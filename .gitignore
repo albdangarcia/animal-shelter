@@ -28,6 +28,13 @@ yarn-error.log*
 # local env files
 .env*.local
 
+# ignore temporary files
+docker-compose.yml
+Dockerfile*
+.env
+.env.example
+.env.development
+
 # vercel
 .vercel
 
