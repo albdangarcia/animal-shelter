@@ -8,6 +8,7 @@ import { fetchSpecies } from "@/app/lib/data/pets/public";
 import { notFound } from "next/navigation";
 import { DeletePetImage } from "@/app/ui/dashboard/pets/buttons";
 import Image from "next/image";
+import Link from "next/link";
 
 interface ImageType {
   id: string;
@@ -52,14 +53,16 @@ export default async function Page({ params }: { params: { id: string } }) {
         </span>
         <div className="flex gap-x-5">
           {pet.petImages?.map((image: ImageType, index: number) => (
-            <div className="flex" key={id}>
+            <div className="flex" key={image.url}>
               <div className="flex text-gray-600 items-center">
-                <Image
-                  src={image.url}
-                  alt={`image ${index}`}
-                  width={40}
-                  height={40}
-                 />
+                <Link href={image.url} target="_blank">
+                  <Image
+                    src={image.url}
+                    alt={`image ${index}`}
+                    width={40}
+                    height={40}
+                  />
+                </Link>
                 <DeletePetImage id={image.id} />
               </div>
             </div>

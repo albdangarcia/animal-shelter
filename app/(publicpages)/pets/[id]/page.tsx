@@ -32,7 +32,7 @@ export default async function Page({ params }: { params: { id: string } }) {
             <PetDetail label="Category" value={pet.species.name} />
             <PetDetail label="Description" value={pet.description} />
           </div>
-          <div className="flex">
+          <div className="flex mt-2">
             <Link
               href="/contact"
               className="bg-blue-600 text-white px-7 py-2 rounded"

@@ -40,7 +40,7 @@ export default async function PetsTable({
                   {pet.petImages[0]?.url ? (
                     <Image
                       src={pet.petImages[0]?.url}
-                      className="rounded-full"
+                      className="rounded-full w-7 h-7 object-cover"
                       width={28}
                       height={28}
                       alt={`${pet.name} profile picture`}

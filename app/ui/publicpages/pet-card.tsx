@@ -2,6 +2,7 @@ import { createPetLike, deletePetLike } from "@/app/lib/actions/pet";
 import { fetchFilteredPublishedPetsWithCategory } from "@/app/lib/data/pets/public";
 import { auth } from "@/auth";
 import { HeartIcon } from "@heroicons/react/24/outline";
+import { PhotoIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import Image from "next/image";
 import Link from "next/link";
@@ -68,13 +69,19 @@ export default async function PetCard({
 
           <Link href={`/pets/${pet.id}`}>
             <div className="w-full">
-              <Image
-                src="/pets/dogface1.jpg"
-                alt="Pet"
-                width={637}
-                height={637}
-                className="rounded-md w-28 h-28"
-              />
+              {pet.petImages.length > 0 ? (
+                <Image
+                  src={pet.petImages[0].url}
+                  alt="Pet"
+                  width={637}
+                  height={637}
+                  className="rounded-md w-28 h-28 object-cover"
+                />
+              ) : (
+                <div className="w-28 h-28 bg-gray-200 rounded-md flex">
+                  <PhotoIcon className="w-8 h-8 m-auto text-gray-500" />
+                </div>
+              )}
               <p className="font-medium w-28 overflow-hidden truncate">
                 {pet.name}
               </p>

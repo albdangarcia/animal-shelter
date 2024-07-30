@@ -54,7 +54,7 @@ model PetImage {
 
 model AdoptionStatus {
   id   String @id @default(cuid())
-  name String
+  name String @unique
   Pet  Pet[]
 
   @@map("adoption_status")
@@ -62,7 +62,7 @@ model AdoptionStatus {
 
 model Species {
   id   String @id @default(cuid())
-  name String
+  name String @unique
   Pet  Pet[]
 
   @@map(name: "species")

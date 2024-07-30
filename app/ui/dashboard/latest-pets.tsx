@@ -28,14 +28,14 @@ export default async function LatestPets() {
 
       <div className="flex grow flex-col justify-between border border-gray-100 rounded-xl p-4">
         <div className="p-3 text-sm">
-          {latestPets.map((pet, i) => {
+          {latestPets.map((pet) => {
             return (
               <div key={pet.id} className="grid grid-cols-[40px,2fr,2fr,1fr] mb-4 items-center border-b border-gray-100 pb-4">
                 <div>
                   {pet.petImages[0]?.url ? (
                     <Image
                       src={pet.petImages[0]?.url}
-                      className="rounded-full"
+                      className="rounded-full w-7 h-7 object-cover"
                       width={28}
                       height={28}
                       alt={`${pet.name} profile picture`}
