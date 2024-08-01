@@ -12,7 +12,6 @@ export async function fetchFilteredPublishedPetsWithCategory(
   speciesName?: string,
   session?: Session | null
 ) {
-  noStore();
   const offset = (currentPage - 1) * ITEMS_PER_PAGE;
 
   // const session = await auth();
@@ -76,7 +75,6 @@ export async function fetchPublishedPetsPagesWithCategory(
   query: string,
   speciesName?: string
 ) {
-  noStore();
   try {
     const count = await prisma.pet.count({
       where: {
@@ -113,7 +111,6 @@ export async function fetchSpecies() {
 }
 
 export async function fetchFrontPagePetById(id: string) {
-  noStore();
   try {
     const pet = await prisma.pet.findUnique({
       where: {
