@@ -91,8 +91,6 @@ const credentialsConfig = Credentials({
       // If the password is correct, return the user object
       if (passwordsMatch) return user;
     }
-
-    console.log('Invalid credentials');
     return null;
   },
 })

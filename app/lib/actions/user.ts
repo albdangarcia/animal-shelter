@@ -7,7 +7,7 @@ import { idSchema } from "@/app/lib/schemas/common";
 import { z } from "zod";
 
 // error messages for the user form
-export type CreateUserFormState = {
+export type updateUserFormState = {
   errors?: {
     role?: string[];
   };
@@ -16,8 +16,7 @@ export type CreateUserFormState = {
 
 // Define a schema for the user form
 export const updateUserFormSchema = z.object({
-  parsedId: z.string().min(1),
-  parsedRole: z.enum(["user", "employee"], {
+  role: z.enum(["user", "employee"], {
     invalid_type_error: "Please select a role.",
   }),
 });
@@ -54,7 +53,7 @@ export async function deleteUser(id: string) {
 
 export async function updateUser(
   id: string,
-  prevState: CreateUserFormState,
+  prevState: updateUserFormState,
   formData: FormData
 ) {
   // Check if the user has permission
@@ -63,10 +62,18 @@ export async function updateUser(
     throw new Error("Access Denied. Failed to Update User.");
   }
 
+  // Validate the id at runtime
+  const parsedId = idSchema.safeParse(id);
+  if (!parsedId.success) {
+    return {
+      message: "Invalid User ID. Failed to Update User.",
+    };
+  }
+  const validatedId = parsedId.data;
+
   // Validate the form data using Zod
   const validatedFields = updateUserFormSchema.safeParse({
-    parsedId: id,
-    parsedRole: formData.get("role"),
+    role: formData.get("role"),
   });
   if (!validatedFields.success) {
     return {
@@ -75,14 +82,14 @@ export async function updateUser(
     };
   }
   // Prepare data for insertion into the database
-  const { parsedId, parsedRole } = validatedFields.data;
+  const { role } = validatedFields.data;
 
   // Update the user in the database
   try {
     await prisma.user.update({
-      where: { id: parsedId },
+      where: { id: validatedId },
       data: {
-        role: parsedRole,
+        role: role,
       },
     });
   } catch (error) {

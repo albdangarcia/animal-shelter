@@ -1,5 +1,5 @@
 "use client";
-import { updateUser, CreateUserFormState } from "@/app/lib/actions/user";
+import { updateUser, updateUserFormState } from "@/app/lib/actions/user";
 import { useFormState } from "react-dom";
 import Link from "next/link";
 
@@ -12,7 +12,7 @@ interface userWithRole {
 export default function EditUserForm({ user }: { user: userWithRole }) {
   const updateUserWithId = updateUser.bind(null, user.id);
   const initialState = { message: null, errors: {} };
-  const [state, dispatch] = useFormState<CreateUserFormState, FormData>(
+  const [state, dispatch] = useFormState<updateUserFormState, FormData>(
     updateUserWithId,
     initialState
   );
