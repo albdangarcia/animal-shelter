@@ -2,16 +2,47 @@ import { unstable_noStore as noStore } from "next/cache";
 import prisma from "@/app/lib/prisma";
 import { ITEMS_PER_PAGE } from "@/app/lib/constants";
 import { rolesWithPermission } from "@/app/lib/actions/authorization";
+import { z } from "zod";
+import { idSchema } from "../../schemas/common";
+
+// Define a schema for fetchFilteredUsers
+const fetchFilteredUsersSchema = z.object({
+  parsedQuery: z.string(),
+  parsedCurrentPage: z.number(),
+});
+
+// Define a schema for fetchUserPages
+const fetchUserPagesSchema = z.string();
 
 export async function fetchFilteredUsers(query: string, currentPage: number) {
+  // Disable caching for this function
   noStore();
-  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
 
+  // Check if the user has permission
+  const hasPermission = await rolesWithPermission(["admin"]);
+  if (!hasPermission) {
+    throw new Error("Access Denied");
+  }
+
+  // Parse the query and currentPage
+  const parsedData = fetchFilteredUsersSchema.safeParse({
+    parsedQuery: query,
+    parsedCurrentPage: currentPage,
+  });
+  if (!parsedData.success) {
+    throw new Error("Invalid type.");
+  }
+  const { parsedQuery, parsedCurrentPage } = parsedData.data;
+
+  // page offset
+  const offset = (parsedCurrentPage - 1) * ITEMS_PER_PAGE;
+
+  // fetch the users
   try {
     const users = await prisma.user.findMany({
       where: {
         email: {
-          contains: query,
+          contains: parsedQuery,
           mode: "insensitive",
         },
         role: {
@@ -34,7 +65,7 @@ export async function fetchFilteredUsers(query: string, currentPage: number) {
     //   prisma.user.findMany({
     //     where: {
     //       email: {
-    //         contains: query,
+    //         contains: parsedQuery,
     //         mode: "insensitive",
     //       },
     //       role: {
@@ -56,7 +87,7 @@ export async function fetchFilteredUsers(query: string, currentPage: number) {
     //   prisma.user.count({
     //     where: {
     //       email: {
-    //         contains: query,
+    //         contains: parsedQuery,
     //         mode: "insensitive",
     //       },
     //       role: {
@@ -69,43 +100,79 @@ export async function fetchFilteredUsers(query: string, currentPage: number) {
     // add a 4 seconds delay to simulate a slow network
     // await new Promise((resolve) => setTimeout(resolve, 4000));
 
+    // return the users
     return users;
   } catch (error) {
-    console.error("Database Error:", error);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Error fetching users.", error);
+    }
     throw new Error("Error fetching users.");
   }
 }
 
 export async function fetchUserPages(query: string) {
+  // Disable caching for this function
   noStore();
+
+  // Check if the user has permission
+  const hasPermission = await rolesWithPermission(["admin"]);
+  if (!hasPermission) {
+    throw new Error("Access Denied");
+  }
+
+  // Parse the query
+  const parsedQuery = fetchUserPagesSchema.safeParse(query);
+  if (!parsedQuery.success) {
+    throw new Error("Invalid type.");
+  }
+  const validatedQuery = parsedQuery.data;
+
+  // Get the total number of users that contains the query
   try {
     const count = await prisma.user.count({
       where: {
         email: {
-          contains: query,
+          contains: validatedQuery,
           mode: "insensitive",
         },
       },
     });
 
+    // Calculate the total number of pages
     const totalPages = Math.ceil(count / ITEMS_PER_PAGE);
 
+    // return the total number of pages
     return totalPages;
   } catch (error) {
-    console.error("Database Error:", error);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Error fetching user pages.", error);
+    }
     throw new Error("Error fetching user pages.");
   }
 }
+
 export async function fetchUserById(id: string) {
+  // Disable caching for this function
+  noStore();
+  
+  // Check if the user has permission
   const hasPermission = await rolesWithPermission(["admin"]);
   if (!hasPermission) {
     throw new Error("Access Denied.");
   }
-  noStore();
+
+  // Validate the id at runtime
+  const parsedId = idSchema.safeParse(id);
+  if (!parsedId.success) {
+    throw new Error("Invalid ID format.");
+  }
+  const validatedId = parsedId.data;
+  
+  // Fetch the user
   try {
     const user = await prisma.user.findUnique({
       where: {
-        id: id,
+        id: validatedId,
       },
       select: {
         id: true,
@@ -114,9 +181,12 @@ export async function fetchUserById(id: string) {
       },
     });
 
+    // return the user
     return user;
   } catch (error) {
-    console.error("Database Error:", error);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Error fetching user.", error);
+    }
     throw new Error("Error fetching user.");
   }
 }

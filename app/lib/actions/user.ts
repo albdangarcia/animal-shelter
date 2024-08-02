@@ -15,8 +15,9 @@ export type CreateUserFormState = {
 };
 
 // Define a schema for the user form
-export const UserFormSchema = z.object({
-  role: z.enum(["user", "employee"], {
+export const updateUserFormSchema = z.object({
+  parsedId: z.string().min(1),
+  parsedRole: z.enum(["user", "employee"], {
     invalid_type_error: "Please select a role.",
   }),
 });
@@ -33,11 +34,12 @@ export async function deleteUser(id: string) {
   if (!parsedId.success) {
     throw new Error();
   }
+  const validatedId = parsedId.data;
 
   // Delete the user
   try {
     await prisma.user.delete({
-      where: { id: id },
+      where: { id: validatedId },
     });
 
     // Revalidate the cache
@@ -61,15 +63,10 @@ export async function updateUser(
     throw new Error("Access Denied. Failed to Update User.");
   }
 
-  // Validate the id at runtime using Zod
-  const parsedId = idSchema.safeParse(id);
-  if (!parsedId.success) {
-    throw new Error();
-  }
-
   // Validate the form data using Zod
-  const validatedFields = UserFormSchema.safeParse({
-    role: formData.get("role"),
+  const validatedFields = updateUserFormSchema.safeParse({
+    parsedId: id,
+    parsedRole: formData.get("role"),
   });
   if (!validatedFields.success) {
     return {
@@ -77,16 +74,15 @@ export async function updateUser(
       message: "Missing Fields. Failed to Update User.",
     };
   }
-
   // Prepare data for insertion into the database
-  const { role } = validatedFields.data;
+  const { parsedId, parsedRole } = validatedFields.data;
 
   // Update the user in the database
   try {
     await prisma.user.update({
-      where: { id: id },
+      where: { id: parsedId },
       data: {
-        role: role,
+        role: parsedRole,
       },
     });
   } catch (error) {

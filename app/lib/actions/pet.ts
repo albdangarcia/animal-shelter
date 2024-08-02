@@ -18,7 +18,7 @@ const PetFormSchema = z.object({
   gender: z.enum(["male", "female"], {
     invalid_type_error: "Please select a gender.",
   }),
-  species_id: z.string().uuid(),
+  species_id: z.string(),
   breed: z.string(),
   weight: z.coerce
     .number()
@@ -32,15 +32,14 @@ const PetFormSchema = z.object({
   published: z.enum(["true", "false"], {
     invalid_type_error: "Please select a status.",
   }),
-  adoption_status_id: z.string().uuid(),
+  adoption_status_id: z.string(),
 });
 
 // Define a schema for PetLike
-const createPetLikeSchema = z.object({
-  pet_id: z.string().uuid().min(1),
-  user_id: z.string().uuid().min(1),
+const createPetIdUserIdSchema = z.object({
+  parsedPetId: z.string(),
+  parsedUserId: z.string(),
 });
-
 
 // Error messages for the pet form
 export type CreatePetFormState = {
@@ -189,6 +188,7 @@ export const updatePet = async (
   if (!parsedId.success) {
     throw new Error("Invalid ID format.");
   }
+  const validatedId = parsedId.data;
 
   // Validate form fields using Zod
   const validatedFields = PetFormSchema.safeParse({
@@ -240,7 +240,7 @@ export const updatePet = async (
     // Images were successfully uploaded
     imageUrlArray = result;
   } else {
-    // There was an error
+    // Return the error
     return result;
   }
 
@@ -250,7 +250,7 @@ export const updatePet = async (
   // Update the pet in the database
   try {
     await prisma.pet.update({
-      where: { id: id },
+      where: { id: validatedId },
       data: {
         name: name,
         age: age,
@@ -304,11 +304,12 @@ export async function deletePet(id: string) {
   if (!parsedId.success) {
     throw new Error("Invalid ID format.");
   }
+  const validatedId = parsedId.data;
 
   // Delete the pet from the database
   try {
     await prisma.pet.delete({
-      where: { id: id },
+      where: { id: validatedId },
     });
 
     // Revalidate the cache for the /dashboard/pets path
@@ -340,11 +341,12 @@ export async function deletePetImage(id: string) {
   if (!parsedId.success) {
     throw new Error("Invalid ID format.");
   }
+  const validatedId = parsedId.data;
 
   // Delete the image from the database
   try {
     const deletedPetImage = await prisma.petImage.delete({
-      where: { id: id },
+      where: { id: validatedId },
     });
 
     // Delete the file from the uploads folder
@@ -373,9 +375,9 @@ export async function createPetLike(petId: string, userId?: string) {
   }
 
   // Validate at runtime using Zod
-  const validatedArgs = createPetLikeSchema.safeParse({
-    pet_id: petId,
-    user_id: userId,
+  const validatedArgs = createPetIdUserIdSchema.safeParse({
+    parsedPetId: petId,
+    parsedUserId: userId,
   });
   if (!validatedArgs.success) {
     return {
@@ -385,14 +387,14 @@ export async function createPetLike(petId: string, userId?: string) {
   }
 
   // Prepare data for insertion into the database
-  const { pet_id, user_id } = validatedArgs.data;
+  const { parsedPetId, parsedUserId } = validatedArgs.data;
 
   // Insert the pet like into the database
   try {
     await prisma.like.create({
       data: {
-        petId: pet_id,
-        userId: user_id,
+        petId: parsedPetId,
+        userId: parsedUserId,
       },
     });
 
@@ -418,26 +420,26 @@ export async function deletePetLike(petId: string, userId?: string) {
   }
 
   // Validate at runtime using Zod
-  const validatedArgs = createPetLikeSchema.safeParse({
-    pet_id: petId,
-    user_id: userId,
+  const parsedArgs = createPetIdUserIdSchema.safeParse({
+    parsedPetId: petId,
+    parsedUserId: userId,
   });
-  if (!validatedArgs.success) {
+  if (!parsedArgs.success) {
     return {
-      errors: validatedArgs.error.flatten().fieldErrors,
+      errors: parsedArgs.error.flatten().fieldErrors,
       message: "Missing Fields. Failed to Update Pet.",
     };
   }
   // Prepare data for insertion into the database
-  const { pet_id, user_id } = validatedArgs.data;
+  const { parsedPetId, parsedUserId } = parsedArgs.data;
 
   // Delete the pet like from the database
   try {
     await prisma.like.delete({
       where: {
         userId_petId: {
-          petId: pet_id,
-          userId: user_id,
+          petId: parsedPetId,
+          userId: parsedUserId,
         },
       },
     });

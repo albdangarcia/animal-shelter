@@ -18,12 +18,12 @@ export default async function PetCard({
 }) {
   // user session
   const session = await auth();
+
   // fetch pets
   const pets = await fetchFilteredPublishedPetsWithCategory(
     query,
     currentPage,
-    speciesName,
-    session
+    speciesName
   );
   return (
     <div className="mt-6 flex gap-3 flex-wrap">

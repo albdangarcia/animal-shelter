@@ -40,7 +40,7 @@ export const PetGallery = ({ images }: { images: ImageProps[] }) => {
         {images.map((image) => (
           <Image
             key={image.id}
-            className="flex-shrink-0 aspect-square min-w-[24%] cursor-pointer object-cover"
+            className="flex-shrink-0 rounded aspect-square min-w-[24%] cursor-pointer object-cover"
             src={image.url}
             onClick={() => setSelectedImage(image.url)}
             height={70}
