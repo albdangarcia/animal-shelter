@@ -1,7 +1,6 @@
 import { fetchFilteredUsers } from "@/app/lib/data/users/user";
 import { PhotoIcon } from "@heroicons/react/24/solid";
-import { DeleteUser, UpdateUser } from "./buttons";
-import Image from "next/image";
+import { DeleteUser, EditUser } from "./buttons";
 
 export default async function UsersTable({
   query,
@@ -34,7 +33,7 @@ export default async function UsersTable({
                 <div className="flex-shrink-0">
                   {/* Prevent the image from shrinking */}
                   {user.image ? (
-                    <Image
+                    <img
                       src={user.image}
                       className="rounded-full"
                       width={28}
@@ -54,7 +53,7 @@ export default async function UsersTable({
               {user.role}
             </div>
             <div className="flex justify-end sm:justify-center gap-3 col-span-3 sm:col-span-1">
-              <UpdateUser id={user.id} />
+              <EditUser id={user.id} />
               <DeleteUser id={user.id} />
             </div>
           </div>

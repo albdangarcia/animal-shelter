@@ -1,9 +1,14 @@
 import Link from "next/link";
-import NavLinks from "@/app/ui/dashboard/navlinks";
+import NavLinks from "@/app/ui/dashboard/nav-links";
 import { PowerIcon, LifebuoyIcon } from "@heroicons/react/24/outline";
 import { signOut } from "@/auth";
+import { auth } from "@/auth";
 
-export default function SideNav() {
+
+export default async function SideNav() {
+  const session = await auth();
+  const userRole = session?.user?.role;
+
   return (
     <div className="flex h-full flex-col px-3 py-4 md:px-2 border-r border-slate-200">
       {/* pet adopt logo */}
@@ -19,7 +24,7 @@ export default function SideNav() {
 
       {/* left nav links */}
       <div className="flex grow flex-row justify-between space-x-2 lg:flex-col lg:space-x-0 lg:space-y-2">
-        <NavLinks />
+        <NavLinks userRole={userRole}/>
         {/* expander */}
         <div className="hidden h-auto w-full grow rounded-md lg:block"></div>
         {/* sign out button */}

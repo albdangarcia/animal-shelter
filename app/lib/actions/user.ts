@@ -15,7 +15,7 @@ export type updateUserFormState = {
 };
 
 // Define a schema for the user form
-export const updateUserFormSchema = z.object({
+const updateUserFormSchema = z.object({
   role: z.enum(["user", "employee"], {
     invalid_type_error: "Please select a role.",
   }),

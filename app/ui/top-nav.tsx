@@ -18,7 +18,6 @@ import clsx from "clsx";
 import { usePathname } from "next/navigation";
 import { signIn, signOut } from "next-auth/react";
 import Link from "next/link";
-import Image from "next/image";
 
 const links = [
   { name: "Home", href: "/" },
@@ -109,7 +108,7 @@ export default function TopNav({
                         <span className="absolute -inset-1.5" />
                         <span className="sr-only">Open user menu</span>
                         {userImage ? (
-                          <Image
+                          <img
                             src={userImage}
                             className="h-8 w-8 rounded-full"
                             alt="User profile image"

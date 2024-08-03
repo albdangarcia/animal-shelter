@@ -5,7 +5,7 @@ import { deleteUser } from "@/app/lib/actions/user";
 import { useState } from "react";
 
 // The buttons for updating and deleting a user
-export function UpdateUser({ id }: { id: string }) {
+export function EditUser({ id }: { id: string }) {
   return (
     <Link
       href={`/dashboard/users/${id}/edit`}
