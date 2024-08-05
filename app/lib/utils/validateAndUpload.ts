@@ -2,9 +2,16 @@
 import path from "path";
 import { writeFile } from "fs/promises";
 import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE } from "@/app/lib/constants";
+import { rolesWithPermission } from "../actions/authorization";
 
 // Validate and upload images
 export async function validateAndUploadImages(petImages: FormDataEntryValue[]) {
+  // Check if the user has permission to upload images
+  const hasPermission = await rolesWithPermission(["admin", "employee"]);
+  if (!hasPermission) {
+    throw new Error("Access Denied. Failed to Create Pet.");
+  }
+  
   const imageUrlArray: string[] = [];
 
   if (petImages.length === 0) {
@@ -46,19 +53,19 @@ export async function validateAndUploadImages(petImages: FormDataEntryValue[]) {
 
       // Write the file to the uploads directory
       try {
-        await writeFile(
-          path.join(process.cwd(), "public/uploads/" + filename),
-          buffer
-        );
+        const filePath = path.join(process.cwd(), "public/uploads/" + filename);
+        await writeFile(filePath, buffer);
         // Add the image URL to uploadPromises
         return "/uploads/" + filename;
       } catch (error) {
+        console.error("Error writing file:", error);
         throw new Error("Failed to upload image: " + file.name);
       }
     });
 
     return await Promise.all(uploadPromises);
   } catch (error) {
+    console.error("Error uploading images:", error);
     return {
       message: "Failed to upload one or more images.",
     };

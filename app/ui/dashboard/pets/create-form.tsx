@@ -501,17 +501,11 @@ export default function EditPetForm({
                   width={40}
                   height={40}
                 />
-                <span className="bg-[#EBE9FA] rounded-full p-[2px] border-[2px] border-[#F4F3FD] border-">
-                  <DocumentIcon
-                    className="h-4 w-4 text-indigo-700"
-                    aria-hidden="true"
-                  />
-                </span>
                 <span className="font-medium text-sm px-2" key={index}>
                   {file.name} - {(file.size / 1024).toFixed(2)} KB
                 </span>
                 <TrashIcon
-                  className="h-4 w-4 hover:cursor-pointer"
+                  className="h-4 w-4 hover:cursor-pointer hover:text-red-600"
                   aria-hidden="true"
                   // remove the file from the state list
                   onClick={() => {

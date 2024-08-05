@@ -6,6 +6,7 @@ import { PhotoIcon } from "@heroicons/react/24/outline";
 import clsx from "clsx";
 import Image from "next/image";
 import Link from "next/link";
+import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
 
 export default async function PetCard({
   query,
@@ -73,8 +74,11 @@ export default async function PetCard({
                 <Image
                   src={pet.petImages[0].url}
                   alt="Pet"
-                  width={637}
-                  height={637}
+                  width={300}
+                  height={300}
+                  placeholder={`data:image/svg+xml;base64,${toBase64(
+                    shimmer(300, 300)
+                  )}`}
                   className="rounded-md w-28 h-28 object-cover"
                 />
               ) : (

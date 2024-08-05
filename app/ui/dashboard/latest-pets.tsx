@@ -36,8 +36,8 @@ export default async function LatestPets() {
                     <Image
                       src={pet.petImages[0]?.url}
                       className="rounded-full w-7 h-7 object-cover"
-                      width={28}
-                      height={28}
+                      width={50}
+                      height={50}
                       alt={`${pet.name} profile picture`}
                     />
                   ) : (

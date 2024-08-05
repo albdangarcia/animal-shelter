@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { PhotoIcon } from "@heroicons/react/24/outline";
+import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
 
 type ImageProps = {
   id: string;
@@ -24,8 +25,11 @@ export const PetGallery = ({ images }: { images: ImageProps[] }) => {
             <Image
               className="object-cover"
               src={selectedImage}
-              fill
-              sizes="(min-width: 800px) 50vw, 100vw"
+              width={600}
+              height={600}
+              placeholder={`data:image/svg+xml;base64,${toBase64(
+                shimmer(600, 600)
+              )}`}
               alt="selected image"
             />
           </Link>
@@ -37,15 +41,18 @@ export const PetGallery = ({ images }: { images: ImageProps[] }) => {
       </div>
       {/* thumbnail images */}
       <div className="flex flex-row gap-x-2 overflow-auto">
-        {images.map((image) => (
+        {images.map((image, index) => (
           <Image
             key={image.id}
             className="flex-shrink-0 rounded aspect-square min-w-[24%] cursor-pointer object-cover"
             src={image.url}
             onClick={() => setSelectedImage(image.url)}
-            height={70}
-            width={70}
-            alt="selected image"
+            height={100}
+            width={100}
+            placeholder={`data:image/svg+xml;base64,${toBase64(
+              shimmer(100, 100)
+            )}`}
+            alt={`image ${index}`}
           />
         ))}
       </div>

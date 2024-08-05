@@ -1,20 +1,12 @@
 import EditPetForm from "@/app/ui/dashboard/pets/edit-form";
 import Breadcrumbs from "@/app/ui/dashboard/pets/breadcrumbs";
-import {
-  fetchPetById,
-  fetchAdoptionStatusList,
-} from "@/app/lib/data/pets/pet";
+import { fetchPetById, fetchAdoptionStatusList } from "@/app/lib/data/pets/pet";
 import { fetchSpecies } from "@/app/lib/data/pets/public";
 import { notFound } from "next/navigation";
 import { DeletePetImage } from "@/app/ui/dashboard/pets/buttons";
 import Image from "next/image";
 import Link from "next/link";
-
-interface ImageType {
-  id: string;
-  url: string;
-  petId: string;
-}
+import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
 
 export default async function Page({ params }: { params: { id: string } }) {
   // get the id from the url
@@ -51,20 +43,23 @@ export default async function Page({ params }: { params: { id: string } }) {
         <span className="block text-sm font-medium leading-6 text-gray-900">
           Uploaded images
         </span>
-        <div className="flex gap-x-5">
-          {pet.petImages?.map((image: ImageType, index: number) => (
-            <div className="flex" key={image.url}>
-              <div className="flex text-gray-600 items-center">
-                <Link href={image.url} target="_blank">
-                  <Image
-                    src={image.url}
-                    alt={`image ${index}`}
-                    width={40}
-                    height={40}
-                  />
-                </Link>
-                <DeletePetImage id={image.id} />
-              </div>
+        <div className="flex flex-row gap-x-2 overflow-auto">
+          {pet.petImages?.map((image, index) => (
+            <div key={image.id} className="relative flex-shrink-0">
+              <Link href={image.url} target="_blank">
+                <Image
+                  key={image.id}
+                  className="flex-shrink-0 rounded aspect-square min-w-[12%] cursor-pointer object-cover"
+                  src={image.url}
+                  height={100}
+                  width={100}
+                  placeholder={`data:image/svg+xml;base64,${toBase64(
+                    shimmer(100, 100)
+                  )}`}
+                  alt={`image ${index}`}
+                />
+              </Link>
+              <DeletePetImage id={image.id} />
             </div>
           ))}
         </div>

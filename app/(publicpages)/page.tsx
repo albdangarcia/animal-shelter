@@ -1,6 +1,6 @@
 import Link from "next/link";
 import Image from "next/image";
-import welcomePicture from "@/public/pets/homeimage15.webp";
+import welcomePicture from "@/public/homeimage15.webp";
 
 const categories = ["Dog", "Cat", "Bird", "Reptile"];
 
