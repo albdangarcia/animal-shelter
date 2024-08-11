@@ -1,12 +1,12 @@
 "use client";
 import { PetImage } from "@prisma/client";
-import { PhotoIcon, UserCircleIcon } from "@heroicons/react/24/solid";
+import { PhotoIcon } from "@heroicons/react/24/solid";
 import { updatePet, CreatePetFormState } from "@/app/lib/actions/pet";
-import { useFormState, useFormStatus } from "react-dom";
+import { useFormState } from "react-dom";
 import { useState } from "react";
 import Link from "next/link";
 import { AdoptionStatus, Pet, Species } from "@prisma/client";
-import { DocumentIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { TrashIcon } from "@heroicons/react/24/outline";
 import Image from "next/image";
 
 interface PetWithImages extends Pet {

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { PhotoIcon } from "@heroicons/react/24/outline";
 import { useState } from "react";
 import { AdoptionStatus, Species } from "@prisma/client";
-import { DocumentIcon, TrashIcon } from "@heroicons/react/24/outline";
+import { TrashIcon } from "@heroicons/react/24/outline";
 import Image from "next/image";
 import { ALLOWED_MIME_TYPES, MAX_FILE_SIZE } from "@/app/lib/constants";
 

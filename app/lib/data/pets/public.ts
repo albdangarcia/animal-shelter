@@ -1,4 +1,3 @@
-import { Session } from "next-auth";
 import prisma from "@/app/lib/prisma";
 import { ITEMS_PER_PAGE } from "@/app/lib/constants";
 import { z } from "zod";

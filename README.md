@@ -55,8 +55,8 @@ To run this project, you will need to add the following environment variables to
 - `AUTH_SECRET`: A secret key for authentication. You can generate a secret key by running the command `openssl rand -base64 32` in your terminal. Ensure OpenSSL is installed:
   - **macOS/Linux**: OpenSSL is usually pre-installed. Verify by running `openssl version`.
   - **Windows**: Install OpenSSL from the [OpenSSL website](https://www.openssl.org/) or using [Chocolatey](https://chocolatey.org/) with the command `choco install openssl`.
-- `AUTH_GITHUB_ID`: Your GitHub OAuth client ID. Obtain this from your GitHub Developer settings.
-- `AUTH_GITHUB_SECRET`: Your GitHub OAuth client secret. Obtain this from your GitHub Developer settings.
+- `AUTH_GITHUB_ID` (optional): Your GitHub OAuth client ID. Obtain this from your GitHub Developer settings.
+- `AUTH_GITHUB_SECRET` (optional): Your GitHub OAuth client secret. Obtain this from your GitHub Developer settings.
 - `AUTH_TRUST_HOST`: Set to `true` or `false` to indicate whether to trust the host for authentication.
 - `POSTGRES_USER`: The PostgreSQL database username.
 - `POSTGRES_PASSWORD`: The PostgreSQL database password.
@@ -65,7 +65,47 @@ To run this project, you will need to add the following environment variables to
 - `POSTGRES_PORT`: The PostgreSQL database port.
 - `POSTGRES_URL`: The PostgreSQL connection URL, which is constructed using the above variables.
 
+## Admin Dashboard Access
+
+To test the admin dashboard, use the following credentials:
+
+- **Username:** admin@example.com
+- **Password:** admin123
+
 ## Running the App
+
+### Run Locally
+
+To run the app in a Docker container, follow these steps:
+
+1. Clone the repository
+   ```sh
+   git clone https://github.com/albdangarcia/animal-shelter.git
+   ```
+1. Navigate to the project directory
+   ```shell
+   cd animal-shelter
+   ```
+1. Copy the `.env.example` file to `.env`:
+   ```sh
+   cp .env.example .env
+   ```
+1. Download the official PostgreSQL image from Docker Hub:
+   ```sh
+   docker pull postgres
+   ```
+1. Start the PostgreSQL container (This step starts a new PostgreSQL container with the specified password and user): 
+   ```sh
+   docker run --name some-postgres -e POSTGRES_PASSWORD=mysecretpassword -d postgres
+   ```
+1. Install the dependencies:
+   ```sh
+   npm install
+   ```
+1. Run the app:
+   ```sh
+   npm run dev
+   ```
 
 ### Using Docker
 

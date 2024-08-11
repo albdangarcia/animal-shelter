@@ -3,6 +3,6 @@ import { NextAuthConfig } from "next-auth";
 
 export const authProviderConfigList = {
   providers: [
-    github,
+    // github,
   ],
 } satisfies NextAuthConfig;
