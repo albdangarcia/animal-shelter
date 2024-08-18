@@ -102,6 +102,18 @@ To run the app in a Docker container, follow these steps:
    ```sh
    npm install
    ```
+1. Push the Prisma schema to the database:
+   ```sh
+   npx prisma db push
+   ```
+1. Push the Prisma schema to the database:
+   ```sh
+   npx prisma generate
+   ```
+1. Seed the database:
+   ```sh
+   npx prisma db seed
+   ```
 1. Run the app:
    ```sh
    npm run dev
