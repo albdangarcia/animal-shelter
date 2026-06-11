@@ -37,7 +37,11 @@ const baseUrl = isDemo
   : "/uploads";
 
 const personData = [
-  { name: "SYSTEM", type: PersonType.AGENCY, email: "system@internal.local" },
+  {
+    name: "External Agency",
+    type: PersonType.AGENCY,
+    email: "agency@example.com",
+  },
   {
     name: "Admin User",
     type: PersonType.INDIVIDUAL,
@@ -55,6 +59,12 @@ const personData = [
     type: PersonType.INDIVIDUAL,
     email: "staff2@example.com",
     role: Role.STAFF,
+  },
+  {
+    name: "Sam Rivera",
+    type: PersonType.INDIVIDUAL,
+    email: "volunteer1@example.com",
+    role: Role.VOLUNTEER,
   },
   {
     name: "Jane Doe",

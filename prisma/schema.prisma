@@ -621,6 +621,9 @@ model AnimalAssociation {
 model Person {
   id      String     @id @default(cuid())
   name    String
+  // AGENCY type persons (e.g., external shelters, rescues) are contact/tracking records only.
+  // They do not have a User account and cannot log in. They exist to link animals to
+  // an organization via Intake, Outcome, or AnimalAssociation.
   type    PersonType @default(INDIVIDUAL)
   email   String?    @unique
   phone   String?
@@ -921,7 +924,7 @@ model AnimalActivityLog {
 // model VolunteerShift {
 //   id           String    @id @default(cuid())
 //   volunteerId  String
-//   volunteer    User      @relation(fields: [volunteerId], references: [id])
+//   volunteer    Person      @relation(fields: [volunteerId], references: [id])
 //   shiftId      String
 //   shift        Shift     @relation(fields: [shiftId], references: [id])
 //   checkInTime  DateTime?
