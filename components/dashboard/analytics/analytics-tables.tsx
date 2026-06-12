@@ -4,13 +4,10 @@ import {
 } from "@/app/lib/data/analytics.data";
 import { fetchTaskAssigneeList } from "@/app/lib/data/animals/animal-task.data";
 
-import TaskTable from "@/components/dashboard/analytics/tables/tasks/task-table";
-import { getColumns as getTaskColumns } from "@/components/dashboard/analytics/tables/tasks/task-table-columns";
-import TasksDataTableToolbar from "@/components/dashboard/analytics/tables/tasks/task-table-toolbar";
-
-import HealthTable from "@/components/dashboard/analytics/tables/animal-health/health-table";
-import { columns as getHealthColumns } from "@/components/dashboard/analytics/tables/animal-health/health-table-columns";
-import HealthDataTableToolbar from "@/components/dashboard/analytics/tables/animal-health/health-table-toolbar";
+import { getTaskColumns } from "@/components/dashboard/analytics/tables/tasks/task-table-columns";
+import { healthColumns } from "@/components/dashboard/analytics/tables/animal-health/health-table-columns";
+import DataTable from "@/components/dashboard/analytics/tables/data-table-client";
+import { DataTableViewToolbarClient } from "@/components/dashboard/analytics/tables/data-table-view-toolbar-client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -22,7 +19,6 @@ import {
 } from "@/components/ui/card";
 
 const AnalyticsTables = async () => {
-  // Move the data fetching here
   const [tasks, animalHealth, assigneeList] = await Promise.all([
     fetchAnalyticsTaskTableData(),
     fetchAnimalsRequiringAttention(),
@@ -45,11 +41,12 @@ const AnalyticsTables = async () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <TaskTable
+            <DataTable
               data={tasks}
               getColumns={getTaskColumns}
-              ToolbarComponent={TasksDataTableToolbar}
-              assigneeList={assigneeList}
+              columnProps={{ assigneeList }}
+              ToolbarComponent={DataTableViewToolbarClient}
+              toolbarProps={{ assigneeList }}
             />
           </CardContent>
         </Card>
@@ -64,10 +61,10 @@ const AnalyticsTables = async () => {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <HealthTable
+            <DataTable
               data={animalHealth}
-              columns={getHealthColumns}
-              ToolbarComponent={HealthDataTableToolbar}
+              columns={healthColumns}
+              ToolbarComponent={DataTableViewToolbarClient}
             />
           </CardContent>
         </Card>

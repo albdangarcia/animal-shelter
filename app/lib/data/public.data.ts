@@ -1,5 +1,4 @@
 import { prisma } from "@/app/lib/prisma";
-import { ITEMS_PER_PAGE } from "@/app/lib/constants/constants";
 import { auth } from "@/auth";
 import { AnimalListingStatus, Prisma } from "@prisma/client";
 import { cuidSchema } from "../zod-schemas/common.schemas";
@@ -27,6 +26,8 @@ export type PetsPayload = Prisma.AnimalGetPayload<{
     };
   };
 }>;
+
+const ITEMS_PER_PAGE = 10
 
 export const fetchPublishedPets = async (
   queryInput: string,

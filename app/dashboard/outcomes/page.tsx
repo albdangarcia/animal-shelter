@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { SearchParamsType } from "@/app/lib/types";
-import DataTable from "@/components/dashboard/outcomes/table/outcome-table";
+import DataTable from "@/components/table-common/data-table";
 import { columns } from "@/components/dashboard/outcomes/table/outcome-table-columns";
 import OutcomeTableToolbar from "@/components/dashboard/outcomes/table/outcome-table-toolbar";
 import { fetchOutcomes } from "@/app/lib/data/animals/outcome.data";
@@ -31,14 +31,16 @@ const Page = async ({ searchParams }: Props) => {
 };
 
 const PageContent = async ({ searchParams }: Props) => {
-  const { query = "", page = "1", sort, type } = await searchParams;
+  const { query = "", page = "1", pageSize = "10", sort, type } = await searchParams;
   const currentPage = Number(page);
+  const currentPageSize = Number(pageSize);
 
-  const { outcomes, totalPages } = await fetchOutcomes(
+  const { outcomes, totalPages, totalRows } = await fetchOutcomes(
     query,
     currentPage,
     sort,
-    type
+    type,
+    currentPageSize
   );
 
   return (
@@ -62,6 +64,7 @@ const PageContent = async ({ searchParams }: Props) => {
                 columns={columns}
                 ToolbarComponent={OutcomeTableToolbar}
                 totalPages={totalPages}
+                totalRows={totalRows}
               />
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { getColumns } from "@/components/dashboard/all-animal-tasks/table/task-table-columns";
-import DataTable from "@/components/dashboard/all-animal-tasks/table/task-table";
+import DataTable from "@/components/table-common/data-table";
 import TasksDataTableToolbar from "@/components/dashboard/all-animal-tasks/table/task-table-toolbar";
 import { SearchParamsType } from "@/app/lib/types";
 import {
@@ -30,7 +30,7 @@ const Page = async ({ searchParams }: Props) => {
   const currentPageSize = Number(pageSize);
 
   // Pass all parameters, including the potentially undefined ones, to the function.
-  const { tasks, totalPages } = await fetchAllAnimalsTasks(
+  const { tasks, totalPages, totalRows } = await fetchAllAnimalsTasks(
     query,
     currentPage,
     category,
@@ -60,7 +60,9 @@ const Page = async ({ searchParams }: Props) => {
                 getColumns={getColumns}
                 ToolbarComponent={TasksDataTableToolbar}
                 totalPages={totalPages}
-                assigneeList={assigneeList}
+                columnProps={{ assigneeList }}
+                // assigneeList={assigneeList}
+                totalRows={totalRows}
               />
             </div>
           </div>

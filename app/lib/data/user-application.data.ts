@@ -1,10 +1,10 @@
 import {
   cuidSchema,
   currentPageSchema,
+  pageSizeSchema,
   searchQuerySchema,
 } from "../zod-schemas/common.schemas";
 import { prisma } from "../prisma";
-import { ITEMS_PER_PAGE } from "../constants/constants";
 import { RequirePermission } from "../auth/protected-actions";
 import { Permissions } from "@/app/lib/auth/permissions";
 import z from "zod";
@@ -71,30 +71,34 @@ export const fetchUserApplicationsSchema = z.object({
   currentPage: currentPageSchema,
   sort: z.string().optional(),
   status: z.string().optional(),
+  pageSize: pageSizeSchema,
 });
 
 const _fetchUserApplications = async (
   queryInput: string,
   currentPageInput: number,
   sortInput: string | undefined,
-  statusInput: string | undefined
+  statusInput: string | undefined,
+  pageSizeInput: number,
 ): Promise<{
   userApplications: ApplicationWithAnimal[];
   totalPages: number;
+  totalRows: number;
 }> => {
   const validatedArgs = fetchUserApplicationsSchema.safeParse({
     query: queryInput,
     currentPage: currentPageInput,
     sort: sortInput,
     status: statusInput,
+    pageSize: pageSizeInput,
   });
 
   if (!validatedArgs.success) {
     throw new Error("Invalid arguments for fetching applications.");
   }
 
-  const { query, currentPage, sort, status } = validatedArgs.data;
-  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+  const { query, currentPage, sort, status, pageSize } = validatedArgs.data;
+  const offset = (currentPage - 1) * pageSize;
 
   const orderBy: Prisma.AdoptionApplicationOrderByWithRelationInput = (() => {
     if (!sort) return { submittedAt: "desc" };
@@ -169,7 +173,7 @@ const _fetchUserApplications = async (
           },
         },
         orderBy: orderBy,
-        take: ITEMS_PER_PAGE,
+        take: pageSize,
         skip: offset,
       }),
       prisma.adoptionApplication.count({
@@ -177,9 +181,9 @@ const _fetchUserApplications = async (
       }),
     ]);
 
-    const totalPages = Math.ceil(count / ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(count / pageSize);
 
-    return { userApplications, totalPages };
+    return { userApplications, totalPages, totalRows: count };
   } catch (error) {
     console.error("Error fetching user applications.", error);
     throw new Error("Error fetching user applications.");
@@ -187,7 +191,7 @@ const _fetchUserApplications = async (
 };
 
 const _fetchUserApplicationById = async (
-  id: string
+  id: string,
 ): Promise<ApplicationWithOutcome | null> => {
   const parsedId = cuidSchema.safeParse(id);
   if (!parsedId.success) {
@@ -238,9 +242,9 @@ const _fetchUserApplicationById = async (
 };
 
 export const fetchUserApplications = RequirePermission(
-  Permissions.APPLICATIONS_READ_LISTING
+  Permissions.APPLICATIONS_READ_LISTING,
 )(_fetchUserApplications);
 
 export const fetchApplicationById = RequirePermission(
-  Permissions.APPLICATIONS_READ_LISTING
+  Permissions.APPLICATIONS_READ_LISTING,
 )(_fetchUserApplicationById);

@@ -2,13 +2,14 @@
 
 import { Table } from "@tanstack/react-table";
 import { DataTableViewOptions } from "@/components/table-common/data-table-view-options";
-import { AnimalsRequiringAttentionPayload } from "@/app/lib/data/analytics.data";
 
-interface HealthDataTableToolbarProps {
-  table: Table<AnimalsRequiringAttentionPayload>;
+interface DataTableViewToolbarProps<TData> {
+  table: Table<TData>;
 }
 
-const HealthDataTableToolbar = ({ table }: HealthDataTableToolbarProps) => {
+export function DataTableViewToolbarClient<TData>({
+  table,
+}: DataTableViewToolbarProps<TData>) {
   return (
     <div className="@container/toolbar flex items-center justify-between">
       <div className="flex self-start gap-2">
@@ -16,6 +17,4 @@ const HealthDataTableToolbar = ({ table }: HealthDataTableToolbarProps) => {
       </div>
     </div>
   );
-};
-
-export default HealthDataTableToolbar;
+}

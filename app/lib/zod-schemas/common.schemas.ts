@@ -13,3 +13,7 @@ export const cuidSchema = z.cuid({
 export const currentPageSchema = z.int().positive({
   error: "Page number must be a positive integer.",
 });
+
+export const pageSizeSchema = z.coerce
+  .number()
+  .transform((val) => ([10, 20, 30, 40, 50].includes(val) ? val : 10));

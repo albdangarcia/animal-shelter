@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { currentPageSchema, searchQuerySchema } from "./common.schemas";
+import { currentPageSchema, pageSizeSchema, searchQuerySchema } from "./common.schemas";
 
 // Schema for the parameters of fetchFilteredUsers function
 export const UsersParamsSchema = z.object({
@@ -7,4 +7,5 @@ export const UsersParamsSchema = z.object({
   currentPage: currentPageSchema,
   sort: z.string().optional(),
   role: z.string().optional(), 
+  pageSize: pageSizeSchema
 });

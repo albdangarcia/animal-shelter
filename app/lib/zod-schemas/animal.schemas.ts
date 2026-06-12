@@ -13,6 +13,7 @@ import { US_STATES } from "@/app/lib/constants/us-states";
 import {
   cuidSchema,
   currentPageSchema,
+  pageSizeSchema,
   searchQuerySchema,
 } from "./common.schemas";
 
@@ -41,6 +42,7 @@ export const MyApplicationsSchema = z.object({
   currentPage: currentPageSchema,
   sort: sortSchema,
   status: z.string().optional(),
+  pageSize: pageSizeSchema,
 });
 
 export const DashboardAnimalsSchema = z.object({
@@ -48,7 +50,7 @@ export const DashboardAnimalsSchema = z.object({
   currentPage: currentPageSchema,
   listingStatus: z.string().optional(),
   sex: z.string().optional(),
-  pageSize: z.number(),
+  pageSize: pageSizeSchema,
   sort: z.string().optional(),
 });
 
@@ -57,7 +59,7 @@ export const AnimalTasksSchema = z.object({
   currentPage: currentPageSchema,
   category: z.string().optional(),
   status: z.string().optional(),
-  pageSize: z.number(),
+  pageSize: pageSizeSchema,
   sort: z.string().optional(),
   animalId: cuidSchema,
 });

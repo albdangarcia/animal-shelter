@@ -10,7 +10,7 @@ import { AnimalsRequiringAttentionPayload } from "@/app/lib/data/analytics.data"
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import Link from "next/link";
 
-export const columns: ColumnDef<AnimalsRequiringAttentionPayload>[] = [
+export const healthColumns: ColumnDef<AnimalsRequiringAttentionPayload>[] = [
   {
     id: "select",
     header: ({ table }) => (

@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { IDParamType, SearchParamsType } from "@/app/lib/types";
-import DataTable from "@/components/dashboard/adoption-applications/table/adoption-applications-table";
+import DataTable from "@/components/table-common/data-table";
 import { columns } from "@/components/dashboard/adoption-applications/table/adoption-applications-table-columns";
 import UserAppTableToolbar from "@/components/dashboard/adoption-applications/table/adoption-applications-table-toolbar";
 import { fetchAnimalApplications } from "@/app/lib/data/animals/animal-adoption-application.data";
@@ -35,19 +35,21 @@ const Page = async ({ searchParams, params }: Props) => {
 const PageContent = async ({ searchParams, params }: Props) => {
   const { id: animalId } = await params;
 
-  const { query = "", page = "1", sort, status } = await searchParams;
+  const { query = "", page = "1", pageSize = "10", sort, status } = await searchParams;
   const currentPage = Number(page);
+  const currentPageSize = Number(pageSize);
 
   if (!animalId) {
     return notFound();
   }
 
-  const { applications, totalPages } = await fetchAnimalApplications(
+  const { applications, totalPages, totalRows } = await fetchAnimalApplications(
     animalId,
     query,
     currentPage,
     sort,
-    status
+    status,
+    currentPageSize
   );
 
   return (
@@ -70,6 +72,7 @@ const PageContent = async ({ searchParams, params }: Props) => {
                 columns={columns}
                 ToolbarComponent={UserAppTableToolbar}
                 totalPages={totalPages}
+                totalRows={totalRows}
               />
             </div>
           </div>

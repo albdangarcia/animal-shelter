@@ -1,6 +1,3 @@
-// items per page for pagination
-export const ITEMS_PER_PAGE = 10;
-
 // Allowed mime types for image uploads
 export const ALLOWED_MIME_TYPES = [
   "image/jpeg",

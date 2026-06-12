@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import DataTable from "@/components/dashboard/my-adoption-applications/table/my-applications-table";
+import DataTable from "@/components/table-common/data-table";
 import { columns } from "@/components/dashboard/my-adoption-applications/table/my-applications-table-columns";
 import { SearchParamsType } from "@/app/lib/types";
 import MyAppTableToolbar from "@/components/dashboard/my-adoption-applications/table/my-applications-table-toolbar";
@@ -19,14 +19,16 @@ interface Props {
 }
 
 const Page = async ({ searchParams }: Props) => {
-  const { query = "", page = "1", sort, status } = await searchParams;
+  const { query = "", page = "1", pageSize = "10", sort, status } = await searchParams;
   const currentPage = Number(page);
+  const currentPageSize = Number(pageSize);
 
-  const { myApplications, totalPages } = await fetchMyApplications(
+  const { myApplications, totalPages, totalRows } = await fetchMyApplications(
     query,
     currentPage,
     sort,
-    status
+    status,
+    currentPageSize
   );
 
   return (
@@ -54,6 +56,7 @@ const Page = async ({ searchParams }: Props) => {
                   columns={columns}
                   ToolbarComponent={MyAppTableToolbar}
                   totalPages={totalPages}
+                  totalRows={totalRows}
                 />
               </div>
             </div>

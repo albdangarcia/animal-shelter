@@ -1,5 +1,16 @@
 "use client";
 
+/**
+ * Client-side DataTable.
+ *
+ * Use this for tables that do NOT need URL-driven server pagination —
+ * sorting, filtering, and pagination are all handled locally via
+ * @tanstack/react-table's built-in row models.
+ *
+ * For tables backed by server-side pagination (manualPagination + URL
+ * search params), use `data-table.tsx` instead.
+ */
+
 import * as React from "react";
 import {
   ColumnDef,
@@ -23,24 +34,33 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[];
+interface DataTableProps<TData, TValue, TExtra = {}> {
+  columns?: ColumnDef<TData, TValue>[];
+  getColumns?: (props: TExtra) => ColumnDef<TData, TValue>[];
+  columnProps?: TExtra;
   data: TData[];
-  ToolbarComponent?: React.ComponentType<{
-    table: Table<TData>;
-  }>;
+  ToolbarComponent?: React.ComponentType<{ table: Table<TData> } & TExtra>;
+  toolbarProps?: TExtra;
 }
 
-const DataTable = <TData, TValue>({
-  columns,
+const DataTable = <TData, TValue, TExtra = {}>({
+  columns: staticColumns,
+  getColumns,
+  columnProps,
   data,
   ToolbarComponent,
-}: DataTableProps<TData, TValue>) => {
+  toolbarProps,
+}: DataTableProps<TData, TValue, TExtra>) => {
   const [sorting, setSorting] = React.useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
+
+  const columns = React.useMemo(() => {
+    if (getColumns) return getColumns(columnProps as TExtra);
+    return staticColumns ?? [];
+  }, [getColumns, columnProps, staticColumns]);
 
   const table = useReactTable({
     data,
@@ -51,13 +71,10 @@ const DataTable = <TData, TValue>({
       rowSelection,
       columnFilters,
     },
-
-    // State handlers for client-side operations
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
     onRowSelectionChange: setRowSelection,
     onColumnVisibilityChange: setColumnVisibility,
-
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
@@ -67,7 +84,9 @@ const DataTable = <TData, TValue>({
 
   return (
     <div className="space-y-4">
-      {ToolbarComponent && <ToolbarComponent table={table} />}
+      {ToolbarComponent && (
+        <ToolbarComponent table={table} {...(toolbarProps as TExtra)} />
+      )}
 
       <div className="rounded-md border">
         <UITable>
@@ -106,10 +125,7 @@ const DataTable = <TData, TValue>({
               ))
             ) : (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
+                <TableCell colSpan={columns.length} className="h-24 text-center">
                   No results.
                 </TableCell>
               </TableRow>

@@ -1,6 +1,9 @@
-import { fetchAnimalTasks, fetchTaskAssigneeList } from "@/app/lib/data/animals/animal-task.data";
+import {
+  fetchAnimalTasks,
+  fetchTaskAssigneeList,
+} from "@/app/lib/data/animals/animal-task.data";
 import { getColumns } from "@/components/dashboard/animals/tasks/table/task-table-columns";
-import DataTable from "@/components/dashboard/animals/tasks/table/task-table";
+import DataTable from "@/components/table-common/data-table";
 import TasksDataTableToolbar from "@/components/dashboard/animals/tasks/table/task-table-toolbar";
 import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import {
@@ -31,15 +34,14 @@ const Page = async ({ params, searchParams }: Props) => {
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
-  // Pass all parameters, including the potentially undefined ones, to the function.
-  const { tasks, totalPages } = await fetchAnimalTasks(
+  const { tasks, totalPages, totalRows } = await fetchAnimalTasks(
     query,
     currentPage,
     category,
     status,
     currentPageSize,
     sort,
-    animalId
+    animalId,
   );
 
   const assigneeList = await fetchTaskAssigneeList();
@@ -60,10 +62,11 @@ const Page = async ({ params, searchParams }: Props) => {
               <DataTable
                 data={tasks}
                 getColumns={getColumns}
+                columnProps={{ animalId, assigneeList }}
                 ToolbarComponent={TasksDataTableToolbar}
+                toolbarProps={{ animalId, assigneeList }}
                 totalPages={totalPages}
-                animalId={animalId}
-                assigneeList={assigneeList}
+                totalRows={totalRows}
               />
             </div>
           </div>

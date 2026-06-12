@@ -28,7 +28,7 @@ export interface GetColumnsProps {
   assigneeList: TaskAssignee[];
 }
 
-export const getColumns = ({
+export const getTaskColumns = ({
   assigneeList,
 }: GetColumnsProps): ColumnDef<TaskAnalyticsPayload>[] => [
   {
@@ -62,7 +62,7 @@ export const getColumns = ({
     ),
     cell: ({ row }) => {
       const priority = priorities.find(
-        (priority) => priority.value === row.original.priority
+        (priority) => priority.value === row.original.priority,
       );
 
       return (
@@ -100,7 +100,7 @@ export const getColumns = ({
     ),
     cell: ({ row }) => {
       const status = statuses.find(
-        (status) => status.value === row.getValue("status")
+        (status) => status.value === row.getValue("status"),
       );
 
       if (!status) {
@@ -127,7 +127,7 @@ export const getColumns = ({
     ),
     cell: ({ row }) => {
       const category = categories.find(
-        (category) => category.value === row.getValue("category")
+        (category) => category.value === row.getValue("category"),
       );
 
       return category ? (
@@ -150,7 +150,7 @@ export const getColumns = ({
     ),
     cell: ({ row }) => {
       const priority = priorities.find(
-        (priority) => priority.value === row.getValue("priority")
+        (priority) => priority.value === row.getValue("priority"),
       );
 
       if (!priority) {
@@ -182,7 +182,7 @@ export const getColumns = ({
       const handleAssigneeChange = async (newAssigneeId: string) => {
         const result = await updateAnimalTaskAssignee(
           task.id,
-          newAssigneeId === "unassigned" ? null : newAssigneeId
+          newAssigneeId === "unassigned" ? null : newAssigneeId,
         );
 
         if (!result.success) {

@@ -1,7 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
-import { ITEMS_PER_PAGE } from "@/app/lib/constants/constants";
 import { Prisma, Role } from "@prisma/client";
-import { cuidSchema, searchQuerySchema } from "../zod-schemas/common.schemas";
+import { cuidSchema } from "../zod-schemas/common.schemas";
 import { UsersParamsSchema } from "../zod-schemas/user.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { Permissions } from "@/app/lib/auth/permissions";
@@ -11,22 +10,28 @@ const _fetchUsers = async (
   queryInput: string,
   currentPageInput: number,
   sortInput: string | undefined,
-  roleInput: string | undefined
-): Promise<{ users: UsersPayload[]; totalPages: number }> => {
+  roleInput: string | undefined,
+  pageSizeInput: number,
+): Promise<{
+  users: UsersPayload[];
+  totalPages: number;
+  totalRows: number;
+}> => {
   // Parse and validate all arguments
   const validatedArgs = UsersParamsSchema.safeParse({
     query: queryInput,
     currentPage: currentPageInput,
     sort: sortInput,
     role: roleInput,
+    pageSize: pageSizeInput,
   });
 
   if (!validatedArgs.success) {
     throw new Error("Invalid arguments for fetching users.");
   }
-  const { query, currentPage, sort, role } = validatedArgs.data;
+  const { query, currentPage, sort, role, pageSize } = validatedArgs.data;
 
-  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+  const offset = (currentPage - 1) * pageSize;
 
   // Dynamically set the sorting order
   const orderBy: Prisma.UserOrderByWithRelationInput = (() => {
@@ -77,48 +82,18 @@ const _fetchUsers = async (
           createdAt: true,
         },
         orderBy: orderBy,
-        take: ITEMS_PER_PAGE,
+        take: pageSize,
         skip: offset,
       }),
     ]);
 
     // Calculate the total number of pages
-    const totalPages = Math.ceil(count / ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(count / pageSize);
 
-    return { users, totalPages };
+    return { users, totalPages, totalRows: count };
   } catch (error) {
     console.error("Error fetching users.", error);
     throw new Error("Error fetching users.");
-  }
-};
-
-const _fetchUserPages = async (queryInput: string): Promise<number> => {
-  // Parse the query
-  const parsedQuery = searchQuerySchema.safeParse(queryInput);
-  if (!parsedQuery.success) {
-    throw new Error("Invalid query format.");
-  }
-  const validatedQuery = parsedQuery.data;
-
-  // Get the total number of users that contains the query
-  try {
-    const count = await prisma.user.count({
-      where: {
-        email: {
-          contains: validatedQuery,
-          mode: "insensitive",
-        },
-      },
-    });
-
-    // Calculate the total number of pages
-    const totalPages = Math.ceil(count / ITEMS_PER_PAGE);
-
-    // return the total number of pages
-    return totalPages;
-  } catch (error) {
-    console.error("Error fetching user pages.", error);
-    throw new Error("Error fetching user pages.");
   }
 };
 
@@ -149,11 +124,9 @@ const _fetchUserById = async (id: string): Promise<UserByIdPayload | null> => {
 };
 
 export const fetchUsers = RequirePermission(Permissions.MANAGE_ROLES)(
-  _fetchUsers
+  _fetchUsers,
 );
-export const fetchUserPages = RequirePermission(Permissions.MANAGE_ROLES)(
-  _fetchUserPages
-);
+
 export const fetchUserById = RequirePermission(Permissions.MANAGE_ROLES)(
-  _fetchUserById
+  _fetchUserById,
 );

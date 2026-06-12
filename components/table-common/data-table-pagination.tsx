@@ -1,88 +1,83 @@
-"use client"
+"use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import { Table } from "@tanstack/react-table"
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Table } from "@tanstack/react-table";
 import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-} from "lucide-react"
+} from "lucide-react";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
+
+const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
 
 interface DataTablePaginationProps<TData> {
-  table: Table<TData>
-  totalPages: number
+  table: Table<TData>;
+  totalPages: number;
+  totalRows: number;
 }
 
 export function DataTablePagination<TData>({
   table,
   totalPages,
+  totalRows,
 }: DataTablePaginationProps<TData>) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
 
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
+  const currentPage = Number(searchParams.get("page")) || 1;
 
-  // Get the current page and page size from the URL, with defaults.
-  const currentPage = Number(searchParams.get("page")) || 1
-  const pageSize = Number(searchParams.get("pageSize")) || 10
+  const rawPageSize = Number(searchParams.get("pageSize")) || 10;
+  const pageSize = PAGE_SIZE_OPTIONS.includes(rawPageSize) ? rawPageSize : 10;
 
-  // Create a URL for a specific page and page size.
-  // const createPageURL = (page?: number, size?: number) => {
-  //   const params = new URLSearchParams(searchParams)
-  //   params.set("page", String(page ?? currentPage))
-  //   params.set("pageSize", String(size ?? pageSize))
-  //   return `${pathname}?${params.toString()}`
-  // }
-    const handleNavigation = (page?: number, size?: number) => {
+  const handleNavigation = (page?: number, size?: number) => {
     const params = new URLSearchParams(searchParams);
-    // If a new page is provided, set it. Otherwise, keep the current page.
     params.set("page", String(page ?? currentPage));
-    // If a new size is provided, set it. Otherwise, keep the current size.
     params.set("pageSize", String(size ?? pageSize));
     router.push(`${pathname}?${params.toString()}`);
   };
 
-  // Determine if navigation buttons should be disabled
   const canGoPrevious = currentPage > 1;
   const canGoNext = currentPage < totalPages;
+
+  const availableSizeOptions = PAGE_SIZE_OPTIONS.filter((_, index) => {
+    const previousSize = PAGE_SIZE_OPTIONS[index - 1] ?? 0;
+    return previousSize < totalRows;
+  });
+
+  // Ensure there's always at least one option to display (e.g. when totalRows is 0)
+  const displaySizeOptions =
+    availableSizeOptions.length > 0 ? availableSizeOptions : [pageSize];
 
   return (
     <div className="flex items-center justify-between px-2">
       <div className="flex-1 text-sm text-muted-foreground">
-        {table.getFilteredSelectedRowModel().rows.length} of{" "}
-        {table.getFilteredRowModel().rows.length} row(s) selected.
+        {table.getFilteredSelectedRowModel().rows.length} of {totalRows} row(s)
+        selected.
       </div>
       <div className="flex items-center space-x-6 lg:space-x-8">
         <div className="flex items-center space-x-2">
           <p className="text-sm font-medium">Rows per page</p>
-          {/* <Select
-            value={`${pageSize}`}
-            onValueChange={(value) => {
-              window.location.href = createPageURL(1, Number(value))
-            }}
-          > */}
           <Select
             value={`${pageSize}`}
-            onValueChange={(value) => {
-              // When changing page size, always go back to page 1
-              handleNavigation(1, Number(value));
-            }}
+            onValueChange={(value) => handleNavigation(1, Number(value))}
+            disabled={displaySizeOptions.length <= 1}
           >
             <SelectTrigger className="h-8 w-[70px]">
               <SelectValue placeholder={pageSize} />
             </SelectTrigger>
             <SelectContent side="top">
-              {[10, 20, 30, 40, 50].map((size) => (
+              {displaySizeOptions.map((size) => (
                 <SelectItem key={size} value={`${size}`}>
                   {size}
                 </SelectItem>
@@ -131,49 +126,7 @@ export function DataTablePagination<TData>({
             <ChevronsRight className="h-4 w-4" />
           </Button>
         </div>
-        {/* <div className="flex items-center space-x-2">
-          <Link href={createPageURL(1)} passHref>
-            <Button
-              variant="outline"
-              className="hidden h-8 w-8 p-0 lg:flex"
-              disabled={currentPage <= 1}
-            >
-              <span className="sr-only">Go to first page</span>
-              <ChevronsLeft />
-            </Button>
-          </Link>
-          <Link href={createPageURL(currentPage - 1)} passHref>
-            <Button
-              variant="outline"
-              className="h-8 w-8 p-0"
-              disabled={currentPage <= 1}
-            >
-              <span className="sr-only">Go to previous page</span>
-              <ChevronLeft />
-            </Button>
-          </Link>
-          <Link href={createPageURL(currentPage + 1)} passHref>
-            <Button
-              variant="outline"
-              className="h-8 w-8 p-0"
-              disabled={currentPage >= totalPages}
-            >
-              <span className="sr-only">Go to next page</span>
-              <ChevronRight />
-            </Button>
-          </Link>
-          <Link href={createPageURL(totalPages)} passHref>
-            <Button
-              variant="outline"
-              className="hidden h-8 w-8 p-0 lg:flex"
-              disabled={currentPage >= totalPages}
-            >
-              <span className="sr-only">Go to last page</span>
-              <ChevronsRight />
-            </Button>
-          </Link>
-        </div> */}
       </div>
     </div>
-  )
+  );
 }

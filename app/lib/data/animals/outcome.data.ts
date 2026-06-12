@@ -2,14 +2,12 @@ import { Prisma, OutcomeType } from "@prisma/client";
 import { z } from "zod";
 import {
   currentPageSchema,
+  pageSizeSchema,
   searchQuerySchema,
 } from "../../zod-schemas/common.schemas";
 import { prisma } from "../../prisma";
 import { RequirePermission } from "../../auth/protected-actions";
 import { Permissions } from "../../auth/permissions";
-
-// The number of outcomes to display per page
-const OUTCOMES_PER_PAGE = 10;
 
 // Zod schema for validating the search parameters
 export const OutcomesSchema = z.object({
@@ -17,6 +15,7 @@ export const OutcomesSchema = z.object({
   currentPage: currentPageSchema,
   sort: z.string().optional(),
   type: z.string().optional(),
+  pageSize: pageSizeSchema
 });
 
 export const _fetchOutcomeById = async (outcomeId: string) => {
@@ -74,7 +73,7 @@ export const _fetchOutcomeById = async (outcomeId: string) => {
     return outcome;
   } catch (error) {
     console.error("Database Error: Failed to fetch outcome.", error);
-    throw new Error("Failed to fetch outcome.")
+    throw new Error("Failed to fetch outcome.");
   }
 };
 
@@ -102,20 +101,26 @@ export const _fetchOutcomes = async (
   queryInput: string,
   currentPageInput: number,
   sortInput: string | undefined,
-  typeInput: string | undefined
-): Promise<{ outcomes: OutcomeWithDetails[]; totalPages: number }> => {
+  typeInput: string | undefined,
+  pageSizeInput: number
+): Promise<{
+  outcomes: OutcomeWithDetails[];
+  totalPages: number;
+  totalRows: number;
+}> => {
   const validatedArgs = OutcomesSchema.safeParse({
     query: queryInput,
     currentPage: currentPageInput,
     sort: sortInput,
     type: typeInput,
+    pageSize: pageSizeInput
   });
 
   if (!validatedArgs.success) {
     throw new Error("Invalid arguments for fetching outcomes.");
   }
 
-  const { query, currentPage, sort, type } = validatedArgs.data;
+  const { query, currentPage, sort, type, pageSize } = validatedArgs.data;
 
   const orderBy: Prisma.OutcomeOrderByWithRelationInput = (() => {
     if (!sort) return { outcomeDate: "desc" };
@@ -161,7 +166,7 @@ export const _fetchOutcomes = async (
   };
 
   try {
-    const offset = (currentPage - 1) * OUTCOMES_PER_PAGE;
+    const offset = (currentPage - 1) * pageSize;
     const [totalCount, outcomes] = await prisma.$transaction([
       prisma.outcome.count({ where: whereClause }),
       prisma.outcome.findMany({
@@ -180,13 +185,13 @@ export const _fetchOutcomes = async (
           adoptionApplication: { select: { id: true, applicantName: true } },
         },
         orderBy,
-        take: OUTCOMES_PER_PAGE,
+        take: pageSize,
         skip: offset,
       }),
     ]);
 
-    const totalPages = Math.ceil(totalCount / OUTCOMES_PER_PAGE);
-    return { outcomes, totalPages };
+    const totalPages = Math.ceil(totalCount / pageSize);
+    return { outcomes, totalPages, totalRows: totalCount };
   } catch (error) {
     console.error("Database Error: Failed to fetch outcomes.", error);
     throw new Error("Failed to fetch outcomes.");
@@ -194,9 +199,9 @@ export const _fetchOutcomes = async (
 };
 
 export const fetchOutcomeById = RequirePermission(
-  Permissions.OUTCOMES_READ_DETAIL
+  Permissions.OUTCOMES_READ_DETAIL,
 )(_fetchOutcomeById);
 
 export const fetchOutcomes = RequirePermission(
-  Permissions.OUTCOMES_READ_LISTING
+  Permissions.OUTCOMES_READ_LISTING,
 )(_fetchOutcomes);

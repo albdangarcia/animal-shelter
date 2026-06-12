@@ -3,13 +3,14 @@ import { Prisma, TaskCategory, TaskStatus } from "@prisma/client";
 import { z } from "zod";
 import { Permissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../auth/protected-actions";
+import { pageSizeSchema } from "../zod-schemas/common.schemas";
 
 const AllAnimalsTasksSchema = z.object({
   query: z.string(),
   currentPage: z.int().positive(),
   category: z.string().optional(),
   status: z.string().optional(),
-  pageSize: z.int().positive(),
+  pageSize: pageSizeSchema,
   sort: z.string().optional(),
 });
 
@@ -34,8 +35,12 @@ const _fetchAllAnimalsTasks = async (
   categoryInput: string | undefined,
   statusInput: string | undefined,
   pageSizeInput: number,
-  sortInput: string | undefined
-): Promise<{ tasks: AllAnimalsTasksPayload[]; totalPages: number }> => {
+  sortInput: string | undefined,
+): Promise<{
+  tasks: AllAnimalsTasksPayload[];
+  totalPages: number;
+  totalRows: number;
+}> => {
   const validatedArgs = AllAnimalsTasksSchema.safeParse({
     query: queryInput,
     currentPage: currentPageInput,
@@ -96,7 +101,7 @@ const _fetchAllAnimalsTasks = async (
 
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    return { tasks, totalPages };
+    return { tasks, totalPages, totalRows: totalCount };
   } catch (error) {
     console.error("Error fetching all tasks:", error);
     throw new Error("Error fetching all tasks.");
@@ -104,5 +109,5 @@ const _fetchAllAnimalsTasks = async (
 };
 
 export const fetchAllAnimalsTasks = RequirePermission(
-  Permissions.ANIMAL_TASK_READ_LISTING
+  Permissions.ANIMAL_TASK_READ_LISTING,
 )(_fetchAllAnimalsTasks);

@@ -10,7 +10,7 @@ import { SearchParamsType } from "@/app/lib/types";
 import { fetchUsers } from "@/app/lib/data/user.data";
 import UsersTableToolbar from "@/components/dashboard/users/table/users-table-toolbar";
 import { columns } from "@/components/dashboard/users/table/users-table-columns";
-import DataTable from "@/components/dashboard/users/table/users-table";
+import DataTable from "@/components/table-common/data-table";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { Permissions } from "@/app/lib/auth/permissions";
@@ -31,14 +31,16 @@ const Page = async ({ searchParams }: Props) => {
 };
 
 const PageContent = async ({ searchParams }: Props) => {
-  const { query = "", page = "1", sort, role } = await searchParams;
+  const { query = "", page = "1", pageSize = "10", sort, role } = await searchParams;
   const currentPage = Number(page);
+  const currentPageSize = Number(pageSize);
 
-  const { users, totalPages } = await fetchUsers(
+  const { users, totalPages, totalRows } = await fetchUsers(
     query,
     currentPage,
     sort,
-    role
+    role,
+    currentPageSize
   );
 
   return (
@@ -61,6 +63,7 @@ const PageContent = async ({ searchParams }: Props) => {
                 columns={columns}
                 ToolbarComponent={UsersTableToolbar}
                 totalPages={totalPages}
+                totalRows={totalRows}
               />
             </div>
           </div>

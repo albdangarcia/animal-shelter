@@ -27,7 +27,7 @@ const _fetchAnimalTasks = async (
   pageSizeInput: number,
   sortInput: string | undefined,
   inputAnimalId: string
-): Promise<{ tasks: FetchAnimalTasksPayload[]; totalPages: number }> => {
+): Promise<{ tasks: FetchAnimalTasksPayload[]; totalPages: number; totalRows: number }> => {
   const validatedArgs = AnimalTasksSchema.safeParse({
     query: queryInput,
     currentPage: currentPageInput,
@@ -89,7 +89,7 @@ const _fetchAnimalTasks = async (
 
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    return { tasks, totalPages };
+    return { tasks, totalPages, totalRows: totalCount };
   } catch (error) {
     console.error("Error fetching tasks:", error);
     throw new Error("Error fetching tasks.");

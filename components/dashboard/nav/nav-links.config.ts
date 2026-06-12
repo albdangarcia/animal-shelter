@@ -52,7 +52,7 @@ export const navMainItems: readonly NavItem[] = [
     permission: Permissions.ANIMAL_READ_LISTING,
   },
   {
-    title: "Users",
+    title: "Role Management",
     url: "/dashboard/users",
     icon: "IconChartBar",
     permission: Permissions.MANAGE_ROLES,

@@ -5,11 +5,11 @@ import { RequirePermission } from "../../auth/protected-actions";
 import {
   cuidSchema,
   currentPageSchema,
+  pageSizeSchema,
   searchQuerySchema,
 } from "../../zod-schemas/common.schemas";
 import z from "zod";
 import { ApplicationWithAnimal } from "../user-application.data";
-import { ITEMS_PER_PAGE } from "../../constants/constants";
 
 export const fetchAnimalApplicationsSchema = z.object({
   animalId: cuidSchema,
@@ -17,6 +17,7 @@ export const fetchAnimalApplicationsSchema = z.object({
   currentPage: currentPageSchema,
   sort: z.string().optional(),
   status: z.string().optional(),
+  pageSize: pageSizeSchema,
 });
 
 const _fetchAnimalApplications = async (
@@ -24,10 +25,12 @@ const _fetchAnimalApplications = async (
   queryInput: string,
   currentPageInput: number,
   sortInput: string | undefined,
-  statusInput: string | undefined
+  statusInput: string | undefined,
+  pageSizeInput: number,
 ): Promise<{
   applications: ApplicationWithAnimal[];
   totalPages: number;
+  totalRows: number;
 }> => {
   const validatedArgs = fetchAnimalApplicationsSchema.safeParse({
     animalId: animalIdInput,
@@ -35,14 +38,16 @@ const _fetchAnimalApplications = async (
     currentPage: currentPageInput,
     sort: sortInput,
     status: statusInput,
+    pageSize: pageSizeInput,
   });
 
   if (!validatedArgs.success) {
     throw new Error("Invalid input provided.");
   }
 
-  const { animalId, query, currentPage, sort, status } = validatedArgs.data;
-  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+  const { animalId, query, currentPage, sort, status, pageSize } =
+    validatedArgs.data;
+  const offset = (currentPage - 1) * pageSize;
 
   const orderBy: Prisma.AdoptionApplicationOrderByWithRelationInput = (() => {
     if (!sort) return { submittedAt: "desc" };
@@ -106,7 +111,7 @@ const _fetchAnimalApplications = async (
           },
         },
         orderBy: orderBy,
-        take: ITEMS_PER_PAGE,
+        take: pageSize,
         skip: offset,
       }),
       prisma.adoptionApplication.count({
@@ -114,9 +119,9 @@ const _fetchAnimalApplications = async (
       }),
     ]);
 
-    const totalPages = Math.ceil(count / ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(count / pageSize);
 
-    return { applications, totalPages };
+    return { applications, totalPages, totalRows: count };
   } catch (error) {
     console.error("Error fetching animal applications.", error);
     throw new Error("Error fetching animal applications.");
@@ -124,5 +129,5 @@ const _fetchAnimalApplications = async (
 };
 
 export const fetchAnimalApplications = RequirePermission(
-  Permissions.APPLICATIONS_READ_DETAIL
+  Permissions.APPLICATIONS_READ_DETAIL,
 )(_fetchAnimalApplications);

@@ -19,29 +19,33 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DataTablePagination } from "../../../table-common/data-table-pagination";
+import { DataTablePagination } from "@/components/table-common/data-table-pagination";
 
-interface DataTableProps<TData, TValue> {
-  columns: ColumnDef<TData, TValue>[];
+interface DataTableProps<TData, TValue, TExtra = {}> {
+  columns?: ColumnDef<TData, TValue>[];
+  getColumns?: (props: TExtra) => ColumnDef<TData, TValue>[];
+  columnProps?: TExtra;
   data: TData[];
-  ToolbarComponent?: React.ComponentType<{
-    table: Table<TData>;
-  }>;
+  ToolbarComponent?: React.ComponentType<{ table: Table<TData> } & TExtra>;
+  toolbarProps?: TExtra;
   totalPages: number;
+  totalRows: number;
 }
 
-const DataTable = <TData, TValue>({
-  columns,
+const DataTable = <TData, TValue, TExtra = {}>({
+  columns: staticColumns,
+  getColumns,
+  columnProps,
   data,
   ToolbarComponent,
+  toolbarProps,
   totalPages,
-}: DataTableProps<TData, TValue>) => {
+  totalRows,
+}: DataTableProps<TData, TValue, TExtra>) => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  // useMemo calculates the sorting state from the URL.
-  // This logic only re-runs when 'searchParams' changes.
   const sorting: SortingState = React.useMemo(() => {
     const sort = searchParams.get("sort");
     if (!sort) return [];
@@ -49,7 +53,11 @@ const DataTable = <TData, TValue>({
     return [{ id, desc: dir === "desc" }];
   }, [searchParams]);
 
-  // State for UI-only features remains managed by useState.
+  const columns = React.useMemo(() => {
+    if (getColumns) return getColumns(columnProps as TExtra);
+    return staticColumns ?? [];
+  }, [getColumns, columnProps, staticColumns]);
+
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] =
     React.useState<VisibilityState>({});
@@ -60,11 +68,7 @@ const DataTable = <TData, TValue>({
     manualPagination: true,
     manualSorting: true,
     pageCount: totalPages,
-    state: {
-      sorting,
-      columnVisibility,
-      rowSelection,
-    },
+    state: { sorting, columnVisibility, rowSelection },
     onSortingChange: (updater) => {
       const newSorting =
         typeof updater === "function" ? updater(sorting) : updater;
@@ -86,7 +90,9 @@ const DataTable = <TData, TValue>({
 
   return (
     <div className="space-y-4">
-      {ToolbarComponent && <ToolbarComponent table={table} />}
+      {ToolbarComponent && (
+        <ToolbarComponent table={table} {...(toolbarProps as TExtra)} />
+      )}
 
       <div className="rounded-md border">
         <UITable>
@@ -125,10 +131,7 @@ const DataTable = <TData, TValue>({
               ))
             ) : (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
+                <TableCell colSpan={columns.length} className="h-24 text-center">
                   No results.
                 </TableCell>
               </TableRow>
@@ -136,7 +139,7 @@ const DataTable = <TData, TValue>({
           </TableBody>
         </UITable>
       </div>
-      <DataTablePagination table={table} totalPages={totalPages} />
+      <DataTablePagination table={table} totalPages={totalPages} totalRows={totalRows} />
     </div>
   );
 };

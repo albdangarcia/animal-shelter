@@ -26,7 +26,7 @@ const _fetchAnimals = async (
   sexInput: string | undefined,
   pageSizeInput: number,
   sortInput: string | undefined
-): Promise<{ animals: AnimalsPayload[]; totalPages: number }> => {
+): Promise<{ animals: AnimalsPayload[]; totalPages: number; totalRows: number}> => {
   // Parse the query and currentPage
   const validatedArgs = DashboardAnimalsSchema.safeParse({
     query: queryInput,
@@ -44,7 +44,7 @@ const _fetchAnimals = async (
     validatedArgs.data;
 
   const orderBy: Prisma.AnimalOrderByWithRelationInput = (() => {
-    if (!sort) return { createdAt: "desc" }; // Default sort
+    if (!sort) return { createdAt: "desc" };
     const [id, dir] = sort.split(".");
     return { [id]: dir === "desc" ? "desc" : "asc" };
   })();
@@ -84,7 +84,7 @@ const _fetchAnimals = async (
 
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    return { animals, totalPages };
+    return { animals, totalPages, totalRows: totalCount};
   } catch (error) {
     console.error("Error fetching animals.", error);
     throw new Error("Error fetching animals.");

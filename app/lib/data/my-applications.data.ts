@@ -1,4 +1,3 @@
-import { ITEMS_PER_PAGE } from "../constants/constants";
 import { prisma } from "../prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
@@ -15,10 +14,12 @@ const _fetchMyApplications = async (
   queryInput: string,
   currentPageInput: number,
   sortInput: string | undefined,
-  statusInput: string | undefined
+  statusInput: string | undefined,
+  pageSizeInput: number
 ): Promise<{
   myApplications: MyApplicationPayload[];
   totalPages: number;
+  totalRows: number;
 }> => {
   const personId = user.personId;
 
@@ -27,13 +28,14 @@ const _fetchMyApplications = async (
     currentPage: currentPageInput,
     sort: sortInput,
     status: statusInput,
+    pageSize: pageSizeInput,
   });
 
   if (!validatedArgs.success) {
     throw new Error("Invalid arguments for fetching applications.");
   }
-  const { query, currentPage, sort, status } = validatedArgs.data;
-  const offset = (currentPage - 1) * ITEMS_PER_PAGE;
+  const { query, currentPage, sort, status, pageSize } = validatedArgs.data;
+  const offset = (currentPage - 1) * pageSize;
 
   const orderBy: Prisma.AdoptionApplicationOrderByWithRelationInput = (() => {
     if (!sort) return { submittedAt: "desc" };
@@ -97,14 +99,14 @@ const _fetchMyApplications = async (
           },
         },
         orderBy: orderBy,
-        take: ITEMS_PER_PAGE,
+        take: pageSize,
         skip: offset,
       }),
     ]);
 
-    const totalPages = Math.ceil(count / ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(count / pageSize);
 
-    return { myApplications, totalPages };
+    return { myApplications, totalPages, totalRows: count };
   } catch (error) {
     console.error("Error fetching applications.", error);
     throw new Error("Error fetching applications.");
