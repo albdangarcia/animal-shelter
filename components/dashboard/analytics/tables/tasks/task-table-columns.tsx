@@ -41,7 +41,7 @@ export const getTaskColumns = ({
         }
         onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
         aria-label="Select all"
-        className="translate-y-[2px]"
+        className="translate-y-0.5"
       />
     ),
     cell: ({ row }) => (
@@ -49,7 +49,7 @@ export const getTaskColumns = ({
         checked={row.getIsSelected()}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         aria-label="Select row"
-        className="translate-y-[2px]"
+        className="translate-y-0.5"
       />
     ),
     enableSorting: false,
@@ -68,7 +68,7 @@ export const getTaskColumns = ({
       return (
         <div className="flex space-x-2">
           {priority && <Badge variant="outline">{priority.label}</Badge>}
-          <span className="max-w-[500px] truncate font-medium">
+          <span className="max-w-125 truncate font-medium">
             {row.getValue("title")}
           </span>
         </div>
@@ -194,7 +194,7 @@ export const getTaskColumns = ({
 
       return (
         <Select value={currentAssigneeId} onValueChange={handleAssigneeChange}>
-          <SelectTrigger className="w-full max-w-[180px]">
+          <SelectTrigger className="w-full max-w-45">
             <SelectValue placeholder="Assign..." />
           </SelectTrigger>
           <SelectContent>

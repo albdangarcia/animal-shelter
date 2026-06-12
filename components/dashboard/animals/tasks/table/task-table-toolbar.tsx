@@ -61,7 +61,7 @@ const TasksDataTableToolbar = ({
               Add Task
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[600px]">
+          <DialogContent className="sm:max-w-150">
             <DialogHeader>
               <DialogTitle>Create Task</DialogTitle>
               <DialogDescription>

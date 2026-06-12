@@ -21,7 +21,7 @@ export const columns: ColumnDef<MyApplicationPayload>[] = [
         }
         onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
         aria-label="Select all"
-        className="translate-y-[2px]"
+        className="translate-y-0.5"
       />
     ),
     cell: ({ row }) => (
@@ -29,7 +29,7 @@ export const columns: ColumnDef<MyApplicationPayload>[] = [
         checked={row.getIsSelected()}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         aria-label="Select row"
-        className="translate-y-[2px]"
+        className="translate-y-0.5"
       />
     ),
     enableSorting: false,
@@ -73,7 +73,7 @@ export const columns: ColumnDef<MyApplicationPayload>[] = [
     },
     cell: ({ row }) => {
       return (
-        <span className="max-w-[500px] truncate">
+        <span className="max-w-125 truncate">
           {row.getValue("applicantName")}
         </span>
       );
@@ -117,7 +117,7 @@ export const columns: ColumnDef<MyApplicationPayload>[] = [
     },
     cell: ({ row }) => {
       return (
-        <span className="max-w-[400px] truncate">
+        <span className="max-w-100 truncate">
           {row.original.animal.species.name}
         </span>
       );

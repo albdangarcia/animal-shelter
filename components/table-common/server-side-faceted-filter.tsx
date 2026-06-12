@@ -105,7 +105,7 @@ export function ServerSideFacetedFilter({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[200px] p-0" align="start">
+      <PopoverContent className="w-50 p-0" align="start">
         <Command>
           <CommandInput placeholder={title} />
           <CommandList>

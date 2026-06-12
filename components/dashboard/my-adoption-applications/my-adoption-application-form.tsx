@@ -492,7 +492,7 @@ export function MyApplicationForm({
                     <FormControl>
                       <Textarea
                         placeholder="Please describe your experience with animals, including past ownership."
-                        className="resize-y min-h-[100px]"
+                        className="resize-y min-h-25"
                         {...field}
                       />
                     </FormControl>
@@ -509,7 +509,7 @@ export function MyApplicationForm({
                     <FormControl>
                       <Textarea
                         placeholder="Why do you want to adopt at this time? What are you looking for in a companion?"
-                        className="resize-y min-h-[100px]"
+                        className="resize-y min-h-25"
                         {...field}
                       />
                     </FormControl>

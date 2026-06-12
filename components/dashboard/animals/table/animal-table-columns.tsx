@@ -23,7 +23,7 @@ export const columns: ColumnDef<AnimalsPayload>[] = [
           }
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
           aria-label="Select all"
-          className="translate-y-[2px]"
+          className="translate-y-0.5"
         />
       </div>
     ),
@@ -33,7 +33,7 @@ export const columns: ColumnDef<AnimalsPayload>[] = [
           checked={row.getIsSelected()}
           onCheckedChange={(value) => row.toggleSelected(!!value)}
           aria-label="Select row"
-          className="translate-y-[2px]"
+          className="translate-y-0.5"
         />
       </div>
     ),
@@ -133,7 +133,7 @@ export const columns: ColumnDef<AnimalsPayload>[] = [
       <DataTableColumnHeader column={column} title="City" />
     ),
     cell: ({ row }) => (
-      <span className="max-w-[200px] truncate">{row.getValue("city")}</span>
+      <span className="max-w-50 truncate">{row.getValue("city")}</span>
     ),
   },
   {
@@ -142,7 +142,7 @@ export const columns: ColumnDef<AnimalsPayload>[] = [
       <DataTableColumnHeader column={column} title="State" />
     ),
     cell: ({ row }) => (
-      <span className="max-w-[200px] truncate">{row.getValue("state")}</span>
+      <span className="max-w-50 truncate">{row.getValue("state")}</span>
     ),
   },
   {

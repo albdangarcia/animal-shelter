@@ -21,7 +21,7 @@ export const columns: ColumnDef<ApplicationWithAnimal>[] = [
         }
         onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
         aria-label="Select all"
-        className="translate-y-[2px]"
+        className="translate-y-0.5"
       />
     ),
     cell: ({ row }) => (
@@ -29,7 +29,7 @@ export const columns: ColumnDef<ApplicationWithAnimal>[] = [
         checked={row.getIsSelected()}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         aria-label="Select row"
-        className="translate-y-[2px]"
+        className="translate-y-0.5"
       />
     ),
     enableSorting: false,
@@ -51,7 +51,7 @@ export const columns: ColumnDef<ApplicationWithAnimal>[] = [
       return (
         <div className="flex space-x-2">
           {status && <Badge variant="outline">{status.label}</Badge>}
-          <span className="max-w-[500px] truncate font-medium">
+          <span className="max-w-125 truncate font-medium">
             {row.getValue("applicantName")}
           </span>
         </div>
@@ -67,7 +67,7 @@ export const columns: ColumnDef<ApplicationWithAnimal>[] = [
       displayName: "Applicant Email",
     },
     cell: ({ row }) => (
-      <span className="max-w-[400px] truncate">
+      <span className="max-w-100 truncate">
         {row.getValue("applicantEmail")}
       </span>
     ),
@@ -81,7 +81,7 @@ export const columns: ColumnDef<ApplicationWithAnimal>[] = [
       displayName: "Applicant Phone",
     },
     cell: ({ row }) => (
-      <span className="max-w-[400px] truncate">
+      <span className="max-w-100 truncate">
         {row.getValue("applicantPhone")}
       </span>
     ),
@@ -142,7 +142,7 @@ export const columns: ColumnDef<ApplicationWithAnimal>[] = [
     },
     cell: ({ row }) => {
       return (
-        <span className="max-w-[400px] truncate">
+        <span className="max-w-100 truncate">
           {row.original.animal.species.name}
         </span>
       );

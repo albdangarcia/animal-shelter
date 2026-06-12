@@ -30,7 +30,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           <span className="sr-only">Open menu</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[160px]">
+      <DropdownMenuContent align="end" className="w-40">
         <Link href={`/dashboard/adoption-applications/${userApplication.id}/edit`}>
           <DropdownMenuItem>Edit</DropdownMenuItem>
         </Link>

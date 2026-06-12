@@ -41,7 +41,7 @@ export const getColumns = ({
         }
         onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
         aria-label="Select all"
-        className="translate-y-[2px]"
+        className="translate-y-0.5"
       />
     ),
     cell: ({ row }) => (
@@ -49,7 +49,7 @@ export const getColumns = ({
         checked={row.getIsSelected()}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         aria-label="Select row"
-        className="translate-y-[2px]"
+        className="translate-y-0.5"
       />
     ),
     enableSorting: false,
@@ -87,7 +87,7 @@ export const getColumns = ({
     ),
     cell: ({ row }) => {
       return (
-        <span className="max-w-[500px] truncate font-medium">
+        <span className="max-w-125 truncate font-medium">
           {row.getValue("title")}
         </span>
       );
@@ -99,7 +99,7 @@ export const getColumns = ({
       <DataTableColumnHeader column={column} title="Details" />
     ),
     cell: ({ row }) => (
-      <span className="max-w-[400px] truncate">{row.getValue("details")}</span>
+      <span className="max-w-100 truncate">{row.getValue("details")}</span>
     ),
   },
   {
@@ -203,7 +203,7 @@ export const getColumns = ({
 
       return (
         <Select value={currentAssigneeId} onValueChange={handleAssigneeChange}>
-          <SelectTrigger className="w-full max-w-[180px]">
+          <SelectTrigger className="w-full max-w-45">
             <SelectValue placeholder="Assign..." />
           </SelectTrigger>
           <SelectContent>

@@ -55,7 +55,7 @@ export function DataTableToolbar<TData>({
             placeholder={searchPlaceholder}
             onChange={(e) => handleSearch(e.target.value)}
             defaultValue={searchParams.get("query")?.toString()}
-            className="h-8 w-[200px] @[736px]/toolbar:w-full"
+            className="h-8 w-50 @[736px]/toolbar:w-full"
           />
         </div>
         <div className="space-x-2 @[736px]/toolbar:justify-self-start items-center flex">

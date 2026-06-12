@@ -269,7 +269,7 @@ export function StaffApplicationUpdateForm({
                       <FormControl>
                         <Textarea
                           placeholder="Add or update internal notes for staff view only."
-                          className="resize-y min-h-[100px]"
+                          className="resize-y min-h-25"
                           disabled={isPending || isAdopted}
                           {...field}
                         />
@@ -521,7 +521,7 @@ export function StaffApplicationUpdateForm({
                 <FormControl>
                   <Textarea
                     value={application.animalExperience ?? "N/A"}
-                    className="resize-y min-h-[100px]"
+                    className="resize-y min-h-25"
                     disabled
                     readOnly
                   />
@@ -532,7 +532,7 @@ export function StaffApplicationUpdateForm({
                 <FormControl>
                   <Textarea
                     value={application.reasonForAdoption}
-                    className="resize-y min-h-[100px]"
+                    className="resize-y min-h-25"
                     disabled
                     readOnly
                   />

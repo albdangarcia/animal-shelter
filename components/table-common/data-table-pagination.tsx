@@ -73,7 +73,7 @@ export function DataTablePagination<TData>({
             onValueChange={(value) => handleNavigation(1, Number(value))}
             disabled={displaySizeOptions.length <= 1}
           >
-            <SelectTrigger className="h-8 w-[70px]">
+            <SelectTrigger className="h-8 w-17.5">
               <SelectValue placeholder={pageSize} />
             </SelectTrigger>
             <SelectContent side="top">
@@ -85,7 +85,7 @@ export function DataTablePagination<TData>({
             </SelectContent>
           </Select>
         </div>
-        <div className="flex w-[100px] items-center justify-center text-sm font-medium">
+        <div className="flex w-25 items-center justify-center text-sm font-medium">
           Page {currentPage} of {totalPages}
         </div>
         <div className="flex items-center space-x-2">

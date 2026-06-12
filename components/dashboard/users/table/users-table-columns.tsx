@@ -19,7 +19,7 @@ export const columns: ColumnDef<UsersPayload>[] = [
         }
         onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
         aria-label="Select all"
-        className="translate-y-[2px]"
+        className="translate-y-0.5"
       />
     ),
     cell: ({ row }) => (
@@ -27,7 +27,7 @@ export const columns: ColumnDef<UsersPayload>[] = [
         checked={row.getIsSelected()}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         aria-label="Select row"
-        className="translate-y-[2px]"
+        className="translate-y-0.5"
       />
     ),
     enableSorting: false,
@@ -46,7 +46,7 @@ export const columns: ColumnDef<UsersPayload>[] = [
       return (
         <div className="flex space-x-2">
           {role && <Badge variant="outline">{role.label}</Badge>}
-          <span className="max-w-[500px] truncate font-medium">
+          <span className="max-w-125 truncate font-medium">
             {row.getValue("email")}
           </span>
         </div>
@@ -62,7 +62,7 @@ export const columns: ColumnDef<UsersPayload>[] = [
       const role = row.getValue("role") as string;
 
       return (
-        <span className="max-w-[400px] truncate capitalize">{role.toLowerCase()}</span>
+        <span className="max-w-100 truncate capitalize">{role.toLowerCase()}</span>
       );
     },
   },
