@@ -180,5 +180,5 @@ const _createReIntake = async (
 };
 
 export const createReIntake = withAuthenticatedUser(
-  RequirePermission(Permissions.ANIMAL_CREATE)(_createReIntake)
+  RequirePermission(Permissions.INTAKE_CREATE)(_createReIntake)
 );

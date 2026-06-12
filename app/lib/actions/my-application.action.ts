@@ -10,12 +10,13 @@ import { MyAdoptionAppFormSchema } from "../zod-schemas/myApplication.schema";
 import { SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { ActionResult } from "../types";
 import { z } from "zod";
+import { isOwnedByUser } from "../auth/ownership";
 
 const _updateMyAdoptionApp = async (
   user: SessionUser, // Injected by withAuthenticatedUser
   applicationId: string, // Adoption Application ID from the URL parameters
   prevState: MyAdoptionAppFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<MyAdoptionAppFormState> => {
   // Validate the applicationId
   const parsedApplicationId = cuidSchema.safeParse(applicationId);
@@ -27,45 +28,38 @@ const _updateMyAdoptionApp = async (
   const validatedApplicationId = parsedApplicationId.data;
 
   // Verify that the application belongs to the current user
+  let application;
   try {
-    const application = await prisma.adoptionApplication.findUnique({
+    application = await prisma.adoptionApplication.findUnique({
       where: { id: validatedApplicationId },
       select: { userId: true, status: true },
     });
-
-    if (!application) {
-      return { message: "Adoption Application not found." };
-    }
-
-    // Perform the ABAC (context-aware) check
-    // Check if the application belongs to the current user
-    if (application.userId !== user.personId) {
-      return {
-        message: "Access Denied. You can only update your own applications.",
-      };
-    }
-
-    // Check if the application status prevents modification
-    const nonEditableStatuses: ApplicationStatus[] = [
-      ApplicationStatus.REVIEWING,
-      ApplicationStatus.APPROVED,
-      ApplicationStatus.REJECTED,
-      ApplicationStatus.WITHDRAWN,
-      ApplicationStatus.ADOPTED,
-    ];
-
-    if (nonEditableStatuses.includes(application.status)) {
-      return {
-        message: `Cannot update application. Its status is currently "${application.status}". Applications cannot be modified if their status is REVIEWING, APPROVED, REJECTED, WITHDRAWN, or ADOPTED.`,
-      };
-    }
   } catch (error) {
     console.error(
       "Database error while verifying application ownership:",
-      error
+      error,
     );
     return {
       message: "Database Error: Failed to verify application ownership.",
+    };
+  }
+
+  if (!isOwnedByUser(application, user.personId)) {
+    return { message: "Adoption Application not found." };
+  }
+
+  // Check if the application status prevents modification
+  const nonEditableStatuses: ApplicationStatus[] = [
+    ApplicationStatus.REVIEWING,
+    ApplicationStatus.APPROVED,
+    ApplicationStatus.REJECTED,
+    ApplicationStatus.WITHDRAWN,
+    ApplicationStatus.ADOPTED,
+  ];
+
+  if (nonEditableStatuses.includes(application.status)) {
+    return {
+      message: `Cannot update application. Its status is currently "${application.status}". Applications cannot be modified if their status is REVIEWING, APPROVED, REJECTED, WITHDRAWN, or ADOPTED.`,
     };
   }
 
@@ -128,7 +122,7 @@ const _updateMyAdoptionApp = async (
   } catch (error) {
     console.error(
       `Database Error updating adoption application ${validatedApplicationId}:`,
-      error
+      error,
     );
     return {
       message: "Database Error: Failed to Update Adoption Application.",
@@ -145,7 +139,7 @@ const _updateMyAdoptionApp = async (
 
 const _withdrawMyApplication = async (
   user: SessionUser, // Injected by withAuthenticatedUser
-  applicationId: string
+  applicationId: string,
 ): Promise<ActionResult> => {
   // Validate the applicationId
   const parsedApplicationId = cuidSchema.safeParse(applicationId);
@@ -164,41 +158,34 @@ const _withdrawMyApplication = async (
   try {
     application = await prisma.adoptionApplication.findUnique({
       where: { id: validatedApplicationId },
-      select: { userId: true, status: true, animalId: true }, // Select animalId
+      select: { userId: true, status: true, animalId: true },
     });
-
-    if (!application) {
-      return { success: false, message: "Adoption Application not found." };
-    }
-
-    if (application.userId !== user.personId) {
-      return {
-        success: false,
-        message: "Access Denied. You can only withdraw your own applications.",
-      };
-    }
-
-    const nonWithdrawableStatuses: ApplicationStatus[] = [
-      ApplicationStatus.ADOPTED,
-      ApplicationStatus.WITHDRAWN,
-      ApplicationStatus.REJECTED,
-    ];
-
-    if (nonWithdrawableStatuses.includes(application.status)) {
-      return {
-        success: false,
-        message: `Cannot withdraw application. Its status is currently "${application.status}".`,
-      };
-    }
   } catch (error) {
     console.error(
       "Error verifying application ownership for withdrawal:",
-      error
+      error,
     );
     return {
       success: false,
       message:
         "A server error occurred while verifying the application. Please try again.",
+    };
+  }
+
+  if (!isOwnedByUser(application, user.personId)) {
+    return { success: false, message: "Adoption Application not found." };
+  }
+
+  const nonWithdrawableStatuses: ApplicationStatus[] = [
+    ApplicationStatus.ADOPTED,
+    ApplicationStatus.WITHDRAWN,
+    ApplicationStatus.REJECTED,
+  ];
+
+  if (nonWithdrawableStatuses.includes(application.status)) {
+    return {
+      success: false,
+      message: `Cannot withdraw application. Its status is currently "${application.status}".`,
     };
   }
 
@@ -235,7 +222,7 @@ const _withdrawMyApplication = async (
   } catch (error) {
     console.error(
       `Database Error withdrawing adoption application ${validatedApplicationId}:`,
-      error
+      error,
     );
     return {
       success: false,
@@ -250,7 +237,7 @@ const _withdrawMyApplication = async (
 
 const _reactivateMyApplication = async (
   user: SessionUser, // Injected by withAuthenticatedUser
-  applicationId: string
+  applicationId: string,
 ): Promise<ActionResult> => {
   // Validate the applicationId
   const parsedApplicationId = cuidSchema.safeParse(applicationId);
@@ -263,8 +250,9 @@ const _reactivateMyApplication = async (
   const validatedApplicationId = parsedApplicationId.data;
 
   // Verify ownership and status
+  let application;
   try {
-    const application = await prisma.adoptionApplication.findUnique({
+    application = await prisma.adoptionApplication.findUnique({
       where: { id: validatedApplicationId },
       select: {
         userId: true,
@@ -272,40 +260,31 @@ const _reactivateMyApplication = async (
         animal: { select: { listingStatus: true } },
       },
     });
-
-    if (!application) {
-      return { success: false, message: "Adoption Application not found." };
-    }
-
-    if (application.userId !== user.personId) {
-      return {
-        success: false,
-        message:
-          "Access Denied. You can only reactivate your own applications.",
-      };
-    }
-
-    if (application.animal.listingStatus !== "PUBLISHED") {
-      return {
-        success: false,
-        message:
-          "Cannot reactivate application. This animal is no longer available for adoption.",
-      };
-    }
-
-    // Check if the application status is WITHDRAWN
-    if (application.status !== ApplicationStatus.WITHDRAWN) {
-      return {
-        success: false,
-        message: `Cannot reactivate application. Its status is currently "${application.status}".`,
-      };
-    }
   } catch (error) {
     console.error("Error verifying application for reactivation:", error);
     return {
       success: false,
       message:
         "A server error occurred while verifying the application. Please try again.",
+    };
+  }
+
+  if (!isOwnedByUser(application, user.personId)) {
+    return { success: false, message: "Adoption Application not found." };
+  }
+
+  if (application.animal.listingStatus !== "PUBLISHED") {
+    return {
+      success: false,
+      message:
+        "Cannot reactivate application. This animal is no longer available for adoption.",
+    };
+  }
+
+  if (application.status !== ApplicationStatus.WITHDRAWN) {
+    return {
+      success: false,
+      message: `Cannot reactivate application. Its status is currently "${application.status}".`,
     };
   }
 
@@ -330,7 +309,7 @@ const _reactivateMyApplication = async (
   } catch (error) {
     console.error(
       `Database Error reactivating adoption application ${validatedApplicationId}:`,
-      error
+      error,
     );
     return {
       success: false,
@@ -348,7 +327,7 @@ const _createMyAdoptionApp = async (
   user: SessionUser, // Injected by withAuthenticatedUser
   animalId: string,
   prevState: MyAdoptionAppFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<MyAdoptionAppFormState> => {
   const parsedAnimalId = cuidSchema.safeParse(animalId);
   if (!parsedAnimalId.success) {
@@ -439,7 +418,7 @@ const _createMyAdoptionApp = async (
       },
       {
         isolationLevel: "Serializable",
-      }
+      },
     );
   } catch (error: unknown) {
     console.error("Error submitting adoption application:", error);
@@ -457,11 +436,11 @@ const _createMyAdoptionApp = async (
 export const updateMyAdoptionApp = withAuthenticatedUser(_updateMyAdoptionApp);
 
 export const withdrawMyApplication = withAuthenticatedUser(
-  _withdrawMyApplication
+  _withdrawMyApplication,
 );
 
 export const createMyAdoptionApp = withAuthenticatedUser(_createMyAdoptionApp);
 
 export const reactivateMyApplication = withAuthenticatedUser(
-  _reactivateMyApplication
+  _reactivateMyApplication,
 );

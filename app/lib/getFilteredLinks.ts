@@ -1,5 +1,6 @@
 import { NavDocument, NavItem } from "@/components/dashboard/nav/nav-links.config";
 import { hasPermission } from "./auth/hasPermission";
+import { type Permission } from "./auth/permissions";
 
 /**
  * Recursively filters navigation items based on user permissions
@@ -68,7 +69,7 @@ export const getFilteredDocuments = async (
  * Useful for showing/hiding entire sections
  */
 export const hasAnyPermission = async (
-  permissions: string[]
+  permissions: Permission[]
 ): Promise<boolean> => {
   for (const permission of permissions) {
     if (await hasPermission(permission)) {

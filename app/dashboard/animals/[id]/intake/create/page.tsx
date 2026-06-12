@@ -24,7 +24,7 @@ const Page = async ({ params }: Props) => {
 
   return (
     <Authorize
-      permission={Permissions.ANIMAL_CREATE}
+      permission={Permissions.INTAKE_CREATE}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent animalId={animalId} />

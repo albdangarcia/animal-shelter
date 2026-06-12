@@ -43,7 +43,7 @@ const _updateUserRole = async (userId: string, newRole: Role) => {
       },
     });
 
-    revalidatePath("/dashboard/users");
+    revalidatePath("/dashboard/role-management");
 
     return {
       success: true,

@@ -1,7 +1,8 @@
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { type Permission } from "@/app/lib/auth/permissions";
 
 interface Props {
-  permission: string;
+  permission: Permission;
   fallback: React.ReactNode;
   children: React.ReactNode;
 }

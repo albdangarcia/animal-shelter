@@ -7,7 +7,7 @@ import { fetchColors, fetchPartners, fetchSpecies } from "@/app/lib/data/animals
 const Page = async () => {
   return (
     <Authorize
-      permission={Permissions.ANIMAL_CREATE}
+      permission={Permissions.INTAKE_CREATE}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent />

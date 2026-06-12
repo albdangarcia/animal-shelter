@@ -1,4 +1,4 @@
-import { Permissions } from "@/app/lib/auth/permissions";
+import { Permissions, type Permission } from "@/app/lib/auth/permissions";
 
 export type IconName = 
   | "IconDashboard"
@@ -21,12 +21,12 @@ export interface NavItem {
   title: string;
   url: string;
   icon: IconName;
-  permission?: string;
+  permission?: Permission;
   isActive?: boolean;
   items?: Array<{
     title: string;
     url: string;
-    permission?: string;
+    permission?: Permission;
   }>;
 }
 
@@ -34,7 +34,7 @@ export interface NavDocument {
   name: string;
   url: string;
   icon: IconName;
-  permission?: string;
+  permission?: Permission;
 }
 
 // Main navigation items
@@ -79,7 +79,7 @@ export const navMainItems: readonly NavItem[] = [
     title: "Animal Tasks",
     url: "/dashboard/animal-tasks",
     icon: "IconUsers",
-    permission: Permissions.OUTCOMES_MANAGE,
+    permission: Permissions.ANIMAL_TASK_READ_LISTING,
   },
 ] as const;
 
