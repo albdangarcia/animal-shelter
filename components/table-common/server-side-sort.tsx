@@ -49,7 +49,7 @@ export function ServerSideSort({
         Sort by:
       </Label>
       <Select onValueChange={handleValueChange} value={currentValue}>
-        <SelectTrigger id="sort-order" className="w-[160px] font-medium" size="sm">
+        <SelectTrigger id="sort-order" className="w-40 font-medium" size="sm">
           <ArrowUpDown className="size-4 mr-2.5 text-black" />
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>

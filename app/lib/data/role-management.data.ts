@@ -1,41 +1,43 @@
 import { prisma } from "@/app/lib/prisma";
 import { Prisma, Role } from "@prisma/client";
-import { cuidSchema } from "../zod-schemas/common.schemas";
-import { UsersParamsSchema } from "../zod-schemas/user.schemas";
+import { UsersRoleParamsSchema } from "../zod-schemas/role-management.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { Permissions } from "@/app/lib/auth/permissions";
-import { UsersPayload, UserByIdPayload } from "../types";
+import { RoleManagementPayload } from "../types";
 
-const _fetchUsers = async (
+const _fetchUserRoles = async (
   queryInput: string,
   currentPageInput: number,
   sortInput: string | undefined,
   roleInput: string | undefined,
   pageSizeInput: number,
+  statusInput: string | undefined,
 ): Promise<{
-  users: UsersPayload[];
+  users: RoleManagementPayload[];
   totalPages: number;
   totalRows: number;
 }> => {
   // Parse and validate all arguments
-  const validatedArgs = UsersParamsSchema.safeParse({
+  const validatedArgs = UsersRoleParamsSchema.safeParse({
     query: queryInput,
     currentPage: currentPageInput,
     sort: sortInput,
     role: roleInput,
     pageSize: pageSizeInput,
+    status: statusInput,
   });
 
   if (!validatedArgs.success) {
     throw new Error("Invalid arguments for fetching users.");
   }
-  const { query, currentPage, sort, role, pageSize } = validatedArgs.data;
+  const { query, currentPage, sort, role, pageSize, status } =
+    validatedArgs.data;
 
   const offset = (currentPage - 1) * pageSize;
 
   // Dynamically set the sorting order
   const orderBy: Prisma.UserOrderByWithRelationInput = (() => {
-    if (!sort) return { createdAt: "desc" }; // Default sort
+    if (!sort) return { createdAt: "desc" };
     const [field, direction] = sort.split(".");
     const dir = direction === "asc" ? "asc" : "desc";
 
@@ -44,6 +46,10 @@ const _fetchUsers = async (
         return { email: dir };
       case "role":
         return { role: dir };
+      case "person":
+        return { person: { name: dir } };
+      case "deactivatedAt":
+        return { deactivatedAt: dir };
       case "createdAt":
         return { createdAt: dir };
       default:
@@ -53,19 +59,38 @@ const _fetchUsers = async (
 
   // Define the base where clause for filtering
   const whereClause: Prisma.UserWhereInput = {
-    email: {
-      contains: query,
-      mode: "insensitive",
-    },
-    // Exclude admins from the general user list by default
+    // Exclude admins globally
     role: {
       not: Role.ADMIN,
     },
+    OR: [
+      {
+        email: {
+          contains: query,
+          mode: "insensitive",
+        },
+      },
+      {
+        person: {
+          name: {
+            contains: query,
+            mode: "insensitive",
+          },
+        },
+      },
+    ],
   };
 
-  // If a specific role is provided for filtering, apply it
-  if (role && Object.values(Role).includes(role as Role)) {
-    whereClause.role = role as Role;
+  // If specific roles are provided for filtering, apply them
+  if (role && role.length > 0) {
+    const filteredRoles = role.filter((r) => r !== Role.ADMIN) as Role[];
+    if (filteredRoles.length > 0) {
+      whereClause.role = { in: filteredRoles };
+    }
+  }
+
+  if (status && status.length === 1) {
+    whereClause.deactivatedAt = status[0] === "active" ? null : { not: null };
   }
 
   // Fetch count and users in a single database transaction for efficiency
@@ -80,6 +105,13 @@ const _fetchUsers = async (
           image: true,
           role: true,
           createdAt: true,
+          deactivatedAt: true,
+          // lastLogin: true, // future prisma schema modification
+          person: {
+            select: {
+              name: true,
+            },
+          },
         },
         orderBy: orderBy,
         take: pageSize,
@@ -97,36 +129,6 @@ const _fetchUsers = async (
   }
 };
 
-const _fetchUserById = async (id: string): Promise<UserByIdPayload | null> => {
-  // Validate the id
-  const parsedId = cuidSchema.safeParse(id);
-  if (!parsedId.success) {
-    throw new Error("Invalid User ID format.");
-  }
-  const validatedId = parsedId.data;
-
-  try {
-    const user = await prisma.user.findUnique({
-      where: {
-        id: validatedId,
-      },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-      },
-    });
-    return user;
-  } catch (error) {
-    console.error("Error fetching user.", error);
-    throw new Error("Error fetching user.");
-  }
-};
-
-export const fetchUsers = RequirePermission(Permissions.MANAGE_ROLES)(
-  _fetchUsers,
-);
-
-export const fetchUserById = RequirePermission(Permissions.MANAGE_ROLES)(
-  _fetchUserById,
+export const fetchUserRoles = RequirePermission(Permissions.MANAGE_ROLES)(
+  _fetchUserRoles,
 );

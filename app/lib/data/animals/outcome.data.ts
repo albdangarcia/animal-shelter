@@ -15,7 +15,7 @@ export const OutcomesSchema = z.object({
   currentPage: currentPageSchema,
   sort: z.string().optional(),
   type: z.string().optional(),
-  pageSize: pageSizeSchema
+  pageSize: pageSizeSchema,
 });
 
 export const _fetchOutcomeById = async (outcomeId: string) => {
@@ -102,7 +102,7 @@ export const _fetchOutcomes = async (
   currentPageInput: number,
   sortInput: string | undefined,
   typeInput: string | undefined,
-  pageSizeInput: number
+  pageSizeInput: number,
 ): Promise<{
   outcomes: OutcomeWithDetails[];
   totalPages: number;
@@ -113,7 +113,7 @@ export const _fetchOutcomes = async (
     currentPage: currentPageInput,
     sort: sortInput,
     type: typeInput,
-    pageSize: pageSizeInput
+    pageSize: pageSizeInput,
   });
 
   if (!validatedArgs.success) {
@@ -134,6 +134,9 @@ export const _fetchOutcomes = async (
     }
     if (id === "animal") {
       return { animal: { name: direction } };
+    }
+    if (id === "date") {
+      return { outcomeDate: direction };
     }
 
     // This handles top-level fields like 'outcomeDate', 'type', etc.

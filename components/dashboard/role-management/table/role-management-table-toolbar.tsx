@@ -1,24 +1,27 @@
 "use client";
 
 import { Table } from "@tanstack/react-table";
-import { UsersPayload } from "@/app/lib/types";
+import { RoleManagementPayload } from "@/app/lib/types";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
-import { UserRoles } from "./users-options";
+import { UserRoles, UserStatuses } from "./role-management-options";
 
 interface UsersTableToolbarProps {
-  table: Table<UsersPayload>;
+  table: Table<RoleManagementPayload>;
 }
 
 const UsersTableToolbar = ({ table }: UsersTableToolbarProps) => {
   return (
     <DataTableToolbar
       table={table}
-      searchId="emails-search"
-      searchPlaceholder="Filter emails..."
-      filterParamKeys={["role"]}
+      searchId="user-search"
+      searchPlaceholder="Filter by email or name..."
+      filterParamKeys={["role", "status"]}
       filters={
+        <>
         <ServerSideFacetedFilter title="Role" paramKey="role" options={UserRoles} />
+        <ServerSideFacetedFilter title="Status" paramKey="status" options={UserStatuses} />
+        </>
       }
     />
   );

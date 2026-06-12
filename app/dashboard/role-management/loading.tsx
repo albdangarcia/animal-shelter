@@ -38,7 +38,7 @@ export default function Loading() {
             <Skeleton className="h-8 w-20" />
           </div>
 
-          {/* Table Skeleton (Converted to Style 1) */}
+          {/* Table Skeleton */}
           <div className="rounded-md border">
             <Table>
               <TableHeader>

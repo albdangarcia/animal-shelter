@@ -177,13 +177,20 @@ export type AnimalForApplicationPayload = Prisma.AnimalGetPayload<{
   };
 }>;
 
-export type UsersPayload = Prisma.UserGetPayload<{
+export type RoleManagementPayload = Prisma.UserGetPayload<{
   select: {
     id: true;
     email: true;
     image: true;
     role: true;
     createdAt: true;
+    deactivatedAt: true;
+    // lastLogin: true;
+    person: {
+      select: {
+        name: true;
+      };
+    };
   };
 }>;
 
@@ -238,15 +245,6 @@ export type ApplicationsPayload = Prisma.AdoptionApplicationGetPayload<{
     applicantState: true;
     status: true;
     submittedAt: true;
-  };
-}>;
-
-// Type for the user returned by _fetchUserById
-export type UserByIdPayload = Prisma.UserGetPayload<{
-  select: {
-    id: true;
-    email: true;
-    role: true;
   };
 }>;
 

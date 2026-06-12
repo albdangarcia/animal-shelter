@@ -7,9 +7,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { SearchParamsType } from "@/app/lib/types";
-import { fetchUsers } from "@/app/lib/data/user.data";
-import UsersTableToolbar from "@/components/dashboard/users/table/users-table-toolbar";
-import { columns } from "@/components/dashboard/users/table/users-table-columns";
+import { fetchUserRoles } from "@/app/lib/data/role-management.data";
+import UsersTableToolbar from "@/components/dashboard/role-management/table/role-management-table-toolbar";
+import { columns } from "@/components/dashboard/role-management/table/role-management-table-columns";
 import DataTable from "@/components/table-common/data-table";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
@@ -31,16 +31,17 @@ const Page = async ({ searchParams }: Props) => {
 };
 
 const PageContent = async ({ searchParams }: Props) => {
-  const { query = "", page = "1", pageSize = "10", sort, role } = await searchParams;
+  const { query = "", page = "1", pageSize = "10", sort, role, status } = await searchParams;
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
-  const { users, totalPages, totalRows } = await fetchUsers(
+  const { users, totalPages, totalRows } = await fetchUserRoles(
     query,
     currentPage,
     sort,
     role,
-    currentPageSize
+    currentPageSize,
+    status
   );
 
   return (

@@ -13,12 +13,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { UsersPayload } from "@/app/lib/types";
+import { RoleManagementPayload } from "@/app/lib/types";
 import { Role } from "@prisma/client";
-import { updateUserRole } from "@/app/lib/actions/user.actions";
+import { updateUserRole } from "@/app/lib/actions/role-management.actions";
 
 interface DataTableRowActionsProps {
-  row: Row<UsersPayload>;
+  row: Row<RoleManagementPayload>;
 }
 
 const assignableRoles: Role[] = [Role.STAFF, Role.USER, Role.VOLUNTEER];
