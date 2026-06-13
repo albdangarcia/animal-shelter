@@ -1,6 +1,6 @@
 import { Permissions, type Permission } from "@/app/lib/auth/permissions";
 
-export type IconName = 
+export type IconName =
   | "IconDashboard"
   | "IconListDetails"
   | "IconUsers"
@@ -15,7 +15,16 @@ export type IconName =
   | "IconReport"
   | "IconFileWord"
   | "IconCirclePlus"
-  | "IconChartBar";
+  | "IconFolder"
+  | "IconChartBar"
+  | "IconDashboard"
+  | "IconListDetails"
+  | "IconUsers"
+  | "IconUsersGroup"
+  | "IconHeartHandshake"
+  | "IconFileText"
+  | "IconChecks"
+  | "IconCheckbox"
 
 export interface NavItem {
   title: string;
@@ -58,27 +67,33 @@ export const navMainItems: readonly NavItem[] = [
     permission: Permissions.MANAGE_ROLES,
   },
   {
+    title: "People Directory",
+    url: "/dashboard/people-directory",
+    icon: "IconUsersGroup",
+    permission: Permissions.MANAGE_ROLES,
+  },
+  {
     title: "My Applications",
     url: "/dashboard/my-applications",
-    icon: "IconFolder",
+    icon: "IconFileText",
     permission: Permissions.MY_APPLICATIONS_READ,
   },
   {
     title: "Adoption Applications",
     url: "/dashboard/adoption-applications",
-    icon: "IconUsers",
+    icon: "IconHeartHandshake",
     permission: Permissions.APPLICATIONS_READ_LISTING,
   },
   {
     title: "Outcomes",
     url: "/dashboard/outcomes",
-    icon: "IconUsers",
+    icon: "IconChecks",
     permission: Permissions.OUTCOMES_MANAGE,
   },
   {
     title: "Animal Tasks",
     url: "/dashboard/animal-tasks",
-    icon: "IconUsers",
+    icon: "IconCheckbox",
     permission: Permissions.ANIMAL_TASK_READ_LISTING,
   },
 ] as const;

@@ -302,11 +302,19 @@ export interface TemplateField {
   order: number;
 }
 
-// export interface AssessmentFormData {
-//   animalId: string;
-//   templateId: string;
-//   overallOutcome?: AssessmentOutcome;
-//   summary?: string;
-//   customFields?: TemplateField[];
-//   [key: string]: any; // For dynamic field values
-// }
+export type PeopleDirectoryPayload = Prisma.PersonGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    type: true;
+    email: true;
+    phone: true;
+    city: true;
+    state: true;
+    user: {
+      select: {
+        id: true;
+      };
+    };
+  };
+}>;

@@ -33,6 +33,7 @@ const errorTypeDetails: Record<'notFound' | 'accessDenied' | 'genericError', Err
         height={80}
         className="mb-5 sm:mb-6 size-20 sm:size-50"
         aria-hidden="true"
+        priority
       />
     ),
   },
@@ -49,6 +50,7 @@ const errorTypeDetails: Record<'notFound' | 'accessDenied' | 'genericError', Err
         height={80}
         className="mb-5 sm:mb-6 size-20 sm:size-50"
         aria-hidden="true"
+        priority
       />
     ),
   },
@@ -64,6 +66,7 @@ const errorTypeDetails: Record<'notFound' | 'accessDenied' | 'genericError', Err
         height={80}
         className="mb-5 sm:mb-6 size-20 sm:size-50"
         aria-hidden="true"
+        priority
       />
     ),
   },
