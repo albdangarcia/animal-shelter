@@ -11,6 +11,7 @@
     "build": "prisma migrate deploy && next build",
     "start": "next start",
     "lint": "eslint",
+    "typecheck": "tsc --noEmit",
     "db": "prisma generate && prisma db push && prisma db seed",
     "db:reset": "prisma migrate reset --force",
     "postinstall": "npm run prisma:generate",
