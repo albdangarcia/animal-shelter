@@ -1,0 +1,16 @@
+services:
+  postgres-e2e:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${PLAYWRIGHT_POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${PLAYWRIGHT_POSTGRES_PASSWORD:-mysecretpassword}
+      POSTGRES_DB: ${PLAYWRIGHT_POSTGRES_DB:-postgres}
+    ports:
+      - "${PLAYWRIGHT_POSTGRES_PORT:-55432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 2s
+

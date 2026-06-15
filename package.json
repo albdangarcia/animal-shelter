@@ -11,6 +11,10 @@
     "build": "prisma migrate deploy && next build",
     "start": "next start",
     "lint": "eslint",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:ui": "playwright test --ui",
+    "e2e:install": "playwright install chromium",
     "typecheck": "tsc --noEmit",
     "db": "prisma generate && prisma db push && prisma db seed",
     "db:reset": "prisma migrate reset --force",
@@ -77,6 +81,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4.1.14",
     "@types/bcrypt": "^6.0.0",
     "@types/node": "^20.19.21",

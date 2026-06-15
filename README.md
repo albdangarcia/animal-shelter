@@ -230,6 +230,43 @@ This method mirrors the live production environment. It's ideal for testing the 
 4.  **Connect Environment Variables**: Vercel will automatically provide `POSTGRES_URL` and `BLOB_READ_WRITE_TOKEN` from the integrations. Copy these and all other variables from your `.env` file into the **Environment Variables** section of your Vercel project settings.
 5.  **Deploy**: Trigger a new deployment on Vercel. Your application will be live.
 
+## End-to-End Tests
+
+Playwright is configured for a Chromium-only E2E workflow that mirrors the local Prisma setup without reusing your normal development database.
+
+### What the Playwright setup does
+
+- Starts an isolated PostgreSQL container from `docker-compose.playwright.yml`
+- Overrides only auth/database-related environment variables for the E2E process
+- Resets the database schema, runs `prisma db push`, and seeds data with `prisma/seed.ts`
+- Starts the Next.js app on `http://127.0.0.1:3001`
+- Runs a login smoke test using the seeded admin account (`admin@example.com`)
+
+### Requirements
+
+- Docker with `docker compose`
+- A populated `.env` file with at least `AUTH_SECRET` and `ADMIN_PASSWORD`
+
+### Install the browser once
+
+```sh
+npm run e2e:install
+```
+
+### Run the E2E suite
+
+```sh
+npm run e2e
+```
+
+Optional local variants:
+
+```sh
+npm run e2e:headed
+npm run e2e:ui
+```
+
+
 ## Credits
 
 Credit for the royalty-free images used in this project is given below:
