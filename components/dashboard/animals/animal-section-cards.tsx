@@ -124,6 +124,7 @@ const AnimalSectionCards = async ({ params }: Props) => {
                   fill
                   sizes="112px"
                   className="object-cover"
+                  loading="eager"
                 />
               ) : (
                 <span className="text-4xl">🐾</span>

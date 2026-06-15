@@ -57,8 +57,16 @@ const _fetchAnimalApplications = async (
     switch (field) {
       case "applicantName":
         return { applicantName: dir };
+      case "applicantEmail":
+        return { applicantEmail: dir };
+      case "applicantPhone":
+        return { applicantPhone: dir };
       case "status":
         return { status: dir };
+      case "animalName":
+        return { animal: { name: dir } };
+      case "animalSpecies":
+        return { animal: { species: { name: dir } } };
       case "submittedAt":
         return { submittedAt: dir };
       default:

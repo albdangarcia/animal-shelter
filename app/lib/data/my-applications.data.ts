@@ -7,7 +7,8 @@ import {
 } from "../types";
 import { MyApplicationsSchema } from "../zod-schemas/animal.schemas";
 import { AnimalListingStatus, ApplicationStatus, Prisma } from "@prisma/client";
-import { SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
+import { RequirePermission, SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
+import { Permissions } from "../auth/permissions";
 
 const _fetchMyApplications = async (
   user: SessionUser,
@@ -217,6 +218,70 @@ const _getAnimalForApplication = async (
     throw new Error("Failed to fetch animal information for application.");
   }
 };
+
+export type ApplicantDefaultsPayload = Prisma.PersonGetPayload<{
+  select: {
+    name: true;
+    email: true;
+    phone: true;
+    address: true;
+    city: true;
+    state: true;
+    zipCode: true;
+    householdProfile: {
+      select: {
+        livingSituation: true;
+        hasYard: true;
+        landlordPermission: true;
+        householdSize: true;
+        hasChildren: true;
+        childrenAges: true;
+        otherAnimalsDescription: true;
+        animalExperience: true;
+      };
+    };
+  };
+}>;
+
+const _fetchApplicantDefaults = async (
+  user: SessionUser
+): Promise<ApplicantDefaultsPayload | null> => {
+  try {
+    const person = await prisma.person.findUnique({
+      where: { id: user.personId },
+      select: {
+        name: true,
+        email: true,
+        phone: true,
+        address: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        householdProfile: {
+          select: {
+            livingSituation: true,
+            hasYard: true,
+            landlordPermission: true,
+            householdSize: true,
+            hasChildren: true,
+            childrenAges: true,
+            otherAnimalsDescription: true,
+            animalExperience: true,
+          },
+        },
+      },
+    });
+
+    return person;
+  } catch (error) {
+    console.error("Error fetching applicant defaults.", error);
+    throw new Error("Error fetching applicant defaults.");
+  }
+};
+
+export const fetchApplicantDefaults = withAuthenticatedUser(
+  RequirePermission(Permissions.MY_APPLICATIONS_CREATE)(_fetchApplicantDefaults)
+);
 
 export const fetchMyApplications = withAuthenticatedUser(_fetchMyApplications);
 export const fetchMyAppById = withAuthenticatedUser(_fetchMyAppById);

@@ -1,6 +1,5 @@
 import {
   Card,
-  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -8,10 +7,8 @@ import {
 } from "@/components/ui/card";
 import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import DataTable from "@/components/table-common/data-table";
-import { columns } from "@/components/dashboard/adoption-applications/table/adoption-applications-table-columns";
-import UserAppTableToolbar from "@/components/dashboard/adoption-applications/table/adoption-applications-table-toolbar";
-import { fetchAnimalApplications } from "@/app/lib/data/animals/animal-adoption-application.data";
-import { notFound } from "next/navigation";
+import { columns } from "@/components/dashboard/people-directory/adoption-applications/person-adoption-applications-table-columns";
+import { fetchPersonAdoptionApplications } from "@/app/lib/data/people-directory/person-adoption-applications.data";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { Permissions } from "@/app/lib/auth/permissions";
@@ -24,7 +21,7 @@ interface Props {
 const Page = async ({ searchParams, params }: Props) => {
   return (
     <Authorize
-      permission={Permissions.APPLICATIONS_READ_LISTING}
+      permission={Permissions.PERSONS_READ_DETAIL}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} params={params} />
@@ -33,30 +30,12 @@ const Page = async ({ searchParams, params }: Props) => {
 };
 
 const PageContent = async ({ searchParams, params }: Props) => {
-  const { id: animalId } = await params;
-
-  const {
-    query = "",
-    page = "1",
-    pageSize = "10",
-    sort,
-    status,
-  } = await searchParams;
+  const { id: personId } = await params;
+  const { page = "1" } = await searchParams;
   const currentPage = Number(page);
-  const currentPageSize = Number(pageSize);
 
-  if (!animalId) {
-    return notFound();
-  }
-
-  const { applications, totalPages, totalRows } = await fetchAnimalApplications(
-    animalId,
-    query,
-    currentPage,
-    sort,
-    status,
-    currentPageSize,
-  );
+  const { applications, totalPages, totalRows } =
+    await fetchPersonAdoptionApplications(currentPage, personId);
 
   return (
     <Card className="@container/card">
@@ -65,9 +44,8 @@ const PageContent = async ({ searchParams, params }: Props) => {
           Adoption Applications
         </CardTitle>
         <CardDescription>
-          Review and compare all adoption applications received for this animal.
+          Applications this person has submitted.
         </CardDescription>
-        <CardAction></CardAction>
       </CardHeader>
       <CardContent>
         <div className="flex flex-1 flex-col">
@@ -76,7 +54,6 @@ const PageContent = async ({ searchParams, params }: Props) => {
               <DataTable
                 data={applications}
                 columns={columns}
-                ToolbarComponent={UserAppTableToolbar}
                 totalPages={totalPages}
                 totalRows={totalRows}
               />

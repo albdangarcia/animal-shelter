@@ -25,7 +25,7 @@ import {
 
 // Helper function to map OutcomeType to AnimalArchiveReason
 const getArchiveReasonFromOutcomeType = (
-  outcomeType: OutcomeType
+  outcomeType: OutcomeType,
 ): AnimalArchiveReason => {
   switch (outcomeType) {
     case "ADOPTION":
@@ -36,6 +36,8 @@ const getArchiveReasonFromOutcomeType = (
       return AnimalArchiveReason.RETURNED_TO_OWNER;
     case "DECEASED":
       return AnimalArchiveReason.DECEASED;
+    case "EUTHANIZED":
+      return AnimalArchiveReason.EUTHANIZED;
     default:
       return AnimalArchiveReason.OTHER;
   }
@@ -50,7 +52,7 @@ const _createOutcome = async (
   user: SessionUser,
   ids: CreateOutcomeIds,
   prevState: OutcomeFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<OutcomeFormState> => {
   const staffMemberId = user.personId;
 
@@ -94,7 +96,7 @@ const _createOutcome = async (
       if (updateResult.count === 0) {
         // If count is 0, another process archived the animal first. Abort.
         throw new ConflictError(
-          "This animal has already been processed for an outcome."
+          "This animal has already been processed for an outcome.",
         );
       }
 
@@ -102,7 +104,7 @@ const _createOutcome = async (
       if (outcomeType === OutcomeType.ADOPTION) {
         if (!adoptionApplicationId) {
           throw new PreconditionFailedError(
-            "An adoption application ID is required for adoption outcomes."
+            "An adoption application ID is required for adoption outcomes.",
           );
         }
 
@@ -113,7 +115,7 @@ const _createOutcome = async (
 
         if (application?.status !== ApplicationStatus.APPROVED) {
           throw new PreconditionFailedError(
-            "Cannot process adoption: The application has not been approved."
+            "Cannot process adoption: The application has not been approved.",
           );
         }
       }
@@ -220,7 +222,7 @@ const _createOutcome = async (
 const _updateOutcome = async (
   outcomeId: string,
   prevState: OutcomeFormState,
-  formData: FormData
+  formData: FormData,
 ): Promise<OutcomeFormState> => {
   // Validate form fields
   const validatedFields = OutcomeFormSchema.safeParse({
@@ -286,9 +288,9 @@ const _updateOutcome = async (
 };
 
 export const createOutcome = withAuthenticatedUser(
-  RequirePermission(Permissions.OUTCOMES_MANAGE)(_createOutcome)
+  RequirePermission(Permissions.OUTCOMES_MANAGE)(_createOutcome),
 );
 
 export const updateOutcome = RequirePermission(Permissions.OUTCOMES_MANAGE)(
-  _updateOutcome
+  _updateOutcome,
 );

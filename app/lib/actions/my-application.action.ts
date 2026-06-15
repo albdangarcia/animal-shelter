@@ -11,6 +11,7 @@ import { SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { ActionResult } from "../types";
 import { z } from "zod";
 import { isOwnedByUser } from "../auth/ownership";
+import { Prisma } from "@prisma/client";
 
 const _updateMyAdoptionApp = async (
   user: SessionUser, // Injected by withAuthenticatedUser
@@ -371,6 +372,17 @@ const _createMyAdoptionApp = async (
     householdSize,
     hasChildren,
     childrenAges,
+    applicantName,
+    applicantEmail,
+    applicantPhone,
+    applicantAddressLine1,
+    applicantAddressLine2,
+    applicantCity,
+    applicantState,
+    applicantZipCode,
+    livingSituation,
+    otherAnimalsDescription,
+    animalExperience,
   } = validatedFields.data;
 
   const dataToCreate = {
@@ -379,7 +391,6 @@ const _createMyAdoptionApp = async (
     animalId: validatedAnimalId,
     hasYard: hasYard === "true",
     landlordPermission: landlordPermission === "true",
-
     householdSize: parseInt(householdSize, 10),
     hasChildren: hasChildren === "true",
     childrenAges:
@@ -388,21 +399,29 @@ const _createMyAdoptionApp = async (
         : childrenAges.split(",").map((age) => parseInt(age.trim(), 10)),
   };
 
+  const householdProfileData = {
+    livingSituation,
+    hasYard: dataToCreate.hasYard,
+    landlordPermission: dataToCreate.landlordPermission,
+    householdSize: dataToCreate.householdSize,
+    hasChildren: dataToCreate.hasChildren,
+    childrenAges: dataToCreate.childrenAges,
+    otherAnimalsDescription,
+    animalExperience,
+  };
+
   try {
     await prisma.$transaction(
       async (tx) => {
-        // Fetch the animal's CURRENT status from the database
         const animal = await tx.animal.findUnique({
           where: { id: validatedAnimalId },
           select: { listingStatus: true },
         });
 
-        // Perform the critical check
         if (animal?.listingStatus !== "PUBLISHED") {
           throw new Error("This animal is no longer available for adoption.");
         }
 
-        // If the check passes, proceed to create the application
         await tx.adoptionApplication.create({
           data: {
             ...dataToCreate,
@@ -415,6 +434,46 @@ const _createMyAdoptionApp = async (
             },
           },
         });
+
+        // Keep the user's reusable Household Profile in sync with what they
+        // just submitted, so future applications come prefilled.
+        await tx.householdProfile.upsert({
+          where: { personId: user.personId },
+          create: { personId: user.personId, ...householdProfileData },
+          update: householdProfileData,
+        });
+
+        // Best-effort sync of contact info back to Person. If the email
+        // collides with another Person's record, skip the sync rather than
+        // failing the whole application.
+        try {
+          await tx.person.update({
+            where: { id: user.personId },
+            data: {
+              name: applicantName,
+              email: applicantEmail || null,
+              phone: applicantPhone,
+              address: applicantAddressLine2
+                ? `${applicantAddressLine1}, ${applicantAddressLine2}`
+                : applicantAddressLine1,
+              city: applicantCity,
+              state: applicantState,
+              zipCode: applicantZipCode,
+            },
+          });
+        } catch (error) {
+          if (
+            error instanceof Prisma.PrismaClientKnownRequestError &&
+            error.code === "P2002"
+          ) {
+            console.warn(
+              "Skipped syncing Person contact info due to email conflict.",
+              error,
+            );
+          } else {
+            throw error;
+          }
+        }
       },
       {
         isolationLevel: "Serializable",
@@ -427,7 +486,6 @@ const _createMyAdoptionApp = async (
         "Database Error: Failed to submit application. Please try again.",
     };
   }
-
   revalidatePath(`/pets/${validatedAnimalId}`);
   revalidatePath("/dashboard/my-applications");
   redirect("/dashboard/my-applications");

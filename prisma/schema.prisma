@@ -41,6 +41,7 @@ enum OutcomeType {
   TRANSFER_OUT
   RETURN_TO_OWNER
   DECEASED
+  EUTHANIZED
   OTHER
 }
 
@@ -160,6 +161,7 @@ enum AnimalArchiveReason {
   TRANSFERRED // Moved to another rescue or shelter
   RETURNED_TO_OWNER
   DECEASED
+  EUTHANIZED
   OTHER
 }
 
@@ -168,17 +170,6 @@ enum LivingSituation {
   RENT_APARTMENT
   RENT_HOUSE
   LIVE_WITH_FAMILY
-  OTHER
-}
-
-enum AssociationType {
-  OWNER
-  FINDER
-  SURRENDERER
-  ADOPTER
-  FOSTER_CARER
-  VET_CONTACT
-  INTERESTED_PARTY
   OTHER
 }
 
@@ -307,7 +298,6 @@ model Animal {
   archiveReason   AnimalArchiveReason? /// Should only be set when listingStatus is ARCHIVED. Explains why the animal is no longer available.
 
   // Relations
-  associatedPersons    AnimalAssociation[]
   // mandatory relationship to Species
   speciesId            String                @map("species_id")
   species              Species               @relation(fields: [speciesId], references: [id])
@@ -471,37 +461,38 @@ model MedicalRecord {
 /// Stores the application and approval status for a user wanting to become a foster parent.
 model FosterProfile {
   id        String   @id @default(cuid())
-  /// Represents a user's application and status as a foster parent.
-  /// The `isActive` flag indicates they are approved and available to take in animals;
-  /// it does NOT mean they are currently fostering a animal.
   isActive  Boolean  @default(false) @map(name: "is_active")
+  internalNotes String?
+
+  animalsFostered Animal[]
+
+  personId String @unique @map(name: "person_id")
+  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  applicantPhone          String
-  applicantAddressLine1   String
-  applicantAddressLine2   String?
-  applicantCity           String
-  applicantState          String
-  applicantZipCode        String
-  livingSituation         LivingSituation
-  hasYard                 Boolean?
-  landlordPermission      Boolean?
-  householdSize           Int
-  hasChildren             Boolean?
-  childrenAges            Int[]
-  otherAnimalsDescription String?
-  experience              String? // General experience with animals
-
-  internalNotes   String? // For staff notes about the foster applicant
-  /// A list of all animals this user has fostered in the past or is currently fostering.
-  /// To see ONLY the currently fostered animals, query the Animal model for this fosterProfileId.
-  animalsFostered Animal[]
-
-  userId String @unique @map(name: "user_id")
-  user   Person @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@map("foster_profiles")
+}
+
+model HouseholdProfile {
+  id       String @id @default(cuid())
+  personId String @unique @map(name: "person_id")
+  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  livingSituation         LivingSituation @map(name: "living_situation")
+  hasYard                 Boolean?        @map(name: "has_yard")
+  landlordPermission      Boolean?        @map(name: "landlord_permission")
+  householdSize           Int             @map(name: "household_size")
+  hasChildren             Boolean?        @map(name: "has_children")
+  childrenAges            Int[]           @map(name: "children_ages")
+  otherAnimalsDescription String?         @map(name: "other_animals_description")
+  animalExperience        String?         @map(name: "animal_experience")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("household_profiles")
 }
 
 /// Represents a user's application to adopt a specific animal. This is a snapshot-in-time record.
@@ -600,30 +591,12 @@ model AnimalImage {
   @@map(name: "animal_images")
 }
 
-/// Links a Person to a Animal with a specific role or context.
-model AnimalAssociation {
-  id String @id @default(cuid())
-
-  animalId String
-  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
-
-  personId String
-  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
-
-  type         AssociationType
-  notes        String?
-  associatedAt DateTime        @default(now())
-
-  @@unique([animalId, personId, type]) // Prevents creating the same association twice
-  @@map("animal_associations")
-}
-
 model Person {
   id      String     @id @default(cuid())
   name    String
   // AGENCY type persons (e.g., external shelters, rescues) are contact/tracking records only.
   // They do not have a User account and cannot log in. They exist to link animals to
-  // an organization via Intake, Outcome, or AnimalAssociation.
+  // an organization via Intake, Outcome.
   type    PersonType @default(INDIVIDUAL)
   email   String?    @unique
   phone   String?
@@ -637,6 +610,8 @@ model Person {
 
   // Back-relations to all their interactions
   fosterProfile            FosterProfile?
+  householdProfile HouseholdProfile?
+  
   adoptionApplications     AdoptionApplication[]
   applicationStatusHistory ApplicationStatusHistory[]
   likes                    Like[]
@@ -648,7 +623,6 @@ model Person {
   surrenderedAnimals       Intake[]                   @relation("SurrenderedBy")
   foundAnimals             Intake[]                   @relation("FoundBy")
   processedIntakes         Intake[]                   @relation("ProcessedBy")
-  animalAssociations       AnimalAssociation[] // For the "Associated People" feature
 
   // financialTransactions  FinancialTransaction[]
   // processedTransactions  FinancialTransaction[] @relation("ProcessedFinance")

@@ -135,26 +135,26 @@ export type AdoptionApplicationPayload = Prisma.AdoptionApplicationGetPayload<{
   include: {
     animal: {
       select: {
-        id: true,
-        name: true,
+        id: true;
+        name: true;
         breeds: {
           select: {
-            name: true,
-          },
-        },
+            name: true;
+          };
+        };
         species: {
           select: {
-            name: true,
-          },
-        },
+            name: true;
+          };
+        };
         adoptionApplications: {
           select: {
-            userId: true,
-          },
-        },
-      },
-    },
-  },
+            userId: true;
+          };
+        };
+      };
+    };
+  };
 }>;
 
 // Type for the animal object returned by getAnimalForApplication
@@ -165,8 +165,8 @@ export type AnimalForApplicationPayload = Prisma.AnimalGetPayload<{
     name: true;
     breeds: {
       select: {
-        name: true,
-      },
+        name: true;
+      };
     };
     species: {
       select: { name: true };
@@ -207,33 +207,32 @@ export type AnimalsPayload = Prisma.AnimalGetPayload<{
   };
 }>;
 
-export type MyApplicationPayload =
-  Prisma.AdoptionApplicationGetPayload<{
-    select: {
-      id: true;
-      status: true;
-      applicantName: true;
-      applicantPhone: true;
-      submittedAt: true;
-      animal: {
-        select: {
-          id: true;
-          name: true;
-          species: {
-            select: {
-              name: true;
-            };
+export type MyApplicationPayload = Prisma.AdoptionApplicationGetPayload<{
+  select: {
+    id: true;
+    status: true;
+    applicantName: true;
+    applicantPhone: true;
+    submittedAt: true;
+    animal: {
+      select: {
+        id: true;
+        name: true;
+        species: {
+          select: {
+            name: true;
           };
-          animalImages: {
-            select: {
-              url: true;
-            };
-            take: 1;
+        };
+        animalImages: {
+          select: {
+            url: true;
           };
+          take: 1;
         };
       };
     };
-  }>;
+  };
+}>;
 
 export type ApplicationsPayload = Prisma.AdoptionApplicationGetPayload<{
   select: {
@@ -316,5 +315,68 @@ export type PeopleDirectoryPayload = Prisma.PersonGetPayload<{
         id: true;
       };
     };
+  };
+}>;
+
+export type PersonSectionCardPayload = Prisma.PersonGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    type: true;
+    email: true;
+    phone: true;
+    address: true;
+    city: true;
+    state: true;
+    zipCode: true;
+    user: {
+      select: {
+        id: true;
+        role: true;
+        image: true;
+        emailVerified: true;
+      };
+    };
+    _count: {
+      select: {
+        adoptionApplications: true;
+        surrenderedAnimals: true;
+        foundAnimals: true;
+        reclaimedAnimalsAsOwner: true;
+        tasksAssigned: true;
+        tasksCreated: true;
+        notesAuthored: true;
+        processedIntakes: true;
+        processedOutcomes: true;
+        Assessment: true;
+      };
+    };
+  };
+}>;
+
+export type PersonFormPayload = Prisma.PersonGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    type: true;
+    email: true;
+    phone: true;
+    address: true;
+    city: true;
+    state: true;
+    zipCode: true;
+  };
+}>;
+
+export type HouseholdProfilePayload = Prisma.HouseholdProfileGetPayload<{
+  select: {
+    livingSituation: true;
+    hasYard: true;
+    landlordPermission: true;
+    householdSize: true;
+    hasChildren: true;
+    childrenAges: true;
+    otherAnimalsDescription: true;
+    animalExperience: true;
   };
 }>;

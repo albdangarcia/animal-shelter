@@ -47,48 +47,76 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import { livingSituationOptions } from "@/app/lib/utils/enum-formatter";
+import { ApplicantDefaultsPayload } from "@/app/lib/data/my-applications.data";
+import { toYesNo } from "@/app/lib/utils/form-utils";
 
 type MyApplicationFormData = z.infer<typeof MyAdoptionAppFormSchema>;
 
 interface MyApplicationFormProps {
   animal: AnimalForApplicationPayload;
   application?: AdoptionApplicationPayload;
+  applicantDefaults?: ApplicantDefaultsPayload | null;
 }
 
 export function MyApplicationForm({
   animal,
   application,
+  applicantDefaults,
 }: MyApplicationFormProps) {
   const isEditMode = !!application;
+
+  const cancelHref = isEditMode
+    ? "/dashboard/my-applications"
+    : `/pets/${animal.id}`;
+
   const action = isEditMode
     ? updateMyAdoptionApp.bind(null, application.id)
     : createMyAdoptionApp.bind(null, animal.id);
   const [state, formAction, isPending] = useActionState(
     action,
-    INITIAL_FORM_STATE
+    INITIAL_FORM_STATE,
   );
+
+  const household = applicantDefaults?.householdProfile;
 
   const form = useForm<MyApplicationFormData>({
     resolver: zodResolver(MyAdoptionAppFormSchema),
     defaultValues: {
-      applicantName: application?.applicantName ?? "",
-      applicantEmail: application?.applicantEmail ?? "",
-      applicantPhone: application?.applicantPhone ?? "",
-      applicantAddressLine1: application?.applicantAddressLine1 ?? "",
+      applicantName:
+        application?.applicantName ?? applicantDefaults?.name ?? "",
+      applicantEmail:
+        application?.applicantEmail ?? applicantDefaults?.email ?? "",
+      applicantPhone:
+        application?.applicantPhone ?? applicantDefaults?.phone ?? "",
+      applicantAddressLine1:
+        application?.applicantAddressLine1 ?? applicantDefaults?.address ?? "",
       applicantAddressLine2: application?.applicantAddressLine2 ?? "",
-      applicantCity: application?.applicantCity ?? "",
-      applicantState: application?.applicantState ?? "",
-      applicantZipCode: application?.applicantZipCode ?? "",
-      livingSituation: application?.livingSituation,
-
-      // Convert all initial values to strings for the form
-      hasYard: application?.hasYard ? "true" : "false",
-      landlordPermission: application?.landlordPermission ? "true" : "false",
-      householdSize: String(application?.householdSize ?? "1"),
-      hasChildren: application?.hasChildren ? "true" : "false",
-      childrenAges: application?.childrenAges?.join(", ") ?? "",
-      otherAnimalsDescription: application?.otherAnimalsDescription ?? "",
-      animalExperience: application?.animalExperience ?? "",
+      applicantCity:
+        application?.applicantCity ?? applicantDefaults?.city ?? "",
+      applicantState:
+        application?.applicantState ?? applicantDefaults?.state ?? "",
+      applicantZipCode:
+        application?.applicantZipCode ?? applicantDefaults?.zipCode ?? "",
+      livingSituation:
+        application?.livingSituation ?? household?.livingSituation,
+      hasYard: toYesNo(application?.hasYard ?? household?.hasYard),
+      landlordPermission: toYesNo(
+        application?.landlordPermission ?? household?.landlordPermission,
+      ),
+      hasChildren: toYesNo(application?.hasChildren ?? household?.hasChildren),
+      householdSize: String(
+        application?.householdSize ?? household?.householdSize ?? "1",
+      ),
+      childrenAges:
+        application?.childrenAges?.join(", ") ??
+        household?.childrenAges?.join(", ") ??
+        "",
+      otherAnimalsDescription:
+        application?.otherAnimalsDescription ??
+        household?.otherAnimalsDescription ??
+        "",
+      animalExperience:
+        application?.animalExperience ?? household?.animalExperience ?? "",
       reasonForAdoption: application?.reasonForAdoption ?? "",
     },
   });
@@ -528,7 +556,7 @@ export function MyApplicationForm({
               type="button"
               disabled={isPending}
             >
-              <Link href="/dashboard/my-applications">Cancel</Link>
+              <Link href={cancelHref}>Cancel</Link>
             </Button>
             <Button type="submit" disabled={isPending}>
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -537,8 +565,8 @@ export function MyApplicationForm({
                   ? "Updating..."
                   : "Submitting..."
                 : isEditMode
-                ? "Update Application"
-                : "Submit Application"}
+                  ? "Update Application"
+                  : "Submit Application"}
             </Button>
           </div>
         </form>

@@ -70,6 +70,11 @@ export const formatJourneyItem = (
             title: "Outcome: Deceased",
             description: `${animalName}'s journey at the shelter has ended.`,
           };
+        case "EUTHANIZED":
+          return {
+            title: "Outcome: Euthanized",
+            description: `${animalName}'s journey at the shelter has ended.`,
+          };
         default:
           return {
             title: "Outcome Event",

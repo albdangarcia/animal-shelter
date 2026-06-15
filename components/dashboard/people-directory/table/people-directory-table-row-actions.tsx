@@ -38,7 +38,9 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href={`/dashboard/people-directory/${person.id}/edit`}>
+          <Link
+            href={`/dashboard/people-directory/${person.id}/edit?returnTo=/dashboard/people-directory`}
+          >
             Edit Contact Info
           </Link>
         </DropdownMenuItem>

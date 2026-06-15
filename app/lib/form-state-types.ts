@@ -85,3 +85,33 @@ export type StaffUpdateAppFormState = {
     statusChangeReason?: string[];
   };
 };
+
+export type PersonFormState = {
+  success?: boolean;
+  message?: string | null;
+  errors?: {
+    name?: string[];
+    type?: string[];
+    email?: string[];
+    phone?: string[];
+    address?: string[];
+    city?: string[];
+    state?: string[];
+    zipCode?: string[];
+  };
+};
+
+export interface HouseholdProfileFormState {
+  success?: boolean;
+  message?: string | null;
+  errors?: {
+    livingSituation?: string[];
+    hasYard?: string[];
+    landlordPermission?: string[];
+    householdSize?: string[];
+    hasChildren?: string[];
+    childrenAges?: string[];
+    otherAnimalsDescription?: string[];
+    animalExperience?: string[];
+  };
+}

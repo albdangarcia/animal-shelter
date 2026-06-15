@@ -4,6 +4,7 @@ import {
   ArrowRightLeft,
   Home,
   HeartCrack,
+  Cross,
   Info,
 } from "lucide-react";
 
@@ -27,6 +28,11 @@ export const OutcomeTypesOptions = [
     value: OutcomeType.DECEASED,
     label: "Deceased",
     icon: HeartCrack,
+  },
+  {
+    value: OutcomeType.EUTHANIZED,
+    label: "Euthanized",
+    icon: Cross,
   },
   {
     value: OutcomeType.OTHER,

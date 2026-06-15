@@ -68,7 +68,7 @@ export const columns: ColumnDef<OutcomeWithDetails>[] = [
     ),
     cell: ({ row }) => {
       const outcomeType = OutcomeTypesOptions.find(
-        (type) => type.value === row.getValue("type")
+        (type) => type.value === row.getValue("type"),
       );
 
       if (!outcomeType) {
@@ -83,6 +83,7 @@ export const columns: ColumnDef<OutcomeWithDetails>[] = [
         TRANSFER_OUT: "secondary",
         RETURN_TO_OWNER: "outline",
         DECEASED: "destructive",
+        EUTHANIZED: "destructive",
       };
 
       const variant = variantMap[outcomeType.value] || "secondary";

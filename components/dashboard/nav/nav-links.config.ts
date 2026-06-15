@@ -70,7 +70,7 @@ export const navMainItems: readonly NavItem[] = [
     title: "People Directory",
     url: "/dashboard/people-directory",
     icon: "IconUsersGroup",
-    permission: Permissions.MANAGE_ROLES,
+    permission: Permissions.PERSONS_READ_LISTING,
   },
   {
     title: "My Applications",

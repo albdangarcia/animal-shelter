@@ -13,9 +13,9 @@ import DataTable from "@/components/table-common/data-table";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { Permissions } from "@/app/lib/auth/permissions";
-import { fetchPeople } from "@/app/lib/data/people-directory.data";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { fetchPeople } from "@/app/lib/data/people-directory/people-directory.data";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -63,7 +63,7 @@ const PageContent = async ({ searchParams }: Props) => {
         </CardDescription>
         <CardAction>
           <Button asChild>
-            <Link href="/people-directory/create">Add Contact</Link>
+            <Link href="/dashboard/people-directory/new">Add Person</Link>
           </Button>
         </CardAction>
       </CardHeader>
