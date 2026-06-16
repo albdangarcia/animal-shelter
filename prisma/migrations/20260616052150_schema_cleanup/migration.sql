@@ -1,12 +1,3 @@
-/*
-  Warnings:
-
-  - You are about to drop the column `user_id` on the `adoption_applications` table. All the data in the column will be lost.
-  - The `archiveReason` column on the `animals` table would be dropped and recreated. This will lead to data loss if there is data in the column.
-  - You are about to drop the column `type` on the `persons` table. All the data in the column will be lost.
-  - Added the required column `applicant_id` to the `adoption_applications` table without a default value. This is not possible if the table is not empty.
-
-*/
 -- DropForeignKey
 ALTER TABLE "adoption_applications" DROP CONSTRAINT "adoption_applications_user_id_fkey";
 
@@ -14,8 +5,7 @@ ALTER TABLE "adoption_applications" DROP CONSTRAINT "adoption_applications_user_
 DROP INDEX "adoption_applications_user_id_idx";
 
 -- AlterTable
-ALTER TABLE "adoption_applications" DROP COLUMN "user_id",
-ADD COLUMN     "applicant_id" TEXT NOT NULL;
+ALTER TABLE "adoption_applications" RENAME COLUMN "user_id" TO "applicant_id";
 
 -- AlterTable
 ALTER TABLE "animals" DROP COLUMN "archiveReason",
