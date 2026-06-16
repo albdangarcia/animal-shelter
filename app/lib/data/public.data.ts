@@ -193,11 +193,11 @@ export const fetchPublicPagePetById = async (id: string) => {
         ...(personId && {
           adoptionApplications: {
             where: {
-              userId: personId,
+              applicantId: personId,
             },
             select: {
               id: true,
-              userId: true,
+              applicantId: true,
               status: true,
             },
             take: 1,

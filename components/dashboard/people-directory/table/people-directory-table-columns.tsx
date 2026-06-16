@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { DataTableColumnHeader } from "../../../table-common/data-table-column-header";
 import { DataTableRowActions } from "./people-directory-table-row-actions";
 import { PeopleDirectoryPayload } from "@/app/lib/types";
-import { PersonTypes } from "./people-directory-options";
+import { AccountStatuses } from "./people-directory-options";
 
 export const columns: ColumnDef<PeopleDirectoryPayload>[] = [
   {
@@ -51,39 +51,27 @@ export const columns: ColumnDef<PeopleDirectoryPayload>[] = [
     },
   },
   {
-    accessorKey: "type",
+    id: "account",
+    accessorFn: (row) => (row.user ? "registered" : "no_account"),
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Type" />
+      <DataTableColumnHeader column={column} title="Account" />
     ),
     cell: ({ row }) => {
-      const type = PersonTypes.find((t) => t.value === row.original.type);
-      if (!type)
-        return (
-          <span className="capitalize">{row.original.type.toLowerCase()}</span>
-        );
+      const status = AccountStatuses.find(
+        (s) => s.value === row.getValue("account"),
+      );
+      if (!status) return null;
 
+      const Icon = status.icon;
       return (
-        <Badge variant="outline" className={type.className}>
-          {type.label}
+        <Badge variant="outline" className={status.className}>
+          <Icon className="mr-1 h-3 w-3" />
+          {status.label}
         </Badge>
       );
     },
     filterFn: (row, id, value) => {
       return value.includes(row.getValue(id));
-    },
-  },
-  {
-    id: "account",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Account" />
-    ),
-    cell: ({ row }) => {
-      const hasAccount = !!row.original.user;
-      return (
-        <Badge variant={hasAccount ? "outline" : "secondary"}>
-          {hasAccount ? "Registered" : "No Account"}
-        </Badge>
-      );
     },
     enableSorting: false,
   },

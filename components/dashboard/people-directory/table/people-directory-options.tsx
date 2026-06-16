@@ -1,19 +1,18 @@
-import { PersonType } from "@prisma/client";
-import { User, Building2 } from "lucide-react";
+import { UserCheck, UserX } from "lucide-react";
 
-export const PersonTypes = [
+export const AccountStatuses = [
   {
-    value: PersonType.INDIVIDUAL,
-    label: "Individual",
-    icon: User,
+    value: "registered",
+    label: "Registered",
+    icon: UserCheck,
     className:
-      "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800",
+      "bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800",
   },
   {
-    value: PersonType.AGENCY,
-    label: "Agency",
-    icon: Building2,
+    value: "no_account",
+    label: "No Account",
+    icon: UserX,
     className:
-      "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800",
+      "bg-gray-50 text-gray-700 border-gray-200 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-700",
   },
 ];

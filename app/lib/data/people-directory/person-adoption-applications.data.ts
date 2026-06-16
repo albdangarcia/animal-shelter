@@ -59,7 +59,7 @@ const _fetchPersonAdoptionApplications = async (
   const { currentPage, personId } = validatedArgs.data;
 
   const whereClause: Prisma.AdoptionApplicationWhereInput = {
-    userId: personId,
+    applicantId: personId,
   };
 
   try {

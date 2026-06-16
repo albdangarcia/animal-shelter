@@ -52,7 +52,7 @@ export type ApplicationWithOutcome = Prisma.AdoptionApplicationGetPayload<{
         };
         adoptionApplications: {
           select: {
-            userId: true;
+            applicantId: true;
           };
         };
       };
@@ -221,7 +221,7 @@ const _fetchUserApplicationById = async (
             },
             adoptionApplications: {
               select: {
-                userId: true,
+                applicantId: true,
               },
             },
           },

@@ -3,7 +3,6 @@ import {
   PrismaClient,
   Role,
   Sex,
-  PersonType,
   PartnerType,
   AnimalListingStatus,
   IntakeType,
@@ -45,42 +44,35 @@ const baseUrl = isDemo
 const personData = [
   {
     name: "External Agency",
-    type: PersonType.AGENCY,
     email: "agency@example.com",
   },
   {
     name: "Admin User",
-    type: PersonType.INDIVIDUAL,
     email: "admin@example.com",
     role: Role.ADMIN,
   },
   {
     name: "Olivia Chen",
-    type: PersonType.INDIVIDUAL,
     email: "staff1@example.com",
     role: Role.STAFF,
   },
   {
     name: "Benjamin Carter",
-    type: PersonType.INDIVIDUAL,
     email: "staff2@example.com",
     role: Role.STAFF,
   },
   {
     name: "Sam Rivera",
-    type: PersonType.INDIVIDUAL,
     email: "volunteer1@example.com",
     role: Role.VOLUNTEER,
   },
   {
     name: "Jane Doe",
-    type: PersonType.INDIVIDUAL,
     email: "surrenderer1@example.com",
     role: Role.USER,
   },
   {
     name: "John Smith",
-    type: PersonType.INDIVIDUAL,
     email: "finder1@example.com",
     role: Role.USER,
   },
@@ -575,7 +567,6 @@ async function seedPersonsAndUsers() {
     const person = await prisma.person.create({
       data: {
         name: pData.name,
-        type: pData.type,
         email: pData.email,
       },
     });

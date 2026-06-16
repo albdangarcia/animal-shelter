@@ -40,7 +40,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { PersonType } from "@prisma/client";
 import { PersonFormSchema } from "@/app/lib/zod-schemas/people-directory.schemas";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import Link from "next/link";
@@ -62,7 +61,6 @@ const PersonForm = ({
   returnTo,
 }: PersonFormProps) => {
   const isEditMode = !!person;
-  const showTypeField = mode === "staff";
 
   const resolvedCancelHref =
     cancelHref ??
@@ -87,7 +85,6 @@ const PersonForm = ({
     defaultValues: isEditMode
       ? {
           name: person.name,
-          type: person.type,
           email: person.email || "",
           phone: person.phone || "",
           address: person.address || "",
@@ -97,7 +94,6 @@ const PersonForm = ({
         }
       : {
           name: "",
-          type: PersonType.INDIVIDUAL,
           email: "",
           phone: "",
           address: "",
@@ -154,7 +150,7 @@ const PersonForm = ({
                 ? "Update your contact information."
                 : isEditMode
                   ? `Editing the record for ${person.name}.`
-                  : "Register a new contact record — e.g., a walk-in contact or partner agency."}
+                  : "Register a new contact record — e.g., a walk-in contact or partner."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-10">
@@ -180,36 +176,6 @@ const PersonForm = ({
                     </FormItem>
                   )}
                 />
-                {showTypeField && (
-                  <FormField
-                    control={form.control}
-                    name="type"
-                    render={({ field }) => (
-                      <FormItem className="col-span-2">
-                        <FormLabel>Type</FormLabel>
-                        <Select
-                          onValueChange={field.onChange}
-                          value={field.value}
-                        >
-                          <FormControl>
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value={PersonType.INDIVIDUAL}>
-                              Individual
-                            </SelectItem>
-                            <SelectItem value={PersonType.AGENCY}>
-                              Agency
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
                 <FormField
                   control={form.control}
                   name="email"

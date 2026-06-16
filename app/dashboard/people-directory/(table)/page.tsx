@@ -38,7 +38,7 @@ const PageContent = async ({ searchParams }: Props) => {
     page = "1",
     pageSize = "10",
     sort,
-    type,
+    account,
   } = await searchParams;
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
@@ -48,7 +48,7 @@ const PageContent = async ({ searchParams }: Props) => {
     currentPage,
     sort,
     currentPageSize,
-    type,
+    account,
   );
 
   return (

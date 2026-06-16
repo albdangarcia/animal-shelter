@@ -36,7 +36,7 @@ const Page = async ({ params }: Props) => {
   const currentUserHasActiveApplication =
     currentUserPersonId &&
     animal.adoptionApplications?.some(
-      (app) => app.userId === currentUserPersonId
+      (app) => app.applicantId === currentUserPersonId
     );
 
   const isLikedByCurrentUser = animal.likes && animal.likes.length > 0;

@@ -7,7 +7,6 @@ import {
   AnimalActivityType,
   AnimalListingStatus,
   IntakeType,
-  PersonType,
 } from "@prisma/client";
 import { redirect } from "next/navigation";
 import {
@@ -125,7 +124,6 @@ const _createReIntake = async (
           data: {
             name: surrenderingPersonName,
             phone: surrenderingPersonPhone,
-            type: PersonType.INDIVIDUAL,
           },
         });
         surrenderingPersonId = person.id;

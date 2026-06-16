@@ -61,7 +61,7 @@ export const _fetchOutcomeById = async (outcomeId: string) => {
                 },
                 adoptionApplications: {
                   select: {
-                    userId: true,
+                    applicantId: true,
                   },
                 },
               },

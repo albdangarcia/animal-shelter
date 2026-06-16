@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { PersonType } from "@prisma/client";
 import {
   currentPageSchema,
   pageSizeSchema,
@@ -12,11 +11,7 @@ export const PeopleDirectoryParamsSchema = z.object({
   currentPage: currentPageSchema,
   sort: z.string().optional(),
   pageSize: pageSizeSchema,
-  type: z
-    .string()
-    .optional()
-    .transform((val) => val?.split(",").filter(Boolean))
-    .pipe(z.array(z.enum(PersonType)).optional()),
+  account: z.string().optional(),
 });
 
 const stateCodes = US_STATES.map((state) => state.code) as [
@@ -27,10 +22,6 @@ const stateCodes = US_STATES.map((state) => state.code) as [
 export const PersonFormSchema = z.object({
   name: z.string().min(1, {
     error: "Name is required.",
-  }),
-  type: z.enum(PersonType, {
-    error: (issue) =>
-      issue.input === undefined ? "Type is required." : undefined,
   }),
   email: z
     .email({ error: "Please enter a valid email address." })

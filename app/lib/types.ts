@@ -149,7 +149,7 @@ export type AdoptionApplicationPayload = Prisma.AdoptionApplicationGetPayload<{
         };
         adoptionApplications: {
           select: {
-            userId: true;
+            applicantId: true;
           };
         };
       };
@@ -172,7 +172,7 @@ export type AnimalForApplicationPayload = Prisma.AnimalGetPayload<{
       select: { name: true };
     };
     adoptionApplications: {
-      select: { userId: true };
+      select: { applicantId: true };
     };
   };
 }>;
@@ -305,7 +305,6 @@ export type PeopleDirectoryPayload = Prisma.PersonGetPayload<{
   select: {
     id: true;
     name: true;
-    type: true;
     email: true;
     phone: true;
     city: true;
@@ -322,7 +321,6 @@ export type PersonSectionCardPayload = Prisma.PersonGetPayload<{
   select: {
     id: true;
     name: true;
-    type: true;
     email: true;
     phone: true;
     address: true;
@@ -358,7 +356,6 @@ export type PersonFormPayload = Prisma.PersonGetPayload<{
   select: {
     id: true;
     name: true;
-    type: true;
     email: true;
     phone: true;
     address: true;
