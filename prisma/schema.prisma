@@ -575,9 +575,6 @@ model AnimalImage {
 model Person {
   id      String     @id @default(cuid())
   name    String
-  // AGENCY type persons (e.g., external shelters, rescues) are contact/tracking records only.
-  // They do not have a User account and cannot log in. They exist to link animals to
-  // an organization via Intake, Outcome.
   email   String?    @unique
   phone   String?
   address String?
