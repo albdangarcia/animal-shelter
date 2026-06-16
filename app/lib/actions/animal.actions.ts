@@ -18,7 +18,6 @@ import {
   AnimalListingStatus,
   ApplicationStatus,
   IntakeType,
-  PersonType,
 } from "@prisma/client";
 import { getAnimalSize } from "../utils/animal-size";
 
@@ -103,7 +102,6 @@ const _createAnimal = async (
           data: {
             name: surrenderingPersonName,
             phone: surrenderingPersonPhone,
-            type: PersonType.INDIVIDUAL,
           },
         });
         surrenderingPersonId = person.id;

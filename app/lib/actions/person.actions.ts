@@ -29,7 +29,7 @@ const _createPerson = async (
     };
   }
 
-  const { name, type, email, phone, address, city, state, zipCode } =
+  const { name, email, phone, address, city, state, zipCode } =
     validatedFields.data;
 
   let newPersonId: string;
@@ -38,7 +38,6 @@ const _createPerson = async (
     const person = await prisma.person.create({
       data: {
         name,
-        type,
         email: email || null,
         phone: phone || null,
         address: address || null,
@@ -90,7 +89,7 @@ const _updatePerson = async (
     };
   }
 
-  const { name, type, email, phone, address, city, state, zipCode } =
+  const { name, email, phone, address, city, state, zipCode } =
     validatedFields.data;
 
   try {
@@ -98,7 +97,6 @@ const _updatePerson = async (
       where: { id: parsedId.data },
       data: {
         name,
-        type,
         email: email || null,
         phone: phone || null,
         address: address || null,
@@ -157,22 +155,10 @@ const _updateMyProfile = async (
     validatedFields.data;
 
   try {
-    // Look up the existing `type` so self-service edits can never change it,
-    // regardless of what the (hidden/unused) field in the submitted form contains.
-    const existingPerson = await prisma.person.findUnique({
-      where: { id: personId },
-      select: { type: true },
-    });
-
-    if (!existingPerson) {
-      return { message: "Profile not found." };
-    }
-
     await prisma.person.update({
       where: { id: personId },
       data: {
         name,
-        type: existingPerson.type, // preserved, not user-editable
         email: email || null,
         phone: phone || null,
         address: address || null,
@@ -182,14 +168,16 @@ const _updateMyProfile = async (
       },
     });
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
-      return {
-        errors: { email: ["A person with this email already exists."] },
-        message: "Failed to update profile.",
-      };
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === "P2002") {
+        return {
+          errors: { email: ["A person with this email already exists."] },
+          message: "Failed to update profile.",
+        };
+      }
+      if (error.code === "P2025") {
+        return { message: "Profile not found." };
+      }
     }
     console.error("Database Error updating profile:", error);
     return {

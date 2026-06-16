@@ -33,7 +33,7 @@ const _updateMyAdoptionApp = async (
   try {
     application = await prisma.adoptionApplication.findUnique({
       where: { id: validatedApplicationId },
-      select: { userId: true, status: true },
+      select: { applicantId: true, status: true },
     });
   } catch (error) {
     console.error(
@@ -159,7 +159,7 @@ const _withdrawMyApplication = async (
   try {
     application = await prisma.adoptionApplication.findUnique({
       where: { id: validatedApplicationId },
-      select: { userId: true, status: true, animalId: true },
+      select: { applicantId: true, status: true, animalId: true },
     });
   } catch (error) {
     console.error(
@@ -256,7 +256,7 @@ const _reactivateMyApplication = async (
     application = await prisma.adoptionApplication.findUnique({
       where: { id: validatedApplicationId },
       select: {
-        userId: true,
+        applicantId: true,
         status: true,
         animal: { select: { listingStatus: true } },
       },
@@ -387,7 +387,7 @@ const _createMyAdoptionApp = async (
 
   const dataToCreate = {
     ...validatedFields.data,
-    userId: user.personId,
+    applicantId: user.personId,
     animalId: validatedAnimalId,
     hasYard: hasYard === "true",
     landlordPermission: landlordPermission === "true",

@@ -1,5 +1,5 @@
 import { prisma } from "@/app/lib/prisma";
-import { PersonType, Prisma, Role } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import {
   RequirePermission,
   SessionUser,
@@ -20,7 +20,7 @@ const _fetchPeople = async (
   currentPageInput: number,
   sortInput: string | undefined,
   pageSizeInput: number,
-  typeInput: string | undefined,
+  accountInput: string | undefined,
 ): Promise<{
   people: PeopleDirectoryPayload[];
   totalPages: number;
@@ -31,13 +31,13 @@ const _fetchPeople = async (
     currentPage: currentPageInput,
     sort: sortInput,
     pageSize: pageSizeInput,
-    type: typeInput,
+    account: accountInput,
   });
 
   if (!validatedArgs.success) {
     throw new Error("Invalid arguments for fetching people.");
   }
-  const { query, currentPage, sort, pageSize, type } = validatedArgs.data;
+  const { query, currentPage, sort, pageSize, account } = validatedArgs.data;
 
   const offset = (currentPage - 1) * pageSize;
 
@@ -81,13 +81,26 @@ const _fetchPeople = async (
     ],
   };
 
-  // If specific types are selected (and it's not "all of them"), apply the filter
-  const allPersonTypes = Object.values(PersonType);
-  if (type && type.length > 0 && type.length < allPersonTypes.length) {
-    whereClause.AND = [
-      ...(whereClause.AND as Prisma.PersonWhereInput[]),
-      { type: { in: type } },
-    ];
+  // REPLACE with account filtering.
+  // The faceted filter sends a comma-separated string; only filter when
+  // exactly one option is selected (both selected = no filter needed).
+  if (account) {
+    const selected = account.split(",").filter(Boolean);
+    const wantsRegistered = selected.includes("registered");
+    const wantsNoAccount = selected.includes("no_account");
+
+    // Only narrow when exactly one of the two is chosen
+    if (wantsRegistered && !wantsNoAccount) {
+      whereClause.AND = [
+        ...(whereClause.AND as Prisma.PersonWhereInput[]),
+        { user: { isNot: null } },
+      ];
+    } else if (wantsNoAccount && !wantsRegistered) {
+      whereClause.AND = [
+        ...(whereClause.AND as Prisma.PersonWhereInput[]),
+        { user: { is: null } },
+      ];
+    }
   }
 
   try {
@@ -101,7 +114,6 @@ const _fetchPeople = async (
         select: {
           id: true,
           name: true,
-          type: true,
           email: true,
           phone: true,
           city: true,
@@ -141,7 +153,6 @@ const _fetchSectionCardsPersonData = async (
       select: {
         id: true,
         name: true,
-        type: true,
         email: true,
         phone: true,
         address: true,
@@ -199,7 +210,6 @@ const _fetchPersonForEdit = async (
       select: {
         id: true,
         name: true,
-        type: true,
         email: true,
         phone: true,
         address: true,
@@ -233,7 +243,6 @@ const _fetchMyProfile = async (
       select: {
         id: true,
         name: true,
-        type: true,
         email: true,
         phone: true,
         address: true,

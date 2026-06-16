@@ -56,7 +56,7 @@ const _fetchMyApplications = async (
   })();
 
   const whereClause: Prisma.AdoptionApplicationWhereInput = {
-    userId: personId,
+    applicantId: personId,
     animal: {
       name: {
         contains: query,
@@ -133,7 +133,7 @@ const _fetchMyAppById = async (
     const myApplication = await prisma.adoptionApplication.findFirst({
       where: {
         id: validatedAdoptionAppId,
-        userId: personId,
+        applicantId: personId,
       },
       include: {
         animal: {
@@ -152,7 +152,7 @@ const _fetchMyAppById = async (
             },
             adoptionApplications: {
               select: {
-                userId: true,
+                applicantId: true,
               },
             },
           },
@@ -203,10 +203,10 @@ const _getAnimalForApplication = async (
         },
         adoptionApplications: {
           where: {
-            userId: personId,
+            applicantId: personId,
           },
           select: {
-            userId: true,
+            applicantId: true,
           },
         },
       },

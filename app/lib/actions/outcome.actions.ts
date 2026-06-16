@@ -10,7 +10,6 @@ import {
 import { Permissions } from "../auth/permissions";
 import { OutcomeFormSchema } from "../zod-schemas/outcome.schema";
 import {
-  AnimalArchiveReason,
   AnimalListingStatus,
   ApplicationStatus,
   OutcomeType,
@@ -22,26 +21,6 @@ import {
   NotFoundError,
   PreconditionFailedError,
 } from "../utils/errors";
-
-// Helper function to map OutcomeType to AnimalArchiveReason
-const getArchiveReasonFromOutcomeType = (
-  outcomeType: OutcomeType,
-): AnimalArchiveReason => {
-  switch (outcomeType) {
-    case "ADOPTION":
-      return AnimalArchiveReason.ADOPTED_INTERNAL;
-    case "TRANSFER_OUT":
-      return AnimalArchiveReason.TRANSFERRED;
-    case "RETURN_TO_OWNER":
-      return AnimalArchiveReason.RETURNED_TO_OWNER;
-    case "DECEASED":
-      return AnimalArchiveReason.DECEASED;
-    case "EUTHANIZED":
-      return AnimalArchiveReason.EUTHANIZED;
-    default:
-      return AnimalArchiveReason.OTHER;
-  }
-};
 
 interface CreateOutcomeIds {
   animalId: string;
@@ -75,11 +54,10 @@ const _createOutcome = async (
 
   const { outcomeDate, outcomeType, destinationPartnerId, notes } =
     validatedFields.data;
-  const archiveReason = getArchiveReasonFromOutcomeType(outcomeType);
 
   try {
     await prisma.$transaction(async (tx) => {
-      // ATOMIC UPDATE: Attempt to archive the animal first.
+      // Attempt to archive the animal first.
       // This update will only succeed if the animal is not already archived.
       const updateResult = await tx.animal.updateMany({
         where: {
@@ -88,7 +66,7 @@ const _createOutcome = async (
         },
         data: {
           listingStatus: AnimalListingStatus.ARCHIVED,
-          archiveReason: archiveReason,
+          archiveReason: outcomeType,
         },
       });
 
@@ -241,7 +219,6 @@ const _updateOutcome = async (
 
   const { outcomeDate, outcomeType, destinationPartnerId, notes } =
     validatedFields.data;
-  const archiveReason = getArchiveReasonFromOutcomeType(outcomeType);
 
   try {
     const existingOutcome = await prisma.outcome.findUnique({
@@ -270,7 +247,7 @@ const _updateOutcome = async (
       // Update the animal's archive reason in case the type changed
       await tx.animal.update({
         where: { id: existingOutcome.animalId },
-        data: { archiveReason: archiveReason },
+        data: { archiveReason: outcomeType },
       });
     });
 

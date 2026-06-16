@@ -30,11 +30,6 @@ enum MedicalRecordType {
   NOTE // A general health-related note
 }
 
-enum PersonType {
-  INDIVIDUAL
-  AGENCY // For shelters, rescues, vet clinics, etc.
-}
-
 enum OutcomeType {
   ADOPTION
   TRANSFER_OUT
@@ -152,16 +147,6 @@ enum ApplicationStatus {
   REJECTED // Application rejected
   WITHDRAWN // Application withdrawn by the user
   ADOPTED // animal has been adopted through this application (final state)
-}
-
-enum AnimalArchiveReason {
-  ADOPTED_INTERNAL // Adopted through an application on this platform
-  ADOPTED_EXTERNAL // Adopted through an external process (e.g., in-person event)
-  TRANSFERRED // Moved to another rescue or shelter
-  RETURNED_TO_OWNER
-  DECEASED
-  EUTHANIZED
-  OTHER
 }
 
 enum LivingSituation {
@@ -294,7 +279,7 @@ model Animal {
   description     String?
   listingStatus   AnimalListingStatus  @default(DRAFT)
   microchipNumber String?              @unique
-  archiveReason   AnimalArchiveReason? /// Should only be set when listingStatus is ARCHIVED. Explains why the animal is no longer available.
+  archiveReason   OutcomeType? /// Should only be set when listingStatus is ARCHIVED. Explains why the animal is no longer available.
 
   // Relations
   // mandatory relationship to Species
@@ -524,22 +509,21 @@ model AdoptionApplication {
   internalNotes String? // For persistent staff notes about the application as a whole
 
   outcome Outcome?
-
   history ApplicationStatusHistory[]
 
   // Relations
-  userId   String @map(name: "user_id")
-  user     Person @relation(fields: [userId], references: [id], onDelete: Restrict) // Prevent deleting a user with applications
-  animalId String @map(name: "animal_id")
-  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  applicantId String @map(name: "applicant_id")
+  applicant   Person @relation(fields: [applicantId], references: [id], onDelete: Restrict) // Prevent deleting a user with applications
+  animalId    String @map(name: "animal_id")
+  animal      Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
 
   submittedAt DateTime @default(now()) @map(name: "submitted_at")
   updatedAt   DateTime @updatedAt @map(name: "updated_at")
 
   @@index([animalId])
-  @@index([userId])
+  @@index([applicantId])
   @@index([status])
-  @@index([animalId, status]) // For quickly finding applications for an animal in a certain status
+  @@index([animalId, status])
   @@map(name: "adoption_applications")
 }
 
@@ -594,7 +578,6 @@ model Person {
   // AGENCY type persons (e.g., external shelters, rescues) are contact/tracking records only.
   // They do not have a User account and cannot log in. They exist to link animals to
   // an organization via Intake, Outcome.
-  type    PersonType @default(INDIVIDUAL)
   email   String?    @unique
   phone   String?
   address String?

@@ -12,15 +12,12 @@ import { PersonSectionCardPayload, IDParamType } from "@/app/lib/types";
 import { fetchSectionCardsPersonData } from "@/app/lib/data/people-directory/people-directory.data";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { PersonType } from "@prisma/client";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import {
   Mail,
   Phone,
   MapPin,
-  Building2,
   User as UserIcon,
-  PawPrint,
   ClipboardList,
   LogIn,
 } from "lucide-react";
@@ -63,12 +60,8 @@ const PersonSectionCards = async ({ params }: Props) => {
             <div className="flex-1">
               <CardTitle className="mb-1">{person.name}</CardTitle>
               <CardDescription className="flex items-center gap-1">
-                {person.type === PersonType.AGENCY ? (
-                  <Building2 className="h-3 w-3" />
-                ) : (
-                  <UserIcon className="h-3 w-3" />
-                )}
-                {formatSingleEnumOption(person.type)}
+                <UserIcon className="h-3 w-3" />
+                {person.user ? "Registered User" : "Contact Record"}
               </CardDescription>
               {fullAddress && (
                 <div className="flex items-center gap-1 text-sm text-muted-foreground mt-2">
@@ -100,9 +93,7 @@ const PersonSectionCards = async ({ params }: Props) => {
                   className="object-cover"
                 />
               ) : (
-                <span className="text-4xl">
-                  {person.type === PersonType.AGENCY ? "🏢" : "👤"}
-                </span>
+                <span className="text-4xl">👤</span>
               )}
             </div>
 
