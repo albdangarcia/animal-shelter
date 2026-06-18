@@ -4,7 +4,7 @@ import {
   cuidSchema,
   currentPageSchema,
 } from "../../zod-schemas/common.schemas";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import z from "zod";
 
@@ -78,5 +78,5 @@ const _fetchAnimalActivityLogs = async (
 };
 
 export const fetchAnimalActivityLogs = RequirePermission(
-  Permissions.ANIMAL_ACTIVITY_READ
+  AppPermissions.ANIMAL_ACTIVITY_READ
 )(_fetchAnimalActivityLogs);

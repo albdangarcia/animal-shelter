@@ -3,7 +3,8 @@ import { IDParamType } from "@/app/lib/types";
 import AnimalCharacteristicsManager from "@/components/dashboard/animals/characteristics/characteristics";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
 
 interface Props {
   params: IDParamType;
@@ -12,7 +13,7 @@ interface Props {
 const Page = async ({ params }: Props) => {
   return (
     <Authorize
-      permission={Permissions.ANIMAL_CHARACTERISTICS_UPDATE}
+      permission={AppPermissions.ANIMAL_CHARACTERISTICS_READ}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent params={params} />
@@ -22,12 +23,16 @@ const Page = async ({ params }: Props) => {
 
 const PageContent = async ({ params }: Props) => {
   const { id: animalId } = await params;
-  const animalCharacteristics = await fetchAnimalCharacteristics(animalId);
+  const [canManage, animalCharacteristics] = await Promise.all([
+    hasPermission(AppPermissions.ANIMAL_CHARACTERISTICS_MANAGE),
+    fetchAnimalCharacteristics(animalId),
+  ]);
 
   return (
-    <AnimalCharacteristicsManager 
-      animalCharacteristics={animalCharacteristics} 
-      animalId={animalId} 
+    <AnimalCharacteristicsManager
+      animalCharacteristics={animalCharacteristics}
+      animalId={animalId}
+      canManage={canManage}
     />
   );
 };

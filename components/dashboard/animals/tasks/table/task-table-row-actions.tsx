@@ -36,15 +36,21 @@ interface DataTableRowActionsProps {
   row: Row<FetchAnimalTasksPayload>;
   assigneeList: TaskAssignee[];
   animalId: string;
+  canManage: boolean;
 }
 
 export function DataTableRowActions({
   row,
   assigneeList,
   animalId,
+  canManage,
 }: DataTableRowActionsProps) {
   const task = row.original;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  if (!canManage) {
+    return null;
+  }
 
   const onSoftDelete = () => {
     const originalStatus = task.status;

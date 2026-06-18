@@ -7,7 +7,7 @@ import {
   SessionUser,
   withAuthenticatedUser,
 } from "../auth/protected-actions";
-import { Permissions } from "../auth/permissions";
+import { AppPermissions } from "../auth/permissions";
 import { OutcomeFormSchema } from "../zod-schemas/outcome.schema";
 import {
   AnimalListingStatus,
@@ -265,9 +265,9 @@ const _updateOutcome = async (
 };
 
 export const createOutcome = withAuthenticatedUser(
-  RequirePermission(Permissions.OUTCOMES_MANAGE)(_createOutcome),
+  RequirePermission(AppPermissions.OUTCOMES_MANAGE)(_createOutcome),
 );
 
-export const updateOutcome = RequirePermission(Permissions.OUTCOMES_MANAGE)(
+export const updateOutcome = RequirePermission(AppPermissions.OUTCOMES_MANAGE)(
   _updateOutcome,
 );

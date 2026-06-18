@@ -3,7 +3,8 @@ import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import AnimalAssessmentsTab from "@/components/dashboard/animals/assessments/assessments";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
 
 interface Props {
   params: IDParamType;
@@ -13,7 +14,7 @@ interface Props {
 const Page = async ({ params, searchParams }: Props) => {
   return (
     <Authorize
-      permission={Permissions.ANIMAL_ASSESSMENT_READ_LISTING}
+      permission={AppPermissions.ANIMAL_ASSESSMENT_READ}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent params={params} searchParams={searchParams} />
@@ -26,6 +27,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
   const { page = "1", type, outcome, sort, showDeleted } = await searchParams;
   const currentPage = Number(page);
   const includeDeleted = showDeleted === "true";
+  const canManage = await hasPermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE);
 
   const { assessments, totalPages } = await fetchAnimalAssessments(
     animalId,
@@ -41,6 +43,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
       animalAssessments={assessments}
       totalPages={totalPages}
       animalId={animalId}
+      canManage={canManage}
     />
   );
 };

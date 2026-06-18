@@ -1,4 +1,6 @@
-import { TaskCategory, TaskPriority, TaskStatus } from "@prisma/client"
+import { buildOptions } from "@/app/lib/utils/option-utils";
+import { TaskCategory, TaskPriority, TaskStatus } from "@prisma/client";
+import type { LucideIcon } from "lucide-react";
 import {
   ArrowDown,
   ArrowRight,
@@ -15,88 +17,34 @@ import {
   Briefcase,
   BrushCleaning,
   Utensils,
-} from "lucide-react"
+} from "lucide-react";
 
-export const categories = [
+const categoryMeta: Record<TaskCategory, { label: string; icon: LucideIcon }> =
   {
-    value: TaskCategory.MEDICAL,
-    label: "Medical",
-    icon: ClipboardList,
-  },
-  {
-    value: TaskCategory.BEHAVIORAL,
-    label: "Behavioral",
-    icon: PawPrint,
-  },
-  {
-    value: TaskCategory.ADMINISTRATIVE,
-    label: "Administrative",
-    icon: Briefcase,
-  },
-  {
-    value: TaskCategory.CLEANING,
-    label: "Cleaning",
-    icon: BrushCleaning,
-  },
-  {
-    value: TaskCategory.FEEDING,
-    label: "Feeding",
-    icon: Utensils,
-  },
-]
+    MEDICAL: { label: "Medical", icon: ClipboardList },
+    BEHAVIORAL: { label: "Behavioral", icon: PawPrint },
+    ADMINISTRATIVE: { label: "Administrative", icon: Briefcase },
+    CLEANING: { label: "Cleaning", icon: BrushCleaning },
+    FEEDING: { label: "Feeding", icon: Utensils },
+  };
 
-export const statuses = [
-  {
-    value: TaskStatus.TODO,
-    label: "Todo",
-    icon: Circle,
-  },
-  {
-    value: TaskStatus.IN_PROGRESS,
-    label: "In Progress",
-    icon: Timer,
-  },
-  {
-    value: TaskStatus.DONE,
-    label: "Done",
-    icon: CheckCircle,
-  },
-  {
-    value: TaskStatus.SKIPPED,
-    label: "Skipped",
-    icon: SkipForward,
-  },
-  {
-    value: TaskStatus.CANCELED,
-    label: "Canceled",
-    icon: CircleOff,
-  },
-  {
-    value: TaskStatus.ON_HOLD,
-    label: "On Hold",
-    icon: PauseCircle,
-  },
-  {
-    value: TaskStatus.DELETED,
-    label: "Deleted",
-    icon: Trash2,
-  },
-]
+const statusMeta: Record<TaskStatus, { label: string; icon: LucideIcon }> = {
+  TODO: { label: "Todo", icon: Circle },
+  IN_PROGRESS: { label: "In Progress", icon: Timer },
+  DONE: { label: "Done", icon: CheckCircle },
+  SKIPPED: { label: "Skipped", icon: SkipForward },
+  CANCELED: { label: "Canceled", icon: CircleOff },
+  ON_HOLD: { label: "On Hold", icon: PauseCircle },
+  DELETED: { label: "Deleted", icon: Trash2 },
+};
 
-export const priorities = [
+const priorityMeta: Record<TaskPriority, { label: string; icon: LucideIcon }> =
   {
-    value: TaskPriority.LOW,
-    label: "Low",
-    icon: ArrowDown,
-  },
-  {
-    value: TaskPriority.MEDIUM,
-    label: "Medium",
-    icon: ArrowRight,
-  },
-  {
-    value: TaskPriority.HIGH,
-    label: "High",
-    icon: ArrowUp,
-  },
-]
+    LOW: { label: "Low", icon: ArrowDown },
+    MEDIUM: { label: "Medium", icon: ArrowRight },
+    HIGH: { label: "High", icon: ArrowUp },
+  };
+
+export const categories = buildOptions(categoryMeta);
+export const statuses = buildOptions(statusMeta);
+export const priorities = buildOptions(priorityMeta);

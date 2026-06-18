@@ -13,6 +13,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
   params: IDParamType;
@@ -34,6 +36,10 @@ const Page = async ({ params, searchParams }: Props) => {
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
+  // Whether the current user can manage tasks (edit assignee/status, delete, edit form).
+  // Volunteers have ANIMAL_TASK_READ only; staff/admin have ANIMAL_TASK_MANAGE.
+  const canManage = await hasPermission(AppPermissions.ANIMAL_TASK_MANAGE);
+
   const { tasks, totalPages, totalRows } = await fetchAnimalTasks(
     query,
     currentPage,
@@ -44,7 +50,9 @@ const Page = async ({ params, searchParams }: Props) => {
     animalId,
   );
 
-  const assigneeList = await fetchTaskAssigneeList();
+  // fetchTaskAssigneeList is gated behind ANIMAL_TASK_MANAGE and would throw
+  // for volunteers, so only call it when the user can manage tasks.
+  const assigneeList = canManage ? await fetchTaskAssigneeList() : [];
 
   return (
     <Card>
@@ -62,9 +70,9 @@ const Page = async ({ params, searchParams }: Props) => {
               <DataTable
                 data={tasks}
                 getColumns={getColumns}
-                columnProps={{ animalId, assigneeList }}
+                columnProps={{ animalId, assigneeList, canManage }}
                 ToolbarComponent={TasksDataTableToolbar}
-                toolbarProps={{ animalId, assigneeList }}
+                toolbarProps={{ animalId, assigneeList, canManage }}
                 totalPages={totalPages}
                 totalRows={totalRows}
               />

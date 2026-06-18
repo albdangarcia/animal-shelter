@@ -3,7 +3,8 @@ import AnimalNotes from "@/components/dashboard/animals/notes/notes";
 import { fetchAnimalNotes } from "@/app/lib/data/animals/animal-note.data";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
 
 interface Props {
   params: IDParamType;
@@ -13,7 +14,7 @@ interface Props {
 const Page = async ({ params, searchParams }: Props) => {
   return (
     <Authorize
-      permission={Permissions.ANIMAL_NOTE_READ_LISTING}
+      permission={AppPermissions.ANIMAL_NOTE_READ}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent params={params} searchParams={searchParams} />
@@ -23,11 +24,12 @@ const Page = async ({ params, searchParams }: Props) => {
 
 const PageContent = async ({ params, searchParams }: Props) => {
   const { id: animalId } = await params;
+  const canManage = await hasPermission(AppPermissions.ANIMAL_NOTE_MANAGE);
   const {
     page = "1",
     category,
     sort, // e.g., "Newest first", "Oldest first"
-    showDeleted
+    showDeleted,
   } = await searchParams;
   const currentPage = Number(page);
   const includeDeleted = showDeleted === "true";
@@ -37,11 +39,16 @@ const PageContent = async ({ params, searchParams }: Props) => {
     category,
     sort,
     animalId,
-    includeDeleted
+    includeDeleted,
   );
-  
+
   return (
-    <AnimalNotes notes={notes} totalPages={totalPages} animalId={animalId} />
+    <AnimalNotes
+      notes={notes}
+      totalPages={totalPages}
+      animalId={animalId}
+      canManage={canManage}
+    />
   );
 };
 

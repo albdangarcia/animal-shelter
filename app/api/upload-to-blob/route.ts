@@ -2,7 +2,7 @@ import { put, del } from "@vercel/blob";
 import { prisma } from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { AnimalActivityType } from "@prisma/client";
 
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const isAuthorized = await hasPermission(Permissions.ANIMAL_UPDATE);
+  const isAuthorized = await hasPermission(AppPermissions.ANIMAL_PHOTO_MANAGE);
   if (!isAuthorized) {
     return NextResponse.json(
       { error: "Forbidden: You do not have permission to upload files." },

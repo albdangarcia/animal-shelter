@@ -2,7 +2,7 @@ import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import { fetchAnimalActivityLogs } from "@/app/lib/data/animals/animal-activity.data";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import ActivityFeed from "@/components/dashboard/animals/activity-feed/activity-feed";
 
 interface Props {
@@ -13,7 +13,7 @@ interface Props {
 const Page = async ({ params, searchParams }: Props) => {
   return (
     <Authorize
-      permission={Permissions.ANIMAL_ACTIVITY_READ}
+      permission={AppPermissions.ANIMAL_ACTIVITY_READ}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent params={params} searchParams={searchParams} />

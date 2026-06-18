@@ -5,7 +5,7 @@ import {
   cuidSchema,
   currentPageSchema,
 } from "../../zod-schemas/common.schemas";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 
 export type AssessmentTemplateWithFields = Prisma.AssessmentTemplateGetPayload<{
@@ -196,13 +196,13 @@ const _fetchAnimalAssessmentById = async (
 };
 
 export const fetchAnimalAssessmentById = RequirePermission(
-  Permissions.ANIMAL_ASSESSMENT_READ_DETAIL
+  AppPermissions.ANIMAL_ASSESSMENT_READ
 )(_fetchAnimalAssessmentById);
 
 export const fetchAssessmentTemplates = RequirePermission(
-  Permissions.ANIMAL_ASSESSMENT_READ_DETAIL
+  AppPermissions.ANIMAL_ASSESSMENT_READ
 )(_fetchAssessmentTemplates);
 
 export const fetchAnimalAssessments = RequirePermission(
-  Permissions.ANIMAL_ASSESSMENT_READ_DETAIL
+  AppPermissions.ANIMAL_ASSESSMENT_READ
 )(_fetchAnimalAssessments);

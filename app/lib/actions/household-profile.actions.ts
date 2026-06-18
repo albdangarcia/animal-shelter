@@ -9,7 +9,7 @@ import {
   SessionUser,
   withAuthenticatedUser,
 } from "../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { HouseholdProfileFormSchema } from "../zod-schemas/household-profile.schemas";
 
 const _updateMyHouseholdProfile = async (
@@ -80,5 +80,5 @@ const _updateMyHouseholdProfile = async (
 };
 
 export const updateMyHouseholdProfile = withAuthenticatedUser(
-  RequirePermission(Permissions.MY_PROFILE_UPDATE)(_updateMyHouseholdProfile),
+  RequirePermission(AppPermissions.MY_PROFILE_UPDATE)(_updateMyHouseholdProfile),
 );

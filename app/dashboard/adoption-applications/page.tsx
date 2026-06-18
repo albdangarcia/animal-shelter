@@ -8,12 +8,13 @@ import {
 } from "@/components/ui/card";
 import { SearchParamsType } from "@/app/lib/types";
 import DataTable from "@/components/table-common/data-table";
-import { columns } from "@/components/dashboard/adoption-applications/table/adoption-applications-table-columns";
+import { getColumns } from "@/components/dashboard/adoption-applications/table/adoption-applications-table-columns";
 import UserAppTableToolbar from "@/components/dashboard/adoption-applications/table/adoption-applications-table-toolbar";
 import { fetchUserApplications } from "@/app/lib/data/user-application.data";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -22,7 +23,7 @@ interface Props {
 const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
-      permission={Permissions.APPLICATIONS_READ_LISTING}
+      permission={AppPermissions.APPLICATIONS_READ}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />
@@ -50,6 +51,10 @@ const PageContent = async ({ searchParams }: Props) => {
       currentPageSize,
     );
 
+  const canManage = await hasPermission(
+    AppPermissions.ANIMAL_ASSESSMENT_MANAGE,
+  );
+
   return (
     <Card className="@container/card">
       <CardHeader>
@@ -67,7 +72,8 @@ const PageContent = async ({ searchParams }: Props) => {
             <div className="flex flex-col gap-4 md:gap-6">
               <DataTable
                 data={userApplications}
-                columns={columns}
+                getColumns={getColumns}
+                columnProps={{ canManage }}
                 ToolbarComponent={UserAppTableToolbar}
                 totalPages={totalPages}
                 totalRows={totalRows}

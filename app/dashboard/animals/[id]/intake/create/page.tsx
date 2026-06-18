@@ -1,4 +1,4 @@
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { IDParamType } from "@/app/lib/types";
@@ -24,7 +24,7 @@ const Page = async ({ params }: Props) => {
 
   return (
     <Authorize
-      permission={Permissions.INTAKE_CREATE}
+      permission={AppPermissions.INTAKE_MANAGE}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent animalId={animalId} />

@@ -7,7 +7,7 @@ import { StaffUpdateAppFormState } from "../form-state-types";
 import { StaffUpdateAdoptionAppFormSchema } from "../zod-schemas/application.schemas";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { ApplicationStatus, AnimalListingStatus, Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import { ConflictError } from "../utils/errors";
@@ -184,5 +184,5 @@ const _staffUpdateAdoptionApp = async (
 };
 
 export const staffUpdateAdoptionApp = RequirePermission(
-  Permissions.APPLICATIONS_MANAGE_STATUS
+  AppPermissions.APPLICATIONS_MANAGE_STATUS
 )(_staffUpdateAdoptionApp);

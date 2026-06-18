@@ -7,7 +7,7 @@ import {
 } from "../../zod-schemas/common.schemas";
 import { prisma } from "../../prisma";
 import { RequirePermission } from "../../auth/protected-actions";
-import { Permissions } from "../../auth/permissions";
+import { AppPermissions } from "../../auth/permissions";
 
 // Zod schema for validating the search parameters
 export const OutcomesSchema = z.object({
@@ -195,16 +195,16 @@ export const _fetchOutcomes = async (
 
     const totalPages = Math.ceil(totalCount / pageSize);
     return { outcomes, totalPages, totalRows: totalCount };
-  } catch (error) {
+} catch (error) {
     console.error("Database Error: Failed to fetch outcomes.", error);
     throw new Error("Failed to fetch outcomes.");
   }
 };
 
 export const fetchOutcomeById = RequirePermission(
-  Permissions.OUTCOMES_READ_DETAIL,
+  AppPermissions.OUTCOMES_READ,
 )(_fetchOutcomeById);
 
 export const fetchOutcomes = RequirePermission(
-  Permissions.OUTCOMES_READ_LISTING,
+  AppPermissions.OUTCOMES_READ,
 )(_fetchOutcomes);

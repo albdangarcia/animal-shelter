@@ -7,7 +7,7 @@ import {
   AssessmentOutcome,
 } from "@prisma/client";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 
 const PER_SOURCE_LIMIT = 15;
@@ -201,5 +201,5 @@ const _fetchPersonActivity = async (
 };
 
 export const fetchPersonActivity = RequirePermission(
-  Permissions.PERSONS_READ_DETAIL,
+  AppPermissions.PERSONS_READ,
 )(_fetchPersonActivity);

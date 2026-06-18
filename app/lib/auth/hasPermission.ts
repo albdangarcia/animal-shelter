@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { auth } from "@/auth";
 import { rolePermissions } from "./roles.config";
-import { type Permission } from "./permissions";
+import { type AppPermission } from "./permissions";
 
 /**
  * Checks if the current user has a specific permission.
@@ -9,7 +9,7 @@ import { type Permission } from "./permissions";
  * @param requiredPermission The permission string to check for.
  * @returns A boolean indicating if the user has the permission.
  */
-export const hasPermission = cache(async (requiredPermission: Permission) => {
+export const hasPermission = cache(async (requiredPermission: AppPermission) => {
   const session = await auth();
   if (!session?.user) {
     return false;

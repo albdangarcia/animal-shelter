@@ -1,5 +1,5 @@
 import PersonForm from "@/components/dashboard/people-directory/person-form";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { fetchPersonForEdit } from "@/app/lib/data/people-directory/people-directory.data";
@@ -14,7 +14,7 @@ interface Props {
 const Page = async ({ params, searchParams }: Props) => {
   return (
     <Authorize
-      permission={Permissions.PERSONS_MANAGE}
+      permission={AppPermissions.PERSONS_MANAGE}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent params={params} searchParams={searchParams}  />

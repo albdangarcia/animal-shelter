@@ -10,7 +10,7 @@ import {
 import { Suspense } from "react";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
   params: IDParamType;
@@ -19,7 +19,7 @@ interface Props {
 const Page = async ({ params }: Props) => {
   return (
     <Authorize
-      permission={Permissions.ANIMAL_JOURNEY_READ}
+      permission={AppPermissions.ANIMAL_JOURNEY_READ}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent params={params} />

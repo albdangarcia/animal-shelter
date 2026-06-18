@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "../prisma";
-import { Permissions } from "../auth/permissions";
+import { AppPermissions } from "../auth/permissions";
 import {
   AnimalActivityType,
   AnimalListingStatus,
@@ -178,5 +178,5 @@ const _createReIntake = async (
 };
 
 export const createReIntake = withAuthenticatedUser(
-  RequirePermission(Permissions.INTAKE_CREATE)(_createReIntake)
+  RequirePermission(AppPermissions.INTAKE_MANAGE)(_createReIntake)
 );

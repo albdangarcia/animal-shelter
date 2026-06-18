@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 // Define a Zod schema for input validation
 const updateCharacteristicsSchema = z.object({
@@ -101,5 +101,5 @@ const _updateAnimalCharacteristics = async (data: {
 };
 
 export const updateAnimalCharacteristics = RequirePermission(
-  Permissions.ANIMAL_CHARACTERISTICS_UPDATE,
+  AppPermissions.ANIMAL_CHARACTERISTICS_MANAGE,
 )(_updateAnimalCharacteristics);

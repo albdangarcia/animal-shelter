@@ -4,7 +4,7 @@ import {
   cuidSchema,
   currentPageSchema,
 } from "../../zod-schemas/common.schemas";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import z from "zod";
 
@@ -104,5 +104,5 @@ const _fetchPersonAdoptionApplications = async (
 };
 
 export const fetchPersonAdoptionApplications = RequirePermission(
-  Permissions.PERSONS_READ_DETAIL,
+  AppPermissions.PERSONS_READ,
 )(_fetchPersonAdoptionApplications);

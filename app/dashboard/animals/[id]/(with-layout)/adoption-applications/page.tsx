@@ -8,13 +8,14 @@ import {
 } from "@/components/ui/card";
 import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import DataTable from "@/components/table-common/data-table";
-import { columns } from "@/components/dashboard/adoption-applications/table/adoption-applications-table-columns";
+import { getColumns } from "@/components/dashboard/adoption-applications/table/adoption-applications-table-columns";
 import UserAppTableToolbar from "@/components/dashboard/adoption-applications/table/adoption-applications-table-toolbar";
 import { fetchAnimalApplications } from "@/app/lib/data/animals/animal-adoption-application.data";
 import { notFound } from "next/navigation";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -24,7 +25,7 @@ interface Props {
 const Page = async ({ searchParams, params }: Props) => {
   return (
     <Authorize
-      permission={Permissions.APPLICATIONS_READ_LISTING}
+      permission={AppPermissions.APPLICATIONS_READ}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} params={params} />
@@ -48,6 +49,10 @@ const PageContent = async ({ searchParams, params }: Props) => {
   if (!animalId) {
     return notFound();
   }
+
+  const canManage = await hasPermission(
+    AppPermissions.ANIMAL_ASSESSMENT_MANAGE,
+  );
 
   const { applications, totalPages, totalRows } = await fetchAnimalApplications(
     animalId,
@@ -75,7 +80,8 @@ const PageContent = async ({ searchParams, params }: Props) => {
             <div className="flex flex-col gap-4 md:gap-6">
               <DataTable
                 data={applications}
-                columns={columns}
+                getColumns={getColumns}
+                columnProps={{ canManage }}
                 ToolbarComponent={UserAppTableToolbar}
                 totalPages={totalPages}
                 totalRows={totalRows}

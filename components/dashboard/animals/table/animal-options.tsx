@@ -1,51 +1,23 @@
-import { Sex } from "@prisma/client"
+import { Sex, AnimalSize } from "@prisma/client"
+import type { LucideIcon } from "lucide-react"
 import {
-  Mars,
-  Venus,
-  HelpCircle as UnknownIcon,
-  CircleDot,
-  Circle as SmallCircle,
-  CircleDashed,
-  CircleEllipsis,
+  Mars, Venus, HelpCircle as UnknownIcon,
+  CircleDot, Circle as SmallCircle, CircleDashed, CircleEllipsis,
 } from "lucide-react"
+import { buildOptions } from "@/app/lib/utils/option-utils"
 
-export const sexOptions = [
-  {
-    value: Sex.MALE,
-    label: "Male",
-    icon: Mars,
-  },
-  {
-    value: Sex.FEMALE,
-    label: "Female",
-    icon: Venus,
-  },
-  {
-    value: Sex.UNKNOWN,
-    label: "Unknown",
-    icon: UnknownIcon,
-  },
-]
+const sexMeta: Record<Sex, { label: string; icon: LucideIcon }> = {
+  MALE:    { label: "Male",    icon: Mars },
+  FEMALE:  { label: "Female",  icon: Venus },
+  UNKNOWN: { label: "Unknown", icon: UnknownIcon },
+}
 
-export const sizeOptions = [
-  {
-    value: "SMALL",
-    label: "Small",
-    icon: SmallCircle,
-  },
-  {
-    value: "MEDIUM",
-    label: "Medium",
-    icon: CircleDot,
-  },
-  {
-    value: "LARGE",
-    label: "Large",
-    icon: CircleDashed,
-  },
-  {
-    value: "EXTRA_LARGE",
-    label: "Extra Large",
-    icon: CircleEllipsis,
-  },
-]
+const sizeMeta: Record<AnimalSize, { label: string; icon: LucideIcon }> = {
+  SMALL:  { label: "Small",       icon: SmallCircle },
+  MEDIUM: { label: "Medium",      icon: CircleDot },
+  LARGE:  { label: "Large",       icon: CircleDashed },
+  XLARGE: { label: "Extra Large", icon: CircleEllipsis },
+}
+
+export const sexOptions = buildOptions(sexMeta)
+export const sizeOptions = buildOptions(sizeMeta)

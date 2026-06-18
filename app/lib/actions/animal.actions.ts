@@ -12,7 +12,7 @@ import {
   SessionUser,
   withAuthenticatedUser,
 } from "../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import {
   AnimalActivityType,
   AnimalListingStatus,
@@ -519,15 +519,15 @@ const _deleteAnimalImage = async (
 };
 
 export const deleteAnimalImage = withAuthenticatedUser(
-  RequirePermission(Permissions.ANIMAL_DELETE_IMAGE)(_deleteAnimalImage)
+  RequirePermission(AppPermissions.ANIMAL_PHOTO_MANAGE)(_deleteAnimalImage)
 );
 
 export const createAnimal = withAuthenticatedUser(
-  RequirePermission(Permissions.INTAKE_CREATE)(_createAnimal)
+  RequirePermission(AppPermissions.INTAKE_MANAGE)(_createAnimal)
 );
 
 export const updateAnimal = withAuthenticatedUser(
-  RequirePermission(Permissions.ANIMAL_UPDATE)(_updateAnimal)
+  RequirePermission(AppPermissions.ANIMAL_INFO_MANAGE)(_updateAnimal)
 );
 
 export const togglePetLike = withAuthenticatedUser(_togglePetLike);

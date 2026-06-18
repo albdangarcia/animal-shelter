@@ -35,14 +35,22 @@ import { AllAnimalsTasksPayload } from "@/app/lib/data/all-animal-tasks.data";
 interface DataTableRowActionsProps {
   row: Row<AllAnimalsTasksPayload>;
   assigneeList: TaskAssignee[];
+  canManage: boolean;
 }
 
 export function DataTableRowActions({
   row,
   assigneeList,
+  canManage,
 }: DataTableRowActionsProps) {
   const task = row.original;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  // Volunteers (read-only) get no row actions — every field is already
+  // visible in the table, and all actions here are mutations.
+  if (!canManage) {
+    return null;
+  }
 
   const onSoftDelete = () => {
     const originalStatus = task.status;

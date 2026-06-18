@@ -8,12 +8,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AnimalSectionCardPayload, IDParamType } from "@/app/lib/types";
 import { fetchSectionCardsAnimalData } from "@/app/lib/data/animals/animal.data";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AnimalListingStatus, Sex } from "@prisma/client";
+import { AnimalHealthStatus, AnimalListingStatus, Sex } from "@prisma/client";
 import { calculateAgeString, formatTimeAgo } from "@/app/lib/utils/date-utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import {
@@ -24,6 +25,29 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import Image from "next/image";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+
+type AlertableStatus = Exclude<AnimalHealthStatus, "HEALTHY" | "RESOLVED">;
+
+const HEALTH_STATUS_ALERTS = {
+  AWAITING_VET_EXAM: { variant: "default", label: "Awaiting Vet Exam" },
+  AWAITING_TRIAGE: { variant: "default", label: "Awaiting Triage" },
+  UNDER_VET_CARE: { variant: "destructive", label: "Under Vet Care" },
+  HOSPITALISED: { variant: "destructive", label: "Hospitalized" },
+  AWAITING_SPAY_NEUTER: { variant: "default", label: "Awaiting Spay/Neuter" },
+  AWAITING_OTHER_SURGERY: {
+    variant: "default",
+    label: "Awaiting Other Surgery",
+  },
+  RECOVERING_FROM_SURGERY: {
+    variant: "default",
+    label: "Recovering from Surgery",
+  },
+} satisfies Record<
+  AlertableStatus,
+  { variant: "default" | "destructive"; label: string }
+>;
 
 interface Props {
   params: IDParamType;
@@ -34,9 +58,12 @@ const AnimalSectionCards = async ({ params }: Props) => {
 
   const animal: AnimalSectionCardPayload | null =
     await fetchSectionCardsAnimalData(id);
+
   if (!animal) {
     notFound();
   }
+
+  const canManage = await hasPermission(AppPermissions.ANIMAL_INFO_MANAGE);
 
   const daysSinceIntake = animal.intake?.[0]?.intakeDate
     ? formatTimeAgo(animal.intake[0].intakeDate)
@@ -53,36 +80,22 @@ const AnimalSectionCards = async ({ params }: Props) => {
 
   // Health status info for rendering
   const getHealthStatusBadge = () => {
-    if (!animal.healthStatus || animal.healthStatus === "HEALTHY") return null;
+    if (!animal.healthStatus) return null;
 
-    const statusConfig = {
-      AWAITING_VET_EXAM: { variant: "secondary", label: "Awaiting Vet Exam" },
-      AWAITING_TRIAGE: { variant: "secondary", label: "Awaiting Triage" },
-      UNDER_VET_CARE: { variant: "destructive", label: "Under Vet Care" },
-      HOSPITALISED: { variant: "destructive", label: "Hospitalized" },
-      AWAITING_SPAY_NEUTER: {
-        variant: "secondary",
-        label: "Awaiting Spay/Neuter",
-      },
-      AWAITING_OTHER_SURGERY: {
-        variant: "secondary",
-        label: "Awaiting Other Surgery",
-      },
-      RECOVERING_FROM_SURGERY: {
-        variant: "secondary",
-        label: "Recovering from Surgery",
-      },
-    };
+    const config =
+      HEALTH_STATUS_ALERTS[
+        animal.healthStatus as keyof typeof HEALTH_STATUS_ALERTS
+      ];
+    if (!config) return null;
 
-    const config = statusConfig[animal.healthStatus];
-    return config ? (
-      <Alert className="mb-4">
+    return (
+      <Alert variant={config.variant} className="mb-4">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           <span className="font-medium text-foreground">{config.label}</span>
         </AlertDescription>
       </Alert>
-    ) : null;
+    );
   };
 
   return (
@@ -186,21 +199,37 @@ const AnimalSectionCards = async ({ params }: Props) => {
           </div>
 
           {/* Action Button */}
-          <Button asChild className="w-full">
-            <Link
-              href={
-                animal.listingStatus !== AnimalListingStatus.ARCHIVED
-                  ? `/dashboard/outcomes/create?animalId=${animal.id}`
-                  : `/dashboard/animals/${animal.id}/intake/create`
-              }
+          <span
+            className={cn(
+              "inline-block w-full",
+              !canManage && "cursor-not-allowed",
+            )}
+          >
+            <Button
+              asChild
+              variant={canManage ? "default" : "outline"}
+              className={cn(
+                "w-full",
+                !canManage && "pointer-events-none opacity-50",
+              )}
             >
-              {approvedApplications > 0
-                ? "Complete Adoption"
-                : animal.listingStatus === AnimalListingStatus.ARCHIVED
-                ? "Create Intake"
-                : "Create Outcome"}
-            </Link>
-          </Button>
+              <Link
+                href={
+                  animal.listingStatus !== AnimalListingStatus.ARCHIVED
+                    ? `/dashboard/outcomes/create?animalId=${animal.id}`
+                    : `/dashboard/animals/${animal.id}/intake/create`
+                }
+                aria-disabled={!canManage}
+                tabIndex={canManage ? undefined : -1}
+              >
+                {approvedApplications > 0
+                  ? "Complete Adoption"
+                  : animal.listingStatus === AnimalListingStatus.ARCHIVED
+                    ? "Create Intake"
+                    : "Create Outcome"}
+              </Link>
+            </Button>
+          </span>
         </CardContent>
       </Card>
 
@@ -212,11 +241,24 @@ const AnimalSectionCards = async ({ params }: Props) => {
             Medical and identification information
           </CardDescription>
           <CardAction>
-            <Button asChild size="sm">
-              <Link href={`/dashboard/animals/${animal.id}/edit`}>
-                Edit Profile
-              </Link>
-            </Button>
+            <span
+              className={cn("inline-block", !canManage && "cursor-not-allowed")}
+            >
+              <Button
+                asChild
+                size="sm"
+                variant={canManage ? "default" : "outline"}
+                className={cn(!canManage && "pointer-events-none opacity-50")}
+              >
+                <Link
+                  href={`/dashboard/animals/${animal.id}/edit`}
+                  aria-disabled={!canManage}
+                  tabIndex={canManage ? undefined : -1}
+                >
+                  Edit Profile
+                </Link>
+              </Button>
+            </span>
           </CardAction>
         </CardHeader>
 

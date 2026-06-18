@@ -9,7 +9,13 @@ import { DataTableRowActions } from "./people-directory-table-row-actions";
 import { PeopleDirectoryPayload } from "@/app/lib/types";
 import { AccountStatuses } from "./people-directory-options";
 
-export const columns: ColumnDef<PeopleDirectoryPayload>[] = [
+export interface GetColumnsProps {
+  canManage: boolean;
+}
+
+export const getColumns = ({
+  canManage,
+}: GetColumnsProps): ColumnDef<PeopleDirectoryPayload>[] => [
   {
     id: "select",
     header: ({ table }) => (
@@ -133,6 +139,6 @@ export const columns: ColumnDef<PeopleDirectoryPayload>[] = [
   },
   {
     id: "actions",
-    cell: ({ row }) => <DataTableRowActions row={row} />,
+    cell: ({ row }) => <DataTableRowActions row={row} canManage={canManage} />,
   },
 ];

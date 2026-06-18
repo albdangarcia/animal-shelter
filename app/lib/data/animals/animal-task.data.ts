@@ -2,7 +2,7 @@ import { prisma } from "@/app/lib/prisma";
 import { Prisma, Role, TaskCategory, TaskStatus } from "@prisma/client";
 import { AnimalTasksSchema } from "../../zod-schemas/animal.schemas";
 import { RequirePermission } from "../../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { TaskAssignee } from "../../types";
 
 export type FetchAnimalTasksPayload = Prisma.TaskGetPayload<{
@@ -135,9 +135,9 @@ const _fetchTaskAssigneeList = async (): Promise<TaskAssignee[]> => {
 };
 
 export const fetchTaskAssigneeList = RequirePermission(
-  Permissions.ANIMAL_TASK_CREATE
+  AppPermissions.ANIMAL_TASK_MANAGE
 )(_fetchTaskAssigneeList);
 
 export const fetchAnimalTasks = RequirePermission(
-  Permissions.ANIMAL_TASK_READ_LISTING
+  AppPermissions.ANIMAL_TASK_READ
 )(_fetchAnimalTasks);

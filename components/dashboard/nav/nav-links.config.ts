@@ -1,4 +1,4 @@
-import { Permissions, type Permission } from "@/app/lib/auth/permissions";
+import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
 
 export type IconName =
   | "IconDashboard"
@@ -30,12 +30,12 @@ export interface NavItem {
   title: string;
   url: string;
   icon: IconName;
-  permission?: Permission;
+  permission?: AppPermission;
   isActive?: boolean;
   items?: Array<{
     title: string;
     url: string;
-    permission?: Permission;
+    permission?: AppPermission;
   }>;
 }
 
@@ -43,7 +43,7 @@ export interface NavDocument {
   name: string;
   url: string;
   icon: IconName;
-  permission?: Permission;
+  permission?: AppPermission;
 }
 
 // Main navigation items
@@ -52,49 +52,49 @@ export const navMainItems: readonly NavItem[] = [
     title: "Dashboard",
     url: "/dashboard",
     icon: "IconDashboard",
-    permission: Permissions.ANIMAL_READ_ANALYTICS,
+    permission: AppPermissions.ANIMAL_READ_ANALYTICS,
   },
   {
     title: "Animals",
     url: "/dashboard/animals",
     icon: "IconListDetails",
-    permission: Permissions.ANIMAL_READ_LISTING,
+    permission: AppPermissions.ANIMAL_INFO_READ,
   },
   {
     title: "Role Management",
     url: "/dashboard/role-management",
     icon: "IconChartBar",
-    permission: Permissions.MANAGE_ROLES,
+    permission: AppPermissions.MANAGE_ROLES,
   },
   {
     title: "People Directory",
     url: "/dashboard/people-directory",
     icon: "IconUsersGroup",
-    permission: Permissions.PERSONS_READ_LISTING,
+    permission: AppPermissions.PERSONS_READ,
   },
   {
     title: "My Applications",
     url: "/dashboard/my-applications",
     icon: "IconFileText",
-    permission: Permissions.MY_APPLICATIONS_READ,
+    permission: AppPermissions.MY_APPLICATIONS_READ,
   },
   {
     title: "Adoption Applications",
     url: "/dashboard/adoption-applications",
     icon: "IconHeartHandshake",
-    permission: Permissions.APPLICATIONS_READ_LISTING,
+    permission: AppPermissions.APPLICATIONS_READ,
   },
   {
     title: "Outcomes",
     url: "/dashboard/outcomes",
     icon: "IconChecks",
-    permission: Permissions.OUTCOMES_MANAGE,
+    permission: AppPermissions.OUTCOMES_READ,
   },
   {
     title: "Animal Tasks",
     url: "/dashboard/animal-tasks",
     icon: "IconCheckbox",
-    permission: Permissions.ANIMAL_TASK_READ_LISTING,
+    permission: AppPermissions.ANIMAL_TASK_READ,
   },
 ] as const;
 

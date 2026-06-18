@@ -91,11 +91,13 @@ const CATEGORY_KEYS = Object.values(CharacteristicCategory);
 interface Props {
   animalCharacteristics: CharacteristicWithAssignment[];
   animalId: string;
+  canManage: boolean;
 }
 
 const AnimalCharacteristicsManager = ({
   animalCharacteristics,
   animalId,
+  canManage,
 }: Props) => {
   const [isPending, startTransition] = useTransition();
 
@@ -115,7 +117,6 @@ const AnimalCharacteristicsManager = ({
   );
 
   // Use stagedChanges if dialog is open, otherwise use initial data
-
   const assignedCharacteristics = useMemo(
     () => animalCharacteristics.filter((char) => stagedChanges.has(char.id)),
     [animalCharacteristics, stagedChanges],
@@ -207,8 +208,13 @@ const AnimalCharacteristicsManager = ({
           </CardDescription>
           <CardAction>
             <DialogTrigger asChild>
-              <Button variant="default" size="sm" onClick={handleOpenDialog}>
-                <Pencil className="size-4 mr-2" />
+              <Button
+                variant={canManage ? "default" : "outline"}
+                size="sm"
+                onClick={handleOpenDialog}
+                className="disabled:pointer-events-auto disabled:cursor-not-allowed"
+                disabled={!canManage}
+              >
                 Edit
               </Button>
             </DialogTrigger>
@@ -234,7 +240,7 @@ const AnimalCharacteristicsManager = ({
                           key={char.id}
                           variant="secondary"
                           className={clsx(
-                            "font-normal text-sm py-1 px-2.5",
+                            "font-medium text-sm py-1 px-2.5",
                             CATEGORIES[char.category]?.color,
                           )}
                         >
@@ -279,7 +285,7 @@ const AnimalCharacteristicsManager = ({
         <div className="flex flex-col gap-4 py-4">
           <div className="p-3 border rounded-lg space-y-3 bg-slate-50/50">
             <Label>Selected Characteristics</Label>
-            <div className="flex flex-wrap gap-2 min-h-[2.5rem] max-h-40 overflow-y-auto">
+            <div className="flex flex-wrap gap-2 min-h-8 max-h-40 overflow-y-auto">
               {assignedCharacteristics.map((char) => (
                 <Badge
                   key={char.id}

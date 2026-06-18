@@ -16,7 +16,7 @@ import {
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { DashboardAnimalsSchema } from "../../zod-schemas/animal.schemas";
 import { RequirePermission } from "../../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 // data for the animals table in the dashboard
 const _fetchAnimals = async (
@@ -363,29 +363,29 @@ const _fetchAnimalForReIntake = async (id: string): Promise<AnimalReIntakeFormPa
 };
 
 export const fetchAnimalForReIntake = RequirePermission(
-  Permissions.ANIMAL_READ_DETAIL
+  AppPermissions.ANIMAL_INFO_READ
 )(_fetchAnimalForReIntake);
 
 export const fetchAnimalForOutcomeForm = RequirePermission(
-  Permissions.ANIMAL_READ_DETAIL
+  AppPermissions.ANIMAL_INFO_READ
 )(_fetchAnimalForOutcomeForm);
 
 export const fetchAnimalForPhotosPage = RequirePermission(
-  Permissions.ANIMAL_UPDATE
+  AppPermissions.ANIMAL_INFO_READ
 )(_fetchAnimalForPhotoPage);
 
-export const fetchPartners = RequirePermission(Permissions.PARTNER_READ)(
+export const fetchPartners = RequirePermission(AppPermissions.PARTNERS_READ)(
   _fetchPartners
 );
 
-export const fetchAnimals = RequirePermission(Permissions.ANIMAL_READ_LISTING)(
+export const fetchAnimals = RequirePermission(AppPermissions.ANIMAL_INFO_READ)(
   _fetchAnimals
 );
 
 export const fetchAnimalById = RequirePermission(
-  Permissions.ANIMAL_READ_DETAIL
+  AppPermissions.ANIMAL_INFO_READ
 )(_fetchAnimalById);
 
-export const fetchSectionCardsAnimalData = RequirePermission(Permissions.ANIMAL_READ_DETAIL)(
+export const fetchSectionCardsAnimalData = RequirePermission(AppPermissions.ANIMAL_INFO_READ)(
   _fetchSectionCardsAnimalData
 );

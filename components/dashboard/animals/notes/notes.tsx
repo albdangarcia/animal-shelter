@@ -51,9 +51,10 @@ interface Props {
   notes: NotePayload[];
   totalPages: number;
   animalId: string;
+  canManage: boolean;
 }
 
-const AnimalNotes = ({ notes, totalPages, animalId }: Props) => {
+const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   return (
@@ -69,7 +70,12 @@ const AnimalNotes = ({ notes, totalPages, animalId }: Props) => {
           <CardAction>
             <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline" className="h-8">
+                <Button
+                  variant={canManage ? "default" : "outline"}
+                  size="sm"
+                  className="disabled:pointer-events-auto disabled:cursor-not-allowed"
+                  disabled={!canManage}
+                >
                   Add Note
                 </Button>
               </DialogTrigger>
@@ -133,7 +139,7 @@ const AnimalNotes = ({ notes, totalPages, animalId }: Props) => {
                           variant="outline"
                           className={clsx(
                             "font-semibold",
-                            noteCategoryColors[note.category]
+                            noteCategoryColors[note.category],
                           )}
                         >
                           {note.category}
@@ -148,7 +154,8 @@ const AnimalNotes = ({ notes, totalPages, animalId }: Props) => {
                       </p>
 
                       <div className="text-xs text-gray-500 mt-3">
-                        <span>{note.author?.name ?? "Unknown User"}</span> &middot;{" "}
+                        <span>{note.author?.name ?? "Unknown User"}</span>{" "}
+                        &middot;{" "}
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="underline decoration-dotted cursor-help">

@@ -14,10 +14,17 @@ import { OutcomeWithDetails } from "@/app/lib/data/animals/outcome.data";
 
 interface DataTableRowActionsProps {
   row: Row<OutcomeWithDetails>;
+  canManage: boolean;
 }
 
-export function DataTableRowActions({ row }: DataTableRowActionsProps) {
+export function DataTableRowActions({ row, canManage }: DataTableRowActionsProps) {
   const outcome = row.original;
+
+  // Volunteers (read-only) get no row actions — every field is already
+  // visible in the table, and all actions here are mutations.
+  if (!canManage) {
+    return null;
+  }
   
   return (
     <DropdownMenu>

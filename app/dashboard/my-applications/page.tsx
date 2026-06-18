@@ -13,6 +13,8 @@ import MyAppTableToolbar from "@/components/dashboard/my-adoption-applications/t
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { fetchMyApplications } from "@/app/lib/data/my-applications.data";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -31,6 +33,10 @@ const Page = async ({ searchParams }: Props) => {
     currentPageSize
   );
 
+  const canManage = await hasPermission(
+      AppPermissions.ANIMAL_ASSESSMENT_MANAGE,
+    );
+
   return (
     <>
       <Card className="@container/card">
@@ -42,7 +48,7 @@ const Page = async ({ searchParams }: Props) => {
             List of your submitted adoption applications.
           </CardDescription>
           <CardAction>
-            <Button asChild>
+            <Button asChild size="sm">
               <Link href="/pets">Adopt Pets</Link>
             </Button>
           </CardAction>

@@ -11,7 +11,7 @@ import {
   SessionUser,
   withAuthenticatedUser,
 } from "../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { PersonFormSchema } from "../zod-schemas/people-directory.schemas";
 
 const _createPerson = async (
@@ -191,13 +191,13 @@ const _updateMyProfile = async (
 };
 
 export const updateMyProfile = withAuthenticatedUser(
-  RequirePermission(Permissions.MY_PROFILE_UPDATE)(_updateMyProfile),
+  RequirePermission(AppPermissions.MY_PROFILE_UPDATE)(_updateMyProfile),
 );
 
-export const createPerson = RequirePermission(Permissions.PERSONS_MANAGE)(
+export const createPerson = RequirePermission(AppPermissions.PERSONS_MANAGE)(
   _createPerson,
 );
 
-export const updatePerson = RequirePermission(Permissions.PERSONS_MANAGE)(
+export const updatePerson = RequirePermission(AppPermissions.PERSONS_MANAGE)(
   _updatePerson,
 );
