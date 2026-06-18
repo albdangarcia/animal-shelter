@@ -32,6 +32,7 @@ import { ServerSideSort } from "@/components/table-common/server-side-sort";
 import { ServerSideSwitch } from "@/components/table-common/server-side-switch";
 import { AssessmentActions } from "./assessment-actions";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
+import { cn } from "@/lib/utils";
 
 const getOutcomeBadgeVariant = (outcome: AssessmentOutcome) => {
   switch (outcome) {
@@ -52,12 +53,14 @@ interface Props {
   animalAssessments: AnimalAssessmentListPayload[];
   animalId: string;
   totalPages: number;
+  canManage: boolean;
 }
 
 const AnimalAssessmentsTab = ({
   animalAssessments,
   animalId,
   totalPages,
+  canManage,
 }: Props) => {
   return (
     <Card>
@@ -67,11 +70,27 @@ const AnimalAssessmentsTab = ({
           A log of all behavioral and medical evaluations.
         </CardDescription>
         <CardAction>
-          <Button asChild>
-            <Link href={`/dashboard/animals/${animalId}/assessments/create`}>
-              Create Assessment
-            </Link>
-          </Button>
+          <span
+            className={cn("inline-block", !canManage && "cursor-not-allowed")}
+          >
+            <Button
+              asChild
+              size="sm"
+              variant={canManage ? "default" : "outline"}
+              className={cn(!canManage && "pointer-events-none opacity-50")}
+            >
+              <Link
+                href={`/dashboard/animals/${animalId}/assessments/create`}
+                aria-disabled={!canManage}
+                tabIndex={canManage ? undefined : -1}
+                onClick={(e) => {
+                  if (!canManage) e.preventDefault();
+                }}
+              >
+                Create Assessment
+              </Link>
+            </Button>
+          </span>
         </CardAction>
 
         {/* Filter and Sort Controls */}
@@ -119,7 +138,7 @@ const AnimalAssessmentsTab = ({
                       {assessment.overallOutcome && (
                         <Badge
                           variant={getOutcomeBadgeVariant(
-                            assessment.overallOutcome
+                            assessment.overallOutcome,
                           )}
                         >
                           {formatSingleEnumOption(assessment.overallOutcome)}
@@ -132,6 +151,7 @@ const AnimalAssessmentsTab = ({
                     <AssessmentActions
                       assessment={assessment}
                       animalId={animalId}
+                      canManage={canManage}
                     />
                   </div>
                 </div>

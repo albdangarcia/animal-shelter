@@ -8,12 +8,13 @@ import {
 } from "@/components/ui/card";
 import { SearchParamsType } from "@/app/lib/types";
 import DataTable from "@/components/table-common/data-table";
-import { columns } from "@/components/dashboard/outcomes/table/outcome-table-columns";
+import { getColumns } from "@/components/dashboard/outcomes/table/outcome-table-columns";
 import OutcomeTableToolbar from "@/components/dashboard/outcomes/table/outcome-table-toolbar";
 import { fetchOutcomes } from "@/app/lib/data/animals/outcome.data";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -22,7 +23,7 @@ interface Props {
 const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
-      permission={Permissions.OUTCOMES_MANAGE}
+      permission={AppPermissions.OUTCOMES_READ}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />
@@ -31,7 +32,13 @@ const Page = async ({ searchParams }: Props) => {
 };
 
 const PageContent = async ({ searchParams }: Props) => {
-  const { query = "", page = "1", pageSize = "10", sort, type } = await searchParams;
+  const {
+    query = "",
+    page = "1",
+    pageSize = "10",
+    sort,
+    type,
+  } = await searchParams;
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
@@ -40,8 +47,10 @@ const PageContent = async ({ searchParams }: Props) => {
     currentPage,
     sort,
     type,
-    currentPageSize
+    currentPageSize,
   );
+
+  const canManage = await hasPermission(AppPermissions.OUTCOMES_MANAGE);
 
   return (
     <Card className="@container/card">
@@ -61,7 +70,8 @@ const PageContent = async ({ searchParams }: Props) => {
             <div className="flex flex-col gap-4 md:gap-6">
               <DataTable
                 data={outcomes}
-                columns={columns}
+                getColumns={getColumns}
+                columnProps={{ canManage }}
                 ToolbarComponent={OutcomeTableToolbar}
                 totalPages={totalPages}
                 totalRows={totalRows}

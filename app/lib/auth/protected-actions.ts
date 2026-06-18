@@ -1,7 +1,7 @@
 import { hasPermission } from "./hasPermission";
 import { auth } from "@/auth";
 import { type Session } from "next-auth";
-import { type Permission } from "./permissions";
+import { type AppPermission } from "./permissions";
 
 export type SessionUser = Session["user"];
 
@@ -28,7 +28,7 @@ export function withAuthenticatedUser<TArgs extends unknown[], TReturn>(
  * @param requiredPermission The permission required to execute the action.
  * @returns A function that takes the target action and returns a new, protected version of it.
  */
-export function RequirePermission(requiredPermission: Permission) {
+export function RequirePermission(requiredPermission: AppPermission) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return function <T extends (...args: any[]) => Promise<any>>(target: T): T {
     const protectedAction = async (...args: Parameters<T>): Promise<ReturnType<T>> => {

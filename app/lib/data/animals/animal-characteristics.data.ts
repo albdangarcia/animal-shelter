@@ -2,7 +2,7 @@ import { prisma } from "@/app/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { RequirePermission } from "../../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 export type CharacteristicWithAssignment = Prisma.CharacteristicGetPayload<object> & {
   isAssigned: boolean;
@@ -56,5 +56,5 @@ const _fetchAnimalCharacteristics = async (
 };
 
 export const fetchAnimalCharacteristics = RequirePermission(
-  Permissions.ANIMAL_CHARACTERISTICS_UPDATE
+  AppPermissions.ANIMAL_CHARACTERISTICS_READ
 )(_fetchAnimalCharacteristics);

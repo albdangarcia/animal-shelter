@@ -16,10 +16,18 @@ import { PeopleDirectoryPayload } from "@/app/lib/types";
 
 interface DataTableRowActionsProps {
   row: Row<PeopleDirectoryPayload>;
+  canManage: boolean;
 }
 
-export function DataTableRowActions({ row }: DataTableRowActionsProps) {
+export function DataTableRowActions({ row, canManage }: DataTableRowActionsProps) {
   const person = row.original;
+
+  // Volunteers (read-only) get no row actions — every field is already
+  // visible in the table, and all actions here are mutations.
+  if (!canManage) {
+    return null;
+  }
+  
 
   return (
     <DropdownMenu>

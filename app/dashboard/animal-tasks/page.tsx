@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/card";
 import { fetchAllAnimalsTasks } from "@/app/lib/data/all-animal-tasks.data";
 import { fetchTaskAssigneeList } from "@/app/lib/data/animals/animal-task.data";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -21,7 +23,7 @@ const Page = async ({ searchParams }: Props) => {
     query = "",
     page = "1",
     pageSize = "10",
-    sort, // e.g., "name.asc"
+    sort,
     category,
     status,
   } = await searchParams;
@@ -29,17 +31,25 @@ const Page = async ({ searchParams }: Props) => {
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
-  // Pass all parameters, including the potentially undefined ones, to the function.
-  const { tasks, totalPages, totalRows } = await fetchAllAnimalsTasks(
-    query,
-    currentPage,
-    category,
-    status,
-    currentPageSize,
-    sort
-  );
+  // Whether the current user can manage tasks (edit assignee/status, delete, edit form).
+  // Volunteers have ANIMAL_TASK_READ only; staff/admin have ANIMAL_TASK_MANAGE.
+  // fetchAllAnimalsTasks doesn't depend on canManage, so run them in parallel.
+  const [canManage, { tasks, totalPages, totalRows }] = await Promise.all([
+    hasPermission(AppPermissions.ANIMAL_TASK_MANAGE),
+    fetchAllAnimalsTasks(
+      query,
+      currentPage,
+      category,
+      status,
+      currentPageSize,
+      sort
+    ),
+  ]);
 
-  const assigneeList = await fetchTaskAssigneeList();
+  // Only fetch the assignee list when the user can manage tasks.
+  // fetchTaskAssigneeList is itself gated behind ANIMAL_TASK_MANAGE and would
+  // throw for volunteers, so we must not call it otherwise.
+  const assigneeList = canManage ? await fetchTaskAssigneeList() : [];
 
   return (
     <Card className="@container/card">
@@ -60,8 +70,7 @@ const Page = async ({ searchParams }: Props) => {
                 getColumns={getColumns}
                 ToolbarComponent={TasksDataTableToolbar}
                 totalPages={totalPages}
-                columnProps={{ assigneeList }}
-                // assigneeList={assigneeList}
+                columnProps={{ assigneeList, canManage }}
                 totalRows={totalRows}
               />
             </div>

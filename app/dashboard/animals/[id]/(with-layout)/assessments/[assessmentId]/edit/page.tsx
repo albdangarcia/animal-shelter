@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { notFound } from "next/navigation";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 
@@ -20,7 +20,7 @@ interface Props {
 const Page = async ({ params }: Props) => {
   return (
     <Authorize
-      permission={Permissions.ANIMAL_ASSESSMENT_READ_DETAIL}
+      permission={AppPermissions.ANIMAL_ASSESSMENT_READ}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent params={params} />

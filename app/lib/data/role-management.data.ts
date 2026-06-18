@@ -2,7 +2,7 @@ import { prisma } from "@/app/lib/prisma";
 import { Prisma, Role } from "@prisma/client";
 import { UsersRoleParamsSchema } from "../zod-schemas/role-management.schemas";
 import { RequirePermission } from "../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RoleManagementPayload } from "../types";
 
 const _fetchUserRoles = async (
@@ -129,6 +129,6 @@ const _fetchUserRoles = async (
   }
 };
 
-export const fetchUserRoles = RequirePermission(Permissions.MANAGE_ROLES)(
+export const fetchUserRoles = RequirePermission(AppPermissions.MANAGE_ROLES)(
   _fetchUserRoles,
 );

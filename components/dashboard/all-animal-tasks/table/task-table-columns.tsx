@@ -7,14 +7,7 @@ import { DataTableRowActions } from "./task-table-row-actions";
 import { TaskAssignee } from "@/app/lib/types";
 import { formatDateOrNA, formatDueDate } from "@/app/lib/utils/date-utils";
 import { DataTableColumnHeader } from "@/components/table-common/data-table-column-header";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { toast } from "sonner";
+import { AssigneeCell } from "@/components/table-common/assignee-cell";
 import { updateAnimalTaskAssignee } from "@/app/lib/actions/animal-task.actions";
 import {
   categories,
@@ -26,10 +19,12 @@ import { AllAnimalsTasksPayload } from "@/app/lib/data/all-animal-tasks.data";
 
 export interface GetColumnsProps {
   assigneeList: TaskAssignee[];
+  canManage: boolean;
 }
 
 export const getColumns = ({
   assigneeList,
+  canManage,
 }: GetColumnsProps): ColumnDef<AllAnimalsTasksPayload>[] => [
   {
     id: "select",
@@ -62,7 +57,7 @@ export const getColumns = ({
     ),
     cell: ({ row }) => {
       const priority = priorities.find(
-        (priority) => priority.value === row.original.priority
+        (priority) => priority.value === row.original.priority,
       );
 
       const animal = row.original.animal;
@@ -109,7 +104,7 @@ export const getColumns = ({
     ),
     cell: ({ row }) => {
       const status = statuses.find(
-        (status) => status.value === row.getValue("status")
+        (status) => status.value === row.getValue("status"),
       );
 
       if (!status) {
@@ -136,7 +131,7 @@ export const getColumns = ({
     ),
     cell: ({ row }) => {
       const category = categories.find(
-        (category) => category.value === row.getValue("category")
+        (category) => category.value === row.getValue("category"),
       );
 
       return category ? (
@@ -159,7 +154,7 @@ export const getColumns = ({
     ),
     cell: ({ row }) => {
       const priority = priorities.find(
-        (priority) => priority.value === row.getValue("priority")
+        (priority) => priority.value === row.getValue("priority"),
       );
 
       if (!priority) {
@@ -184,39 +179,16 @@ export const getColumns = ({
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Assignee" />
     ),
-    cell: ({ row }) => {
-      const task = row.original;
-      const currentAssigneeId = task.assignee?.id || "unassigned";
-
-      const handleAssigneeChange = async (newAssigneeId: string) => {
-        const result = await updateAnimalTaskAssignee(
-          task.id,
-          newAssigneeId === "unassigned" ? null : newAssigneeId
-        );
-
-        if (!result.success) {
-          toast.error(result.message);
-        } else {
-          toast.success("Assignee updated successfully.");
+    cell: ({ row }) => (
+      <AssigneeCell
+        currentAssignee={row.original.assignee}
+        assigneeList={assigneeList}
+        canManage={canManage}
+        onAssigneeChange={(newAssigneeId) =>
+          updateAnimalTaskAssignee(row.original.id, newAssigneeId)
         }
-      };
-
-      return (
-        <Select value={currentAssigneeId} onValueChange={handleAssigneeChange}>
-          <SelectTrigger className="w-full max-w-45">
-            <SelectValue placeholder="Assign..." />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="unassigned">Unassigned</SelectItem>
-            {assigneeList.map((assignee) => (
-              <SelectItem key={assignee.id} value={assignee.id}>
-                {assignee.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      );
-    },
+      />
+    ),
   },
   {
     accessorKey: "dueDate",
@@ -227,23 +199,19 @@ export const getColumns = ({
       displayName: "Due Date",
     },
     cell: ({ row }) => {
-      // Get the entire task object from the row
       const task = row.original;
       const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
 
-      // Define active statuses
       const activeStatuses = ["TODO", "IN_PROGRESS"];
+      const isOverdueAndActive =
+        isOverdue && activeStatuses.includes(task.status);
 
-      return (
-        <span
-          className={
-            isOverdue && activeStatuses.includes(task.status)
-              ? "text-red-600 font-medium" // Apply a red color for overdue tasks
-              : ""
-          }
-        >
+      return isOverdueAndActive ? (
+        <Badge variant="destructive">
           {formatDueDate(task.dueDate, task.status)}
-        </span>
+        </Badge>
+      ) : (
+        <span>{formatDueDate(task.dueDate, task.status)}</span>
       );
     },
   },
@@ -263,7 +231,11 @@ export const getColumns = ({
   {
     id: "actions",
     cell: ({ row }) => (
-      <DataTableRowActions row={row} assigneeList={assigneeList} />
+      <DataTableRowActions
+        row={row}
+        assigneeList={assigneeList}
+        canManage={canManage}
+      />
     ),
   },
 ];

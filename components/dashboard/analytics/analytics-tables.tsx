@@ -2,10 +2,9 @@ import {
   fetchAnimalsRequiringAttention,
   fetchAnalyticsTaskTableData,
 } from "@/app/lib/data/analytics.data";
-import { fetchTaskAssigneeList } from "@/app/lib/data/animals/animal-task.data";
 
-import { getTaskColumns } from "@/components/dashboard/analytics/tables/tasks/task-table-columns";
-import { healthColumns } from "@/components/dashboard/analytics/tables/animal-health/health-table-columns";
+import { recentTasksColumns } from "@/components/dashboard/analytics/tables/tasks/recent-tasks-columns";
+import { healthColumns } from "@/components/dashboard/analytics/tables/animal-health/recent-health-columns";
 import DataTable from "@/components/dashboard/analytics/tables/data-table-client";
 import { DataTableViewToolbarClient } from "@/components/dashboard/analytics/tables/data-table-view-toolbar-client";
 
@@ -19,10 +18,9 @@ import {
 } from "@/components/ui/card";
 
 const AnalyticsTables = async () => {
-  const [tasks, animalHealth, assigneeList] = await Promise.all([
+  const [tasks, animalHealth] = await Promise.all([
     fetchAnalyticsTaskTableData(),
     fetchAnimalsRequiringAttention(),
-    fetchTaskAssigneeList(),
   ]);
 
   return (
@@ -36,17 +34,14 @@ const AnalyticsTables = async () => {
           <CardHeader>
             <CardTitle>Animal Tasks</CardTitle>
             <CardDescription>
-              This table provides a direct to-do list for shelter staff, showing
-              all tasks that are not yet completed.
+              A quick view of the most recent tasks that are not yet completed.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <DataTable
               data={tasks}
-              getColumns={getTaskColumns}
-              columnProps={{ assigneeList }}
+              columns={recentTasksColumns}
               ToolbarComponent={DataTableViewToolbarClient}
-              toolbarProps={{ assigneeList }}
             />
           </CardContent>
         </Card>

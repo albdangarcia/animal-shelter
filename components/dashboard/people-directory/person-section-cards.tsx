@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { PersonSectionCardPayload, IDParamType } from "@/app/lib/types";
 import { fetchSectionCardsPersonData } from "@/app/lib/data/people-directory/people-directory.data";
 import Link from "next/link";
@@ -22,6 +23,8 @@ import {
   LogIn,
 } from "lucide-react";
 import Image from "next/image";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
   params: IDParamType;
@@ -32,9 +35,14 @@ const PersonSectionCards = async ({ params }: Props) => {
 
   const person: PersonSectionCardPayload | null =
     await fetchSectionCardsPersonData(id);
+
   if (!person) {
     notFound();
   }
+
+  const canManage = await hasPermission(
+    AppPermissions.PERSONS_MANAGE,
+  );
 
   const fullAddress = [
     person.address,
@@ -180,11 +188,24 @@ const PersonSectionCards = async ({ params }: Props) => {
           <CardTitle>Contact & Account Details</CardTitle>
           <CardDescription>Address and account information</CardDescription>
           <CardAction>
-            <Button asChild size="sm">
-              <Link href={`/dashboard/people-directory/${person.id}/edit`}>
-                Edit Contact Info
-              </Link>
-            </Button>
+            <span
+              className={cn("inline-block", !canManage && "cursor-not-allowed")}
+            >
+              <Button
+                asChild
+                size="sm"
+                variant={canManage ? "default" : "outline"}
+                className={cn(!canManage && "pointer-events-none opacity-50")}
+              >
+                <Link
+                  href={`/dashboard/people-directory/${person.id}/edit`}
+                  aria-disabled={!canManage}
+                  tabIndex={canManage ? undefined : -1}
+                >
+                  Edit Contact Info
+                </Link>
+              </Button>
+            </span>
           </CardAction>
         </CardHeader>
 

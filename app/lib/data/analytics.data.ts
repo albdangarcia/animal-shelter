@@ -6,7 +6,7 @@ import {
   OutcomeType,
   Prisma,
 } from "@prisma/client";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../auth/protected-actions";
 import { Prettify } from "../utils/type-utils";
 
@@ -394,17 +394,17 @@ const _fetchAnimalsRequiringAttention = async (): Promise<
 };
 
 export const fetchAnalyticsTaskTableData = RequirePermission(
-  Permissions.ANIMAL_READ_ANALYTICS,
+  AppPermissions.ANIMAL_READ_ANALYTICS,
 )(_fetchAnalyticsTaskTableData);
 
 export const fetchPetCardData = RequirePermission(
-  Permissions.ANIMAL_READ_ANALYTICS,
+  AppPermissions.ANIMAL_READ_ANALYTICS,
 )(_fetchAnimalCardData);
 
 export const fetchChartData = RequirePermission(
-  Permissions.ANIMAL_READ_ANALYTICS,
+  AppPermissions.ANIMAL_READ_ANALYTICS,
 )(_fetchChartData);
 
 export const fetchAnimalsRequiringAttention = RequirePermission(
-  Permissions.ANIMAL_READ_ANALYTICS,
+  AppPermissions.ANIMAL_READ_ANALYTICS,
 )(_fetchAnimalsRequiringAttention);

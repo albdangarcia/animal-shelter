@@ -11,7 +11,7 @@ import { columns } from "@/components/dashboard/people-directory/adoption-applic
 import { fetchPersonAdoptionApplications } from "@/app/lib/data/people-directory/person-adoption-applications.data";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -21,7 +21,7 @@ interface Props {
 const Page = async ({ searchParams, params }: Props) => {
   return (
     <Authorize
-      permission={Permissions.PERSONS_READ_DETAIL}
+      permission={AppPermissions.PERSONS_READ}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} params={params} />

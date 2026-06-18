@@ -11,7 +11,7 @@ import {
   SessionUser,
   RequirePermission,
 } from "../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { AnimalActivityType, AssessmentOutcome } from "@prisma/client";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
@@ -330,23 +330,23 @@ const _restoreAnimalAssessment = async (
 };
 
 export const createAssessment = withAuthenticatedUser(
-  RequirePermission(Permissions.ANIMAL_ASSESSMENT_CREATE)(_createAssessment)
+  RequirePermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE)(_createAssessment)
 );
 
 export const updateAnimalAssessment = withAuthenticatedUser(
-  RequirePermission(Permissions.ANIMAL_ASSESSMENT_UPDATE)(
+  RequirePermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE)(
     _updateAnimalAssessment
   )
 );
 
 export const deleteAnimalAssessment = withAuthenticatedUser(
-  RequirePermission(Permissions.ANIMAL_ASSESSMENT_DELETE)(
+  RequirePermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE)(
     _deleteAnimalAssessment
   )
 );
 
 export const restoreAnimalAssessment = withAuthenticatedUser(
-  RequirePermission(Permissions.ANIMAL_ASSESSMENT_DELETE)(
+  RequirePermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE)(
     _restoreAnimalAssessment
   )
 );

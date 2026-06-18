@@ -13,7 +13,7 @@ import { columns } from "@/components/dashboard/role-management/table/role-manag
 import DataTable from "@/components/table-common/data-table";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -22,7 +22,7 @@ interface Props {
 const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
-      permission={Permissions.MANAGE_ROLES}
+      permission={AppPermissions.MANAGE_ROLES}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />

@@ -8,7 +8,7 @@ import {
   SessionUser,
   withAuthenticatedUser,
 } from "../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { NoteFormSchema } from "../zod-schemas/animal.schemas";
 
 export interface AnimalNoteFormState {
@@ -207,17 +207,17 @@ const _restoreAnimalNote = async (
 };
 
 export const deleteAnimalNote = RequirePermission(
-  Permissions.ANIMAL_NOTE_DELETE
+  AppPermissions.ANIMAL_NOTE_MANAGE
 )(_deleteAnimalNote);
 
 export const restoreAnimalNote = RequirePermission(
-  Permissions.ANIMAL_NOTE_UPDATE
+  AppPermissions.ANIMAL_NOTE_MANAGE
 )(_restoreAnimalNote);
 
 export const createAnimalNote = withAuthenticatedUser(
-  RequirePermission(Permissions.ANIMAL_NOTE_CREATE)(_createAnimalNote)
+  RequirePermission(AppPermissions.ANIMAL_NOTE_MANAGE)(_createAnimalNote)
 );
 
 export const updateAnimalNote = RequirePermission(
-  Permissions.ANIMAL_NOTE_UPDATE
+  AppPermissions.ANIMAL_NOTE_MANAGE
 )(_updateAnimalNote);

@@ -8,7 +8,7 @@ import {
 import { MyApplicationsSchema } from "../zod-schemas/animal.schemas";
 import { AnimalListingStatus, ApplicationStatus, Prisma } from "@prisma/client";
 import { RequirePermission, SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
-import { Permissions } from "../auth/permissions";
+import { AppPermissions } from "../auth/permissions";
 
 const _fetchMyApplications = async (
   user: SessionUser,
@@ -280,7 +280,7 @@ const _fetchApplicantDefaults = async (
 };
 
 export const fetchApplicantDefaults = withAuthenticatedUser(
-  RequirePermission(Permissions.MY_APPLICATIONS_CREATE)(_fetchApplicantDefaults)
+  RequirePermission(AppPermissions.MY_APPLICATIONS_MANAGE)(_fetchApplicantDefaults)
 );
 
 export const fetchMyApplications = withAuthenticatedUser(_fetchMyApplications);

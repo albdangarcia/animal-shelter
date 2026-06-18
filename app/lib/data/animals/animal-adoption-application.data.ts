@@ -1,4 +1,4 @@
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { ApplicationStatus, Prisma } from "@prisma/client";
 import { prisma } from "../../prisma";
 import { RequirePermission } from "../../auth/protected-actions";
@@ -137,5 +137,5 @@ const _fetchAnimalApplications = async (
 };
 
 export const fetchAnimalApplications = RequirePermission(
-  Permissions.APPLICATIONS_READ_DETAIL,
+  AppPermissions.APPLICATIONS_READ,
 )(_fetchAnimalApplications);

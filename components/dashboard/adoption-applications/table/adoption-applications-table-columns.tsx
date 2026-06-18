@@ -10,7 +10,13 @@ import { ApplicationWithAnimal } from "@/app/lib/data/user-application.data";
 import { formatTimeAgo } from "@/app/lib/utils/date-utils";
 import Link from "next/link";
 
-export const columns: ColumnDef<ApplicationWithAnimal>[] = [
+export interface GetColumnsProps {
+  canManage: boolean;
+}
+
+export const getColumns = ({
+  canManage,
+}: GetColumnsProps): ColumnDef<ApplicationWithAnimal>[] => [
   {
     id: "select",
     header: ({ table }) => (
@@ -45,7 +51,7 @@ export const columns: ColumnDef<ApplicationWithAnimal>[] = [
     },
     cell: ({ row }) => {
       const status = ApplicationStatuses.find(
-        (status) => status.value === row.original.status
+        (status) => status.value === row.original.status,
       );
 
       return (
@@ -93,7 +99,7 @@ export const columns: ColumnDef<ApplicationWithAnimal>[] = [
     ),
     cell: ({ row }) => {
       const status = ApplicationStatuses.find(
-        (status) => status.value === row.getValue("status")
+        (status) => status.value === row.getValue("status"),
       );
 
       if (!status) {
@@ -163,6 +169,6 @@ export const columns: ColumnDef<ApplicationWithAnimal>[] = [
   },
   {
     id: "actions",
-    cell: ({ row }) => <DataTableRowActions row={row} />,
+    cell: ({ row }) => <DataTableRowActions row={row} canManage={canManage} />,
   },
 ];

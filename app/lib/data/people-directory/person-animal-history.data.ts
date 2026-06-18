@@ -1,6 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 
 export type PersonAnimalHistoryRole =
@@ -133,5 +133,5 @@ const _fetchPersonAnimalHistory = async (
 };
 
 export const fetchPersonAnimalHistory = RequirePermission(
-  Permissions.PERSONS_READ_DETAIL
+  AppPermissions.PERSONS_READ
 )(_fetchPersonAnimalHistory);

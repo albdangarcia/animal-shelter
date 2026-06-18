@@ -5,7 +5,7 @@ import {
   currentPageSchema,
 } from "../../zod-schemas/common.schemas";
 import z from "zod";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 
 export type FetchAnimalNotePayload = Prisma.NoteGetPayload<{
@@ -119,5 +119,5 @@ const _fetchAnimalNotes = async (
 };
 
 export const fetchAnimalNotes = RequirePermission(
-  Permissions.ANIMAL_NOTE_READ_LISTING
+  AppPermissions.ANIMAL_NOTE_READ
 )(_fetchAnimalNotes);

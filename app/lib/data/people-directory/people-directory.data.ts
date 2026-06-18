@@ -5,7 +5,7 @@ import {
   SessionUser,
   withAuthenticatedUser,
 } from "../../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { PeopleDirectoryParamsSchema } from "../../zod-schemas/people-directory.schemas";
 import {
   HouseholdProfilePayload,
@@ -285,21 +285,21 @@ const _fetchMyHouseholdProfile = async (
 };
 
 export const fetchMyHouseholdProfile = withAuthenticatedUser(
-  RequirePermission(Permissions.MY_PROFILE_UPDATE)(_fetchMyHouseholdProfile),
+  RequirePermission(AppPermissions.MY_PROFILE_UPDATE)(_fetchMyHouseholdProfile),
 );
 
 export const fetchMyProfile = withAuthenticatedUser(
-  RequirePermission(Permissions.MY_PROFILE_UPDATE)(_fetchMyProfile),
+  RequirePermission(AppPermissions.MY_PROFILE_UPDATE)(_fetchMyProfile),
 );
 
-export const fetchPersonForEdit = RequirePermission(Permissions.PERSONS_MANAGE)(
+export const fetchPersonForEdit = RequirePermission(AppPermissions.PERSONS_MANAGE)(
   _fetchPersonForEdit,
 );
 
 export const fetchSectionCardsPersonData = RequirePermission(
-  Permissions.PERSONS_READ_DETAIL,
+  AppPermissions.PERSONS_READ,
 )(_fetchSectionCardsPersonData);
 
-export const fetchPeople = RequirePermission(Permissions.PERSONS_READ_LISTING)(
+export const fetchPeople = RequirePermission(AppPermissions.PERSONS_READ)(
   _fetchPeople,
 );

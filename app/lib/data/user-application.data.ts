@@ -6,7 +6,7 @@ import {
 } from "../zod-schemas/common.schemas";
 import { prisma } from "../prisma";
 import { RequirePermission } from "../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import z from "zod";
 import { ApplicationStatus, Prisma } from "@prisma/client";
 
@@ -242,9 +242,9 @@ const _fetchUserApplicationById = async (
 };
 
 export const fetchUserApplications = RequirePermission(
-  Permissions.APPLICATIONS_READ_LISTING,
+  AppPermissions.APPLICATIONS_READ,
 )(_fetchUserApplications);
 
 export const fetchApplicationById = RequirePermission(
-  Permissions.APPLICATIONS_READ_LISTING,
+  AppPermissions.APPLICATIONS_READ,
 )(_fetchUserApplicationById);

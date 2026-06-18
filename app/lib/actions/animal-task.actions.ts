@@ -9,7 +9,7 @@ import {
   SessionUser,
   withAuthenticatedUser,
 } from "../auth/protected-actions";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { TaskFormSchema } from "../zod-schemas/animal.schemas";
 import { TaskStatus } from "@prisma/client";
 import z from "zod";
@@ -209,17 +209,17 @@ const _updateAnimalTaskAssignee = async (
 };
 
 export const updateAnimalTaskAssignee = RequirePermission(
-  Permissions.ANIMAL_TASK_UPDATE
+  AppPermissions.ANIMAL_TASK_MANAGE
 )(_updateAnimalTaskAssignee);
 
 export const updateAnimalTaskStatus = RequirePermission(
-  Permissions.ANIMAL_TASK_UPDATE
+  AppPermissions.ANIMAL_TASK_MANAGE
 )(_updateTaskStatus);
 
 export const updateAnimalTask = RequirePermission(
-  Permissions.ANIMAL_TASK_UPDATE
+  AppPermissions.ANIMAL_TASK_MANAGE
 )(_updateAnimalTask);
 
 export const createAnimalTask = withAuthenticatedUser(
-  RequirePermission(Permissions.ANIMAL_TASK_CREATE)(_createAnimalTask)
+  RequirePermission(AppPermissions.ANIMAL_TASK_MANAGE)(_createAnimalTask)
 );

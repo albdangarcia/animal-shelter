@@ -25,12 +25,14 @@ interface TasksDataTableToolbarProps {
   table: Table<FetchAnimalTasksPayload>;
   animalId: string;
   assigneeList: TaskAssignee[];
+  canManage: boolean;
 }
 
 const TasksDataTableToolbar = ({
   table,
   animalId,
   assigneeList,
+  canManage,
 }: TasksDataTableToolbarProps) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
@@ -57,7 +59,12 @@ const TasksDataTableToolbar = ({
       extraActions={
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="h-8">
+            <Button
+              size="sm"
+              variant={canManage ? "default" : "outline"}
+              className="disabled:pointer-events-auto disabled:cursor-not-allowed"
+              disabled={!canManage}
+            >
               Add Task
             </Button>
           </DialogTrigger>

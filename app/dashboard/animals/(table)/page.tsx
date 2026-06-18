@@ -13,12 +13,26 @@ import { SearchParamsType } from "@/app/lib/types";
 import AnimalsDataTableToolbar from "@/components/dashboard/animals/table/animal-table-toolbar";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { Authorize } from "@/components/auth/authorize";
+import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
   searchParams: SearchParamsType;
 }
 
 const Page = async ({ searchParams }: Props) => {
+  return (
+    <Authorize
+      permission={AppPermissions.ANIMAL_INFO_READ}
+      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+    >
+      <PageContent searchParams={searchParams} />
+    </Authorize>
+  );
+};
+
+const PageContent = async ({ searchParams }: Props) => {
   const {
     query = "",
     page = "1",
@@ -51,7 +65,7 @@ const Page = async ({ searchParams }: Props) => {
           for a new arrival.
         </CardDescription>
         <CardAction>
-          <Button asChild>
+          <Button asChild size="sm">
             <Link href="/dashboard/animals/create">Add Animal</Link>
           </Button>
         </CardAction>

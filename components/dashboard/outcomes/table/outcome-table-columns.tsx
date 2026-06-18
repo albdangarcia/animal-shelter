@@ -9,7 +9,13 @@ import { DataTableRowActions } from "./outcome-table-row-actions";
 import { OutcomeWithDetails } from "@/app/lib/data/animals/outcome.data";
 import { formatDateOrNA } from "@/app/lib/utils/date-utils";
 
-export const columns: ColumnDef<OutcomeWithDetails>[] = [
+export interface GetColumnsProps {
+  canManage: boolean;
+}
+
+export const getColumns = ({
+  canManage,
+}: GetColumnsProps): ColumnDef<OutcomeWithDetails>[] => [
   {
     id: "select",
     header: ({ table }) => (
@@ -132,6 +138,6 @@ export const columns: ColumnDef<OutcomeWithDetails>[] = [
   },
   {
     id: "actions",
-    cell: ({ row }) => <DataTableRowActions row={row} />,
+    cell: ({ row }) => <DataTableRowActions row={row} canManage={canManage} />,
   },
 ];

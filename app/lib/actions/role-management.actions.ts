@@ -6,7 +6,7 @@ import { Role } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
-import { Permissions } from "../auth/permissions";
+import { AppPermissions } from "../auth/permissions";
 
 // Define a Zod schema for input validation
 const UpdateUserRoleSchema = z.object({
@@ -58,6 +58,6 @@ const _updateUserRole = async (userId: string, newRole: Role) => {
   }
 };
 
-export const updateUserRole = RequirePermission(Permissions.MANAGE_ROLES)(
+export const updateUserRole = RequirePermission(AppPermissions.MANAGE_ROLES)(
   _updateUserRole
 );

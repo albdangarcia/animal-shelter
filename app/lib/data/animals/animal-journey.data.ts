@@ -1,7 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { AnimalActivityType, Prisma } from "@prisma/client";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 
 export type AnimalJourneyLogPayload = Prisma.AnimalActivityLogGetPayload<{
@@ -87,5 +87,5 @@ const _fetchAnimalJourney = async (
 };
 
 export const fetchAnimalJourney = RequirePermission(
-  Permissions.ANIMAL_JOURNEY_READ
+  AppPermissions.ANIMAL_JOURNEY_READ
 )(_fetchAnimalJourney);

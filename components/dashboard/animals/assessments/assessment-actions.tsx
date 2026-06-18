@@ -20,11 +20,13 @@ import Link from "next/link";
 interface AssessmentActionsProps {
   assessment: AnimalAssessmentListPayload;
   animalId: string;
+  canManage: boolean;
 }
 
 export function AssessmentActions({
   assessment,
   animalId,
+  canManage,
 }: AssessmentActionsProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -52,6 +54,10 @@ export function AssessmentActions({
       });
     });
   };
+
+  if (!canManage) {
+    return null;
+  }
 
   return (
     <DropdownMenu>

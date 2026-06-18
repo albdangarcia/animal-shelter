@@ -17,15 +17,22 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface AnimalImageGalleryProps {
   images: AnimalImage[];
   animalId: string;
+  canManage: boolean;
 }
 
 export default function AnimalImageGallery({
   images,
   animalId,
+  canManage,
 }: AnimalImageGalleryProps) {
   const [isPending, startTransition] = useTransition();
 
@@ -79,18 +86,35 @@ export default function AnimalImageGallery({
               priority={index === 0}
             />
             <div className="absolute top-2 right-2">
-              <Button
-                size="icon"
-                variant="destructive"
-                onClick={() =>
-                  setImageToDelete({ id: image.id, url: image.url })
-                }
-                disabled={isPending}
-                className="opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                aria-label="Delete image"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {/* Wrapper span lets the tooltip fire even while the
+                      button itself is disabled, since disabled elements
+                      don't receive pointer/focus events. */}
+                  <span
+                    className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex"
+                    tabIndex={canManage ? undefined : 0}
+                  >
+                    <Button
+                      size="icon"
+                      variant="destructive"
+                      onClick={() =>
+                        setImageToDelete({ id: image.id, url: image.url })
+                      }
+                      disabled={isPending || !canManage}
+                      className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+                      aria-label="Delete image"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {!canManage && (
+                  <TooltipContent>
+                    You don&apos;t have permission to delete images
+                  </TooltipContent>
+                )}
+              </Tooltip>
             </div>
           </div>
         ))}

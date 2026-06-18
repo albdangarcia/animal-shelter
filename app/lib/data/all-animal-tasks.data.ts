@@ -1,7 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import { Prisma, TaskCategory, TaskStatus } from "@prisma/client";
 import { z } from "zod";
-import { Permissions } from "@/app/lib/auth/permissions";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../auth/protected-actions";
 import { pageSizeSchema } from "../zod-schemas/common.schemas";
 
@@ -109,5 +109,5 @@ const _fetchAllAnimalsTasks = async (
 };
 
 export const fetchAllAnimalsTasks = RequirePermission(
-  Permissions.ANIMAL_TASK_READ_LISTING,
+  AppPermissions.ANIMAL_TASK_READ,
 )(_fetchAllAnimalsTasks);
