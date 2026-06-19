@@ -945,8 +945,52 @@ async function seedChartData() {
   console.log("Seeded bulk chart data.");
 }
 
+async function clearDatabase() {
+  console.log("Clearing existing data...");
+
+  await prisma.medicationLog.deleteMany();
+  await prisma.medicationSchedule.deleteMany();
+  await prisma.assessmentField.deleteMany();
+  await prisma.assessment.deleteMany();
+  await prisma.animalActivityLog.deleteMany();
+  await prisma.task.deleteMany();
+  await prisma.intake.deleteMany();
+  await prisma.outcome.deleteMany();
+  await prisma.applicationStatusHistory.deleteMany();
+  await prisma.adoptionApplication.deleteMany();
+
+  await prisma.animalNote.deleteMany();
+  await prisma.personNote.deleteMany();
+  await prisma.partnerNote.deleteMany();
+  await prisma.partnerContact.deleteMany();
+  await prisma.like.deleteMany();
+
+  await prisma.fosterProfile.deleteMany();
+  await prisma.householdProfile.deleteMany();
+
+  await prisma.animalImage.deleteMany();
+  await prisma.medicalRecord.deleteMany();
+  await prisma.animal.deleteMany();
+
+  await prisma.assessmentTemplate.deleteMany();
+
+  await prisma.partner.deleteMany();
+
+  await prisma.breed.deleteMany();
+  await prisma.species.deleteMany();
+  await prisma.color.deleteMany();
+  await prisma.characteristic.deleteMany();
+
+  await prisma.account.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.person.deleteMany();
+
+  console.log("Cleared existing data.");
+}
+
 export async function main() {
   console.log("Start seeding new data...");
+  await clearDatabase();
   await seedPersonsAndUsers();
   await seedLookupTables();
   await seedPartners();
