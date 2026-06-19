@@ -8,7 +8,7 @@ import z from "zod";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 
-export type FetchAnimalNotePayload = Prisma.NoteGetPayload<{
+export type FetchAnimalNotePayload = Prisma.AnimalNoteGetPayload<{
   select: {
     id: true;
     category: true;
@@ -16,7 +16,7 @@ export type FetchAnimalNotePayload = Prisma.NoteGetPayload<{
   };
 }>;
 
-export type NotePayload = Prisma.NoteGetPayload<{
+export type NotePayload = Prisma.AnimalNoteGetPayload<{
   select: {
     id: true;
     content: true;
@@ -70,13 +70,13 @@ const _fetchAnimalNotes = async (
     showDeleted: includeDeleted,
   } = validatedArgs.data;
   // Determine the sorting order for the query, defaulting to newest first
-  const orderBy: Prisma.NoteOrderByWithRelationInput = (() => {
+  const orderBy: Prisma.AnimalNoteOrderByWithRelationInput = (() => {
     if (!sort) return { createdAt: "desc" };
     const [id, dir] = sort.split(".");
     return { [id]: dir === "desc" ? "desc" : "asc" };
   })();
   // Construct the 'where' clause for the Prisma query based on filters
-  const whereClause: Prisma.NoteWhereInput = {
+  const whereClause: Prisma.AnimalNoteWhereInput = {
     animalId: animalId,
     ...(category && {
       category: { in: category.split(",") as NoteCategory[] },
@@ -88,8 +88,8 @@ const _fetchAnimalNotes = async (
     const offset = (currentPage - 1) * NOTES_PER_PAGE;
     // Use a transaction to fetch the total count and the notes data in one go
     const [totalCount, notes] = await prisma.$transaction([
-      prisma.note.count({ where: whereClause }),
-      prisma.note.findMany({
+      prisma.animalNote.count({ where: whereClause }),
+      prisma.animalNote.findMany({
         where: whereClause,
         select: {
           id: true,

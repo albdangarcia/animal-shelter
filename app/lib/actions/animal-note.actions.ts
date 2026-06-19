@@ -48,7 +48,7 @@ const _createAnimalNote = async (
   const { category, content } = validatedFields.data;
 
   try {
-    await prisma.note.create({
+    await prisma.animalNote.create({
       data: {
         category: category,
         content: content,
@@ -110,7 +110,7 @@ const _updateAnimalNote = async (
   const { category, content } = validatedFields.data;
 
   try {
-    await prisma.note.update({
+    await prisma.animalNote.update({
       where: {
         id: parsedNoteId.data,
         animalId: parsedAnimalId.data,
@@ -148,7 +148,7 @@ const _deleteAnimalNote = async (
   }
 
   try {
-    await prisma.note.update({
+    await prisma.animalNote.update({
       where: {
         id: parsedNoteId.data,
       },
@@ -183,7 +183,7 @@ const _restoreAnimalNote = async (
   }
 
   try {
-    await prisma.note.update({
+    await prisma.animalNote.update({
       where: {
         id: parsedNoteId.data,
       },

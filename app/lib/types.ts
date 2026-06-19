@@ -343,7 +343,7 @@ export type PersonSectionCardPayload = Prisma.PersonGetPayload<{
         reclaimedAnimalsAsOwner: true;
         tasksAssigned: true;
         tasksCreated: true;
-        notesAuthored: true;
+        animalNotesAuthored: true;
         processedIntakes: true;
         processedOutcomes: true;
         Assessment: true;

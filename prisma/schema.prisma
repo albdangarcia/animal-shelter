@@ -169,16 +169,25 @@ model Partner {
   name String      @unique
   type PartnerType
 
-  // Contact Info
-  contactPerson String?
-  email         String?
-  phone         String?
-  address       String?
-  city          String?
-  state         String?
-  zipCode       String?
+  // Contact Info (the organization's own — for named people, see contacts below)
+  email   String?
+  phone   String?
+  website String?
+  address String?
+  city    String?
+  state   String?
+  zipCode String?
+
+  // Retire a partner without deleting it
+  isActive Boolean @default(true)
+
+  // Quick pinned blurb (e.g. "transfers weekdays only"). Dated history lives in partnerNotes.
+  notes String?
 
   // Back-relations
+  contacts     PartnerContact[]
+  partnerNotes PartnerNote[]
+
   transferredInAnimals  Intake[]
   transferredOutAnimals Outcome[]
 
@@ -186,6 +195,25 @@ model Partner {
   updatedAt DateTime @updatedAt
 
   @@map("partners")
+}
+
+// A Person can be a contact at many Partners, and a Partner can have many contacts
+model PartnerContact {
+  id        String  @id @default(cuid())
+  partnerId String
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  personId  String
+  person    Person  @relation(fields: [personId], references: [id])
+
+  role      String? // e.g., "Intake Coordinator", "Director", "After-hours line"
+  isPrimary Boolean @default(false)
+  isActive  Boolean @default(true) // false = no longer the contact, kept for history
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([partnerId, personId])
+  @@map("partner_contacts")
 }
 
 model Intake {
@@ -267,18 +295,18 @@ model Outcome {
 }
 
 model Animal {
-  id              String               @id @default(cuid())
+  id              String              @id @default(cuid())
   name            String
-  birthDate       DateTime             @map(name: "birth_date")
+  birthDate       DateTime            @map(name: "birth_date")
   sex             Sex
   size            AnimalSize?
-  weightKg        Float?               @map(name: "weight_kg")
-  heightCm        Float?               @map(name: "height_cm")
+  weightKg        Float?              @map(name: "weight_kg")
+  heightCm        Float?              @map(name: "height_cm")
   city            String?
   state           String?
   description     String?
-  listingStatus   AnimalListingStatus  @default(DRAFT)
-  microchipNumber String?              @unique
+  listingStatus   AnimalListingStatus @default(DRAFT)
+  microchipNumber String?             @unique
   archiveReason   OutcomeType? /// Should only be set when listingStatus is ARCHIVED. Explains why the animal is no longer available.
 
   // Relations
@@ -290,7 +318,7 @@ model Animal {
   characteristics      Characteristic[]
   animalImages         AnimalImage[]
   medicalRecords       MedicalRecord[]
-  notes                Note[]
+  notes                AnimalNote[]
   tasks                Task[]
   likes                Like[]
   adoptionApplications AdoptionApplication[]
@@ -327,8 +355,9 @@ model Species {
   animals Animal[]
   breeds  Breed[] // A species can have many breeds
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
 
   @@map(name: "species")
 }
@@ -340,8 +369,9 @@ model Breed {
   speciesId String   @map(name: "species_id")
   species   Species  @relation(fields: [speciesId], references: [id])
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
 
   @@unique([name, speciesId])
   @@map(name: "breeds")
@@ -352,8 +382,9 @@ model Color {
   name    String   @unique // "Black", "White", "Brown", "Brindle", "Tabby"
   animals Animal[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
 
   @@map(name: "colors")
 }
@@ -374,7 +405,7 @@ model Characteristic {
   @@map("characteristics")
 }
 
-model Note {
+model AnimalNote {
   id       String       @id @default(cuid())
   category NoteCategory
   content  String
@@ -383,14 +414,52 @@ model Note {
   animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
 
   authorId String? @map(name: "author_id")
-  author   Person? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  author   Person? @relation("AnimalNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map(name: "deleted_at")
 
   @@index([animalId])
-  @@map(name: "notes")
+  @@map(name: "animal_notes")
+}
+
+// Dated log of notes about a Person (e.g. "called 6/12, declined to foster").
+model PersonNote {
+  id      String @id @default(cuid())
+  content String
+
+  personId String @map(name: "person_id")
+  person   Person @relation("PersonNoteSubject", fields: [personId], references: [id], onDelete: Cascade)
+
+  authorId String? @map(name: "author_id")
+  author   Person? @relation("PersonNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
+
+  @@index([personId])
+  @@map("person_notes")
+}
+
+// Dated log of notes about a Partner organization.
+model PartnerNote {
+  id      String @id @default(cuid())
+  content String
+
+  partnerId String  @map(name: "partner_id")
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  authorId String? @map(name: "author_id")
+  author   Person? @relation("PartnerNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
+
+  @@index([partnerId])
+  @@map("partner_notes")
 }
 
 model Task {
@@ -444,8 +513,8 @@ model MedicalRecord {
 
 /// Stores the application and approval status for a user wanting to become a foster parent.
 model FosterProfile {
-  id        String   @id @default(cuid())
-  isActive  Boolean  @default(false) @map(name: "is_active")
+  id            String  @id @default(cuid())
+  isActive      Boolean @default(false) @map(name: "is_active")
   internalNotes String?
 
   animalsFostered Animal[]
@@ -573,9 +642,9 @@ model AnimalImage {
 }
 
 model Person {
-  id      String     @id @default(cuid())
+  id      String  @id @default(cuid())
   name    String
-  email   String?    @unique
+  email   String? @unique
   phone   String?
   address String?
   city    String?
@@ -586,13 +655,17 @@ model Person {
   user User?
 
   // Back-relations to all their interactions
-  fosterProfile            FosterProfile?
+  fosterProfile    FosterProfile?
   householdProfile HouseholdProfile?
-  
+
   adoptionApplications     AdoptionApplication[]
   applicationStatusHistory ApplicationStatusHistory[]
   likes                    Like[]
-  notesAuthored            Note[]
+  animalNotesAuthored      AnimalNote[]               @relation("AnimalNoteAuthor")
+  personNotesAuthored      PersonNote[]               @relation("PersonNoteAuthor")
+  partnerNotesAuthored     PartnerNote[]              @relation("PartnerNoteAuthor")
+  personNotes              PersonNote[]               @relation("PersonNoteSubject") // notes written ABOUT this person
+  partnerContacts          PartnerContact[]
   tasksAssigned            Task[]                     @relation("TasksAssignedTo")
   tasksCreated             Task[]                     @relation("TasksCreatedBy")
   reclaimedAnimalsAsOwner  Outcome[]                  @relation("ReclaimedByOwner")

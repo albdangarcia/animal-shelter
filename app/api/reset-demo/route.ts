@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     await prisma.animalActivityLog.deleteMany({});
     await prisma.templateField.deleteMany({});
     await prisma.medicalRecord.deleteMany({});
-    await prisma.note.deleteMany({});
+    await prisma.animalNote.deleteMany({});
     await prisma.task.deleteMany({});
     await prisma.assessment.deleteMany({});
     

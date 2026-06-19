@@ -18,6 +18,7 @@ import {
   AssessmentOutcome,
   FieldType,
   OutcomeType,
+  Prisma,
 } from "@prisma/client";
 import { isDemo } from "@/lib/flags";
 import {
@@ -179,13 +180,13 @@ const allCharacteristics = {
   },
 };
 
-const partnerData = [
+const partnerData: Prisma.PartnerCreateManyInput[] = [
   {
     name: "City Animal Control",
     type: PartnerType.GOVERNMENT_AGENCY,
-    contactPerson: "Officer Dave",
     email: "contact@cityanimalcontrol.gov",
     phone: "555-0101",
+    website: "https://cityanimalcontrol.gov",
     address: "123 Public Works Rd",
     city: "New York",
     state: "NY",
@@ -194,9 +195,9 @@ const partnerData = [
   {
     name: "Second Chance Rescue",
     type: PartnerType.RESCUE_GROUP,
-    contactPerson: "Sarah Jones",
     email: "sarah@secondchancerescue.org",
     phone: "555-0102",
+    website: "https://secondchancerescue.org",
     address: "456 Rescue Ave",
     city: "New York",
     state: "NY",
@@ -205,9 +206,9 @@ const partnerData = [
   {
     name: "Downtown Veterinary Clinic",
     type: PartnerType.VET_CLINIC,
-    contactPerson: "Dr. Emily White",
     email: "reception@downtownvet.com",
     phone: "555-0103",
+    website: "https://downtownvet.com",
     address: "789 Health St",
     city: "New York",
     state: "NY",
@@ -793,7 +794,7 @@ async function seedAnimalsAndRelations() {
         },
       });
 
-      await prisma.note.create({
+      await prisma.animalNote.create({
         data: {
           animalId: animal.id,
           authorId: processingStaff.id,

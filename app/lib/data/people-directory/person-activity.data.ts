@@ -119,7 +119,7 @@ const _fetchPersonActivity = async (
           orderBy: { createdAt: "desc" },
           take: PER_SOURCE_LIMIT,
         },
-        notesAuthored: {
+        animalNotesAuthored: {
           where: { deletedAt: null },
           select: {
             createdAt: true,
@@ -175,7 +175,7 @@ const _fetchPersonActivity = async (
         title: task.title,
         status: task.status,
       })),
-      ...person.notesAuthored.map((note) => ({
+      ...person.animalNotesAuthored.map((note) => ({
         kind: "NOTE_AUTHORED" as const,
         date: note.createdAt,
         animal: note.animal,
