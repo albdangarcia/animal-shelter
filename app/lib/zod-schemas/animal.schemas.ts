@@ -75,13 +75,13 @@ export const AnimalFormSchema = z
     animalName: z.string().min(1, {
       error: "Animal name is required.",
     }),
-    species: z.cuid({
+    species: z.cuid2({
       error: "A valid species ID is required.",
     }),
-    breed: z.cuid({
+    breed: z.cuid2({
       error: "A valid primary breed ID is required.",
     }),
-    primaryColor: z.cuid({
+    primaryColor: z.cuid2({
       error: "A valid primary color ID is required.",
     }),
     sex: z.enum(Sex, {
@@ -131,7 +131,7 @@ export const AnimalFormSchema = z
     intakeType: z.enum(IntakeType).optional(),
     intakeDate: z.coerce.date().optional(),
     notes: z.string().optional(),
-    sourcePartnerId: z.cuid().optional().or(z.literal("")),
+    sourcePartnerId: z.cuid2().optional().or(z.literal("")),
     foundAddress: z.string().optional(),
     foundCity: z.string().optional(),
     foundState: z.string().optional(),
@@ -200,7 +200,7 @@ export const TaskFormSchema = z
     priority: z.enum(TaskPriority).optional(),
     dueDate: z.coerce.date().optional(),
     assigneeId: z
-      .cuid({
+      .cuid2({
         error: "Valid assignee ID is required.",
       })
       .optional(),

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -48,7 +49,16 @@ export const getColumns = ({
     ),
     cell: ({ row }) => {
       const { animal } = row.original;
-      return <div className="font-medium">{animal.name}</div>;
+      return (
+        <div className="font-medium">
+          <Link
+            href={`/dashboard/animals/${animal.id}`}
+            className="hover:underline"
+          >
+            {animal.name}
+          </Link>
+        </div>
+      );
     },
   },
   {

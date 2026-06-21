@@ -18,6 +18,7 @@ const personTabDefinitions = [
   { suffix: "", label: "Animal History" },
   { suffix: "/adoption-applications", label: "Adoption Applications" },
   { suffix: "/activity", label: "Activity" },
+  { suffix: "/notes", label: "Notes" },
 ];
 
 export function PersonNavTabs() {

@@ -25,6 +25,7 @@ export type IconName =
   | "IconFileText"
   | "IconChecks"
   | "IconCheckbox"
+  | "IconBuildingStore"
 
 export interface NavItem {
   title: string;
@@ -71,6 +72,12 @@ export const navMainItems: readonly NavItem[] = [
     url: "/dashboard/people-directory",
     icon: "IconUsersGroup",
     permission: AppPermissions.PERSONS_READ,
+  },
+  {
+    title: "Partner Directory",
+    url: "/dashboard/partners-directory",
+    icon: "IconBuildingStore",
+    permission: AppPermissions.PARTNERS_READ,
   },
   {
     title: "My Applications",

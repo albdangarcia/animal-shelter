@@ -38,3 +38,13 @@ export const PersonFormSchema = z.object({
     }),
   zipCode: z.string().optional(),
 });
+
+export const PersonNotesParamsSchema = z.object({
+  currentPage: currentPageSchema,
+  sort: z.string().optional(),
+  status: z.string().optional(),
+});
+
+export const PersonNoteFormSchema = z.object({
+  content: z.string().min(1, { error: "Content cannot be empty." }),
+});

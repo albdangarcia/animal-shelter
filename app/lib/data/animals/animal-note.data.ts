@@ -8,7 +8,7 @@ import z from "zod";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 
-export type FetchAnimalNotePayload = Prisma.NoteGetPayload<{
+export type FetchAnimalNotePayload = Prisma.AnimalNoteGetPayload<{
   select: {
     id: true;
     category: true;
@@ -16,7 +16,7 @@ export type FetchAnimalNotePayload = Prisma.NoteGetPayload<{
   };
 }>;
 
-export type NotePayload = Prisma.NoteGetPayload<{
+export type NotePayload = Prisma.AnimalNoteGetPayload<{
   select: {
     id: true;
     content: true;
@@ -37,7 +37,7 @@ const AnimalNotesSchema = z.object({
   animalId: cuidSchema,
   category: z.string().optional(),
   sort: z.string().optional(),
-  showDeleted: z.boolean().optional(),
+  status: z.string().optional(),
 });
 
 const NOTES_PER_PAGE = 10;
@@ -47,49 +47,55 @@ const _fetchAnimalNotes = async (
   categoryInput: string | undefined,
   sortInput: string | undefined,
   inputAnimalId: string,
-  showDeleted: boolean = false
+  statusInput: string | undefined,
 ): Promise<{ notes: NotePayload[]; totalPages: number }> => {
-  // Validate and parse the input arguments using the Zod schema
   const validatedArgs = AnimalNotesSchema.safeParse({
     currentPage: currentPageInput,
     category: categoryInput,
     sort: sortInput,
     animalId: inputAnimalId,
-    showDeleted,
+    status: statusInput,
   });
-  // If validation fails, log the error and throw an exception
   if (!validatedArgs.success) {
     throw new Error("Invalid arguments for fetching notes.");
   }
 
-  const {
-    currentPage,
-    category,
-    sort,
-    animalId,
-    showDeleted: includeDeleted,
-  } = validatedArgs.data;
-  // Determine the sorting order for the query, defaulting to newest first
-  const orderBy: Prisma.NoteOrderByWithRelationInput = (() => {
+  const { currentPage, category, sort, animalId, status } = validatedArgs.data;
+
+  const orderBy: Prisma.AnimalNoteOrderByWithRelationInput = (() => {
     if (!sort) return { createdAt: "desc" };
     const [id, dir] = sort.split(".");
     return { [id]: dir === "desc" ? "desc" : "asc" };
   })();
-  // Construct the 'where' clause for the Prisma query based on filters
-  const whereClause: Prisma.NoteWhereInput = {
+
+  // Status filter: deleted notes show only when "deleted" is selected.
+  // Default (nothing) and "active" only → active notes. Both → all.
+  const selected = status ? status.split(",").filter(Boolean) : [];
+  const wantsActive = selected.includes("active");
+  const wantsDeleted = selected.includes("deleted");
+
+  let deletedFilter: Prisma.AnimalNoteWhereInput = {};
+  if (wantsDeleted && !wantsActive) {
+    deletedFilter = { deletedAt: { not: null } }; // deleted only
+  } else if (wantsActive && wantsDeleted) {
+    deletedFilter = {}; // both → all
+  } else {
+    deletedFilter = { deletedAt: null }; // default & active-only → active
+  }
+
+  const whereClause: Prisma.AnimalNoteWhereInput = {
     animalId: animalId,
     ...(category && {
       category: { in: category.split(",") as NoteCategory[] },
     }),
-    ...(includeDeleted ? {} : { deletedAt: null }),
+    ...deletedFilter,
   };
+
   try {
-    // Calculate the offset for pagination
     const offset = (currentPage - 1) * NOTES_PER_PAGE;
-    // Use a transaction to fetch the total count and the notes data in one go
     const [totalCount, notes] = await prisma.$transaction([
-      prisma.note.count({ where: whereClause }),
-      prisma.note.findMany({
+      prisma.animalNote.count({ where: whereClause }),
+      prisma.animalNote.findMany({
         where: whereClause,
         select: {
           id: true,
@@ -105,11 +111,11 @@ const _fetchAnimalNotes = async (
           },
         },
         orderBy: orderBy,
-        take: NOTES_PER_PAGE, // Limit the number of records returned
-        skip: offset, // Skip records for pagination
+        take: NOTES_PER_PAGE,
+        skip: offset,
       }),
     ]);
-    // Calculate the total number of pages
+
     const totalPages = Math.ceil(totalCount / NOTES_PER_PAGE);
     return { notes, totalPages };
   } catch (error) {
@@ -119,5 +125,5 @@ const _fetchAnimalNotes = async (
 };
 
 export const fetchAnimalNotes = RequirePermission(
-  AppPermissions.ANIMAL_NOTE_READ
+  AppPermissions.ANIMAL_NOTE_READ,
 )(_fetchAnimalNotes);

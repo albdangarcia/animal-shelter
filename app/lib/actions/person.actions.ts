@@ -13,6 +13,7 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { PersonFormSchema } from "../zod-schemas/people-directory.schemas";
+import { z } from "zod";
 
 const _createPerson = async (
   prevState: PersonFormState,
@@ -24,7 +25,7 @@ const _createPerson = async (
 
   if (!validatedFields.success) {
     return {
-      errors: validatedFields.error.flatten().fieldErrors,
+      errors: z.flattenError(validatedFields.error).fieldErrors,
       message: "Missing or invalid fields. Failed to create person.",
     };
   }
@@ -84,7 +85,7 @@ const _updatePerson = async (
 
   if (!validatedFields.success) {
     return {
-      errors: validatedFields.error.flatten().fieldErrors,
+      errors: z.flattenError(validatedFields.error).fieldErrors,
       message: "Missing or invalid fields. Failed to update person.",
     };
   }
@@ -146,7 +147,7 @@ const _updateMyProfile = async (
 
   if (!validatedFields.success) {
     return {
-      errors: validatedFields.error.flatten().fieldErrors,
+      errors: z.flattenError(validatedFields.error).fieldErrors,
       message: "Missing or invalid fields. Failed to update profile.",
     };
   }

@@ -10,6 +10,7 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { NoteFormSchema } from "../zod-schemas/animal.schemas";
+import { z } from "zod";
 
 export interface AnimalNoteFormState {
   success?: boolean;
@@ -40,7 +41,7 @@ const _createAnimalNote = async (
   if (!validatedFields.success) {
     return {
       success: false,
-      errors: validatedFields.error.flatten().fieldErrors,
+      errors: z.flattenError(validatedFields.error).fieldErrors,
       message: "Missing or invalid fields. Failed to create animal.",
     };
   }
@@ -48,7 +49,7 @@ const _createAnimalNote = async (
   const { category, content } = validatedFields.data;
 
   try {
-    await prisma.note.create({
+    await prisma.animalNote.create({
       data: {
         category: category,
         content: content,
@@ -102,7 +103,7 @@ const _updateAnimalNote = async (
   if (!validatedFields.success) {
     return {
       success: false,
-      errors: validatedFields.error.flatten().fieldErrors,
+      errors: z.flattenError(validatedFields.error).fieldErrors,
       message: "Missing or invalid fields. Failed to update note.",
     };
   }
@@ -110,7 +111,7 @@ const _updateAnimalNote = async (
   const { category, content } = validatedFields.data;
 
   try {
-    await prisma.note.update({
+    await prisma.animalNote.update({
       where: {
         id: parsedNoteId.data,
         animalId: parsedAnimalId.data,
@@ -148,7 +149,7 @@ const _deleteAnimalNote = async (
   }
 
   try {
-    await prisma.note.update({
+    await prisma.animalNote.update({
       where: {
         id: parsedNoteId.data,
       },
@@ -183,7 +184,7 @@ const _restoreAnimalNote = async (
   }
 
   try {
-    await prisma.note.update({
+    await prisma.animalNote.update({
       where: {
         id: parsedNoteId.data,
       },

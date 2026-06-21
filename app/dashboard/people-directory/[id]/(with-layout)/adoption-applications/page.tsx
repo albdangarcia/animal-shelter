@@ -40,7 +40,7 @@ const PageContent = async ({ searchParams, params }: Props) => {
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardTitle className="font-semibold tabular-nums @[650px]/card:text-xl">
+        <CardTitle>
           Adoption Applications
         </CardTitle>
         <CardDescription>

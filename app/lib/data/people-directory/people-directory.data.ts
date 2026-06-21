@@ -175,7 +175,7 @@ const _fetchSectionCardsPersonData = async (
             reclaimedAnimalsAsOwner: true,
             tasksAssigned: true,
             tasksCreated: true,
-            notesAuthored: true,
+            animalNotesAuthored: true,
             processedIntakes: true,
             processedOutcomes: true,
             Assessment: true,
@@ -292,9 +292,9 @@ export const fetchMyProfile = withAuthenticatedUser(
   RequirePermission(AppPermissions.MY_PROFILE_UPDATE)(_fetchMyProfile),
 );
 
-export const fetchPersonForEdit = RequirePermission(AppPermissions.PERSONS_MANAGE)(
-  _fetchPersonForEdit,
-);
+export const fetchPersonForEdit = RequirePermission(
+  AppPermissions.PERSONS_MANAGE,
+)(_fetchPersonForEdit);
 
 export const fetchSectionCardsPersonData = RequirePermission(
   AppPermissions.PERSONS_READ,

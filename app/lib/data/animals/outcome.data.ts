@@ -170,7 +170,7 @@ export const _fetchOutcomes = async (
 
   try {
     const offset = (currentPage - 1) * pageSize;
-    const [totalCount, outcomes] = await prisma.$transaction([
+    const [totalCount, outcomes] = await Promise.all([
       prisma.outcome.count({ where: whereClause }),
       prisma.outcome.findMany({
         where: whereClause,

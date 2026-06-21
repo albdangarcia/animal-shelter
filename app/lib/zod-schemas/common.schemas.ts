@@ -5,7 +5,7 @@ export const searchQuerySchema = z.string().trim().max(100, {
 });
 
 // Helper for CUID validation
-export const cuidSchema = z.cuid({
+export const cuidSchema = z.cuid2({
   error: "Invalid ID format. Expected a CUID.",
 });
 
