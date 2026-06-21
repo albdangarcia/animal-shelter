@@ -16,6 +16,7 @@ import {
 } from "../auth/protected-actions";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { ReIntakeFormSchema } from "../zod-schemas/intake.schema";
+import { z } from "zod";
 
 export type IntakeFormState = {
   message?: string | null;
@@ -77,7 +78,7 @@ const _createReIntake = async (
 
   if (!validatedFields.success) {
     return {
-      errors: validatedFields.error.flatten().fieldErrors,
+      errors: z.flattenError(validatedFields.error).fieldErrors,
       message: "Missing or invalid fields. Failed to process re-intake.",
     };
   }

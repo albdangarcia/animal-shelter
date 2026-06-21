@@ -1,6 +1,5 @@
 import { AnimalHealthStatus, IntakeType } from "@prisma/client";
-// import z from "zod";
-import * as z from "zod"; 
+import { z } from "zod";
 
 export const ReIntakeFormSchema = z
   .object({

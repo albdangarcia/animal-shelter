@@ -11,6 +11,7 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { ApplicationStatus, AnimalListingStatus, Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import { ConflictError } from "../utils/errors";
+import { z } from "zod";
 
 const _staffUpdateAdoptionApp = async (
   adoptionAppId: string,
@@ -60,7 +61,7 @@ const _staffUpdateAdoptionApp = async (
       validatedFields.error
     );
     return {
-      errors: validatedFields.error.flatten().fieldErrors,
+      errors: z.flattenError(validatedFields.error).fieldErrors,
       message:
         "Missing or Invalid Fields. Failed to Update Adoption Application.",
     };

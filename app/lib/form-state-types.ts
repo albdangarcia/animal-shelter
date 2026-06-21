@@ -115,3 +115,20 @@ export interface HouseholdProfileFormState {
     animalExperience?: string[];
   };
 }
+
+export type PartnerFormState = {
+  success?: boolean;
+  message?: string | null;
+  errors?: {
+    name?: string[];
+    type?: string[];
+    email?: string[];
+    phone?: string[];
+    website?: string[];
+    address?: string[];
+    city?: string[];
+    state?: string[];
+    zipCode?: string[];
+    notes?: string[];
+  };
+};

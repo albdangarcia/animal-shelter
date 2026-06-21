@@ -377,3 +377,129 @@ export type HouseholdProfilePayload = Prisma.HouseholdProfileGetPayload<{
     animalExperience: true;
   };
 }>;
+
+export type PartnersDirectoryPayload = Prisma.PartnerGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    type: true;
+    email: true;
+    phone: true;
+    website: true;
+    city: true;
+    state: true;
+    isActive: true;
+    _count: {
+      select: {
+        contacts: true;
+      };
+    };
+  };
+}>;
+
+export type PartnerFormPayload = Prisma.PartnerGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    type: true;
+    email: true;
+    phone: true;
+    website: true;
+    address: true;
+    city: true;
+    state: true;
+    zipCode: true;
+    isActive: true;
+    notes: true;
+  };
+}>;
+
+export type PartnerSectionCardPayload = Prisma.PartnerGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    type: true;
+    email: true;
+    phone: true;
+    website: true;
+    address: true;
+    city: true;
+    state: true;
+    zipCode: true;
+    isActive: true;
+    notes: true;
+    contacts: {
+      where: { isPrimary: true; isActive: true };
+      take: 1;
+      select: {
+        role: true;
+        person: {
+          select: { id: true; name: true; email: true; phone: true };
+        };
+      };
+    };
+    _count: {
+      select: {
+        contacts: true;
+        transferredInAnimals: true;
+        transferredOutAnimals: true;
+        partnerNotes: true;
+      };
+    };
+  };
+}>;
+
+export type PartnerContactsPayload = Prisma.PartnerContactGetPayload<{
+  select: {
+    id: true;
+    role: true;
+    isPrimary: true;
+    isActive: true;
+    person: {
+      select: {
+        id: true;
+        name: true;
+        email: true;
+        phone: true;
+      };
+    };
+  };
+}>;
+
+export type LinkablePersonPayload = {
+  id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  isDeactivatedContactHere: boolean;
+};
+
+export type PartnerNotePayload = Prisma.PartnerNoteGetPayload<{
+  select: {
+    id: true;
+    content: true;
+    author: {
+      select: {
+        id: true;
+        name: true;
+      };
+    };
+    createdAt: true;
+    deletedAt: true;
+  };
+}>;
+
+export type PersonNotePayload = Prisma.PersonNoteGetPayload<{
+  select: {
+    id: true;
+    content: true;
+    author: {
+      select: {
+        id: true;
+        name: true;
+      };
+    };
+    createdAt: true;
+    deletedAt: true;
+  };
+}>;

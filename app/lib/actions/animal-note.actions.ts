@@ -10,6 +10,7 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { NoteFormSchema } from "../zod-schemas/animal.schemas";
+import { z } from "zod";
 
 export interface AnimalNoteFormState {
   success?: boolean;
@@ -40,7 +41,7 @@ const _createAnimalNote = async (
   if (!validatedFields.success) {
     return {
       success: false,
-      errors: validatedFields.error.flatten().fieldErrors,
+      errors: z.flattenError(validatedFields.error).fieldErrors,
       message: "Missing or invalid fields. Failed to create animal.",
     };
   }
@@ -102,7 +103,7 @@ const _updateAnimalNote = async (
   if (!validatedFields.success) {
     return {
       success: false,
-      errors: validatedFields.error.flatten().fieldErrors,
+      errors: z.flattenError(validatedFields.error).fieldErrors,
       message: "Missing or invalid fields. Failed to update note.",
     };
   }

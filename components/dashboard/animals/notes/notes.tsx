@@ -35,7 +35,6 @@ import { NoteActions } from "./note-actions";
 import { SimplePagination } from "../../../simple-pagination";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { ServerSideSort } from "@/components/table-common/server-side-sort";
-import { ServerSideSwitch } from "@/components/table-common/server-side-switch";
 
 export const noteCategoryColors: Record<NoteCategory, string> = {
   [NoteCategory.BEHAVIORAL]: "bg-blue-100 text-blue-800 border-blue-200",
@@ -46,6 +45,11 @@ export const noteCategoryColors: Record<NoteCategory, string> = {
     "bg-purple-100 text-purple-800 border-purple-200",
   [NoteCategory.FOSTER_UPDATE]: "bg-green-100 text-green-800 border-green-200",
 };
+
+const noteStatusOptions = [
+  { value: "active", label: "Active" },
+  { value: "deleted", label: "Deleted" },
+];
 
 interface Props {
   notes: NotePayload[];
@@ -106,6 +110,14 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
             </div>
 
             <div className="flex items-center gap-2">
+              <ServerSideFacetedFilter
+                title="Status"
+                paramKey="status"
+                options={noteStatusOptions}
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
               <ServerSideSort
                 paramKey="sort"
                 placeholder="Select order"
@@ -115,8 +127,6 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
                 ]}
               />
             </div>
-
-            <ServerSideSwitch paramKey="showDeleted" label="Show Deleted" />
           </div>
         </CardHeader>
 
@@ -128,9 +138,11 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
                   key={note.id}
                   className="border rounded-lg p-4 relative group"
                 >
-                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <NoteActions note={note} animalId={animalId} />
-                  </div>
+                  {canManage && (
+                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <NoteActions note={note} animalId={animalId} />
+                    </div>
+                  )}
 
                   <div className="flex items-start gap-4">
                     <div className="flex-1">

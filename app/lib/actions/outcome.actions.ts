@@ -21,6 +21,7 @@ import {
   NotFoundError,
   PreconditionFailedError,
 } from "../utils/errors";
+import { z } from "zod";
 
 interface CreateOutcomeIds {
   animalId: string;
@@ -47,7 +48,7 @@ const _createOutcome = async (
 
   if (!validatedFields.success) {
     return {
-      errors: validatedFields.error.flatten().fieldErrors,
+      errors: z.flattenError(validatedFields.error).fieldErrors,
       message: "Missing or Invalid Fields. Failed to Process Outcome.",
     };
   }
@@ -212,7 +213,7 @@ const _updateOutcome = async (
 
   if (!validatedFields.success) {
     return {
-      errors: validatedFields.error.flatten().fieldErrors,
+      errors: z.flattenError(validatedFields.error).fieldErrors,
       message: "Missing or Invalid Fields. Failed to Update Outcome.",
     };
   }

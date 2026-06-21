@@ -28,18 +28,17 @@ const PageContent = async ({ params, searchParams }: Props) => {
   const {
     page = "1",
     category,
-    sort, // e.g., "Newest first", "Oldest first"
-    showDeleted,
+    sort,
+    status,
   } = await searchParams;
   const currentPage = Number(page);
-  const includeDeleted = showDeleted === "true";
 
   const { notes, totalPages } = await fetchAnimalNotes(
     currentPage,
     category,
     sort,
     animalId,
-    includeDeleted,
+    status,
   );
 
   return (
