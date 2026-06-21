@@ -114,7 +114,7 @@ const _fetchAnimalAssessments = async (
   };
   try {
     const offset = (currentPage - 1) * ASSESSMENTS_PER_PAGE;
-    const [totalCount, assessments] = await prisma.$transaction([
+    const [totalCount, assessments] = await Promise.all([
       prisma.assessment.count({ where: whereClause }),
       prisma.assessment.findMany({
         where: whereClause,

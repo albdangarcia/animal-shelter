@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { ThemeToggle } from "./light-dark-theme/theme-toggle";
 
 // Helper function to format the title string
 const formatTitle = (s: string) => {
@@ -39,9 +40,9 @@ export function SiteHeader() {
           orientation="vertical"
           className="mx-2 data-[orientation=vertical]:h-4"
         />
-        <h1 className="text-base font-medium">{title}</h1> 
+        <h1 className="text-base font-medium">{title}</h1>
         <div className="ml-auto flex items-center gap-2">
-          
+          <ThemeToggle />
         </div>
       </div>
     </header>

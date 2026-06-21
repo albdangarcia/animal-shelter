@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { openSans, fontgeist } from "../components/fonts";
-import { Toaster } from "@/components/ui/sonner"
+import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/light-dark-theme/theme-provider";
 
 export const metadata: Metadata = {
   title: "Animal Shelter & Operations Platform",
@@ -14,10 +15,17 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`${fontgeist.className} ${openSans.variable} antialiased`}>
-        {children}
-        <Toaster />
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
