@@ -60,28 +60,32 @@ type CategoryUIDefinition = {
 const CATEGORIES: Record<CharacteristicCategory, CategoryUIDefinition> = {
   [CharacteristicCategory.BEHAVIOR]: {
     label: "Behavior",
-    color: "bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100",
+    color:
+      "bg-blue-100 text-blue-800 border-blue-200 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-900 dark:hover:bg-blue-950",
     icon: HeartPulse,
   },
   [CharacteristicCategory.MEDICAL]: {
     label: "Medical",
-    color: "bg-red-100 text-red-800 border-red-200 hover:bg-red-100",
+    color:
+      "bg-red-100 text-red-800 border-red-200 hover:bg-red-100 dark:bg-red-950 dark:text-red-300 dark:border-red-900 dark:hover:bg-red-950",
     icon: Stethoscope,
   },
   [CharacteristicCategory.ENVIRONMENT]: {
     label: "Environment",
-    color: "bg-green-100 text-green-800 border-green-200 hover:bg-green-100",
+    color:
+      "bg-green-100 text-green-800 border-green-200 hover:bg-green-100 dark:bg-green-950 dark:text-green-300 dark:border-green-900 dark:hover:bg-green-950",
     icon: Home,
   },
   [CharacteristicCategory.ADMINISTRATIVE]: {
     label: "Administrative",
-    color: "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-100",
+    color:
+      "bg-gray-100 text-gray-800 border-gray-200 hover:bg-gray-100 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700 dark:hover:bg-gray-800",
     icon: FileText,
   },
   [CharacteristicCategory.OTHER]: {
     label: "Other",
     color:
-      "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100",
+      "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100 dark:bg-yellow-950 dark:text-yellow-300 dark:border-yellow-900 dark:hover:bg-yellow-950",
     icon: PlusCircle,
   },
 };
@@ -200,9 +204,11 @@ const AnimalCharacteristicsManager = ({
         else handleOpenDialog();
       }}
     >
-      <Card className="w-full mx-auto">
-        <CardHeader className="relative">
-          <CardTitle>Characteristics</CardTitle>
+      <Card className="@container/card">
+        <CardHeader>
+          <CardTitle className="@[650px]/card:text-xl">
+            Characteristics
+          </CardTitle>
           <CardDescription>
             Unique behavioral and medical traits for this animal.
           </CardDescription>
@@ -229,9 +235,9 @@ const AnimalCharacteristicsManager = ({
               return (
                 characteristicsForCategory &&
                 characteristicsForCategory.length > 0 && (
-                  <div key={key} className="border rounded-lg p-4 bg-white">
-                    <h4 className="font-medium mb-3 flex items-center gap-2 text-gray-700">
-                      <Icon className="h-5 w-5 text-gray-500" />
+                  <div key={key} className="border rounded-lg p-4 bg-card">
+                    <h4 className="font-medium mb-3 flex items-center gap-2 text-foreground">
+                      <Icon className="h-5 w-5 text-muted-foreground" />
                       {CATEGORIES[key].label}
                     </h4>
                     <div className="flex flex-wrap gap-2">
@@ -274,7 +280,7 @@ const AnimalCharacteristicsManager = ({
         </CardContent>
       </Card>
 
-      <DialogContent className="sm:max-w-[625px]">
+      <DialogContent className="sm:max-w-156.25">
         <DialogHeader>
           <DialogTitle>Edit Characteristics</DialogTitle>
           <DialogDescription>
@@ -283,7 +289,7 @@ const AnimalCharacteristicsManager = ({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-4">
-          <div className="p-3 border rounded-lg space-y-3 bg-slate-50/50">
+          <div className="p-3 border rounded-lg space-y-3 bg-muted/50">
             <Label>Selected Characteristics</Label>
             <div className="flex flex-wrap gap-2 min-h-8 max-h-40 overflow-y-auto">
               {assignedCharacteristics.map((char) => (
@@ -298,7 +304,7 @@ const AnimalCharacteristicsManager = ({
                   <span>{char.name}</span>
                   <button
                     onClick={() => handleTagRemove(char.id)}
-                    className="rounded-full hover:bg-black/10 p-0.5"
+                    className="rounded-full hover:bg-black/10 dark:hover:bg-white/10 p-0.5"
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -324,7 +330,7 @@ const AnimalCharacteristicsManager = ({
                 <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
-            <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+            <PopoverContent className="w-(--radix-popover-trigger-width) p-0">
               <Command>
                 <CommandInput placeholder="Search characteristics..." />
                 <CommandList>
@@ -336,7 +342,7 @@ const AnimalCharacteristicsManager = ({
                         value={char.name}
                         onSelect={() => handleTagAdd(char.id)}
                       >
-                        <div className="flex-grow">{char.name}</div>
+                        <div className="grow">{char.name}</div>
                         <Badge variant="outline" className="ml-2">
                           {CATEGORIES[char.category]?.label}
                         </Badge>

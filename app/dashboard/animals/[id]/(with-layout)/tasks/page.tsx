@@ -55,9 +55,11 @@ const Page = async ({ params, searchParams }: Props) => {
   const assigneeList = canManage ? await fetchTaskAssigneeList() : [];
 
   return (
-    <Card>
+    <Card className="@container/card">
       <CardHeader>
-        <CardTitle>Tasks</CardTitle>
+        <CardTitle className="@[650px]/card:text-xl">
+          Tasks
+        </CardTitle>
         <CardDescription>
           This page displays all tasks that are associated with this animal,
           which can be filtered and sorted.

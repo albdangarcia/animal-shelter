@@ -129,7 +129,7 @@ const AnimalSectionCards = async ({ params }: Props) => {
         <CardContent className="space-y-4">
           {/* Image and Quick Stats Grid */}
           <div className="flex gap-4">
-            <div className="relative flex h-28 w-28 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary">
+            <div className="relative flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary">
               {firstImage ? (
                 <Image
                   src={firstImage}

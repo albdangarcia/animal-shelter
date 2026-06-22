@@ -91,7 +91,7 @@ const PersonSectionCards = async ({ params }: Props) => {
         <CardContent className="space-y-4">
           {/* Avatar and Contact Info Grid */}
           <div className="flex gap-4">
-            <div className="relative flex h-28 w-28 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary">
+            <div className="relative flex h-28 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary">
               {person.user?.image ? (
                 <Image
                   src={person.user.image}
@@ -107,7 +107,7 @@ const PersonSectionCards = async ({ params }: Props) => {
 
             <div className="flex-1 grid grid-cols-1 gap-2 text-sm">
               <div className="rounded-md p-2.5 flex items-center gap-2">
-                <Mail className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div>
                   <p className="text-xs text-muted-foreground mb-0.5">Email</p>
                   <p className="font-semibold break-all">
@@ -116,7 +116,7 @@ const PersonSectionCards = async ({ params }: Props) => {
                 </div>
               </div>
               <div className="rounded-md p-2.5 flex items-center gap-2">
-                <Phone className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div>
                   <p className="text-xs text-muted-foreground mb-0.5">Phone</p>
                   <p className="font-semibold">{person.phone || "N/A"}</p>

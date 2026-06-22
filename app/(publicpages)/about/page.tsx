@@ -12,19 +12,23 @@ const locations = [
 const Page = () => {
   return (
     <PageLayout>
-      <PageHeader
-        title="About Us"
-        description="Welcome to PetAdopt, where compassion meets purpose. Our mission is simple yet profound: to provide a safe haven for animals in need, offering them refuge, care, and a second chance at a loving home. Join us in our journey to create a world where every paw print leaves a trail of hope."
-      />
-      
-      <div className="my-8 border-t border-gray-200"></div>
+      <div className="mb-10">
+        <PageHeader
+          title="About Us"
+          description="Welcome to PetAdopt, where compassion meets purpose. Our mission is simple yet profound: to provide a safe haven for animals in need, offering them refuge, care, and a second chance at a loving home. Join us in our journey to create a world where every paw print leaves a trail of hope."
+        />
+      </div>
 
-      <PageHeader title="Our Locations" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+      <PageHeader title="Our Locations" as="section" />
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {locations.map((loc, index) => (
           <Card key={index} title={loc.location}>
-            <p className="text-gray-500">{loc.address}</p>
-            <p className="text-gray-500">{loc.state}</p>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {loc.address}
+            </p>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              {loc.state}
+            </p>
           </Card>
         ))}
       </div>

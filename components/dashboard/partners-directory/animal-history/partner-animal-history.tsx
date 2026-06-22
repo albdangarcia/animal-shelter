@@ -28,8 +28,10 @@ import {
 
 export const transferDirectionColors: Record<PartnerTransferDirection, string> =
   {
-    TRANSFER_IN: "bg-green-100 text-green-800 border-green-200",
-    TRANSFER_OUT: "bg-orange-100 text-orange-800 border-orange-200",
+    TRANSFER_IN:
+      "bg-green-100 text-green-800 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-900",
+    TRANSFER_OUT:
+      "bg-orange-100 text-orange-800 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-900",
   };
 
 const transferDirectionLabels: Record<PartnerTransferDirection, string> = {
@@ -55,7 +57,9 @@ const PartnerAnimalHistory = ({ history }: Props) => {
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardTitle>Animal History</CardTitle>
+        <CardTitle className="@[650px]/card:text-xl">
+          Animal History
+        </CardTitle>
         <CardDescription>
           Animals received from or transferred to this partner.
         </CardDescription>
@@ -77,7 +81,7 @@ const PartnerAnimalHistory = ({ history }: Props) => {
                   className="border rounded-lg p-4 relative"
                 >
                   <div className="flex items-start gap-4">
-                    <div className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary">
+                    <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary">
                       {firstImage ? (
                         <Image
                           src={firstImage}
@@ -125,7 +129,7 @@ const PartnerAnimalHistory = ({ history }: Props) => {
                         </p>
                       )}
 
-                      <div className="text-xs text-gray-500 mt-3">
+                      <div className="text-xs text-muted-foreground mt-3">
                         {entry.date ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -148,7 +152,7 @@ const PartnerAnimalHistory = ({ history }: Props) => {
               );
             })
           ) : (
-            <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
+            <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
               <p className="font-semibold text-lg">No Animal History Found</p>
 
               <p className="text-sm mt-1">

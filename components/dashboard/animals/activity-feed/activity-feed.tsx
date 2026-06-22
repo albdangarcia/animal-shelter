@@ -19,9 +19,11 @@ interface Props {
 
 const ActivityFeed = ({ activityLogs = [], totalPages }: Props) => {
   return (
-    <Card>
+    <Card className="@container/card">
       <CardHeader>
-        <CardTitle>Activity</CardTitle>
+        <CardTitle className="@[650px]/card:text-xl">
+          Activity
+        </CardTitle>
         <CardDescription>
           This page displays the most recent activity logs for this animal,
           including who made the change and a summary of the action.
@@ -36,7 +38,7 @@ const ActivityFeed = ({ activityLogs = [], totalPages }: Props) => {
                   <div className="relative pb-8">
                     {index !== activityLogs.length - 1 && (
                       <span
-                        className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200"
+                        className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-border"
                         aria-hidden="true"
                       />
                     )}
@@ -47,7 +49,7 @@ const ActivityFeed = ({ activityLogs = [], totalPages }: Props) => {
             </ul>
           </div>
         ) : (
-          <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
+          <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
             <p className="font-semibold text-lg">No Activity Found</p>
             <p className="text-sm mt-1">
               There is no activity history for this animal yet.

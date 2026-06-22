@@ -24,9 +24,8 @@ const Page = async ({ params, searchParams }: Props) => {
 
 const PageContent = async ({ params, searchParams }: Props) => {
   const { id: animalId } = await params;
-  const { page = "1", type, outcome, sort, showDeleted } = await searchParams;
+  const { page = "1", type, outcome, sort, status } = await searchParams;
   const currentPage = Number(page);
-  const includeDeleted = showDeleted === "true";
   const canManage = await hasPermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE);
 
   const { assessments, totalPages } = await fetchAnimalAssessments(
@@ -35,7 +34,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
     type,
     outcome,
     sort,
-    includeDeleted
+    status,
   );
 
   return (

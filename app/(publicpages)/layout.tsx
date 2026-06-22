@@ -11,9 +11,9 @@ export default async function PagesLayout({
   return (
     <>
       {isDemo && <DemoBanner />}
-      <div className="flex min-h-screen flex-col p-6 bg-slate-100/60">
+      <div className="flex min-h-screen flex-col p-6 bg-muted/40">
         <TopNavWrapper />
-        <main className="grow mx-auto w-full max-w-7xl px-4 md:px-10 py-7 bg-white rounded-t-sm">
+        <main className="grow mx-auto w-full max-w-7xl px-4 md:px-10 py-7 bg-card rounded-t-sm">
           {children}
         </main>
         <Footer />

@@ -1,51 +1,54 @@
 import {
   Card,
   CardContent,
-  CardFooter,
+  CardDescription,
   CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const Loading = () => {
-  const skeletonItemCount = 5;
+  // Number of placeholder rows
+  const rows = [0, 1, 2, 3];
 
   return (
-    <Card>
+    <Card className="@container/card">
       <CardHeader>
-        {/* Skeleton for CardTitle */}
-        <Skeleton className="h-7 w-32" />
-        {/* Skeleton for CardDescription */}
-        <Skeleton className="h-4 w-full mt-2" />
-        <Skeleton className="h-4 w-4/5" />
+        <CardTitle className="@[650px]/card:text-xl">
+          Activity
+        </CardTitle>
+        <CardDescription>
+          This page displays the most recent activity logs for this animal,
+          including who made the change and a summary of the action.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="flow-root">
           <ul className="-mb-8">
-            {Array.from({ length: skeletonItemCount }).map((_, index) => (
-              <li key={index}>
+            {rows.map((row, index) => (
+              <li key={row}>
                 <div className="relative pb-8">
-                  {/* Vertical line connecting the items */}
-                  {index !== skeletonItemCount - 1 && (
+                  {/* Connector line — hidden on the last row, same as the real feed */}
+                  {index !== rows.length - 1 && (
                     <span
-                      className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200"
+                      className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-border"
                       aria-hidden="true"
                     />
                   )}
-                  {/* Skeleton for ActivityFeedItem */}
                   <div className="relative flex items-start space-x-4">
-                    {/* Icon Skeleton */}
-                    <Skeleton className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full" />
+                    {/* Icon circle */}
+                    <Skeleton className="h-8 w-8 shrink-0 rounded-full ring-4 ring-card" />
 
-                    {/* Activity Details Skeleton */}
-                    <div className="min-w-0 flex-grow space-y-2">
-                      <div className="flex items-center space-x-2">
-                        {/* Avatar Skeleton */}
-                        <Skeleton className="h-6 w-6 rounded-full" />
-                        {/* Text Line Skeleton */}
-                        <Skeleton className="h-4 w-3/4" />
+                    {/* Details */}
+                    <div className="min-w-0 grow">
+                      <div className="flex items-center gap-2">
+                        {/* Avatar */}
+                        <Skeleton className="h-6 w-6 shrink-0 rounded-full" />
+                        {/* Name + action text */}
+                        <Skeleton className="h-4 w-48" />
+                        {/* Timestamp */}
+                        <Skeleton className="h-3 w-16" />
                       </div>
-                      {/* "Show details" button skeleton */}
-                      <Skeleton className="h-4 w-20" />
                     </div>
                   </div>
                 </div>
@@ -54,16 +57,6 @@ const Loading = () => {
           </ul>
         </div>
       </CardContent>
-      <CardFooter>
-        {/* Skeleton for SimplePagination */}
-        <div className="flex items-center space-x-2">
-          <Skeleton className="h-9 w-20" />
-          <Skeleton className="h-9 w-9" />
-          <Skeleton className="h-9 w-9" />
-          <Skeleton className="h-9 w-9" />
-          <Skeleton className="h-9 w-20" />
-        </div>
-      </CardFooter>
     </Card>
   );
 };

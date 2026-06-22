@@ -29,7 +29,6 @@ import {
 } from "@/app/lib/utils/enum-formatter";
 import Link from "next/link";
 import { ServerSideSort } from "@/components/table-common/server-side-sort";
-import { ServerSideSwitch } from "@/components/table-common/server-side-switch";
 import { AssessmentActions } from "./assessment-actions";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { cn } from "@/lib/utils";
@@ -49,6 +48,11 @@ const getOutcomeBadgeVariant = (outcome: AssessmentOutcome) => {
   }
 };
 
+const assessmentStatusOptions = [
+  { value: "active", label: "Active" },
+  { value: "deleted", label: "Deleted" },
+];
+
 interface Props {
   animalAssessments: AnimalAssessmentListPayload[];
   animalId: string;
@@ -63,9 +67,11 @@ const AnimalAssessmentsTab = ({
   canManage,
 }: Props) => {
   return (
-    <Card>
+    <Card className="@container/card">
       <CardHeader>
-        <CardTitle>Animal Assessments</CardTitle>
+        <CardTitle className="@[650px]/card:text-xl">
+          Animal Assessments
+        </CardTitle>
         <CardDescription>
           A log of all behavioral and medical evaluations.
         </CardDescription>
@@ -105,6 +111,11 @@ const AnimalAssessmentsTab = ({
             paramKey="outcome"
             options={assessmentOutcomeOptions}
           />
+          <ServerSideFacetedFilter
+            title="Status"
+            paramKey="status"
+            options={assessmentStatusOptions}
+          />
           <ServerSideSort
             paramKey="sort"
             placeholder="Select order"
@@ -113,7 +124,6 @@ const AnimalAssessmentsTab = ({
               { label: "Oldest First", value: "date.asc" },
             ]}
           />
-          <ServerSideSwitch paramKey="showDeleted" label="Show Deleted" />
         </div>
       </CardHeader>
 

@@ -27,11 +27,16 @@ import {
 } from "@/app/lib/data/people-directory/person-animal-history.data";
 
 export const historyRoleColors: Record<PersonAnimalHistoryRole, string> = {
-  SURRENDERER: "bg-amber-100 text-amber-800 border-amber-200",
-  FINDER: "bg-blue-100 text-blue-800 border-blue-200",
-  OWNER_RECLAIMED: "bg-purple-100 text-purple-800 border-purple-200",
-  APPLICANT: "bg-green-100 text-green-800 border-green-200",
-  FOSTER_CARER: "bg-teal-100 text-teal-800 border-teal-200",
+  SURRENDERER:
+    "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900",
+  FINDER:
+    "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-900",
+  OWNER_RECLAIMED:
+    "bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-900",
+  APPLICANT:
+    "bg-green-100 text-green-800 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-900",
+  FOSTER_CARER:
+    "bg-teal-100 text-teal-800 border-teal-200 dark:bg-teal-950 dark:text-teal-300 dark:border-teal-900",
 };
 
 const INITIAL_DISPLAY_COUNT = 10;
@@ -52,7 +57,9 @@ const PersonAnimalHistory = ({ history }: Props) => {
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardTitle>Animal History</CardTitle>
+        <CardTitle className="@[650px]/card:text-xl">
+          Animal History
+        </CardTitle>
         <CardDescription>
           Animals this person has been involved with, as a surrenderer, finder,
           owner, applicant, or foster carer.
@@ -71,7 +78,7 @@ const PersonAnimalHistory = ({ history }: Props) => {
                   className="border rounded-lg p-4 relative"
                 >
                   <div className="flex items-start gap-4">
-                    <div className="relative flex h-16 w-16 flex-shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary">
+                    <div className="relative flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary">
                       {firstImage ? (
                         <Image
                           src={firstImage}
@@ -120,7 +127,7 @@ const PersonAnimalHistory = ({ history }: Props) => {
                           </p>
                         )}
 
-                      <div className="text-xs text-gray-500 mt-3">
+                      <div className="text-xs text-muted-foreground mt-3">
                         {entry.date ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -143,7 +150,7 @@ const PersonAnimalHistory = ({ history }: Props) => {
               );
             })
           ) : (
-            <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
+            <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
               <p className="font-semibold text-lg">No Animal History Found</p>
 
               <p className="text-sm mt-1">

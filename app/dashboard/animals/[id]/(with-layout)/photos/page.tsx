@@ -42,10 +42,10 @@ const PageContent = async ({ params }: Props) => {
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="@container/card">
         <CardHeader>
-          <CardTitle className="font-semibold">
-            Current Images for {animal.name}
+          <CardTitle className="@[650px]/card:text-xl">
+            Current Images
           </CardTitle>
           <CardDescription>
             Manage the existing photos for this animal&apos;s profile. Hover
@@ -61,9 +61,11 @@ const PageContent = async ({ params }: Props) => {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className="@container/card">
         <CardHeader>
-          <CardTitle className="font-semibold">Upload New Images</CardTitle>
+          <CardTitle className="@[650px]/card:text-xl">
+            Upload New Images
+          </CardTitle>
           <CardDescription>
             Add new photos to this animal&apos;s profile. Drag and drop images
             below or click to browse.

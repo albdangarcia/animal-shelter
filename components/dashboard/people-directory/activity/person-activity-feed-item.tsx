@@ -70,27 +70,27 @@ export default function PersonActivityFeedItem({ entry }: Props) {
   return (
     <div className="relative flex items-start space-x-4">
       {/* Icon */}
-      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 ring-4 ring-white">
-        <Icon className="h-5 w-5 text-gray-500" />
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted ring-4 ring-card">
+        <Icon className="h-5 w-5 text-muted-foreground" />
       </div>
 
       {/* Activity Details */}
-      <div className="min-w-0 flex-grow">
-        <div className="flex flex-wrap items-center text-sm text-gray-600">
+      <div className="min-w-0 grow">
+        <div className="flex flex-wrap items-center text-sm text-muted-foreground">
           <p className="truncate">
             {config.text}{" "}
             <Link
               href={`/dashboard/animals/${entry.animal.id}`}
-              className="font-semibold text-gray-900 hover:underline"
+              className="font-semibold text-foreground hover:underline"
             >
               {entry.animal.name}
             </Link>{" "}
-            <span className="text-gray-400 capitalize">
+            <span className="text-muted-foreground/70 capitalize">
               ({entry.animal.species.name})
             </span>
           </p>
 
-          <span className="ml-2 text-gray-400 whitespace-nowrap">
+          <span className="ml-2 text-muted-foreground/70 whitespace-nowrap">
             &bull; {formatTimeAgo(entry.date)}
           </span>
         </div>
@@ -98,7 +98,7 @@ export default function PersonActivityFeedItem({ entry }: Props) {
         {/* Inline summary for task entries */}
         {(entry.kind === "TASK_CREATED" || entry.kind === "TASK_ASSIGNED") && (
           <div className="mt-1 flex items-center gap-2 text-sm">
-            <span className="text-gray-700">{entry.title}</span>
+            <span className="text-foreground">{entry.title}</span>
             <Badge variant="outline">
               {formatSingleEnumOption(entry.status)}
             </Badge>
@@ -110,12 +110,12 @@ export default function PersonActivityFeedItem({ entry }: Props) {
           <div className="mt-2">
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="text-xs font-semibold text-blue-600 hover:underline"
+              className="text-xs font-semibold text-blue-600 hover:underline dark:text-blue-400"
             >
               {isExpanded ? "Hide details" : "Show details"}
             </button>
             {isExpanded && (
-              <div className="details-box mt-2 p-3 bg-slate-50 border rounded-md text-sm text-gray-700">
+              <div className="details-box mt-2 p-3 bg-muted/50 border rounded-md text-sm text-foreground">
                 {entry.kind === "INTAKE_PROCESSED" && (
                   <p>Intake type: {formatSingleEnumOption(entry.intakeType)}</p>
                 )}
@@ -151,7 +151,9 @@ export default function PersonActivityFeedItem({ entry }: Props) {
                         {entry.summary}
                       </pre>
                     ) : (
-                      <p className="text-gray-400">No summary provided.</p>
+                      <p className="text-muted-foreground">
+                        No summary provided.
+                      </p>
                     )}
                   </>
                 )}

@@ -1,41 +1,44 @@
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const Loading = () => {
+const AnimalCharacteristicsSkeleton = () => {
   return (
-    <Card className="w-full mx-auto">
-      <CardHeader>
-        <div className="flex justify-between items-start">
-          <div className="space-y-1.5">
-            {/* Skeleton for CardTitle */}
-            <Skeleton className="h-7 w-48" />
-            {/* Skeleton for CardDescription */}
-            <Skeleton className="h-4 w-80" />
-          </div>
-          {/* Skeleton for Edit Button */}
-          <Skeleton className="h-9 w-20" />
+    <Card className="@container/card">
+      <CardHeader className="relative">
+        <CardTitle className="@[650px]/card:text-xl">Characteristics</CardTitle>
+        <CardDescription>
+          Unique behavioral and medical traits for this animal.
+        </CardDescription>
+        {/* Edit button (CardAction sits top-right) */}
+        <div className="absolute right-6 top-6">
+          <Skeleton className="h-8 w-14" />
         </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          {/* Render 3 skeleton category blocks */}
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="border rounded-lg p-4 bg-white">
-              {/* Skeleton for category title */}
+          {/* Two placeholder category groups */}
+          {[0, 1].map((group) => (
+            <div key={group} className="border rounded-lg p-4 bg-card">
+              {/* Category heading: icon + label */}
               <div className="flex items-center gap-2 mb-3">
-                <Skeleton className="h-5 w-5 rounded-full" />
-                <Skeleton className="h-5 w-28" />
+                <Skeleton className="h-5 w-5 rounded" />
+                <Skeleton className="h-4 w-28" />
               </div>
-              {/* Skeleton for badges */}
+              {/* Badge chips */}
               <div className="flex flex-wrap gap-2">
-                <Skeleton className="h-6 w-24 rounded-md" />
-                <Skeleton className="h-6 w-32 rounded-md" />
-                <Skeleton className="h-6 w-28 rounded-md" />
-                {index === 1 && <Skeleton className="h-6 w-40 rounded-md" />}
+                {[0, 1, 2].map((chip) => (
+                  <Skeleton
+                    key={chip}
+                    className="h-6 rounded-md"
+                    style={{ width: `${5 + group + chip}rem` }}
+                  />
+                ))}
               </div>
             </div>
           ))}
@@ -45,4 +48,4 @@ const Loading = () => {
   );
 };
 
-export default Loading;
+export default AnimalCharacteristicsSkeleton;

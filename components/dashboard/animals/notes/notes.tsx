@@ -37,13 +37,18 @@ import { ServerSideFacetedFilter } from "@/components/table-common/server-side-f
 import { ServerSideSort } from "@/components/table-common/server-side-sort";
 
 export const noteCategoryColors: Record<NoteCategory, string> = {
-  [NoteCategory.BEHAVIORAL]: "bg-blue-100 text-blue-800 border-blue-200",
-  [NoteCategory.MEDICAL]: "bg-red-100 text-red-800 border-red-200",
-  [NoteCategory.FEEDING]: "bg-amber-100 text-amber-800 border-amber-200",
-  [NoteCategory.GENERAL]: "bg-gray-100 text-gray-800 border-gray-200",
+  [NoteCategory.BEHAVIORAL]:
+    "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-900",
+  [NoteCategory.MEDICAL]:
+    "bg-red-100 text-red-800 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-900",
+  [NoteCategory.FEEDING]:
+    "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900",
+  [NoteCategory.GENERAL]:
+    "bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
   [NoteCategory.ADOPTION_UPDATE]:
-    "bg-purple-100 text-purple-800 border-purple-200",
-  [NoteCategory.FOSTER_UPDATE]: "bg-green-100 text-green-800 border-green-200",
+    "bg-purple-100 text-purple-800 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-900",
+  [NoteCategory.FOSTER_UPDATE]:
+    "bg-green-100 text-green-800 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-900",
 };
 
 const noteStatusOptions = [
@@ -65,7 +70,9 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
     <>
       <Card className="@container/card">
         <CardHeader>
-          <CardTitle>Animal Notes</CardTitle>
+          <CardTitle className="@[650px]/card:text-xl">
+            Animal Notes
+          </CardTitle>
 
           <CardDescription>
             Keep track of important notes about this animal.
@@ -83,7 +90,7 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
                   Add Note
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-[600px]">
+              <DialogContent className="sm:max-w-150">
                 <DialogHeader>
                   <DialogTitle>Add Note</DialogTitle>
                   <DialogDescription>
@@ -161,11 +168,11 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
                         )}
                       </div>
 
-                      <p className="text-sm text-gray-700 mt-2 whitespace-pre-wrap">
+                      <p className="text-sm text-foreground mt-2 whitespace-pre-wrap">
                         {note.content}
                       </p>
 
-                      <div className="text-xs text-gray-500 mt-3">
+                      <div className="text-xs text-muted-foreground mt-3">
                         <span>{note.author?.name ?? "Unknown User"}</span>{" "}
                         &middot;{" "}
                         <Tooltip>
@@ -185,7 +192,7 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
                 </div>
               ))
             ) : (
-              <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
+              <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
                 <p className="font-semibold text-lg">No Matching Notes Found</p>
 
                 <p className="text-sm mt-1">
