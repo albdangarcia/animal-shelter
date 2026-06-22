@@ -10,7 +10,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ThemeToggle } from "@/components/light-dark-theme/theme-toggle";
 
 interface UserAvatarProps {
   userImage?: string | null;
@@ -18,9 +17,7 @@ interface UserAvatarProps {
 
 const UserMenu = ({ userImage }: UserAvatarProps) => {
   return (
-    <div className="flex items-center gap-x-4 ml-auto">
-      <ThemeToggle className="bg-transparent hover:bg-white! text-gray-200 hover:text-gray-700" />
-
+    <div className="flex items-center gap-x-4">
       <Button
         size="icon"
         aria-label="View notifications"
