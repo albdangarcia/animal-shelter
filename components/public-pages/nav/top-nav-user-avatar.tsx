@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ThemeToggle } from "@/components/light-dark-theme/theme-toggle";
 
 interface UserAvatarProps {
   userImage?: string | null;
