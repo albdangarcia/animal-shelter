@@ -4,16 +4,16 @@ import { Briefcase, HeartHandshake, LogIn } from "lucide-react";
 
 // The icon map
 const iconMap = {
-  CREATED: <LogIn className="h-5 w-5 text-gray-500" />,
-  INTAKE_PROCESSED: <LogIn className="h-5 w-5 text-gray-500" />,
-  STATUS_CHANGE: <Briefcase className="h-5 w-5 text-gray-500" />,
-  OUTCOME_PROCESSED: <HeartHandshake className="h-5 w-5 text-gray-500" />,
+  CREATED: <LogIn className="h-5 w-5 text-muted-foreground" />,
+  INTAKE_PROCESSED: <LogIn className="h-5 w-5 text-muted-foreground" />,
+  STATUS_CHANGE: <Briefcase className="h-5 w-5 text-muted-foreground" />,
+  OUTCOME_PROCESSED: <HeartHandshake className="h-5 w-5 text-muted-foreground" />,
 };
 
 const getIcon = (activityType: string) => {
   return (
     iconMap[activityType as keyof typeof iconMap] || (
-      <Briefcase className="h-5 w-5 text-gray-500" />
+      <Briefcase className="h-5 w-5 text-muted-foreground" />
     )
   );
 };
@@ -52,29 +52,29 @@ const AnimalJourney = async ({ animalId }: { animalId: string }) => {
               <div className="relative pb-8">
                 {index !== journeyData.length - 1 ? (
                   <span
-                    className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200"
+                    className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-border"
                     aria-hidden="true"
                   />
                 ) : null}
                 <div className="relative flex space-x-3">
                   <div>
-                    <span className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center ring-8 ring-white">
+                    <span className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
                       {getIcon(item.activityType)}
                     </span>
                   </div>
                   <div className="flex min-w-0 flex-1 justify-between space-x-4 pt-1.5">
                     <div>
-                      <p className="text-sm font-semibold text-gray-800">
+                      <p className="text-sm font-semibold text-foreground">
                         {formattedItem.title}
                       </p>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         {formattedItem.description}
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-muted-foreground/70 mt-1">
                         By: {item.changedBy.name}
                       </p>
                     </div>
-                    <div className="whitespace-nowrap text-right text-xs text-gray-500">
+                    <div className="whitespace-nowrap text-right text-xs text-muted-foreground/70">
                       <time dateTime={item.changedAt.toISOString()}>
                         {new Date(item.changedAt).toLocaleDateString("en-US", {
                           year: "numeric",

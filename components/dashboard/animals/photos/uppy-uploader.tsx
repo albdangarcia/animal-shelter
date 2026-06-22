@@ -9,6 +9,7 @@ import XHRUpload from "@uppy/xhr-upload";
 import "@/node_modules/@uppy/core/dist/style.min.css";
 import "@/node_modules/@uppy/dashboard/dist/style.min.css";
 import { toast } from "sonner";
+import { useTheme } from "next-themes";
 
 interface UppyUploaderProps {
   animalId: string;
@@ -36,41 +37,30 @@ const UploadDisabledPlaceholder = () => {
       </div>
 
       <style jsx>{`
-        .disabledUploader-root {
-          width: 100%;
-        }
-
         .disabledUploader-inner {
           position: relative;
           width: 100%;
           height: 250px;
-          background-color: #f3f3f3;
+          background-color: var(--muted);
           border-radius: 8px;
           overflow: hidden;
           cursor: not-allowed;
-        }
-
-        /* Diagonal hatch pattern reads as "blocked/inactive" at a glance,
-           same language as disabled form fields and OS-level drop targets. */
-        .disabledUploader-inner {
           background-image: repeating-linear-gradient(
             -45deg,
-            #ebebeb 0px,
-            #ebebeb 8px,
-            #f3f3f3 8px,
-            #f3f3f3 16px
+            var(--border) 0px,
+            var(--border) 8px,
+            var(--muted) 8px,
+            var(--muted) 16px
           );
         }
-
         .disabledUploader-inner::before {
           content: "";
           position: absolute;
           inset: 8px;
-          border: 2px dotted #c7c7c7;
+          border: 2px dotted var(--border);
           border-radius: 5px;
           pointer-events: none;
         }
-
         .disabledUploader-hint {
           display: flex;
           flex-direction: column;
@@ -82,7 +72,6 @@ const UploadDisabledPlaceholder = () => {
           padding: 0 24px;
           text-align: center;
         }
-
         .disabledUploader-icon {
           display: flex;
           align-items: center;
@@ -90,19 +79,17 @@ const UploadDisabledPlaceholder = () => {
           width: 40px;
           height: 40px;
           border-radius: 999px;
-          background-color: #e2e2e2;
-          color: #8a8a8a;
+          background-color: var(--accent);
+          color: var(--muted-foreground);
           margin-bottom: 6px;
         }
-
         .disabledUploader-title {
-          color: #8a8a8a;
+          color: var(--muted-foreground);
           font-size: 16px;
           font-weight: 600;
         }
-
         .disabledUploader-subtext {
-          color: #8a8a8a;
+          color: var(--muted-foreground);
           font-size: 13px;
           font-weight: 400;
           max-width: 320px;
@@ -114,6 +101,7 @@ const UploadDisabledPlaceholder = () => {
 
 const UppyUploader = ({ animalId, canManage }: UppyUploaderProps) => {
   const router = useRouter();
+  const { resolvedTheme } = useTheme();
 
   const [uppy] = useState(() =>
     new Uppy({
@@ -166,6 +154,7 @@ const UppyUploader = ({ animalId, canManage }: UppyUploaderProps) => {
     <div>
       <Dashboard
         uppy={uppy}
+        theme={resolvedTheme === "dark" ? "dark" : "light"}
         hideProgressAfterFinish={true}
         note="Images will be saved to the animal's record upon successful upload."
         proudlyDisplayPoweredByUppy={false}

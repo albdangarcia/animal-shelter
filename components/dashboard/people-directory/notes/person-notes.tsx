@@ -52,7 +52,9 @@ const PersonNotes = ({ notes, totalPages, personId, canManage }: Props) => {
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardTitle>Person Notes</CardTitle>
+        <CardTitle className="@[650px]/card:text-xl">
+          Person Notes
+        </CardTitle>
 
         <CardDescription>
           Keep track of important notes about this person.
@@ -70,7 +72,7 @@ const PersonNotes = ({ notes, totalPages, personId, canManage }: Props) => {
                 Add Note
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-150">
               <DialogHeader>
                 <DialogTitle>Add Note</DialogTitle>
                 <DialogDescription>
@@ -134,11 +136,11 @@ const PersonNotes = ({ notes, totalPages, personId, canManage }: Props) => {
                       </div>
                     )}
 
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    <p className="text-sm text-foreground whitespace-pre-wrap">
                       {note.content}
                     </p>
 
-                    <div className="text-xs text-gray-500 mt-3">
+                    <div className="text-xs text-muted-foreground mt-3">
                       <span>{note.author?.name ?? "Unknown User"}</span>{" "}
                       &middot;{" "}
                       <Tooltip>
@@ -158,7 +160,7 @@ const PersonNotes = ({ notes, totalPages, personId, canManage }: Props) => {
               </div>
             ))
           ) : (
-            <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
+            <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
               <p className="font-semibold text-lg">No Notes Found</p>
 
               <p className="text-sm mt-1">

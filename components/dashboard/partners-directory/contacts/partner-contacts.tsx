@@ -36,12 +36,7 @@ interface Props {
   canManage: boolean;
 }
 
-const PartnerContacts = ({
-  contacts,
-  people,
-  partnerId,
-  canManage,
-}: Props) => {
+const PartnerContacts = ({ contacts, people, partnerId, canManage }: Props) => {
   const [showAll, setShowAll] = useState(false);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
@@ -54,7 +49,9 @@ const PartnerContacts = ({
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardTitle>Contacts</CardTitle>
+        <CardTitle className="@[650px]/card:text-xl">
+          Contacts
+        </CardTitle>
 
         <CardDescription>
           People linked to this partner as points of contact.
@@ -72,7 +69,7 @@ const PartnerContacts = ({
                 Add Contact
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-150">
               <DialogHeader>
                 <DialogTitle>Add Contact</DialogTitle>
                 <DialogDescription>
@@ -111,7 +108,7 @@ const PartnerContacts = ({
                 )}
 
                 <div className="flex items-start gap-4">
-                  <div className="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-lg border bg-secondary text-2xl">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg border bg-secondary text-2xl">
                     👤
                   </div>
 
@@ -126,7 +123,7 @@ const PartnerContacts = ({
                       {contact.isPrimary && (
                         <Badge
                           variant="outline"
-                          className="font-semibold bg-amber-100 text-amber-800 border-amber-200"
+                          className="font-semibold bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-900"
                         >
                           <Star className="mr-1 h-3 w-3" />
                           Primary
@@ -143,7 +140,7 @@ const PartnerContacts = ({
                       </p>
                     )}
 
-                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
+                    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                       {contact.person.email && (
                         <span className="flex items-center gap-1 break-all">
                           <Mail className="h-3 w-3" />
@@ -162,7 +159,7 @@ const PartnerContacts = ({
               </div>
             ))
           ) : (
-            <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
+            <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
               <p className="font-semibold text-lg">No Contacts Found</p>
 
               <p className="text-sm mt-1">

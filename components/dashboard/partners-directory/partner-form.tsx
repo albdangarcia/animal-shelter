@@ -144,9 +144,11 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        <Card className="w-full max-w-3xl mx-auto">
+        <Card className="w-full max-w-3xl mx-auto @container/card">
           <CardHeader>
-            <CardTitle>{isEditMode ? "Edit Partner" : "New Partner"}</CardTitle>
+            <CardTitle className="@[650px]/card:text-xl">
+              {isEditMode ? "Edit Partner" : "New Partner"}
+            </CardTitle>
             <CardDescription>
               {isEditMode
                 ? `Editing the record for ${partner.name}.`

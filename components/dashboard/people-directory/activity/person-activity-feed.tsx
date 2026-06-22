@@ -29,9 +29,11 @@ const PersonActivityFeed = ({ activity = [] }: Props) => {
   const hasMore = activity.length > INITIAL_DISPLAY_COUNT;
 
   return (
-    <Card>
+    <Card className="@container/card">
       <CardHeader>
-        <CardTitle>Activity</CardTitle>
+        <CardTitle className="@[650px]/card:text-xl">
+          Activity
+        </CardTitle>
         <CardDescription>
           Recent activity involving this person — tasks, notes, assessments, and
           intake/outcome processing.
@@ -48,7 +50,7 @@ const PersonActivityFeed = ({ activity = [] }: Props) => {
                   <div className="relative pb-8">
                     {index !== visibleActivity.length - 1 && (
                       <span
-                        className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-gray-200"
+                        className="absolute left-4 top-4 -ml-px h-full w-0.5 bg-border"
                         aria-hidden="true"
                       />
                     )}
@@ -59,7 +61,7 @@ const PersonActivityFeed = ({ activity = [] }: Props) => {
             </ul>
           </div>
         ) : (
-          <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
+          <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
             <p className="font-semibold text-lg">No Activity Found</p>
             <p className="text-sm mt-1">
               There is no recorded activity for this person yet.

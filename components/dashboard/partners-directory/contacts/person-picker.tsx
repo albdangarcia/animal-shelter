@@ -96,7 +96,7 @@ export const PersonPicker = ({ people, value, onChange, disabled }: Props) => {
                     {person.isDeactivatedContactHere ? (
                       <Badge
                         variant="outline"
-                        className="flex-shrink-0 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-700"
+                        className="shrink-0 bg-gray-100 text-gray-700 border-gray-300 dark:bg-gray-900 dark:text-gray-300 dark:border-gray-700"
                       >
                         Deactivated here
                       </Badge>

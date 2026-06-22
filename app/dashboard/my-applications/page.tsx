@@ -21,7 +21,13 @@ interface Props {
 }
 
 const Page = async ({ searchParams }: Props) => {
-  const { query = "", page = "1", pageSize = "10", sort, status } = await searchParams;
+  const {
+    query = "",
+    page = "1",
+    pageSize = "10",
+    sort,
+    status,
+  } = await searchParams;
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
@@ -30,46 +36,40 @@ const Page = async ({ searchParams }: Props) => {
     currentPage,
     sort,
     status,
-    currentPageSize
+    currentPageSize,
   );
 
-  const canManage = await hasPermission(
-      AppPermissions.ANIMAL_ASSESSMENT_MANAGE,
-    );
-
   return (
-    <>
-      <Card className="@container/card">
-        <CardHeader>
-          <CardTitle className="font-semibold tabular-nums @[650px]/card:text-xl">
-            My applications
-          </CardTitle>
-          <CardDescription>
-            List of your submitted adoption applications.
-          </CardDescription>
-          <CardAction>
-            <Button asChild size="sm">
-              <Link href="/pets">Adopt Pets</Link>
-            </Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-1 flex-col">
-            <div className="@container/main flex flex-1 flex-col gap-2">
-              <div className="flex flex-col gap-4 md:gap-6">
-                <DataTable
-                  data={myApplications}
-                  columns={columns}
-                  ToolbarComponent={MyAppTableToolbar}
-                  totalPages={totalPages}
-                  totalRows={totalRows}
-                />
-              </div>
+    <Card className="@container/card">
+      <CardHeader>
+        <CardTitle className="@[650px]/card:text-xl">
+          My applications
+        </CardTitle>
+        <CardDescription>
+          List of your submitted adoption applications.
+        </CardDescription>
+        <CardAction>
+          <Button asChild size="sm">
+            <Link href="/pets">Adopt Pets</Link>
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-1 flex-col">
+          <div className="@container/main flex flex-1 flex-col gap-2">
+            <div className="flex flex-col gap-4 md:gap-6">
+              <DataTable
+                data={myApplications}
+                columns={columns}
+                ToolbarComponent={MyAppTableToolbar}
+                totalPages={totalPages}
+                totalRows={totalRows}
+              />
             </div>
           </div>
-        </CardContent>
-      </Card>
-    </>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

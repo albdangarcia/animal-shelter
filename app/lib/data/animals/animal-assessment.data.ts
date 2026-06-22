@@ -68,7 +68,7 @@ export const AnimalAssessmentsSchema = z.object({
   type: z.string().optional(),
   outcome: z.string().optional(),
   sort: z.string().optional(),
-  showDeleted: z.boolean().optional(),
+  status: z.string().optional(),
 });
 
 const _fetchAnimalAssessments = async (
@@ -77,8 +77,11 @@ const _fetchAnimalAssessments = async (
   typeInput: string | undefined,
   outcomeInput: string | undefined,
   sortInput: string | undefined,
-  showDeletedInput: boolean = false
-): Promise<{ assessments: AnimalAssessmentListPayload[]; totalPages: number }> => {
+  statusInput: string | undefined,
+): Promise<{
+  assessments: AnimalAssessmentListPayload[];
+  totalPages: number;
+}> => {
   // Validate and parse inputs
   const validatedArgs = AnimalAssessmentsSchema.safeParse({
     currentPage: currentPageInput,
@@ -86,19 +89,36 @@ const _fetchAnimalAssessments = async (
     type: typeInput,
     outcome: outcomeInput,
     sort: sortInput,
-    showDeleted: showDeletedInput,
+    status: statusInput,
   });
   if (!validatedArgs.success) {
     throw new Error("Invalid arguments for fetching animal assessments.");
   }
 
-  const { currentPage, type, outcome, sort, showDeleted } = validatedArgs.data;
+  const { currentPage, type, outcome, sort, status } = validatedArgs.data;
+
   // Determine the sorting order, defaulting to newest first
   const orderBy: Prisma.AssessmentOrderByWithRelationInput = (() => {
     if (!sort) return { date: "desc" };
     const [id, dir] = sort.split(".");
     return { [id]: dir === "desc" ? "desc" : "asc" };
   })();
+
+  // Status filter: deleted assessments show only when "deleted" is selected.
+  // Default (nothing) and "active" only → active. Both → all.
+  const selected = status ? status.split(",").filter(Boolean) : [];
+  const wantsActive = selected.includes("active");
+  const wantsDeleted = selected.includes("deleted");
+
+  let deletedFilter: Prisma.AssessmentWhereInput = {};
+  if (wantsDeleted && !wantsActive) {
+    deletedFilter = { deletedAt: { not: null } }; // deleted only
+  } else if (wantsActive && wantsDeleted) {
+    deletedFilter = {}; // both → all
+  } else {
+    deletedFilter = { deletedAt: null }; // default & active-only → active
+  }
+
   // Construct the 'where' clause based on filters
   const whereClause: Prisma.AssessmentWhereInput = {
     animalId: animalId,
@@ -110,11 +130,12 @@ const _fetchAnimalAssessments = async (
     ...(outcome && {
       overallOutcome: { in: outcome.split(",") as AssessmentOutcome[] },
     }),
-    ...(showDeleted ? {} : { deletedAt: null }),
+    ...deletedFilter,
   };
+
   try {
     const offset = (currentPage - 1) * ASSESSMENTS_PER_PAGE;
-    const [totalCount, assessments] = await prisma.$transaction([
+    const [totalCount, assessments] = await Promise.all([
       prisma.assessment.count({ where: whereClause }),
       prisma.assessment.findMany({
         where: whereClause,
@@ -167,7 +188,7 @@ export type AnimalAssessmentFormPayload = Prisma.AssessmentGetPayload<{
 }>;
 
 const _fetchAnimalAssessmentById = async (
-  id: string
+  id: string,
 ): Promise<AnimalAssessmentFormPayload | null> => {
   try {
     const assessment = await prisma.assessment.findUnique({
@@ -196,13 +217,13 @@ const _fetchAnimalAssessmentById = async (
 };
 
 export const fetchAnimalAssessmentById = RequirePermission(
-  AppPermissions.ANIMAL_ASSESSMENT_READ
+  AppPermissions.ANIMAL_ASSESSMENT_READ,
 )(_fetchAnimalAssessmentById);
 
 export const fetchAssessmentTemplates = RequirePermission(
-  AppPermissions.ANIMAL_ASSESSMENT_READ
+  AppPermissions.ANIMAL_ASSESSMENT_READ,
 )(_fetchAssessmentTemplates);
 
 export const fetchAnimalAssessments = RequirePermission(
-  AppPermissions.ANIMAL_ASSESSMENT_READ
+  AppPermissions.ANIMAL_ASSESSMENT_READ,
 )(_fetchAnimalAssessments);

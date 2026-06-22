@@ -1,9 +1,5 @@
-import { Suspense } from "react";
 import Search from "../../../components/search";
-import { PublicPetsCardSkeleton } from "../../../components/skeletons";
-import {
-  fetchSpecies,
-} from "@/app/lib/data/public.data";
+import { fetchSpecies } from "@/app/lib/data/public.data";
 import PetGrid from "@/components/public-pages/pets/pet-grid";
 import CategoryList from "@/components/public-pages/pets/category-list";
 import { SearchParamsType } from "@/app/lib/types";
@@ -39,16 +35,11 @@ const Page = async ({ searchParams }: Props) => {
       </div>
 
       {/* pets card */}
-      <Suspense
-        key={query + currentPage + speciesName}
-        fallback={<PublicPetsCardSkeleton />}
-      >
-        <PetGrid
-          query={query}
-          currentPage={currentPage}
-          speciesName={speciesName}
-        />
-      </Suspense>
+      <PetGrid
+        query={query}
+        currentPage={currentPage}
+        speciesName={speciesName}
+      />
     </div>
   );
 };

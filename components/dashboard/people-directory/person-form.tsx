@@ -136,9 +136,9 @@ const PersonForm = ({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-        <Card className="w-full max-w-3xl mx-auto">
+        <Card className="w-full max-w-3xl mx-auto @container/card">
           <CardHeader>
-            <CardTitle>
+            <CardTitle className="@[650px]/card:text-xl">
               {mode === "self"
                 ? "My Profile"
                 : isEditMode

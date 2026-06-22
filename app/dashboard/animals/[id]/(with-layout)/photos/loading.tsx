@@ -1,39 +1,50 @@
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
+  CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 const Loading = () => {
   return (
     <div className="space-y-6">
-      {/* Skeleton for the Current Images Card */}
-      <Card>
+      {/* Current Images card */}
+      <Card className="@container/card">
         <CardHeader>
-          <Skeleton className="h-7 w-3/5" />
-          <Skeleton className="h-4 w-4/5 mt-2" />
+          <CardTitle className="@[650px]/card:text-xl">
+            Current Images
+          </CardTitle>
+          <CardDescription>
+            Manage the existing photos for this animal&apos;s profile. Hover
+            over an image to delete it.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {/* Render 8 skeleton image placeholders */}
-            {Array.from({ length: 8 }).map((_, index) => (
-              <Skeleton key={index} className="aspect-square rounded-lg" />
+          {/* Image grid */}
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+            {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+              <Skeleton key={i} className="aspect-square w-full rounded-lg" />
             ))}
           </div>
         </CardContent>
       </Card>
 
-      {/* Skeleton for the Upload New Images Card */}
-      <Card>
+      {/* Upload card */}
+      <Card className="@container/card">
         <CardHeader>
-          <Skeleton className="h-7 w-1/2" />
-          <Skeleton className="h-4 w-full mt-2" />
-          <Skeleton className="h-4 w-2/3" />
+          <CardTitle className="@[650px]/card:text-xl">
+            Upload New Images
+          </CardTitle>
+          <CardDescription>
+            Add new photos to this animal&apos;s profile. Drag and drop images
+            below or click to browse.
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* A large skeleton to represent the Uppy Uploader dashboard */}
-          <Skeleton className="h-96 w-full rounded-lg" />
+          {/* Uploader drop-zone placeholder */}
+          <Skeleton className="h-62 w-full rounded-lg" />
         </CardContent>
       </Card>
     </div>

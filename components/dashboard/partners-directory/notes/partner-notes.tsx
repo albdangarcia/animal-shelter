@@ -47,19 +47,13 @@ interface Props {
   canManage: boolean;
 }
 
-const PartnerNotes = ({
-  notes,
-  totalPages,
-  partnerId,
-  canManage,
-}: Props) => {
+const PartnerNotes = ({ notes, totalPages, partnerId, canManage }: Props) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   return (
     <Card className="@container/card">
       <CardHeader>
-        <CardTitle>Partner Notes</CardTitle>
-
+        <CardTitle className="@[650px]/card:text-xl">Partner Notes</CardTitle>
         <CardDescription>
           Keep track of important notes about this partner.
         </CardDescription>
@@ -76,7 +70,7 @@ const PartnerNotes = ({
                 Add Note
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+            <DialogContent className="sm:max-w-150">
               <DialogHeader>
                 <DialogTitle>Add Note</DialogTitle>
                 <DialogDescription>
@@ -140,11 +134,11 @@ const PartnerNotes = ({
                       </div>
                     )}
 
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    <p className="text-sm text-foreground whitespace-pre-wrap">
                       {note.content}
                     </p>
 
-                    <div className="text-xs text-gray-500 mt-3">
+                    <div className="text-xs text-muted-foreground mt-3">
                       <span>{note.author?.name ?? "Unknown User"}</span>{" "}
                       &middot;{" "}
                       <Tooltip>
@@ -164,7 +158,7 @@ const PartnerNotes = ({
               </div>
             ))
           ) : (
-            <div className="text-center text-gray-500 py-12 border-2 border-dashed rounded-lg">
+            <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
               <p className="font-semibold text-lg">No Notes Found</p>
 
               <p className="text-sm mt-1">
