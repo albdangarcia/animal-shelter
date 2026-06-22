@@ -13,6 +13,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { ThemeToggle } from "@/components/light-dark-theme/theme-toggle";
 import NavItemsRenderer from "./nav-items-renderer";
 import UserMenu from "./top-nav-user-avatar";
 
@@ -24,7 +25,7 @@ interface NavLink {
 interface TopNavProps {
   userImage: string | null | undefined;
   showUserProfile: boolean;
-  links: NavLink[]; 
+  links: NavLink[];
 }
 
 const TopNav = ({ userImage, showUserProfile, links }: TopNavProps) => {
@@ -103,8 +104,13 @@ const TopNav = ({ userImage, showUserProfile, links }: TopNavProps) => {
             </div>
           </div>
 
-          {/* User profile menu */}
-          {showUserProfile && <UserMenu userImage={userImage} />}
+          {/* Right-side controls — always visible */}
+          <div className="flex items-center gap-x-4 ml-auto">
+            <ThemeToggle className="bg-transparent hover:bg-white! text-gray-200 hover:text-gray-700" />
+
+            {/* User profile menu */}
+            {showUserProfile && <UserMenu userImage={userImage} />}
+          </div>
         </div>
       </div>
     </nav>
