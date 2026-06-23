@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { Role } from "@prisma/client";
+import { Role, Prisma } from "@prisma/client";
 import { prisma } from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
@@ -43,13 +43,26 @@ const _updateUserRole = async (userId: string, newRole: Role) => {
       },
     });
 
-    revalidatePath("/dashboard/role-management");
+    revalidatePath("/dashboard/settings/role-management");
 
     return {
       success: true,
       message: "User role updated successfully.",
     };
   } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      // The where clause matched no row: either the user doesn't exist,
+      // or they're an admin and the NOT guard blocked the update.
+      return {
+        success: false,
+        message:
+          "User not found, or this user is an admin and cannot be modified here.",
+      };
+    }
+
     console.error("Failed to update user role:", error);
     return {
       success: false,

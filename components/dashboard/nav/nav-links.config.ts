@@ -62,12 +62,6 @@ export const navMainItems: readonly NavItem[] = [
     permission: AppPermissions.ANIMAL_INFO_READ,
   },
   {
-    title: "Role Management",
-    url: "/dashboard/role-management",
-    icon: "IconChartBar",
-    permission: AppPermissions.MANAGE_ROLES,
-  },
-  {
     title: "People Directory",
     url: "/dashboard/people-directory",
     icon: "IconUsersGroup",
@@ -144,8 +138,9 @@ export const navCollapsibleItems: readonly NavItem[] = [
 export const navSecondaryItems: readonly NavItem[] = [
   {
     title: "Settings",
-    url: "#",
+    url: "/dashboard/settings",
     icon: "IconSettings",
+    permission: AppPermissions.MANAGE_ROLES,
   },
   {
     title: "Get Help",

@@ -57,6 +57,12 @@ export const AppPermissions = {
 
   // Role Management (admins only)
   MANAGE_ROLES: "user:manage_roles",
+  
+  // Catalog / System Configuration (admins only)
+  MANAGE_CHARACTERISTICS_CATALOG: "characteristics_catalog:manage",
+  MANAGE_ASSESSMENT_TEMPLATES: "assessment_templates:manage",
+
+  // 
 } as const;
 
 export type AppPermission =
