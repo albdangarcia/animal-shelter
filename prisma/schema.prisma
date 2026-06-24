@@ -1,3 +1,7 @@
+// ═══════════════════════════════════════════════════
+// CONFIG
+// ═══════════════════════════════════════════════════
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -6,6 +10,10 @@ datasource db {
   provider = "postgresql"
 }
 
+// ═══════════════════════════════════════════════════
+// IDENTITY & ACCESS
+// ═══════════════════════════════════════════════════
+
 enum Role {
   ADMIN // Administrator with full system access
   STAFF // Shelter staff with operational privileges
@@ -13,141 +21,96 @@ enum Role {
   VOLUNTEER // Volunteer with limited access, can view animals and applications
 }
 
-enum CharacteristicCategory {
-  BEHAVIOR // For behavioral notes like "Bite History", "On-Leash Reactivity"
-  MEDICAL // For health-related tags like "Deaf", "Heartworm Positive"
-  ENVIRONMENT // For home-related needs like "Good With Kids", "Housebroken"
-  ADMINISTRATIVE // For internal, process-related tags like "Adoption Fee Waived"
-  OTHER // For any other tags that don't fit the above categories
+model Person {
+  id      String  @id @default(cuid())
+  name    String
+  email   String? @unique
+  phone   String?
+  address String?
+  city    String?
+  state   String?
+  zipCode String?
+
+  // A Person MIGHT have a user account for logging in.
+  user User?
+
+  // Back-relations to all their interactions
+  fosterProfile    FosterProfile?
+  householdProfile HouseholdProfile?
+
+  adoptionApplications     AdoptionApplication[]
+  applicationStatusHistory ApplicationStatusHistory[]
+  likes                    Like[]
+  animalNotesAuthored      AnimalNote[]               @relation("AnimalNoteAuthor")
+  personNotesAuthored      PersonNote[]               @relation("PersonNoteAuthor")
+  partnerNotesAuthored     PartnerNote[]              @relation("PartnerNoteAuthor")
+  personNotes              PersonNote[]               @relation("PersonNoteSubject") // notes written ABOUT this person
+  partnerContacts          PartnerContact[]
+  tasksAssigned            Task[]                     @relation("TasksAssignedTo")
+  tasksCreated             Task[]                     @relation("TasksCreatedBy")
+  reclaimedAnimalsAsOwner  Outcome[]                  @relation("ReclaimedByOwner")
+  processedOutcomes        Outcome[]                  @relation("ProcessedOutcome")
+  surrenderedAnimals       Intake[]                   @relation("SurrenderedBy")
+  foundAnimals             Intake[]                   @relation("FoundBy")
+  processedIntakes         Intake[]                   @relation("ProcessedBy")
+
+  // financialTransactions  FinancialTransaction[]
+  // processedTransactions  FinancialTransaction[] @relation("ProcessedFinance")
+  // licenses               License[]
+
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  MedicationLog     MedicationLog[]
+  Assessment        Assessment[]
+  AnimalActivityLog AnimalActivityLog[]
+
+  @@map("persons")
 }
 
-enum MedicalRecordType {
-  VACCINATION // For recording immunizations like Rabies, DHPP, etc.
-  PROCEDURE // For surgeries like spay/neuter, dental cleaning
-  MEDICATION // For prescribed drugs
-  ALLERGY // To note known allergies
-  CHECKUP // A general vet visit or check-up
-  NOTE // A general health-related note
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique // Kept here for Auth.js/NextAuth compatibility
+  emailVerified DateTime? @map(name: "email_verified")
+  password      String?
+  image         String?
+  role          Role      @default(USER)
+
+  // The one-to-one link to the master Person record
+  personId String @unique
+  // Restrict to prevent accidental deletion of a Person with history
+  person   Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+
+  accounts Account[]
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  deactivatedAt DateTime? @map(name: "deactivated_at")
+
+  @@map(name: "users")
 }
 
-enum OutcomeType {
-  ADOPTION
-  TRANSFER_OUT
-  RETURN_TO_OWNER
-  DECEASED
-  EUTHANIZED
-  OTHER
+model Account {
+  userId            String  @map(name: "user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map(name: "provider_account_id")
+  access_token      String?
+  token_type        String?
+  scope             String?
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+  @@map(name: "accounts")
 }
 
-enum TaskCategory {
-  MEDICAL
-  BEHAVIORAL
-  ADMINISTRATIVE
-  CLEANING
-  FEEDING
-}
-
-enum AnimalActivityType {
-  FIELD_UPDATE // A direct field on the animal model was changed (e.g., name, weight)
-  NOTE_ADDED // A note was created for this animal
-  PHOTO_UPLOADED // A new photo was added
-  MEDICAL_RECORD_ADDED // A medical record was created
-  ASSESSMENT_COMPLETED // An assessment was finished
-  TASK_CREATED // A task was created
-  TASK_STATUS_CHANGED // A task's status was updated
-  STATUS_CHANGE // A significant status like listing or health status changed
-  INTAKE_PROCESSED // The initial intake event
-  OUTCOME_PROCESSED // A final outcome event
-  CREATED // The animal record itself was created
-}
-
-enum TaskStatus {
-  TODO
-  IN_PROGRESS
-  DONE
-  SKIPPED // Task was skipped, not completed
-  CANCELED
-  ON_HOLD
-  DELETED // Task is deleted but kept for records
-}
-
-enum TaskPriority {
-  HIGH
-  MEDIUM
-  LOW
-}
-
-enum NoteCategory {
-  BEHAVIORAL
-  MEDICAL
-  FEEDING
-  GENERAL
-  ADOPTION_UPDATE
-  FOSTER_UPDATE
-}
-
-enum AnimalSize {
-  SMALL
-  MEDIUM
-  LARGE
-  XLARGE
-}
-
-enum IntakeType {
-  OWNER_SURRENDER // OS / Return
-  STRAY
-  BORN_IN_CARE
-  TRANSFER_IN
-  SEIZE // e.g., from a legal case
-  SERVICE_IN // e.g., temporary boarding for a community member
-  ACO_IMPOUND // Animal Control impound
-}
-
-enum AnimalLegalStatus {
-  NONE
-  STRAY_HOLD
-  BITE_QUARANTINE
-  COURT_HOLD
-  POLICE_HOLD
-  PROTECTIVE_CUSTODY
-}
-
-enum Sex {
-  MALE
-  FEMALE
-  UNKNOWN
-}
-
-enum AnimalHealthStatus {
-  HEALTHY
-  AWAITING_VET_EXAM
-  AWAITING_TRIAGE
-  UNDER_VET_CARE
-  HOSPITALISED
-  AWAITING_SPAY_NEUTER
-  AWAITING_OTHER_SURGERY
-  RECOVERING_FROM_SURGERY
-}
-
-enum AnimalListingStatus {
-  DRAFT // Profile is being prepared, not yet ready for public view.
-  PUBLISHED // Profile is live, publicly accessible, and available for applications.
-
-  PENDING_ADOPTION // An application has been approved; animal is temporarily reserved. Not accepting new applications.
-
-  // for the outcome process
-  ARCHIVED // Profile is no longer public (e.g., animal adopted, transferred, or otherwise unavailable) and is kept for records.
-}
-
-enum ApplicationStatus {
-  PENDING // Application submitted, awaiting review
-  REVIEWING // Application is actively being reviewed
-  WAITLISTED // A strong application, held as a backup for a specific animal OR approved in general, waiting for a suitable animal.
-  APPROVED // Application approved
-  REJECTED // Application rejected
-  WITHDRAWN // Application withdrawn by the user
-  ADOPTED // animal has been adopted through this application (final state)
-}
+// ═══════════════════════════════════════════════════
+// PEOPLE-ADJACENT PROFILES
+// ═══════════════════════════════════════════════════
 
 enum LivingSituation {
   OWN_HOME
@@ -156,6 +119,47 @@ enum LivingSituation {
   LIVE_WITH_FAMILY
   OTHER
 }
+
+/// Stores the application and approval status for a user wanting to become a foster parent.
+model FosterProfile {
+  id            String  @id @default(cuid())
+  isActive      Boolean @default(false) @map(name: "is_active")
+  internalNotes String?
+
+  animalsFostered Animal[]
+
+  personId String @unique @map(name: "person_id")
+  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("foster_profiles")
+}
+
+model HouseholdProfile {
+  id       String @id @default(cuid())
+  personId String @unique @map(name: "person_id")
+  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
+  livingSituation         LivingSituation @map(name: "living_situation")
+  hasYard                 Boolean?        @map(name: "has_yard")
+  landlordPermission      Boolean?        @map(name: "landlord_permission")
+  householdSize           Int             @map(name: "household_size")
+  hasChildren             Boolean?        @map(name: "has_children")
+  childrenAges            Int[]           @map(name: "children_ages")
+  otherAnimalsDescription String?         @map(name: "other_animals_description")
+  animalExperience        String?         @map(name: "animal_experience")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("household_profiles")
+}
+
+// ═══════════════════════════════════════════════════
+// PARTNERS
+// ═══════════════════════════════════════════════════
 
 enum PartnerType {
   SHELTER
@@ -216,82 +220,59 @@ model PartnerContact {
   @@map("partner_contacts")
 }
 
-model Intake {
-  id         String     @id @default(cuid())
-  intakeDate DateTime   @default(now())
-  type       IntakeType
+// ═══════════════════════════════════════════════════
+// ANIMAL CORE
+// ═══════════════════════════════════════════════════
 
-  animalId String
-
-  // The animal created as a result of this intake event. A one-to-one relationship.
-  animal Animal @relation(fields: [animalId], references: [id])
-
-  // Optional fields depending on the intake type
-
-  // For OWNER_SURRENDER or RETURN
-  surrenderingPersonId String?
-  surrenderingPerson   Person? @relation(name: "SurrenderedBy", fields: [surrenderingPersonId], references: [id])
-
-  // For STRAY
-  dateLost        DateTime?
-  foundAddress    String?
-  foundCity       String?
-  foundState      String?
-  foundZipCode    String?
-  foundByPersonId String?
-  foundByPerson   Person?   @relation(name: "FoundBy", fields: [foundByPersonId], references: [id])
-
-  // For TRANSFER_IN
-  sourcePartnerId String?
-  sourcePartner   Partner? @relation(fields: [sourcePartnerId], references: [id])
-
-  // General fields
-  staffMemberId String
-  staffMember   Person  @relation(name: "ProcessedBy", fields: [staffMemberId], references: [id])
-  notes         String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([animalId])
-  @@index([sourcePartnerId])
-  @@index([staffMemberId])
-  @@map("intakes")
+enum Sex {
+  MALE
+  FEMALE
+  UNKNOWN
 }
 
-model Outcome {
-  id          String      @id @default(cuid())
-  outcomeDate DateTime    @default(now())
-  type        OutcomeType
+enum AnimalSize {
+  SMALL
+  MEDIUM
+  LARGE
+  XLARGE
+}
 
-  animalId String
-  // The animal leaving the shelter. A one-to-one relationship.
-  animal   Animal @relation(fields: [animalId], references: [id])
+enum AnimalHealthStatus {
+  HEALTHY
+  AWAITING_VET_EXAM
+  AWAITING_TRIAGE
+  UNDER_VET_CARE
+  HOSPITALISED
+  AWAITING_SPAY_NEUTER
+  AWAITING_OTHER_SURGERY
+  RECOVERING_FROM_SURGERY
+}
 
-  // Optional fields depending on the outcome type
+enum AnimalListingStatus {
+  DRAFT // Profile is being prepared, not yet ready for public view.
+  PUBLISHED // Profile is live, publicly accessible, and available for applications.
 
-  // For ADOPTION
-  adoptionApplicationId String?              @unique
-  adoptionApplication   AdoptionApplication? @relation(fields: [adoptionApplicationId], references: [id])
+  PENDING_ADOPTION // An application has been approved; animal is temporarily reserved. Not accepting new applications.
 
-  // For RETURN_TO_OWNER
-  ownerId String?
-  owner   Person? @relation("ReclaimedByOwner", fields: [ownerId], references: [id])
+  // for the outcome process
+  ARCHIVED // Profile is no longer public (e.g., animal adopted, transferred, or otherwise unavailable) and is kept for records.
+}
 
-  // For TRANSFER_OUT
-  destinationPartnerId String?
-  destinationPartner   Partner? @relation(fields: [destinationPartnerId], references: [id])
+enum AnimalLegalStatus {
+  NONE
+  STRAY_HOLD
+  BITE_QUARANTINE
+  COURT_HOLD
+  POLICE_HOLD
+  PROTECTIVE_CUSTODY
+}
 
-  // General fields
-  staffMemberId String
-  staffMember   Person  @relation(name: "ProcessedOutcome", fields: [staffMemberId], references: [id])
-  notes         String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([animalId])
-  @@map("outcomes")
+enum CharacteristicCategory {
+  BEHAVIOR // For behavioral notes like "Bite History", "On-Leash Reactivity"
+  MEDICAL // For health-related tags like "Deaf", "Heartworm Positive"
+  ENVIRONMENT // For home-related needs like "Good With Kids", "Housebroken"
+  ADMINISTRATIVE // For internal, process-related tags like "Adoption Fee Waived"
+  OTHER // For any other tags that don't fit the above categories
 }
 
 model Animal {
@@ -404,92 +385,131 @@ model Characteristic {
   @@map("characteristics")
 }
 
-model AnimalNote {
-  id       String       @id @default(cuid())
-  category NoteCategory
-  content  String
+model AnimalImage {
+  id  String @id @default(cuid())
+  url String
 
   animalId String @map(name: "animal_id")
   animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
 
-  authorId String? @map(name: "author_id")
-  author   Person? @relation("AnimalNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime? @map(name: "deleted_at")
-
-  @@index([animalId])
-  @@map(name: "animal_notes")
+  @@map(name: "animal_images")
 }
 
-// Dated log of notes about a Person (e.g. "called 6/12, declined to foster").
-model PersonNote {
-  id      String @id @default(cuid())
-  content String
+// ═══════════════════════════════════════════════════
+// INTAKE & OUTCOME
+// ═══════════════════════════════════════════════════
 
-  personId String @map(name: "person_id")
-  person   Person @relation("PersonNoteSubject", fields: [personId], references: [id], onDelete: Cascade)
-
-  authorId String? @map(name: "author_id")
-  author   Person? @relation("PersonNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime? @map(name: "deleted_at")
-
-  @@index([personId])
-  @@map("person_notes")
+enum IntakeType {
+  OWNER_SURRENDER // OS / Return
+  STRAY
+  BORN_IN_CARE
+  TRANSFER_IN
+  SEIZE // e.g., from a legal case
+  SERVICE_IN // e.g., temporary boarding for a community member
+  ACO_IMPOUND // Animal Control impound
 }
 
-// Dated log of notes about a Partner organization.
-model PartnerNote {
-  id      String @id @default(cuid())
-  content String
-
-  partnerId String  @map(name: "partner_id")
-  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
-
-  authorId String? @map(name: "author_id")
-  author   Person? @relation("PartnerNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime? @map(name: "deleted_at")
-
-  @@index([partnerId])
-  @@map("partner_notes")
+enum OutcomeType {
+  ADOPTION
+  TRANSFER_OUT
+  RETURN_TO_OWNER
+  DECEASED
+  EUTHANIZED
+  OTHER
 }
 
-model Task {
-  id      String  @id @default(cuid())
-  title   String
-  details String?
+model Intake {
+  id         String     @id @default(cuid())
+  intakeDate DateTime   @default(now())
+  type       IntakeType
 
-  status   TaskStatus   @default(TODO)
-  priority TaskPriority @default(MEDIUM)
-  category TaskCategory
-  dueDate  DateTime?    @map(name: "due_date") // Optional due date for the task
+  animalId String
 
-  animalId String @map(name: "animal_id")
-  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  // The animal created as a result of this intake event. A one-to-one relationship.
+  animal Animal @relation(fields: [animalId], references: [id])
 
-  /// The staff member this task is assigned to. Can be null if it's a general task for any staff.
-  assigneeId String? @map(name: "assignee_id")
-  assignee   Person? @relation("TasksAssignedTo", fields: [assigneeId], references: [id], onDelete: SetNull)
+  // Optional fields depending on the intake type
 
-  medicationLog MedicationLog?
+  // For OWNER_SURRENDER or RETURN
+  surrenderingPersonId String?
+  surrenderingPerson   Person? @relation(name: "SurrenderedBy", fields: [surrenderingPersonId], references: [id])
 
-  createdById String @map("created_by_id")
-  createdBy   Person @relation("TasksCreatedBy", fields: [createdById], references: [id])
+  // For STRAY
+  dateLost        DateTime?
+  foundAddress    String?
+  foundCity       String?
+  foundState      String?
+  foundZipCode    String?
+  foundByPersonId String?
+  foundByPerson   Person?   @relation(name: "FoundBy", fields: [foundByPersonId], references: [id])
+
+  // For TRANSFER_IN
+  sourcePartnerId String?
+  sourcePartner   Partner? @relation(fields: [sourcePartnerId], references: [id])
+
+  // General fields
+  staffMemberId String
+  staffMember   Person  @relation(name: "ProcessedBy", fields: [staffMemberId], references: [id])
+  notes         String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([animalId])
-  @@index([assigneeId])
-  @@index([status])
-  @@map(name: "tasks")
+  @@index([sourcePartnerId])
+  @@index([staffMemberId])
+  @@map("intakes")
+}
+
+model Outcome {
+  id          String      @id @default(cuid())
+  outcomeDate DateTime    @default(now())
+  type        OutcomeType
+
+  animalId String
+  // The animal leaving the shelter. A one-to-one relationship.
+  animal   Animal @relation(fields: [animalId], references: [id])
+
+  // Optional fields depending on the outcome type
+
+  // For ADOPTION
+  adoptionApplicationId String?              @unique
+  adoptionApplication   AdoptionApplication? @relation(fields: [adoptionApplicationId], references: [id])
+
+  // For RETURN_TO_OWNER
+  ownerId String?
+  owner   Person? @relation("ReclaimedByOwner", fields: [ownerId], references: [id])
+
+  // For TRANSFER_OUT
+  destinationPartnerId String?
+  destinationPartner   Partner? @relation(fields: [destinationPartnerId], references: [id])
+
+  // General fields
+  staffMemberId String
+  staffMember   Person  @relation(name: "ProcessedOutcome", fields: [staffMemberId], references: [id])
+  notes         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([animalId])
+  @@map("outcomes")
+}
+
+// ═══════════════════════════════════════════════════
+// MEDICAL
+// ═══════════════════════════════════════════════════
+
+enum MedicalRecordType {
+  VACCINATION // For recording immunizations like Rabies, DHPP, etc.
+  PROCEDURE // For surgeries like spay/neuter, dental cleaning
+  MEDICATION // For prescribed drugs
+  ALLERGY // To note known allergies
+  CHECKUP // A general vet visit or check-up
+  NOTE // A general health-related note
 }
 
 model MedicalRecord {
@@ -510,41 +530,197 @@ model MedicalRecord {
   @@map(name: "medical_records")
 }
 
-/// Stores the application and approval status for a user wanting to become a foster parent.
-model FosterProfile {
-  id            String  @id @default(cuid())
-  isActive      Boolean @default(false) @map(name: "is_active")
-  internalNotes String?
+// Shelters deal with dozens of animals on different medications with varying schedules 
+// (twice a day, every 3 days, etc.). Automating this prevents missed doses, which is critical for animal health.
+// Using Cron Jobs
 
-  animalsFostered Animal[]
+// In this scenario, MedicalRecord can be used for one-off events
+// like vaccines or procedures, while MedicationLog handles recurring treatments.
+model MedicationSchedule {
+  id             String  @id @default(cuid())
+  medicationName String // e.g., "Doxycycline", "Metronidazole"
+  dosage         Float // e.g., 100, 0.5
+  dosageUnit     String // e.g., "mg", "ml", "tablet(s)"
+  route          String // e.g., "Oral", "Topical", "Injectable"
+  instructions   String?
+  isActive       Boolean @default(true)
 
-  personId String @unique @map(name: "person_id")
-  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  // Recurrence Info
+  startDate      DateTime
+  repeatInterval Int // e.g., 1
+  repeatUnit     String // "Days", "Weeks"
+  timesPerDay    Int       @default(1) // How many times within that day
+  endByDate      DateTime?
+
+  animalId String @map("animal_id")
+  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+
+  // Link to the logs of when this was administered
+  administrations MedicationLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("foster_profiles")
+  @@index([animalId])
+  @@map("medication_schedules")
 }
 
-model HouseholdProfile {
-  id       String @id @default(cuid())
-  personId String @unique @map(name: "person_id")
-  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+// Model to log every single time a medication is given
+model MedicationLog {
+  id String @id @default(cuid())
 
-  livingSituation         LivingSituation @map(name: "living_situation")
-  hasYard                 Boolean?        @map(name: "has_yard")
-  landlordPermission      Boolean?        @map(name: "landlord_permission")
-  householdSize           Int             @map(name: "household_size")
-  hasChildren             Boolean?        @map(name: "has_children")
-  childrenAges            Int[]           @map(name: "children_ages")
-  otherAnimalsDescription String?         @map(name: "other_animals_description")
-  animalExperience        String?         @map(name: "animal_experience")
+  administeredAt DateTime @default(now())
+  notes          String?
+
+  // The staff member who gave the medication
+  administeredById String
+  administeredBy   Person @relation(fields: [administeredById], references: [id])
+
+  // The schedule this administration belongs to
+  scheduleId String
+  schedule   MedicationSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+
+  // The animal who received it (denormalized for easy querying)
+  animalId String
+  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+
+  // Optionally, link to the task that prompted this action
+  taskId String? @unique
+  task   Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@index([animalId])
+  @@index([scheduleId])
+  @@map("medication_logs")
+}
+
+// ═══════════════════════════════════════════════════
+// ASSESSMENTS
+// ═══════════════════════════════════════════════════
+
+enum AssessmentType {
+  INTAKE_MEDICAL
+  INTAKE_BEHAVIORAL
+  DAILY_MONITORING
+  PLAYGROUP_EVALUATION
+  CAT_TEST
+  DOG_TEST
+  HANDLING_SENSITIVITY
+  LEASH_MANNER
+  QUARANTINE_CHECK
+  POST_ADOPTION_FOLLOWUP
+  OTHER
+}
+
+enum AssessmentOutcome {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  NEEDS_ATTENTION
+  MONITOR
+  NOT_APPLICABLE
+}
+
+enum FieldType {
+  TEXT // Single-line text input
+  TEXTAREA // Multi-line text area
+  NUMBER // Numerical input
+  SELECT // Dropdown list from options
+  CHECKBOX // A single checkbox (for boolean true/false)
+  RADIO // Radio buttons for single selection
+  DATE // A date picker
+}
+
+model Assessment {
+  id             String             @id @default(cuid())
+  animalId       String
+  animal         Animal             @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  assessorId     String
+  assessor       Person             @relation(fields: [assessorId], references: [id])
+  date           DateTime           @default(now())
+  overallOutcome AssessmentOutcome?
+  summary        String? // A text summary of the findings, e.g., "Ready for adoption"
+
+  templateId String?
+  template   AssessmentTemplate? @relation(fields: [templateId], references: [id])
+
+  // Link to a list of specific answers/findings
+  fields AssessmentField[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
+
+  @@index([animalId])
+  @@map("assessments")
+}
+
+// A model for each individual question/field within an assessment
+model AssessmentField {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  // What was being assessed?
+  // e.g., "Reaction to handling", "Food guarding", "Heart murmur"
+  fieldName String
+
+  // The result of the assessment for that field
+  // e.g., "Tolerant", "Severe", "Grade 2/6 Systolic"
+  fieldValue String
+
+  // Optional longer notes for this specific field
+  notes String?
+
+  createdAt DateTime @default(now())
+
+  @@map("assessment_fields")
+}
+
+// To define a type of assessment, like "Intake Behavioral"
+model AssessmentTemplate {
+  id          String         @id @default(cuid())
+  name        String         @unique // e.g., "Intake Behavioral", "Daily Monitoring"
+  description String?
+  type        AssessmentType
+
+  allowCustomFields Boolean         @default(true) // Controls if staff can add ad-hoc fields during assessment
+  templateFields    TemplateField[]
+  Assessment        Assessment[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@map("household_profiles")
+  @@map("assessment_templates")
+}
+
+model TemplateField {
+  id         String             @id @default(cuid())
+  templateId String
+  template   AssessmentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  label       String // e.g., "Kennel Presence"
+  fieldType   FieldType // e.g., "SELECT", "TEXT", "NUMBER"
+  placeholder String?
+  options     String[] // For SELECT, stores ["Quiet", "Anxious", "Barking"]
+  isRequired  Boolean   @default(true)
+  order       Int // To control the display order in the form
+
+  @@map("assessment_template_fields")
+}
+
+// ═══════════════════════════════════════════════════
+// ADOPTION WORKFLOW
+// ═══════════════════════════════════════════════════
+
+enum ApplicationStatus {
+  PENDING // Application submitted, awaiting review
+  REVIEWING // Application is actively being reviewed
+  WAITLISTED // A strong application, held as a backup for a specific animal OR approved in general, waiting for a suitable animal.
+  APPROVED // Application approved
+  REJECTED // Application rejected
+  WITHDRAWN // Application withdrawn by the user
+  ADOPTED // animal has been adopted through this application (final state)
 }
 
 /// Represents a user's application to adopt a specific animal. This is a snapshot-in-time record.
@@ -627,279 +803,147 @@ model Like {
   @@map(name: "likes")
 }
 
-model AnimalImage {
-  id  String @id @default(cuid())
-  url String
+// ═══════════════════════════════════════════════════
+// TASKS & NOTES
+// ═══════════════════════════════════════════════════
+
+enum TaskCategory {
+  MEDICAL
+  BEHAVIORAL
+  ADMINISTRATIVE
+  CLEANING
+  FEEDING
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  SKIPPED // Task was skipped, not completed
+  CANCELED
+  ON_HOLD
+  DELETED // Task is deleted but kept for records
+}
+
+enum TaskPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum NoteCategory {
+  BEHAVIORAL
+  MEDICAL
+  FEEDING
+  GENERAL
+  ADOPTION_UPDATE
+  FOSTER_UPDATE
+}
+
+model Task {
+  id      String  @id @default(cuid())
+  title   String
+  details String?
+
+  status   TaskStatus   @default(TODO)
+  priority TaskPriority @default(MEDIUM)
+  category TaskCategory
+  dueDate  DateTime?    @map(name: "due_date") // Optional due date for the task
 
   animalId String @map(name: "animal_id")
   animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  /// The staff member this task is assigned to. Can be null if it's a general task for any staff.
+  assigneeId String? @map(name: "assignee_id")
+  assignee   Person? @relation("TasksAssignedTo", fields: [assigneeId], references: [id], onDelete: SetNull)
 
-  @@map(name: "animal_images")
-}
+  medicationLog MedicationLog?
 
-model Person {
-  id      String  @id @default(cuid())
-  name    String
-  email   String? @unique
-  phone   String?
-  address String?
-  city    String?
-  state   String?
-  zipCode String?
-
-  // A Person MIGHT have a user account for logging in.
-  user User?
-
-  // Back-relations to all their interactions
-  fosterProfile    FosterProfile?
-  householdProfile HouseholdProfile?
-
-  adoptionApplications     AdoptionApplication[]
-  applicationStatusHistory ApplicationStatusHistory[]
-  likes                    Like[]
-  animalNotesAuthored      AnimalNote[]               @relation("AnimalNoteAuthor")
-  personNotesAuthored      PersonNote[]               @relation("PersonNoteAuthor")
-  partnerNotesAuthored     PartnerNote[]              @relation("PartnerNoteAuthor")
-  personNotes              PersonNote[]               @relation("PersonNoteSubject") // notes written ABOUT this person
-  partnerContacts          PartnerContact[]
-  tasksAssigned            Task[]                     @relation("TasksAssignedTo")
-  tasksCreated             Task[]                     @relation("TasksCreatedBy")
-  reclaimedAnimalsAsOwner  Outcome[]                  @relation("ReclaimedByOwner")
-  processedOutcomes        Outcome[]                  @relation("ProcessedOutcome")
-  surrenderedAnimals       Intake[]                   @relation("SurrenderedBy")
-  foundAnimals             Intake[]                   @relation("FoundBy")
-  processedIntakes         Intake[]                   @relation("ProcessedBy")
-
-  // financialTransactions  FinancialTransaction[]
-  // processedTransactions  FinancialTransaction[] @relation("ProcessedFinance")
-  // licenses               License[]
-
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-  MedicationLog     MedicationLog[]
-  Assessment        Assessment[]
-  AnimalActivityLog AnimalActivityLog[]
-
-  @@map("persons")
-}
-
-model User {
-  id            String    @id @default(cuid())
-  email         String    @unique // Kept here for Auth.js/NextAuth compatibility
-  emailVerified DateTime? @map(name: "email_verified")
-  password      String?
-  image         String?
-  role          Role      @default(USER)
-
-  // The one-to-one link to the master Person record
-  personId String @unique
-  // Restrict to prevent accidental deletion of a Person with history
-  person   Person @relation(fields: [personId], references: [id], onDelete: Restrict)
-
-  accounts Account[]
-
-  createdAt DateTime @default(now()) @map(name: "created_at")
-  updatedAt DateTime @updatedAt @map(name: "updated_at")
-
-  deactivatedAt DateTime? @map(name: "deactivated_at")
-
-  @@map(name: "users")
-}
-
-model Account {
-  userId            String  @map(name: "user_id")
-  type              String
-  provider          String
-  providerAccountId String  @map(name: "provider_account_id")
-  access_token      String?
-  token_type        String?
-  scope             String?
-
-  createdAt DateTime @default(now()) @map(name: "created_at")
-  updatedAt DateTime @updatedAt @map(name: "updated_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@id([provider, providerAccountId])
-  @@map(name: "accounts")
-}
-
-// Shelters deal with dozens of animals on different medications with varying schedules 
-// (twice a day, every 3 days, etc.). Automating this prevents missed doses, which is critical for animal health.
-// Using Cron Jobs
-
-// In this scenario, MedicalRecord can be used for one-off events
-// like vaccines or procedures, while MedicationLog handles recurring treatments.
-model MedicationSchedule {
-  id             String  @id @default(cuid())
-  medicationName String // e.g., "Doxycycline", "Metronidazole"
-  dosage         Float // e.g., 100, 0.5
-  dosageUnit     String // e.g., "mg", "ml", "tablet(s)"
-  route          String // e.g., "Oral", "Topical", "Injectable"
-  instructions   String?
-  isActive       Boolean @default(true)
-
-  // Recurrence Info
-  startDate      DateTime
-  repeatInterval Int // e.g., 1
-  repeatUnit     String // "Days", "Weeks"
-  timesPerDay    Int       @default(1) // How many times within that day
-  endByDate      DateTime?
-
-  animalId String @map("animal_id")
-  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
-
-  // Link to the logs of when this was administered
-  administrations MedicationLog[]
+  createdById String @map("created_by_id")
+  createdBy   Person @relation("TasksCreatedBy", fields: [createdById], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([animalId])
-  @@map("medication_schedules")
+  @@index([assigneeId])
+  @@index([status])
+  @@map(name: "tasks")
 }
 
-// Model to log every single time a medication is given
-model MedicationLog {
-  id String @id @default(cuid())
+model AnimalNote {
+  id       String       @id @default(cuid())
+  category NoteCategory
+  content  String
 
-  administeredAt DateTime @default(now())
-  notes          String?
-
-  // The staff member who gave the medication
-  administeredById String
-  administeredBy   Person @relation(fields: [administeredById], references: [id])
-
-  // The schedule this administration belongs to
-  scheduleId String
-  schedule   MedicationSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-
-  // The animal who received it (denormalized for easy querying)
-  animalId String
+  animalId String @map(name: "animal_id")
   animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
 
-  // Optionally, link to the task that prompted this action
-  taskId String? @unique
-  task   Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
-
-  @@index([animalId])
-  @@index([scheduleId])
-  @@map("medication_logs")
-}
-
-enum AssessmentType {
-  INTAKE_MEDICAL
-  INTAKE_BEHAVIORAL
-  DAILY_MONITORING
-  PLAYGROUP_EVALUATION
-  CAT_TEST
-  DOG_TEST
-  HANDLING_SENSITIVITY
-  LEASH_MANNER
-  QUARANTINE_CHECK
-  POST_ADOPTION_FOLLOWUP
-  OTHER
-}
-
-enum AssessmentOutcome {
-  EXCELLENT
-  GOOD
-  FAIR
-  POOR
-  NEEDS_ATTENTION
-  MONITOR
-  NOT_APPLICABLE
-}
-
-model Assessment {
-  id             String             @id @default(cuid())
-  animalId       String
-  animal         Animal             @relation(fields: [animalId], references: [id], onDelete: Cascade)
-  assessorId     String
-  assessor       Person             @relation(fields: [assessorId], references: [id])
-  date           DateTime           @default(now())
-  overallOutcome AssessmentOutcome?
-  summary        String? // A text summary of the findings, e.g., "Ready for adoption"
-
-  templateId String?
-  template   AssessmentTemplate? @relation(fields: [templateId], references: [id])
-
-  // Link to a list of specific answers/findings
-  fields AssessmentField[]
+  authorId String? @map(name: "author_id")
+  author   Person? @relation("AnimalNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map(name: "deleted_at")
 
   @@index([animalId])
-  @@map("assessments")
+  @@map(name: "animal_notes")
 }
 
-// A model for each individual question/field within an assessment
-model AssessmentField {
-  id           String     @id @default(cuid())
-  assessmentId String
-  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+// Dated log of notes about a Person (e.g. "called 6/12, declined to foster").
+model PersonNote {
+  id      String @id @default(cuid())
+  content String
 
-  // What was being assessed?
-  // e.g., "Reaction to handling", "Food guarding", "Heart murmur"
-  fieldName String
+  personId String @map(name: "person_id")
+  person   Person @relation("PersonNoteSubject", fields: [personId], references: [id], onDelete: Cascade)
 
-  // The result of the assessment for that field
-  // e.g., "Tolerant", "Severe", "Grade 2/6 Systolic"
-  fieldValue String
+  authorId String? @map(name: "author_id")
+  author   Person? @relation("PersonNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
-  // Optional longer notes for this specific field
-  notes String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
 
-  createdAt DateTime @default(now())
-
-  @@map("assessment_fields")
+  @@index([personId])
+  @@map("person_notes")
 }
 
-// To define a type of assessment, like "Intake Behavioral"
-model AssessmentTemplate {
-  id          String         @id @default(cuid())
-  name        String         @unique // e.g., "Intake Behavioral", "Daily Monitoring"
-  description String?
-  type        AssessmentType
+// Dated log of notes about a Partner organization.
+model PartnerNote {
+  id      String @id @default(cuid())
+  content String
 
-  allowCustomFields Boolean         @default(true) // Controls if staff can add ad-hoc fields during assessment
-  templateFields    TemplateField[]
-  Assessment        Assessment[]
+  partnerId String  @map(name: "partner_id")
+  partner   Partner @relation(fields: [partnerId], references: [id], onDelete: Cascade)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  authorId String? @map(name: "author_id")
+  author   Person? @relation("PartnerNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
-  @@map("assessment_templates")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
+
+  @@index([partnerId])
+  @@map("partner_notes")
 }
 
-enum FieldType {
-  TEXT // Single-line text input
-  TEXTAREA // Multi-line text area
-  NUMBER // Numerical input
-  SELECT // Dropdown list from options
-  CHECKBOX // A single checkbox (for boolean true/false)
-  RADIO // Radio buttons for single selection
-  DATE // A date picker
-}
+// ═══════════════════════════════════════════════════
+// ACTIVITY LOG
+// ═══════════════════════════════════════════════════
 
-model TemplateField {
-  id         String             @id @default(cuid())
-  templateId String
-  template   AssessmentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-
-  label       String // e.g., "Kennel Presence"
-  fieldType   FieldType // e.g., "SELECT", "TEXT", "NUMBER"
-  placeholder String?
-  options     String[] // For SELECT, stores ["Quiet", "Anxious", "Barking"]
-  isRequired  Boolean   @default(true)
-  order       Int // To control the display order in the form
-
-  @@map("assessment_template_fields")
+enum AnimalActivityType {
+  FIELD_UPDATE // A direct field on the animal model was changed (e.g., name, weight)
+  NOTE_ADDED // A note was created for this animal
+  PHOTO_UPLOADED // A new photo was added
+  MEDICAL_RECORD_ADDED // A medical record was created
+  ASSESSMENT_COMPLETED // An assessment was finished
+  TASK_CREATED // A task was created
+  TASK_STATUS_CHANGED // A task's status was updated
+  STATUS_CHANGE // A significant status like listing or health status changed
+  INTAKE_PROCESSED // The initial intake event
+  OUTCOME_PROCESSED // A final outcome event
+  CREATED // The animal record itself was created
 }
 
 model AnimalActivityLog {
@@ -919,7 +963,9 @@ model AnimalActivityLog {
   @@map("animal_activity_logs")
 }
 
-// // ================== Future models ==================
+// ═══════════════════════════════════════════════════
+// FUTURE MODELS
+// ═══════════════════════════════════════════════════
 
 // // ============ Volunteer Management & Scheduling ============
 // // To manage who is coming in, when, and for what job (e.g., dog walking, cleaning, front desk). 
