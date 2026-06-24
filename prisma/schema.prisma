@@ -332,7 +332,7 @@ model Animal {
 
 model Species {
   id      String   @id @default(cuid())
-  name    String
+  name    String   @unique
   animals Animal[]
   breeds  Breed[] // A species can have many breeds
 
