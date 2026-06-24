@@ -391,7 +391,7 @@ model Color {
 
 model Characteristic {
   id       String                 @id @default(cuid())
-  name     String // e.g., "Good with Kids", "Bite History", "Deaf"
+  name     String                 @unique // Globally unique; a trait is identified by name alone, regardless of category
   category CharacteristicCategory // The group this tag belongs to (BEHAVIOR, MEDICAL, etc.)
 
   // A list of all animals that have this characteristic
@@ -401,7 +401,6 @@ model Characteristic {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map(name: "deleted_at")
 
-  @@unique([name, category]) // Ensures "Deaf (MEDICAL)" is unique, etc.
   @@map("characteristics")
 }
 
