@@ -173,6 +173,9 @@ export const fetchPublicPagePetById = async (id: string) => {
           },
         },
         characteristics: {
+          where: {
+            deletedAt: null,
+          },
           select: {
             name: true,
           },
