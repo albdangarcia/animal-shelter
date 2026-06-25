@@ -133,11 +133,18 @@ const _fetchSectionCardsAnimalData = async (
           },
         },
         breeds: {
+          where: {
+            deletedAt: null,
+          },
           select: {
             name: true,
           },
+          
         },
         colors: {
+          where: {
+            deletedAt: null,
+          },
           select: {
             name: true,
           },

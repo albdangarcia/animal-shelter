@@ -163,11 +163,13 @@ export const fetchPublicPagePetById = async (id: string) => {
           },
         },
         breeds: {
+          where: { deletedAt: null },
           select: {
             name: true,
           },
         },
         colors: {
+          where: { deletedAt: null },
           select: {
             name: true,
           },

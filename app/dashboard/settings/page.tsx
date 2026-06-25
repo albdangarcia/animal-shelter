@@ -32,6 +32,13 @@ const settingsCards: readonly SettingsCard[] = [
         permission: AppPermissions.MANAGE_CHARACTERISTICS_CATALOG,
     },
     {
+        title: "Animal Taxonomy",
+        description:
+            "Manage species, breeds, and colors used to describe animals.",
+        url: "/dashboard/settings/animal-taxonomy",
+        permission: AppPermissions.MANAGE_ANIMAL_TAXONOMY,
+    },
+    {
         title: "Assessment Templates",
         description:
             "Create and edit the templates staff use to assess animals.",
