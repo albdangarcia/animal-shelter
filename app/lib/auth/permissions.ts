@@ -61,8 +61,7 @@ export const AppPermissions = {
   // Catalog / System Configuration (admins only)
   MANAGE_CHARACTERISTICS_CATALOG: "characteristics_catalog:manage",
   MANAGE_ASSESSMENT_TEMPLATES: "assessment_templates:manage",
-
-  // 
+  MANAGE_ANIMAL_TAXONOMY: "animal_taxonomy:manage",
 } as const;
 
 export type AppPermission =
