@@ -295,7 +295,9 @@ model Animal {
   speciesId            String                @map("species_id")
   species              Species               @relation(fields: [speciesId], references: [id])
   breeds               Breed[]
-  colors               Color[]
+  colors               Color[] // all colors, including the primary
+  primaryColorId       String               @map("primary_color_id")
+  primaryColor         Color                @relation("PrimaryColor", fields: [primaryColorId], references: [id])
   characteristics      Characteristic[]
   animalImages         AnimalImage[]
   medicalRecords       MedicalRecord[]
@@ -359,9 +361,10 @@ model Breed {
 }
 
 model Color {
-  id      String   @id @default(cuid())
-  name    String   @unique // "Black", "White", "Brown", "Brindle", "Tabby"
-  animals Animal[]
+  id                String    @id @default(cuid())
+  name              String    @unique // "Black", "White", "Brown", "Brindle", "Tabby"
+  animals           Animal[] // animals that have this color (in their full color set)
+  primaryForAnimals Animal[]  @relation("PrimaryColor") // animals where this is the primary color
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
