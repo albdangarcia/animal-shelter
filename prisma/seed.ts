@@ -26,8 +26,8 @@ import {
   getRandomDateWithinLastDays,
   getRandomItem,
 } from "@/app/lib/utils/seeding-utils";
-import {env} from "prisma/config";
-import {PrismaPg} from "@prisma/adapter-pg";
+import { env } from "prisma/config";
+import { PrismaPg } from "@prisma/adapter-pg";
 
 const connectionString = `${process.env.DATABASE_URL ?? env("DATABASE_URL")}`;
 const adapter = new PrismaPg({ connectionString });
@@ -224,6 +224,7 @@ const animalSeedData = [
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.GOLDEN_RETRIEVER],
     colors: [allColors.GOLDEN],
+    primaryColor: allColors.GOLDEN,
     characteristics: [
       allCharacteristics.GOOD_WITH_KIDS,
       allCharacteristics.GOOD_WITH_DOGS,
@@ -243,6 +244,7 @@ const animalSeedData = [
       allSpecies.DOG.breeds.MIXED_BREED,
     ],
     colors: [allColors.WHITE],
+    primaryColor: allColors.WHITE,
     characteristics: [allCharacteristics.NEEDS_QUIET_HOME],
     intakeType: IntakeType.STRAY,
     healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
@@ -256,6 +258,7 @@ const animalSeedData = [
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.AIREDALE_TERRIER],
     colors: [allColors.BROWN, allColors.BLACK],
+    primaryColor: allColors.BROWN,
     characteristics: [allCharacteristics.HOUSEBROKEN],
     intakeType: IntakeType.TRANSFER_IN,
     healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
@@ -269,6 +272,7 @@ const animalSeedData = [
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.SIAMESE],
     colors: [allColors.WHITE, allColors.BROWN],
+    primaryColor: allColors.WHITE,
     characteristics: [allCharacteristics.GOOD_WITH_CATS],
     intakeType: IntakeType.OWNER_SURRENDER,
     healthStatus: AnimalHealthStatus.HEALTHY,
@@ -286,6 +290,7 @@ const animalSeedData = [
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.DOMESTIC_SHORTHAIR],
     colors: [allColors.GRAY, allColors.TABBY],
+    primaryColor: allColors.GRAY,
     characteristics: [],
     intakeType: IntakeType.BORN_IN_CARE,
     healthStatus: AnimalHealthStatus.AWAITING_SPAY_NEUTER,
@@ -303,6 +308,7 @@ const animalSeedData = [
     species: allSpecies.REPTILE,
     breeds: [allSpecies.REPTILE.breeds.IGUANA],
     colors: [allColors.GREEN],
+    primaryColor: allColors.GREEN,
     characteristics: [],
     intakeType: IntakeType.SEIZE,
     healthStatus: AnimalHealthStatus.AWAITING_TRIAGE,
@@ -320,6 +326,7 @@ const animalSeedData = [
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.LABRADOR, allSpecies.DOG.breeds.MIXED_BREED],
     colors: [allColors.BLACK],
+    primaryColor: allColors.BLACK,
     characteristics: [
       allCharacteristics.GOOD_WITH_KIDS,
       allCharacteristics.HOUSEBROKEN,
@@ -339,6 +346,7 @@ const animalSeedData = [
       allSpecies.CAT.breeds.DOMESTIC_SHORTHAIR,
     ],
     colors: [allColors.TABBY, allColors.ORANGE],
+    primaryColor: allColors.TABBY,
     characteristics: [allCharacteristics.GOOD_WITH_CATS],
     intakeType: IntakeType.BORN_IN_CARE,
     healthStatus: AnimalHealthStatus.HEALTHY,
@@ -352,6 +360,7 @@ const animalSeedData = [
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.GOLDEN_RETRIEVER],
     colors: [allColors.GOLDEN],
+    primaryColor: allColors.GOLDEN,
     characteristics: [allCharacteristics.DEAF],
     intakeType: IntakeType.TRANSFER_IN,
     healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
@@ -707,6 +716,15 @@ async function seedAnimalsAndRelations() {
         .filter((dbColor) => colorNames.includes(dbColor.name))
         .map((c) => ({ id: c.id }));
 
+      const primaryColorName = animalData.primaryColor.name;
+      const primaryColor = dbColors.find((c) => c.name === primaryColorName);
+      if (!primaryColor) {
+        console.warn(
+          `Skipping animal "${animalData.name}" because its primary color "${primaryColorName}" was not found.`,
+        );
+        continue;
+      }
+
       const characteristicNames = animalData.characteristics.map((c) => c.name);
       const connectedChars = dbChars
         .filter((dbChar) => characteristicNames.includes(dbChar.name))
@@ -731,6 +749,7 @@ async function seedAnimalsAndRelations() {
           species: { connect: { id: species.id } },
           breeds: { connect: connectedBreeds },
           colors: { connect: connectedColors },
+          primaryColor: { connect: { id: primaryColor.id } },
           characteristics: { connect: connectedChars },
           animalImages: {
             create: animalData.images.map((imageUrl) => ({ url: imageUrl })),
@@ -815,7 +834,7 @@ async function seedAnimalsAndRelations() {
             // Random due date between 3 and 7 days from now
             dueDate: new Date(
               Date.now() +
-                (Math.floor(Math.random() * 5) + 3) * 24 * 60 * 60 * 1000,
+              (Math.floor(Math.random() * 5) + 3) * 24 * 60 * 60 * 1000,
             ),
           },
         });
