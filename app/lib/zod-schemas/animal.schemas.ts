@@ -84,6 +84,10 @@ export const AnimalFormSchema = z
     primaryColor: z.cuid2({
       error: "A valid primary color ID is required.",
     }),
+    additionalColors: z
+      .array(z.cuid2({ error: "A valid color ID is required." }))
+      .optional()
+      .default([]),
     sex: z.enum(Sex, {
       error: (issue) =>
         issue.input === undefined ? "Sex is required." : undefined,
@@ -144,6 +148,14 @@ export const AnimalFormSchema = z
         code: "custom",
         message: "Source partner is required for transfers.",
         path: ["sourcePartnerId"],
+      });
+    }
+
+    if (data.additionalColors.includes(data.primaryColor)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "The primary color shouldn't be repeated in additional colors.",
+        path: ["additionalColors"],
       });
     }
 

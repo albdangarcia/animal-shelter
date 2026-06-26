@@ -46,7 +46,7 @@ const TopNav = ({ userImage, showUserProfile, links }: TopNavProps) => {
                   className="text-gray-400 hover:bg-gray-700 hover:text-white"
                 >
                   <span className="sr-only">Open main menu</span>
-                  <Bars3Icon className="block h-6 w-6" aria-hidden="true" />
+                  <Bars3Icon className="block size-6" aria-hidden="true" />
                 </Button>
               </SheetTrigger>
               <SheetContent

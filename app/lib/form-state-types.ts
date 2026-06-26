@@ -8,12 +8,12 @@ export type AnimalFormState = {
     species?: string[];
     breed?: string[];
     primaryColor?: string[];
+    additionalColors?: string[];
     sex?: string[];
     size?: string[];
     estimatedBirthDate?: string[];
     healthStatus?: string[];
     microchipNumber?: string[];
-
     intakeType?: string[];
     intakeDate?: string[];
     sourcePartnerId?: string[];
@@ -22,7 +22,6 @@ export type AnimalFormState = {
     foundState?: string[];
     surrenderingPersonName?: string[];
     surrenderingPersonPhone?: string[];
-    
     notes?: string[];
   };
 };

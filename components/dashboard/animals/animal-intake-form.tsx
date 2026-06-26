@@ -16,7 +16,13 @@ import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { Control, FieldValues, useForm, UseFormWatch } from "react-hook-form";
 import { z } from "zod";
 import { format } from "date-fns";
-import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
+import {
+  Calendar as CalendarIcon,
+  Check,
+  ChevronsUpDown,
+  Loader2,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +49,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Badge } from "@/components/ui/badge";
 import {
   Form,
   FormControl,
@@ -129,7 +144,10 @@ const AnimalForm = ({
           animalName: animal.name,
           species: animal.speciesId,
           breed: animal.breeds[0]?.id || "",
-          primaryColor: animal.colors[0]?.id || "",
+          primaryColor: animal.primaryColorId || "",
+          additionalColors: animal.colors
+            .filter((c) => c.id !== animal.primaryColorId)
+            .map((c) => c.id),
           sex: animal.sex,
           estimatedBirthDate: new Date(animal.birthDate),
           weightKg: animal.weightKg ?? "",
@@ -153,6 +171,7 @@ const AnimalForm = ({
           sex: animalSexOptions[0].value,
           breed: "",
           primaryColor: "",
+          additionalColors: [],
           weightKg: "",
           heightCm: "",
           microchipNumber: "",
@@ -186,7 +205,12 @@ const AnimalForm = ({
   const onSubmit = (data: AnimalFormValues) => {
     const formData = new FormData();
     for (const [key, value] of Object.entries(data)) {
-      if (value instanceof Date) {
+      if (key === "additionalColors") {
+        // Append each id separately so formData.getAll() works server-side.
+        (value as string[] | undefined)?.forEach((id) =>
+          formData.append("additionalColors", id),
+        );
+      } else if (value instanceof Date) {
         formData.append(key, value.toISOString());
       } else if (value != null && value !== "") {
         formData.append(key, String(value));
@@ -322,6 +346,101 @@ const AnimalForm = ({
                       <FormMessage />
                     </FormItem>
                   )}
+                />
+                <FormField
+                  control={form.control}
+                  name="additionalColors"
+                  render={({ field }) => {
+                    const primaryColorId = form.watch("primaryColor");
+                    const selectedIds: string[] = field.value || [];
+                    // Options exclude the currently-selected primary color.
+                    const available = colors.filter(
+                      (c) => c.id !== primaryColorId,
+                    );
+                    const toggle = (id: string) => {
+                      if (selectedIds.includes(id)) {
+                        field.onChange(selectedIds.filter((x) => x !== id));
+                      } else {
+                        field.onChange([...selectedIds, id]);
+                      }
+                    };
+                    return (
+                      <FormItem className="col-span-2 flex flex-col">
+                        <FormLabel>Additional Colors</FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                role="combobox"
+                                className="w-full justify-between font-normal"
+                              >
+                                {selectedIds.length > 0
+                                  ? `${selectedIds.length} selected`
+                                  : "Select colors"}
+                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-(--radix-popover-trigger-width) p-0">
+                            <Command>
+                              <CommandInput placeholder="Search colors..." />
+                              <CommandList>
+                                <CommandEmpty>No color found.</CommandEmpty>
+                                <CommandGroup>
+                                  {available.map((c) => {
+                                    const checked = selectedIds.includes(c.id);
+                                    return (
+                                      <CommandItem
+                                        key={c.id}
+                                        value={c.name}
+                                        onSelect={() => toggle(c.id)}
+                                      >
+                                        <Check
+                                          className={cn(
+                                            "mr-2 h-4 w-4",
+                                            checked
+                                              ? "opacity-100"
+                                              : "opacity-0",
+                                          )}
+                                        />
+                                        {c.name}
+                                      </CommandItem>
+                                    );
+                                  })}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        {selectedIds.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {selectedIds.map((id) => {
+                              const color = colors.find((c) => c.id === id);
+                              if (!color) return null;
+                              return (
+                                <Badge
+                                  key={id}
+                                  variant="secondary"
+                                  className="gap-1"
+                                >
+                                  {color.name}
+                                  <button
+                                    type="button"
+                                    onClick={() => toggle(id)}
+                                    className="rounded-full hover:bg-black/10 dark:hover:bg-white/10"
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
                 />
                 <FormField
                   control={form.control}
@@ -592,12 +711,6 @@ const AnimalForm = ({
 
             {/* Intake Section - Only show on CREATE mode */}
             {!isEditMode && (
-              // <IntakeFormFields
-              //   control={form.control}
-              //   watch={form.watch}
-              //   partners={partners}
-              //   isEditMode={false}
-              // />
               <IntakeFormFields
                 control={
                   form.control as unknown as Control<
