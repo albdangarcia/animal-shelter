@@ -84,7 +84,7 @@ const AnimalSectionCards = async ({ params }: Props) => {
 
     const config =
       HEALTH_STATUS_ALERTS[
-        animal.healthStatus as keyof typeof HEALTH_STATUS_ALERTS
+      animal.healthStatus as keyof typeof HEALTH_STATUS_ALERTS
       ];
     if (!config) return null;
 
@@ -319,9 +319,24 @@ const AnimalSectionCards = async ({ params }: Props) => {
               <div className="flex items-center justify-between border-b pb-2 text-sm">
                 <span className="text-muted-foreground">Primary Color</span>
                 <span className="font-medium">
-                  {animal.colors[0]?.name || "N/A"}
+                  {animal.primaryColor?.name || "N/A"}
                 </span>
               </div>
+              {(() => {
+                const additional = animal.colors.filter(
+                  (c) => c.name !== animal.primaryColor?.name,
+                );
+                return additional.length > 0 ? (
+                  <div className="flex items-center justify-between border-b pb-2 text-sm">
+                    <span className="text-muted-foreground">
+                      Other Colors
+                    </span>
+                    <span className="font-medium text-right">
+                      {additional.map((c) => c.name).join(", ")}
+                    </span>
+                  </div>
+                ) : null;
+              })()}
             </div>
           </div>
 

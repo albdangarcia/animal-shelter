@@ -26,7 +26,7 @@ const _fetchAnimals = async (
   sexInput: string | undefined,
   pageSizeInput: number,
   sortInput: string | undefined
-): Promise<{ animals: AnimalsPayload[]; totalPages: number; totalRows: number}> => {
+): Promise<{ animals: AnimalsPayload[]; totalPages: number; totalRows: number }> => {
   // Parse the query and currentPage
   const validatedArgs = DashboardAnimalsSchema.safeParse({
     query: queryInput,
@@ -84,7 +84,7 @@ const _fetchAnimals = async (
 
     const totalPages = Math.ceil(totalCount / pageSize);
 
-    return { animals, totalPages, totalRows: totalCount};
+    return { animals, totalPages, totalRows: totalCount };
   } catch (error) {
     console.error("Error fetching animals.", error);
     throw new Error("Error fetching animals.");
@@ -139,7 +139,11 @@ const _fetchSectionCardsAnimalData = async (
           select: {
             name: true,
           },
-          
+        },
+        primaryColor: {
+          select: {
+            name: true,
+          },
         },
         colors: {
           where: {
@@ -148,7 +152,6 @@ const _fetchSectionCardsAnimalData = async (
           select: {
             name: true,
           },
-          take: 1,
         },
         adoptionApplications: {
           select: {
@@ -214,6 +217,7 @@ const _fetchAnimalById = async (
         microchipNumber: true,
         healthStatus: true,
         speciesId: true,
+        primaryColorId: true,
         breeds: {
           select: {
             id: true,

@@ -20,10 +20,10 @@ import {
   IntakeType,
 } from "@prisma/client";
 import { getAnimalSize } from "../utils/animal-size";
-
 import { ConflictError, NotFoundError } from "../utils/errors";
 import { del } from "@vercel/blob";
 import { isDemo } from "@/lib/flags";
+
 const _createAnimal = async (
   user: SessionUser,
   prevState: AnimalFormState,
@@ -38,9 +38,14 @@ const _createAnimal = async (
     };
   }
 
-  const validatedFields = AnimalFormSchema.safeParse(
-    Object.fromEntries(formData.entries())
-  );
+  // Array fields must be pulled with getAll — Object.fromEntries keeps only
+  // the last value for repeated keys.
+  const additionalColors = formData.getAll("additionalColors");
+
+  const validatedFields = AnimalFormSchema.safeParse({
+    ...Object.fromEntries(formData.entries()),
+    additionalColors,
+  });
 
   if (!validatedFields.success) {
     return {
@@ -67,6 +72,7 @@ const _createAnimal = async (
     species: speciesId,
     breed: breedId,
     primaryColor: primaryColorId,
+    additionalColors: additionalColorIds,
     intakeType,
     intakeDate,
     notes,
@@ -80,6 +86,12 @@ const _createAnimal = async (
     heightCm,
   } = validatedFields.data;
 
+  // Full color set = primary + additionals, de-duped in case the primary
+  // also appears in the additional list.
+  const allColorIds = Array.from(
+    new Set([primaryColorId, ...additionalColorIds]),
+  );
+
   try {
     await prisma.$transaction(async (tx) => {
       const speciesRecord = await tx.species.findUnique({
@@ -89,6 +101,14 @@ const _createAnimal = async (
 
       if (!speciesRecord) {
         throw new Error("Invalid Species ID provided.");
+      }
+
+      // Guard: all submitted colors must exist and not be soft-deleted.
+      const validColorCount = await tx.color.count({
+        where: { id: { in: allColorIds }, deletedAt: null },
+      });
+      if (validColorCount !== allColorIds.length) {
+        throw new Error("One or more selected colors are no longer available.");
       }
 
       const calculatedSize = getAnimalSize(
@@ -128,7 +148,8 @@ const _createAnimal = async (
           state: validatedFields.data.foundState || null,
           species: { connect: { id: speciesId } },
           breeds: { connect: { id: breedId } },
-          colors: { connect: { id: primaryColorId } },
+          colors: { connect: allColorIds.map((id) => ({ id })) },
+          primaryColor: { connect: { id: primaryColorId } },
         },
       });
 
@@ -199,9 +220,14 @@ const _updateAnimal = async (
   const validatedAnimalId = parsedId.data;
   const staffMemberId = user.personId;
 
-  const validatedFields = AnimalFormSchema.safeParse(
-    Object.fromEntries(formData.entries())
-  );
+  // Array fields must be pulled with getAll — Object.fromEntries keeps only
+  // the last value for repeated keys.
+  const additionalColors = formData.getAll("additionalColors");
+
+  const validatedFields = AnimalFormSchema.safeParse({
+    ...Object.fromEntries(formData.entries()),
+    additionalColors,
+  });
 
   if (!validatedFields.success) {
     return {
@@ -221,6 +247,7 @@ const _updateAnimal = async (
     species: speciesId,
     breed: breedId,
     primaryColor: primaryColorId,
+    additionalColors: additionalColorIds,
     weightKg,
     heightCm,
     city,
@@ -240,6 +267,12 @@ const _updateAnimal = async (
 
   const numericWeight = weightKg === "" ? undefined : weightKg;
   const numericHeight = heightCm === "" ? undefined : heightCm;
+
+  // Full color set = primary + additionals, de-duped in case the primary
+  // also appears in the additional list.
+  const allColorIds = Array.from(
+    new Set([primaryColorId, ...additionalColorIds]),
+  );
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -289,6 +322,16 @@ const _updateAnimal = async (
         throw new NotFoundError("The specified species does not exist.");
       }
 
+      // Guard: all submitted colors must exist and not be soft-deleted.
+      const validColorCount = await tx.color.count({
+        where: { id: { in: allColorIds }, deletedAt: null },
+      });
+      if (validColorCount !== allColorIds.length) {
+        throw new ConflictError(
+          "One or more selected colors are no longer available. Please refresh and try again.",
+        );
+      }
+
       const calculatedSize = getAnimalSize(
         speciesRecord.name,
         numericWeight as number | null
@@ -304,7 +347,6 @@ const _updateAnimal = async (
 
       await tx.animal.update({
         where: { id: validatedAnimalId },
-
         data: {
           name: animalName,
           birthDate: estimatedBirthDate,
@@ -321,7 +363,8 @@ const _updateAnimal = async (
           state: state,
           species: { connect: { id: speciesId } },
           breeds: { set: [{ id: breedId }] },
-          colors: { set: [{ id: primaryColorId }] },
+          colors: { set: allColorIds.map((id) => ({ id })) },
+          primaryColor: { connect: { id: primaryColorId } },
         },
       });
 
@@ -338,7 +381,7 @@ const _updateAnimal = async (
     });
   } catch (error) {
     console.error("Database Error updating animal:", error);
-    if (error instanceof ConflictError) {
+    if (error instanceof ConflictError || error instanceof NotFoundError) {
       return { message: error.message };
     }
     return {

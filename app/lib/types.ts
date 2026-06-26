@@ -73,9 +73,11 @@ export type AnimalSectionCardPayload = Prisma.AnimalGetPayload<{
     breeds: {
       select: { name: true };
     };
+    primaryColor: {
+      select: { name: true };
+    };
     colors: {
       select: { name: true };
-      take: 1;
     };
     adoptionApplications: {
       select: { status: true };
@@ -113,6 +115,7 @@ export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{
     microchipNumber: true;
     healthStatus: true;
     speciesId: true;
+    primaryColorId: true;
     breeds: {
       select: {
         id: true;

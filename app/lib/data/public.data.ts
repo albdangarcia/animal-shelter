@@ -168,6 +168,11 @@ export const fetchPublicPagePetById = async (id: string) => {
             name: true,
           },
         },
+        primaryColor: {
+          select: {
+            name: true,
+          },
+        },
         colors: {
           where: { deletedAt: null },
           select: {

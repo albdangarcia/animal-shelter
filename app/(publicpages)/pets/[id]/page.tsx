@@ -44,7 +44,14 @@ const Page = async ({ params }: Props) => {
   // Prepare array data for display
   const breedString =
     animal.breeds?.map((b) => b.name).join(", ") || "Mixed Breed";
-  const colorString = animal.colors?.map((c) => c.name).join(", ") || "";
+
+  // Primary color shown on its own; remaining colors listed separately.
+  const primaryColorName = animal.primaryColor?.name || "";
+  const additionalColorString =
+    animal.colors
+      ?.filter((c) => c.name !== animal.primaryColor?.name)
+      .map((c) => c.name)
+      .join(", ") || "";
 
   const adoptCta =
     animal.listingStatus === "PENDING_ADOPTION" ? (
@@ -104,7 +111,8 @@ const Page = async ({ params }: Props) => {
           <PetCardDetail label="Sex" value={animal.sex} />
           <PetCardDetail label="Breed" value={breedString} />
           <PetCardDetail label="Size" value={animal.size} />
-          <PetCardDetail label="Color" value={colorString} />
+          <PetCardDetail label="Primary Color" value={primaryColorName} />
+          <PetCardDetail label="Other Colors" value={additionalColorString} />
           <PetCardDetail
             label="Spayed/Neutered"
             value={animal.isSpayedNeutered ? "Yes" : "No"}
