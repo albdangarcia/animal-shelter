@@ -42,6 +42,8 @@ export function DataTableToolbar<TData>({
     router.replace(`${pathname}?${params.toString()}`);
   }, 300);
 
+  const currentQuery = searchParams.get("query")?.toString() ?? "";
+
   const isFiltered =
     searchParams.has("query") ||
     filterParamKeys.some((key) => searchParams.has(key));
@@ -51,10 +53,15 @@ export function DataTableToolbar<TData>({
       <div className="grid grid-cols-1 items-center gap-y-2 @[736px]/toolbar:grid-cols-[200px_1fr] @[736px]/toolbar:gap-x-4">
         <div>
           <Input
+            // Keying on the URL query remounts the uncontrolled input when the
+            // param changes externally (e.g. Reset), keeping the visible text in
+            // sync with the URL. Typing doesn't remount: the debounced handler
+            // sets query to exactly what was typed.
+            key={currentQuery}
             id={searchId}
             placeholder={searchPlaceholder}
             onChange={(e) => handleSearch(e.target.value)}
-            defaultValue={searchParams.get("query")?.toString()}
+            defaultValue={currentQuery}
             className="h-8 w-50 @[736px]/toolbar:w-full"
           />
         </div>
