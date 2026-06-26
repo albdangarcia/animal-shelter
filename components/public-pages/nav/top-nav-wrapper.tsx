@@ -15,9 +15,10 @@ const TopNavWrapper = async () => {
   const navLinks = [
     { name: "Home", href: "/" },
     { name: "Pets", href: "/pets" },
+    ...(session ? [{ name: "Favorites", href: "/pets/favorites" }] : []),
     { name: "About", href: "/about" },
     { name: "Contact", href: "/contact" },
-    { name: "Dashboard", href: dashboardHref }, // Use the dynamic href
+    { name: "Dashboard", href: dashboardHref },
   ];
 
   return (

@@ -415,17 +415,6 @@ const _togglePetLike = async (
       return { success: false, message: "Pet not found." };
     }
 
-    const isLikeableStatus =
-      pet.listingStatus === "PUBLISHED" ||
-      pet.listingStatus === "PENDING_ADOPTION";
-    if (!isLikeableStatus) {
-      return {
-        success: false,
-        message:
-          "This pet is not available for interaction at its current status.",
-      };
-    }
-
     const existingLike = await prisma.like.findUnique({
       where: {
         userId_animalId: {
@@ -436,6 +425,8 @@ const _togglePetLike = async (
     });
 
     if (existingLike) {
+      // Unlike is always allowed, regardless of listing status, so users can
+      // clear pets from their favorites even after the pet becomes unavailable.
       await prisma.like.delete({
         where: {
           userId_animalId: {
@@ -446,10 +437,24 @@ const _togglePetLike = async (
       });
 
       revalidatePath("/pets");
+      revalidatePath("/pets/favorites");
       revalidatePath(`/pets/${validatedAnimalId}`);
 
       return { success: true, message: "Removed from favorites." };
     } else {
+      // Creating a new like is only allowed for available pets. This guards
+      // against stale pages or crafted requests trying to like an archived pet.
+      const isLikeableStatus =
+        pet.listingStatus === "PUBLISHED" ||
+        pet.listingStatus === "PENDING_ADOPTION";
+      if (!isLikeableStatus) {
+        return {
+          success: false,
+          message:
+            "This pet is not available for interaction at its current status.",
+        };
+      }
+
       await prisma.like.create({
         data: {
           userId: personId,
@@ -458,6 +463,7 @@ const _togglePetLike = async (
       });
 
       revalidatePath("/pets");
+      revalidatePath("/pets/favorites");
       revalidatePath(`/pets/${validatedAnimalId}`);
       return { success: true, message: "Added to favorites!" };
     }

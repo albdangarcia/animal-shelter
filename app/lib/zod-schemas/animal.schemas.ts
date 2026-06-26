@@ -24,11 +24,23 @@ const speciesNameSchema = z
   })
   .optional();
 
-export const PublishedPetsSchema = z.object({
-  query: searchQuerySchema,
-  currentPage: currentPageSchema,
-  speciesName: speciesNameSchema,
-});
+// Raw comma-joined color names from the URL (e.g. "Black,Brown").
+// Split into an array in the fetcher, mirroring the faceted filter's param handling.
+const colorParamSchema = z
+  .string()
+  .max(200, {
+    error: "Color filter is too long.",
+  })
+  .optional();
+
+// Generic comma-joined facet param (e.g. "MALE,FEMALE" or "SMALL,MEDIUM").
+// Values are validated against the real enum in the fetcher before use.
+const facetParamSchema = z
+  .string()
+  .max(100, {
+    error: "Filter value is too long.",
+  })
+  .optional();
 
 export const sortSchema = z
   .string()
@@ -36,6 +48,16 @@ export const sortSchema = z
     error: "Sort must be in 'field.direction' format",
   })
   .optional();
+
+export const PublishedPetsSchema = z.object({
+  query: searchQuerySchema,
+  currentPage: currentPageSchema,
+  speciesName: speciesNameSchema,
+  color: colorParamSchema,
+  sex: facetParamSchema,
+  size: facetParamSchema,
+  sort: sortSchema,
+});
 
 export const MyApplicationsSchema = z.object({
   query: searchQuerySchema,
