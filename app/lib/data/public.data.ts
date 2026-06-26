@@ -1,6 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
 import { auth } from "@/auth";
-import { AnimalListingStatus, Prisma } from "@prisma/client";
+import { AnimalListingStatus, AnimalSize, Prisma, Sex } from "@prisma/client";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { PublishedPetsSchema } from "../zod-schemas/animal.schemas";
 
@@ -29,37 +29,122 @@ export type PetsPayload = Prisma.AnimalGetPayload<{
 
 const ITEMS_PER_PAGE = 10
 
-export const fetchPublishedPets = async (
-  queryInput: string,
-  currentPageInput: number,
-  speciesNameInput?: string
-): Promise<{ pets: PetsPayload[]; totalPages: number }> => {
+// Allowlist of sortable fields → Prisma orderBy. Never pass raw user input into
+// orderBy; anything not in this map falls back to the default (newest first).
+const SORT_MAP: Record<string, Prisma.AnimalOrderByWithRelationInput> = {
+  "createdAt.desc": { createdAt: "desc" }, // Newest
+  "createdAt.asc": { createdAt: "asc" }, // Oldest listing
+  "birthDate.desc": { birthDate: "desc" }, // Youngest
+  "birthDate.asc": { birthDate: "asc" }, // Oldest pet
+  "name.asc": { name: "asc" }, // Name A–Z
+};
+
+const DEFAULT_SORT: Prisma.AnimalOrderByWithRelationInput = { createdAt: "desc" };
+
+export interface FetchPublishedPetsArgs {
+  query: string;
+  currentPage: number;
+  speciesName?: string;
+  color?: string;
+  sex?: string;
+  size?: string;
+  sort?: string;
+}
+
+export const fetchPublishedPets = async ({
+  query: queryInput,
+  currentPage: currentPageInput,
+  speciesName: speciesNameInput,
+  color: colorInput,
+  sex: sexInput,
+  size: sizeInput,
+  sort: sortInput,
+}: FetchPublishedPetsArgs): Promise<{
+  pets: PetsPayload[];
+  totalPages: number;
+}> => {
+  // Treat empty strings as "not provided" so optional schemas (especially the
+  // regex-validated `sort`) skip them instead of failing validation. The page
+  // passes "" defaults for absent params, which would otherwise trip the sort
+  // regex on the unfiltered /pets view.
+  const emptyToUndefined = (v?: string) => (v ? v : undefined);
+
   const validatedArgs = PublishedPetsSchema.safeParse({
     query: queryInput,
     currentPage: currentPageInput,
-    speciesName: speciesNameInput,
+    speciesName: emptyToUndefined(speciesNameInput),
+    color: emptyToUndefined(colorInput),
+    sex: emptyToUndefined(sexInput),
+    size: emptyToUndefined(sizeInput),
+    sort: emptyToUndefined(sortInput),
   });
 
   if (!validatedArgs.success) {
+    console.error(
+      "Invalid arguments for fetching pets:",
+      validatedArgs.error.flatten().fieldErrors,
+    );
     throw new Error("Invalid arguments for fetching pets.");
   }
-  const { query, currentPage, speciesName } = validatedArgs.data;
+  const { query, currentPage, speciesName, color, sex, size, sort } =
+    validatedArgs.data;
+
+  // Split comma-joined facet params into clean lists. Sex/size are validated
+  // against the real Prisma enums so crafted values can't reach the query.
+  const colorNames = color?.split(",").filter(Boolean) ?? [];
+
+  const sexValues = (sex?.split(",").filter(Boolean) ?? []).filter(
+    (v): v is Sex => (Object.values(Sex) as string[]).includes(v),
+  );
+  const sizeValues = (size?.split(",").filter(Boolean) ?? []).filter(
+    (v): v is AnimalSize =>
+      (Object.values(AnimalSize) as string[]).includes(v),
+  );
+
+  const orderBy = (sort && SORT_MAP[sort]) || DEFAULT_SORT;
 
   const session = await auth();
   const personId = session?.user?.personId;
 
   const whereClause: Prisma.AnimalWhereInput = {
-    name: {
-      contains: query,
-      mode: "insensitive",
-    },
     listingStatus: {
       in: [AnimalListingStatus.PUBLISHED, AnimalListingStatus.PENDING_ADOPTION],
     },
+    // Free-text search across name, breed, and city so adopters don't need to
+    // know a pet's assigned name. Only applied when there's a query; combines
+    // as AND with the species and color filters below.
+    ...(query && {
+      OR: [
+        { name: { contains: query, mode: "insensitive" } },
+        {
+          breeds: {
+            some: { name: { contains: query, mode: "insensitive" } },
+          },
+        },
+        { city: { contains: query, mode: "insensitive" } },
+      ],
+    }),
     ...(speciesName && {
       species: {
         name: speciesName,
       },
+    }),
+    // OR-within color (any selected color), AND-across with species + query.
+    // `some` matches the animal's full color set, so a pet shows if any of its
+    // colors (primary or secondary) is one of the selected names.
+    ...(colorNames.length > 0 && {
+      colors: {
+        some: {
+          name: { in: colorNames },
+        },
+      },
+    }),
+    // Sex and size are enum fields (not relations), matched directly with `in`.
+    ...(sexValues.length > 0 && {
+      sex: { in: sexValues },
+    }),
+    ...(sizeValues.length > 0 && {
+      size: { in: sizeValues },
     }),
   };
 
@@ -94,9 +179,7 @@ export const fetchPublishedPets = async (
           }),
           listingStatus: true,
         },
-        orderBy: {
-          createdAt: "desc",
-        },
+        orderBy,
         take: ITEMS_PER_PAGE,
         skip: offset,
       }),
@@ -112,11 +195,102 @@ export const fetchPublishedPets = async (
 
 export const fetchSpecies = async () => {
   try {
-    const species = await prisma.species.findMany();
+    const species = await prisma.species.findMany({
+      where: { deletedAt: null },
+      orderBy: { name: "asc" },
+    });
     return species;
   } catch (error) {
     console.error("Error fetching species.", error);
     throw new Error("Error fetching species.");
+  }
+};
+
+export const fetchColors = async () => {
+  try {
+    const colors = await prisma.color.findMany({
+      where: { deletedAt: null },
+      orderBy: { name: "asc" },
+    });
+    return colors;
+  } catch (error) {
+    console.error("Error fetching colors.", error);
+    throw new Error("Error fetching colors.");
+  }
+};
+
+export type FavoritePet = {
+  id: string;
+  name: string;
+  city: string | null;
+  birthDate: Date;
+  listingStatus: AnimalListingStatus;
+  animalImages: { url: string }[];
+  // Always present (these are the user's own likes), kept for PetCard's heart state.
+  likes: { userId: string }[];
+  isAvailable: boolean;
+};
+
+const AVAILABLE_STATUSES: AnimalListingStatus[] = [
+  AnimalListingStatus.PUBLISHED,
+  AnimalListingStatus.PENDING_ADOPTION,
+];
+
+/**
+ * Fetches the signed-in user's liked pets, including ones that are no longer
+ * available. Unavailable pets are flagged via `isAvailable` so the UI can grey
+ * them out — we never expose WHY a pet is unavailable (archiveReason is never
+ * selected), so adopted/transferred/deceased all read as a neutral "unavailable".
+ *
+ * Ordering: most recently liked first, but unavailable pets are always pushed to
+ * the end (recency preserved within each group).
+ */
+export const fetchFavoritePets = async (): Promise<{
+  pets: FavoritePet[];
+}> => {
+  const session = await auth();
+  const personId = session?.user?.personId;
+
+  if (!personId) {
+    return { pets: [] };
+  }
+
+  try {
+    const likes = await prisma.like.findMany({
+      where: { userId: personId },
+      orderBy: { createdAt: "desc" }, // most recently liked first
+      select: {
+        animal: {
+          select: {
+            id: true,
+            name: true,
+            city: true,
+            birthDate: true,
+            listingStatus: true,
+            animalImages: {
+              select: { url: true },
+              take: 1,
+            },
+          },
+        },
+      },
+    });
+
+    const pets: FavoritePet[] = likes.map((like) => ({
+      ...like.animal,
+      // This is the user's own like list, so every pet is liked by them.
+      likes: [{ userId: personId }],
+      isAvailable: AVAILABLE_STATUSES.includes(like.animal.listingStatus),
+    }));
+
+    // Available first (recency preserved), then unavailable (recency preserved).
+    const available = pets.filter((p) => p.isAvailable);
+    const unavailable = pets.filter((p) => !p.isAvailable);
+
+    return { pets: [...available, ...unavailable] };
+  } catch (error) {
+    console.error("Error fetching favorite pets.", error);
+    throw new Error("Error fetching favorite pets.");
   }
 };
 

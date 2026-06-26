@@ -1,12 +1,8 @@
 import Link from "next/link";
 import WelcomeImage from "../../components/public-pages/welcome-image";
 import { fetchLatestPublicAnimals } from "../lib/data/public.data";
-import Image from "next/image";
-import { shimmer, toBase64 } from "../lib/utils/image-loading-placeholder";
-import { calculateAgeString } from "../lib/utils/date-utils";
 import { Suspense } from "react";
-import { PhotoIcon } from "@heroicons/react/16/solid";
-import LikeButton from "../../components/public-pages/like-button";
+import PetCard from "@/components/public-pages/pets/pet-card";
 import { auth } from "@/auth";
 import LatestPetsSkeleton from "@/components/public-pages/latest-pets-skeleton";
 
@@ -133,58 +129,12 @@ const LatestPetsContent = async () => {
   const currentUserPersonId = session?.user?.personId;
 
   return (
-    <div className="mt-6 grid gap-4 gap-y-14 grid-cols-[repeat(auto-fit,minmax(--spacing(40),1fr))]">
-      {latestAnimals.map((animal) => {
-        const isLikedByCurrentUser = !!(
-          currentUserPersonId && animal.likes?.length > 0
-        );
-        const ageString = calculateAgeString({
-          birthDate: animal.birthDate,
-          simple: true,
-        });
-        return (
-          <Link
-            href={`/pets/${animal.id}`}
-            key={animal.id}
-            className="relative max-w-56 bg-card block hover:shadow-lg transition-shadow duration-150 ease-in-out group rounded-lg"
-          >
-            <div className="relative w-full aspect-square overflow-hidden rounded-lg">
-              {animal.animalImages?.length > 0 ? (
-                <Image
-                  src={animal.animalImages[0].url}
-                  alt={`Photo of ${animal.name}`}
-                  fill
-                  sizes="(max-width: 480px) 80vw, (max-width: 768px) 40vw, (max-width: 1024px) 30vw, 224px"
-                  placeholder={`data:image/svg+xml;base64,${toBase64(
-                    shimmer(224, 224),
-                  )}`}
-                  className="rounded-md object-cover group-hover:scale-110 transition-transform duration-300 ease-in-out"
-                />
-              ) : (
-                <div className="w-full h-full bg-muted rounded-md flex items-center justify-center">
-                  <PhotoIcon className="w-16 h-16 text-muted-foreground" />
-                </div>
-              )}
-            </div>
-
-            <div className="absolute -bottom-6.5 left-2 right-2">
-              <div className="text-sm flex flex-col px-4 py-2 bg-card shadow-lg rounded-lg relative">
-                <span className="font-semibold w-full">{animal.name}</span>
-                <div className="text-xs text-muted-foreground">
-                  <span>{`${ageString} • ${animal.city}`}</span>
-                </div>
-                <div className="absolute -top-4 right-2 z-10">
-                  <LikeButton
-                    animalId={animal.id}
-                    currentUserPersonId={currentUserPersonId}
-                    isLikedByCurrentUser={isLikedByCurrentUser}
-                  />
-                </div>
-              </div>
-            </div>
-          </Link>
-        );
-      })}
+    <div className="mt-6 flex flex-wrap justify-center gap-4 gap-y-14">
+      {latestAnimals.map((animal) => (
+        <div key={animal.id} className="w-44">
+          <PetCard pet={animal} currentUserPersonId={currentUserPersonId} />
+        </div>
+      ))}
     </div>
   );
 };
