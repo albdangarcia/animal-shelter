@@ -11,6 +11,7 @@ import {
   HouseholdProfilePayload,
   PeopleDirectoryPayload,
   PersonFormPayload,
+  PersonProfileTabPayload,
   PersonSectionCardPayload,
 } from "../../types";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
@@ -259,6 +260,59 @@ const _fetchMyProfile = async (
   }
 };
 
+const _fetchPersonProfileTabData = async (
+  id: string,
+): Promise<PersonProfileTabPayload | null> => {
+  const parsedId = cuidSchema.safeParse(id);
+
+  if (!parsedId.success) {
+    throw new Error("Invalid person ID format.");
+  }
+
+  try {
+    const person = await prisma.person.findUnique({
+      where: { id: parsedId.data },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        address: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        user: {
+          select: {
+            role: true,
+            emailVerified: true,
+          },
+        },
+        householdProfile: {
+          select: {
+            livingSituation: true,
+            hasYard: true,
+            landlordPermission: true,
+            householdSize: true,
+            hasChildren: true,
+            childrenAges: true,
+            otherAnimalsDescription: true,
+            animalExperience: true,
+          },
+        },
+      },
+    });
+
+    if (person?.user?.role === Role.ADMIN) {
+      return null;
+    }
+
+    return person;
+  } catch (error) {
+    console.error("Error fetching person profile tab data.", error);
+    throw new Error("Error fetching person profile data.");
+  }
+};
+
 const _fetchMyHouseholdProfile = async (
   user: SessionUser,
 ): Promise<HouseholdProfilePayload | null> => {
@@ -283,6 +337,10 @@ const _fetchMyHouseholdProfile = async (
     throw new Error("Error fetching household profile data.");
   }
 };
+
+export const fetchPersonProfileTabData = RequirePermission(
+  AppPermissions.PERSONS_READ,
+)(_fetchPersonProfileTabData);
 
 export const fetchMyHouseholdProfile = withAuthenticatedUser(
   RequirePermission(AppPermissions.MY_PROFILE_UPDATE)(_fetchMyHouseholdProfile),
