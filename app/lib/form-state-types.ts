@@ -131,3 +131,28 @@ export type PartnerFormState = {
     notes?: string[];
   };
 };
+
+export type StaffAdoptionApplicationFormState = {
+  success?: boolean;
+  message?: string | null;
+  errors?: {
+    applicantName?: string[];
+    applicantEmail?: string[];
+    applicantPhone?: string[];
+    applicantAddressLine1?: string[];
+    applicantAddressLine2?: string[];
+    applicantCity?: string[];
+    applicantState?: string[];
+    applicantZipCode?: string[];
+    livingSituation?: string[];
+    hasYard?: string[];
+    landlordPermission?: string[];
+    householdSize?: string[];
+    hasChildren?: string[];
+    childrenAges?: string[];
+    otherAnimalsDescription?: string[];
+    animalExperience?: string[];
+    reasonForAdoption?: string[];
+    animalId?: string[];
+  };
+};

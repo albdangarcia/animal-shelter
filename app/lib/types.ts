@@ -537,3 +537,33 @@ export type PersonNotePayload = Prisma.PersonNoteGetPayload<{
     deletedAt: true;
   };
 }>;
+
+export type PersonForApplicationFormPayload = Prisma.PersonGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    email: true;
+    phone: true;
+    address: true;
+    city: true;
+    state: true;
+    zipCode: true;
+    user: {
+      select: {
+        id: true;
+      };
+    };
+    householdProfile: {
+      select: {
+        livingSituation: true;
+        hasYard: true;
+        landlordPermission: true;
+        householdSize: true;
+        hasChildren: true;
+        childrenAges: true;
+        otherAnimalsDescription: true;
+        animalExperience: true;
+      };
+    };
+  };
+}>;

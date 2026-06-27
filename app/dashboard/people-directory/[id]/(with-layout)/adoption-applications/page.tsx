@@ -1,5 +1,6 @@
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -12,6 +13,10 @@ import { fetchPersonAdoptionApplications } from "@/app/lib/data/people-directory
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -34,8 +39,10 @@ const PageContent = async ({ searchParams, params }: Props) => {
   const { page = "1" } = await searchParams;
   const currentPage = Number(page);
 
-  const { applications, totalPages, totalRows } =
-    await fetchPersonAdoptionApplications(currentPage, personId);
+  const [canManage, { applications, totalPages, totalRows }] = await Promise.all([
+    hasPermission(AppPermissions.PERSONS_MANAGE),
+    fetchPersonAdoptionApplications(currentPage, personId),
+  ]);
 
   return (
     <Card className="@container/card">
@@ -46,6 +53,21 @@ const PageContent = async ({ searchParams, params }: Props) => {
         <CardDescription>
           Applications this person has submitted.
         </CardDescription>
+        <CardAction>
+          <span className={cn(!canManage && "cursor-not-allowed")}>
+            <Button
+              asChild
+              size="sm"
+              className={cn(!canManage && "pointer-events-none opacity-50")}
+            >
+              <Link
+                href={`/dashboard/people-directory/${personId}/adoption-applications/new`}
+              >
+                Add Application
+              </Link>
+            </Button>
+          </span>
+        </CardAction>
       </CardHeader>
       <CardContent>
         <div className="flex flex-1 flex-col">

@@ -10,6 +10,7 @@ import { PeopleDirectoryParamsSchema } from "../../zod-schemas/people-directory.
 import {
   HouseholdProfilePayload,
   PeopleDirectoryPayload,
+  PersonForApplicationFormPayload,
   PersonFormPayload,
   PersonProfileTabPayload,
   PersonSectionCardPayload,
@@ -337,6 +338,68 @@ const _fetchMyHouseholdProfile = async (
     throw new Error("Error fetching household profile data.");
   }
 };
+
+const _fetchPersonForApplicationForm = async (
+  id: string,
+): Promise<PersonForApplicationFormPayload | null> => {
+  const parsedId = cuidSchema.safeParse(id);
+
+  if (!parsedId.success) {
+    throw new Error("Invalid person ID format.");
+  }
+
+  try {
+    const person = await prisma.person.findUnique({
+      where: { id: parsedId.data },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        address: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        user: {
+          select: {
+            id: true,
+          },
+        },
+        householdProfile: {
+          select: {
+            livingSituation: true,
+            hasYard: true,
+            landlordPermission: true,
+            householdSize: true,
+            hasChildren: true,
+            childrenAges: true,
+            otherAnimalsDescription: true,
+            animalExperience: true,
+          },
+        },
+      },
+    });
+
+    if (person?.user) {
+      const fullUser = await prisma.user.findUnique({
+        where: { id: person.user.id },
+        select: { role: true },
+      });
+      if (fullUser?.role === Role.ADMIN) {
+        return null;
+      }
+    }
+
+    return person;
+  } catch (error) {
+    console.error("Error fetching person for application form.", error);
+    throw new Error("Error fetching person data.");
+  }
+};
+
+export const fetchPersonForApplicationForm = RequirePermission(
+  AppPermissions.PERSONS_MANAGE,
+)(_fetchPersonForApplicationForm);
 
 export const fetchPersonProfileTabData = RequirePermission(
   AppPermissions.PERSONS_READ,
