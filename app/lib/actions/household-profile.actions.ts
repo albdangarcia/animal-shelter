@@ -11,6 +11,7 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { HouseholdProfileFormSchema } from "../zod-schemas/household-profile.schemas";
+import { cuidSchema } from "../zod-schemas/common.schemas";
 import { z } from "zod";
 
 const _updateMyHouseholdProfile = async (
@@ -83,3 +84,90 @@ const _updateMyHouseholdProfile = async (
 export const updateMyHouseholdProfile = withAuthenticatedUser(
   RequirePermission(AppPermissions.MY_PROFILE_UPDATE)(_updateMyHouseholdProfile),
 );
+
+const _updateStaffHouseholdProfile = async (
+  personId: string,
+  prevState: HouseholdProfileFormState,
+  formData: FormData,
+): Promise<HouseholdProfileFormState> => {
+  const parsedId = cuidSchema.safeParse(personId);
+  if (!parsedId.success) {
+    return { message: "Invalid person ID format." };
+  }
+
+  const person = await prisma.person.findUnique({
+    where: { id: parsedId.data },
+    select: { user: { select: { id: true } } },
+  });
+
+  if (!person) {
+    return { message: "Person not found." };
+  }
+
+  if (person.user !== null) {
+    return {
+      message:
+        "Unauthorized: Cannot edit household profile for a registered user account.",
+    };
+  }
+
+  const validatedFields = HouseholdProfileFormSchema.safeParse(
+    Object.fromEntries(formData.entries()),
+  );
+
+  if (!validatedFields.success) {
+    return {
+      errors: z.flattenError(validatedFields.error).fieldErrors,
+      message: "Missing or invalid fields. Failed to update household profile.",
+    };
+  }
+
+  const {
+    livingSituation,
+    hasYard,
+    landlordPermission,
+    householdSize,
+    hasChildren,
+    childrenAges,
+    otherAnimalsDescription,
+    animalExperience,
+  } = validatedFields.data;
+
+  const dataToSave = {
+    livingSituation,
+    hasYard: hasYard === undefined ? undefined : hasYard === "true",
+    landlordPermission:
+      landlordPermission === undefined
+        ? undefined
+        : landlordPermission === "true",
+    householdSize: parseInt(householdSize, 10),
+    hasChildren: hasChildren === undefined ? undefined : hasChildren === "true",
+    childrenAges:
+      !childrenAges || childrenAges.trim() === ""
+        ? []
+        : childrenAges.split(",").map((age) => parseInt(age.trim(), 10)),
+    otherAnimalsDescription,
+    animalExperience,
+  };
+
+  try {
+    await prisma.householdProfile.upsert({
+      where: { personId: parsedId.data },
+      create: { personId: parsedId.data, ...dataToSave },
+      update: dataToSave,
+    });
+  } catch (error) {
+    console.error("Database Error updating staff household profile:", error);
+    return {
+      success: false,
+      message: "Database Error: Failed to update household profile.",
+    };
+  }
+
+  revalidatePath(`/dashboard/people-directory/${parsedId.data}/profile`);
+  return { success: true, message: "Household profile updated." };
+};
+
+export const updateStaffHouseholdProfile = RequirePermission(
+  AppPermissions.PERSONS_MANAGE,
+)(_updateStaffHouseholdProfile);

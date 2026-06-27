@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
+import HouseholdProfileForm from "@/components/dashboard/account/household-profile-form";
 
 interface Props {
   params: IDParamType;
@@ -44,12 +45,8 @@ const PageContent = async ({ params }: Props) => {
     notFound();
   }
 
-  const hp = person.householdProfile;
-
-  const boolDisplay = (val: boolean | null | undefined) => {
-    if (val === null || val === undefined) return "N/A";
-    return val ? "Yes" : "No";
-  };
+  const hasAccount = !!person.user;
+  const householdMode = !hasAccount && canManage ? "staff-edit" : "staff-view";
 
   return (
     <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2">
@@ -120,58 +117,12 @@ const PageContent = async ({ params }: Props) => {
       </Card>
 
       {/* Card 2 — Household & Lifestyle */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Household & Lifestyle</CardTitle>
-          <CardDescription>Home environment and animal experience.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!hp ? (
-            <p className="text-sm text-muted-foreground italic">
-              No household information on file.
-            </p>
-          ) : (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">Living Situation</span>
-                <span>{formatSingleEnumOption(hp.livingSituation)}</span>
-              </div>
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">Household Size</span>
-                <span>{hp.householdSize ?? "N/A"}</span>
-              </div>
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">Has Yard</span>
-                <span>{boolDisplay(hp.hasYard)}</span>
-              </div>
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">Landlord Permission</span>
-                <span>{boolDisplay(hp.landlordPermission)}</span>
-              </div>
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">Has Children</span>
-                <span>{boolDisplay(hp.hasChildren)}</span>
-              </div>
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">Children Ages</span>
-                <span>
-                  {hp.childrenAges.length > 0
-                    ? hp.childrenAges.join(", ")
-                    : "N/A"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">Other Animals</span>
-                <span>{hp.otherAnimalsDescription || "N/A"}</span>
-              </div>
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">Animal Experience</span>
-                <span>{hp.animalExperience || "N/A"}</span>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <HouseholdProfileForm
+        householdProfile={person.householdProfile}
+        mode={householdMode}
+        personId={person.id}
+        canManage={canManage}
+      />
     </div>
   );
 };
