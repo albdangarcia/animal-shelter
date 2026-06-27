@@ -380,14 +380,10 @@ const _fetchPersonForApplicationForm = async (
       },
     });
 
+    // Block the staff application form for any person who already has a registered account.
+    // Registered users submit their own applications via the public flow.
     if (person?.user) {
-      const fullUser = await prisma.user.findUnique({
-        where: { id: person.user.id },
-        select: { role: true },
-      });
-      if (fullUser?.role === Role.ADMIN) {
-        return null;
-      }
+      return null;
     }
 
     return person;
@@ -400,6 +396,29 @@ const _fetchPersonForApplicationForm = async (
 export const fetchPersonForApplicationForm = RequirePermission(
   AppPermissions.PERSONS_MANAGE,
 )(_fetchPersonForApplicationForm);
+
+const _fetchPersonHasUserAccount = async (
+  personId: string,
+): Promise<boolean> => {
+  const parsedId = cuidSchema.safeParse(personId);
+  if (!parsedId.success) {
+    throw new Error("Invalid person ID format.");
+  }
+  try {
+    const person = await prisma.person.findUnique({
+      where: { id: parsedId.data },
+      select: { user: { select: { id: true } } },
+    });
+    return person?.user != null;
+  } catch (error) {
+    console.error("Error fetching person account status.", error);
+    throw new Error("Error fetching person account status.");
+  }
+};
+
+export const fetchPersonHasUserAccount = RequirePermission(
+  AppPermissions.PERSONS_MANAGE,
+)(_fetchPersonHasUserAccount);
 
 export const fetchPersonProfileTabData = RequirePermission(
   AppPermissions.PERSONS_READ,

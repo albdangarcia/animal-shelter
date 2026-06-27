@@ -1,18 +1,10 @@
 "use client";
 
-import {
-  startTransition,
-  useActionState,
-  useEffect,
-  useState,
-  useTransition,
-} from "react";
-import { useDebouncedCallback } from "use-debounce";
+import { startTransition, useActionState, useEffect } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { ChevronsUpDown, Loader2, X } from "lucide-react";
-import { useRouter, usePathname } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -42,52 +34,39 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import Link from "next/link";
-import { StaffAdoptionApplicationFormSchema } from "@/app/lib/zod-schemas/application.schemas";
+import { MyAdoptionAppFormSchema } from "@/app/lib/zod-schemas/myApplication.schema";
 import {
   INITIAL_FORM_STATE,
   StaffAdoptionApplicationFormState,
 } from "@/app/lib/form-state-types";
-import { PersonForApplicationFormPayload } from "@/app/lib/types";
-import { AnimalSearchResult } from "@/app/lib/data/animals/animal.data";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import { livingSituationOptions } from "@/app/lib/utils/enum-formatter";
 import { toYesNo } from "@/app/lib/utils/form-utils";
-import { staffCreateAdoptionApplication } from "@/app/lib/actions/adoption-application.actions";
+import { staffEditPersonApplication } from "@/app/lib/actions/adoption-application.actions";
+import { PersonApplicationForEditPayload } from "@/app/lib/data/people-directory/person-adoption-applications.data";
 
-type FormValues = z.infer<typeof StaffAdoptionApplicationFormSchema>;
+type FormValues = z.infer<typeof MyAdoptionAppFormSchema>;
 
 interface Props {
-  person: PersonForApplicationFormPayload;
-  animalResults: AnimalSearchResult[];
-  animalSearch: string;
+  application: PersonApplicationForEditPayload;
+  personId: string;
+  callbackUrl?: string;
 }
 
-const StaffAdoptionApplicationForm = ({
-  person,
-  animalResults,
-  animalSearch,
+const StaffAdoptionApplicationEditForm = ({
+  application,
+  personId,
+  callbackUrl,
 }: Props) => {
-  const hp = person.householdProfile;
-  const router = useRouter();
-  const pathname = usePathname();
-
-  const action = staffCreateAdoptionApplication.bind(null, person.id);
+  const action = staffEditPersonApplication.bind(
+    null,
+    application.id,
+    personId,
+    callbackUrl ?? null
+  );
 
   const [state, formAction, isPending] = useActionState<
     StaffAdoptionApplicationFormState,
@@ -95,48 +74,29 @@ const StaffAdoptionApplicationForm = ({
   >(action, INITIAL_FORM_STATE);
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(StaffAdoptionApplicationFormSchema),
+    resolver: zodResolver(MyAdoptionAppFormSchema),
     defaultValues: {
-      applicantName: person.name,
-      applicantEmail: person.email ?? "",
-      applicantPhone: person.phone ?? "",
-      applicantAddressLine1: person.address ?? "",
-      applicantAddressLine2: "",
-      applicantCity: person.city ?? "",
-      applicantState: person.state ?? "",
-      applicantZipCode: person.zipCode ?? "",
-      livingSituation: hp?.livingSituation,
-      householdSize: String(hp?.householdSize ?? "1"),
-      hasYard: toYesNo(hp?.hasYard),
-      landlordPermission: toYesNo(hp?.landlordPermission),
-      hasChildren: toYesNo(hp?.hasChildren),
-      childrenAges: hp?.childrenAges?.join(", ") ?? "",
-      otherAnimalsDescription: hp?.otherAnimalsDescription ?? "",
-      animalExperience: hp?.animalExperience ?? "",
-      reasonForAdoption: "",
-      animalId: "",
+      applicantName: application.applicantName,
+      applicantEmail: application.applicantEmail,
+      applicantPhone: application.applicantPhone,
+      applicantAddressLine1: application.applicantAddressLine1,
+      applicantAddressLine2: application.applicantAddressLine2 ?? "",
+      applicantCity: application.applicantCity,
+      applicantState: application.applicantState,
+      applicantZipCode: application.applicantZipCode,
+      livingSituation: application.livingSituation,
+      householdSize: String(application.householdSize),
+      hasYard: toYesNo(application.hasYard),
+      landlordPermission: toYesNo(application.landlordPermission),
+      hasChildren: toYesNo(application.hasChildren),
+      childrenAges: (application.childrenAges ?? []).join(", "),
+      otherAnimalsDescription: application.otherAnimalsDescription ?? "",
+      animalExperience: application.animalExperience ?? "",
+      reasonForAdoption: application.reasonForAdoption,
     },
   });
 
   const hasChildrenValue = form.watch("hasChildren");
-
-  // Animal search state
-  const [selectedAnimal, setSelectedAnimal] = useState<AnimalSearchResult | null>(null);
-  const [animalQuery, setAnimalQuery] = useState(animalSearch);
-  const [isAnimalSearchOpen, setIsAnimalSearchOpen] = useState(false);
-  const [isSearchPending, startSearchTransition] = useTransition();
-
-  const updateSearchParam = useDebouncedCallback((query: string) => {
-    startSearchTransition(() => {
-      if (query.trim().length >= 2) {
-        router.replace(
-          `${pathname}?animalSearch=${encodeURIComponent(query.trim())}`
-        );
-      } else {
-        router.replace(pathname);
-      }
-    });
-  }, 300);
 
   useEffect(() => {
     if (state.message) {
@@ -170,115 +130,18 @@ const StaffAdoptionApplicationForm = ({
         <Card className="w-full max-w-3xl mx-auto @container/card">
           <CardHeader>
             <CardTitle className="@[650px]/card:text-xl">
-              New Adoption Application
+              Edit Adoption Application
             </CardTitle>
             <CardDescription>
-              Submitting on behalf of {person.name}
+              Editing application for{" "}
+              <Badge variant="secondary" className="text-sm py-0.5 px-2">
+                {application.animal.name} &middot;{" "}
+                {application.animal.species.name}
+              </Badge>
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-10">
-            {/* Section 0 — Animal */}
-            <div className="space-y-6">
-              <h3 className="font-semibold border-b pb-2">Animal</h3>
-              <FormField
-                control={form.control}
-                name="animalId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Animal to Adopt *</FormLabel>
-                    {selectedAnimal ? (
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-sm py-1 px-3">
-                          {selectedAnimal.name} &middot; {selectedAnimal.species.name}
-                        </Badge>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedAnimal(null);
-                            setAnimalQuery("");
-                            field.onChange("");
-                            router.replace(pathname);
-                          }}
-                        >
-                          <X className="h-4 w-4 mr-1" />
-                          Clear
-                        </Button>
-                      </div>
-                    ) : (
-                      <Popover
-                        open={isAnimalSearchOpen}
-                        onOpenChange={setIsAnimalSearchOpen}
-                      >
-                        <PopoverTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={isAnimalSearchOpen}
-                            className="w-full justify-between font-normal text-muted-foreground"
-                          >
-                            Search for an animal...
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent
-                          className="w-[--radix-popover-trigger-width] p-0"
-                          align="start"
-                        >
-                          <Command shouldFilter={false}>
-                            <CommandInput
-                              placeholder="Type an animal name..."
-                              value={animalQuery}
-                              onValueChange={(value) => {
-                                setAnimalQuery(value);
-                                updateSearchParam(value);
-                              }}
-                            />
-                            <CommandList>
-                              {isSearchPending ? (
-                                <CommandEmpty>Searching...</CommandEmpty>
-                              ) : animalQuery.trim().length < 2 ? (
-                                <CommandEmpty>
-                                  Type at least 2 characters to search.
-                                </CommandEmpty>
-                              ) : animalResults.length === 0 ? (
-                                <CommandEmpty>No published animals found.</CommandEmpty>
-                              ) : (
-                                <CommandGroup>
-                                  {animalResults.map((animal) => (
-                                    <CommandItem
-                                      key={animal.id}
-                                      value={animal.id}
-                                      onSelect={() => {
-                                        setSelectedAnimal(animal);
-                                        field.onChange(animal.id);
-                                        setIsAnimalSearchOpen(false);
-                                        setAnimalQuery("");
-                                        router.replace(pathname);
-                                      }}
-                                    >
-                                      <span>{animal.name}</span>
-                                      <span className="text-muted-foreground ml-2">
-                                        &middot; {animal.species.name}
-                                      </span>
-                                    </CommandItem>
-                                  ))}
-                                </CommandGroup>
-                              )}
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
             {/* Section 1 — Applicant Information */}
             <div className="space-y-6">
               <h3 className="font-semibold border-b pb-2">
@@ -459,7 +322,7 @@ const StaffAdoptionApplicationForm = ({
                         <Input type="number" min="1" {...field} />
                       </FormControl>
                       <FormDescription>
-                        Including yourself, how many people live in the home?
+                        Including themselves, how many people live in the home?
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -630,7 +493,7 @@ const StaffAdoptionApplicationForm = ({
                     <FormLabel>Reason for Adoption *</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Why does this person want to adopt at this time? What are they looking for in a companion?"
+                        placeholder="Why does this person want to adopt at this time?"
                         className="resize-y min-h-25"
                         {...field}
                       />
@@ -645,14 +508,17 @@ const StaffAdoptionApplicationForm = ({
           <CardFooter className="flex justify-end space-x-4">
             <Button asChild variant="outline" type="button" disabled={isPending}>
               <Link
-                href={`/dashboard/people-directory/${person.id}/adoption-applications`}
+                href={
+                  callbackUrl ??
+                  `/dashboard/people-directory/${personId}/adoption-applications`
+                }
               >
                 Cancel
               </Link>
             </Button>
             <Button type="submit" size="lg" disabled={isPending}>
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isPending ? "Submitting..." : "Submit Application"}
+              {isPending ? "Saving..." : "Save Changes"}
             </Button>
           </CardFooter>
         </Card>
@@ -661,4 +527,4 @@ const StaffAdoptionApplicationForm = ({
   );
 };
 
-export default StaffAdoptionApplicationForm;
+export default StaffAdoptionApplicationEditForm;

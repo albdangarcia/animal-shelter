@@ -12,22 +12,27 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
-import { ApplicationWithAnimal } from "@/app/lib/data/user-application.data";
+import { PersonAdoptionApplicationPayload } from "@/app/lib/data/people-directory/person-adoption-applications.data";
 
 interface DataTableRowActionsProps {
-  row: Row<ApplicationWithAnimal>;
+  row: Row<PersonAdoptionApplicationPayload>;
+  personId: string;
   canManage: boolean;
+  canEdit: boolean;
 }
 
-export function DataTableRowActions({ row, canManage }: DataTableRowActionsProps) {
-  const userApplication = row.original;
-  
-  // Volunteers (read-only) get no row actions — every field is already
-  // visible in the table, and all actions here are mutations.
+export function DataTableRowActions({
+  row,
+  personId,
+  canManage,
+  canEdit,
+}: DataTableRowActionsProps) {
   if (!canManage) {
     return null;
   }
-  
+
+  const application = row.original;
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -42,9 +47,16 @@ export function DataTableRowActions({ row, canManage }: DataTableRowActionsProps
       <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuLabel>Actions</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <Link href={`/dashboard/adoption-applications/${userApplication.id}/edit`}>
+        <Link href={`/dashboard/adoption-applications/${application.id}/edit`}>
           <DropdownMenuItem>Review</DropdownMenuItem>
         </Link>
+        {canEdit && (
+          <Link
+            href={`/dashboard/people-directory/${personId}/adoption-applications/${application.id}/edit`}
+          >
+            <DropdownMenuItem>Edit</DropdownMenuItem>
+          </Link>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

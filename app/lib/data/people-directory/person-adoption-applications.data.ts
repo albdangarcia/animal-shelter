@@ -8,6 +8,39 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import z from "zod";
 
+export type PersonApplicationForEditPayload =
+  Prisma.AdoptionApplicationGetPayload<{
+    select: {
+      id: true;
+      status: true;
+      applicantId: true;
+      applicantName: true;
+      applicantEmail: true;
+      applicantPhone: true;
+      applicantAddressLine1: true;
+      applicantAddressLine2: true;
+      applicantCity: true;
+      applicantState: true;
+      applicantZipCode: true;
+      livingSituation: true;
+      householdSize: true;
+      hasYard: true;
+      landlordPermission: true;
+      hasChildren: true;
+      childrenAges: true;
+      otherAnimalsDescription: true;
+      animalExperience: true;
+      reasonForAdoption: true;
+      animal: {
+        select: {
+          id: true;
+          name: true;
+          species: { select: { name: true } };
+        };
+      };
+    };
+  }>;
+
 export type PersonAdoptionApplicationPayload =
   Prisma.AdoptionApplicationGetPayload<{
     select: {
@@ -103,6 +136,76 @@ const _fetchPersonAdoptionApplications = async (
   }
 };
 
+const _fetchPersonApplicationForEdit = async (
+  applicationId: string,
+  personId: string,
+): Promise<PersonApplicationForEditPayload | null> => {
+  const parsedApplicationId = cuidSchema.safeParse(applicationId);
+  const parsedPersonId = cuidSchema.safeParse(personId);
+
+  if (!parsedApplicationId.success || !parsedPersonId.success) {
+    throw new Error("Invalid ID format.");
+  }
+
+  try {
+    // Only walk-in contacts (no user account) can have their applications edited by staff.
+    const person = await prisma.person.findUnique({
+      where: { id: parsedPersonId.data },
+      select: { user: { select: { id: true } } },
+    });
+
+    if (!person || person.user !== null) {
+      return null;
+    }
+
+    const application = await prisma.adoptionApplication.findUnique({
+      where: {
+        id: parsedApplicationId.data,
+        applicantId: parsedPersonId.data,
+      },
+      select: {
+        id: true,
+        status: true,
+        applicantId: true,
+        applicantName: true,
+        applicantEmail: true,
+        applicantPhone: true,
+        applicantAddressLine1: true,
+        applicantAddressLine2: true,
+        applicantCity: true,
+        applicantState: true,
+        applicantZipCode: true,
+        livingSituation: true,
+        householdSize: true,
+        hasYard: true,
+        landlordPermission: true,
+        hasChildren: true,
+        childrenAges: true,
+        otherAnimalsDescription: true,
+        animalExperience: true,
+        reasonForAdoption: true,
+        animal: {
+          select: {
+            id: true,
+            name: true,
+            species: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    return application;
+  } catch (error) {
+    console.error("Error fetching person application for edit.", error);
+    throw new Error("Could not fetch application for editing.");
+  }
+};
+
+
 export const fetchPersonAdoptionApplications = RequirePermission(
   AppPermissions.PERSONS_READ,
 )(_fetchPersonAdoptionApplications);
+
+export const fetchPersonApplicationForEdit = RequirePermission(
+  AppPermissions.PERSONS_MANAGE,
+)(_fetchPersonApplicationForEdit);

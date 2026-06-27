@@ -1,6 +1,7 @@
 import { prisma } from "@/app/lib/prisma";
 import {
   AnimalListingStatus,
+  ApplicationStatus,
   Sex,
   Prisma,
 } from "@prisma/client";
@@ -14,6 +15,7 @@ import {
   AnimalReIntakeFormPayload,
 } from "../../types";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
+import { searchQuerySchema } from "../../zod-schemas/common.schemas";
 import { DashboardAnimalsSchema } from "../../zod-schemas/animal.schemas";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -373,6 +375,62 @@ const _fetchAnimalForReIntake = async (id: string): Promise<AnimalReIntakeFormPa
   }
 };
 
+export type AnimalSearchResult = Prisma.AnimalGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    species: { select: { name: true } };
+    listingStatus: true;
+  };
+}>;
+
+const _searchPublishedAnimals = async (
+  query: string,
+  excludePersonId?: string
+) => {
+  const parsed = searchQuerySchema.safeParse(query);
+  const q = parsed.success ? parsed.data : "";
+
+  try {
+    return await prisma.animal.findMany({
+      where: {
+        listingStatus: AnimalListingStatus.PUBLISHED,
+        name: { contains: q, mode: "insensitive" },
+        ...(excludePersonId && {
+          NOT: {
+            adoptionApplications: {
+              some: {
+                applicantId: excludePersonId,
+                status: {
+                  notIn: [
+                    ApplicationStatus.REJECTED,
+                    ApplicationStatus.WITHDRAWN,
+                  ],
+                },
+              },
+            },
+          },
+        }),
+      },
+      select: {
+        id: true,
+        name: true,
+        species: { select: { name: true } },
+        listingStatus: true,
+      },
+      take: 10,
+      orderBy: { name: "asc" },
+    });
+  } catch (error) {
+    console.error("Error searching published animals.", error);
+    throw new Error("Error searching animals.");
+  }
+};
+
+export const searchPublishedAnimals = RequirePermission(
+  AppPermissions.PERSONS_MANAGE
+)(_searchPublishedAnimals);
+
 export const fetchAnimalForReIntake = RequirePermission(
   AppPermissions.ANIMAL_INFO_READ
 )(_fetchAnimalForReIntake);
@@ -400,3 +458,4 @@ export const fetchAnimalById = RequirePermission(
 export const fetchSectionCardsAnimalData = RequirePermission(AppPermissions.ANIMAL_INFO_READ)(
   _fetchSectionCardsAnimalData
 );
+
