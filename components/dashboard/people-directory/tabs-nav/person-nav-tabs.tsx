@@ -15,7 +15,8 @@ import { Menu } from "lucide-react";
 import { LinkTabs } from "../../animals/tabs-nav/link-tabs";
 
 const personTabDefinitions = [
-  { suffix: "", label: "Animal History" },
+  { suffix: "", label: "Profile" },
+  { suffix: "/history", label: "Animal History" },
   { suffix: "/adoption-applications", label: "Adoption Applications" },
   { suffix: "/activity", label: "Activity" },
   { suffix: "/notes", label: "Notes" },

@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ApplicationStatus } from "@prisma/client";
-import { ArrowRight, Info, Loader2 } from "lucide-react";
+import { ArrowRight, Info, Loader2, Pencil } from "lucide-react";
 import Link from "next/link";
 import { startTransition, useActionState, useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
@@ -76,6 +76,7 @@ export function StaffApplicationUpdateForm({
   const isAdopted = application.status === "ADOPTED";
   const isApproved = application.status === "APPROVED";
   const outcome = application.outcome;
+  const isWalkIn = application.applicant?.user === null;
 
   const applicationStatusOptions: StatusOption[] =
     updatableApplicationStatuses.map((status) => ({
@@ -165,6 +166,16 @@ export function StaffApplicationUpdateForm({
                   </Link>
                 </Button>
               </CardDescription>
+              {isWalkIn && (
+                <Button asChild variant="outline" size="sm" className="mt-2 w-fit">
+                  <Link
+                    href={`/dashboard/people-directory/${application.applicantId}/adoption-applications/${application.id}/edit?callbackUrl=/dashboard/adoption-applications/${application.id}/edit`}
+                  >
+                    <Pencil className="mr-2 h-3.5 w-3.5" />
+                    Edit Application Fields
+                  </Link>
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {isAdopted && outcome && (

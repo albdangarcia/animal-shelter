@@ -7,11 +7,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PersonSectionCardPayload, IDParamType } from "@/app/lib/types";
 import { fetchSectionCardsPersonData } from "@/app/lib/data/people-directory/people-directory.data";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import {
@@ -23,8 +21,6 @@ import {
   LogIn,
 } from "lucide-react";
 import Image from "next/image";
-import { hasPermission } from "@/app/lib/auth/hasPermission";
-import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
   params: IDParamType;
@@ -40,10 +36,6 @@ const PersonSectionCards = async ({ params }: Props) => {
     notFound();
   }
 
-  const canManage = await hasPermission(
-    AppPermissions.PERSONS_MANAGE,
-  );
-
   const fullAddress = [
     person.address,
     person.city,
@@ -58,6 +50,39 @@ const PersonSectionCards = async ({ params }: Props) => {
     person._count.surrenderedAnimals +
     person._count.foundAnimals +
     person._count.reclaimedAnimalsAsOwner;
+
+  const tiles = [
+    {
+      label: "Applications",
+      value: applicationCount,
+      icon: ClipboardList,
+      color: "text-green-600",
+      valueClass: "text-2xl font-bold",
+    },
+    {
+      label: "Animal Events",
+      value: intakeOutcomeCount,
+      icon: LogIn,
+      color: "text-orange-500",
+      valueClass: "text-2xl font-bold",
+    },
+    {
+      label: "Role",
+      value: person.user
+        ? formatSingleEnumOption(person.user.role)
+        : "No Account",
+      icon: UserIcon,
+      color: "text-blue-500",
+      valueClass: "font-semibold",
+    },
+    {
+      label: "Email Verified",
+      value: person.user ? (person.user.emailVerified ? "Yes" : "No") : "N/A",
+      icon: Mail,
+      color: "text-purple-500",
+      valueClass: "font-semibold",
+    },
+  ];
 
   return (
     <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2">
@@ -124,159 +149,21 @@ const PersonSectionCards = async ({ params }: Props) => {
               </div>
             </div>
           </div>
-
-          {/* Quick Stats Grid */}
-          <div className="grid grid-cols-2 gap-3 border-t pt-4">
-            <div className="rounded-lg border bg-card p-4">
-              <div className="flex items-center gap-2">
-                <ClipboardList className="h-4 w-4 text-green-600" />
-                <span className="text-xs text-muted-foreground">
-                  Applications
-                </span>
-              </div>
-
-              <p className="mt-2 text-2xl font-bold">{applicationCount}</p>
-            </div>
-
-            <div className="rounded-lg border bg-card p-4">
-              <div className="flex items-center gap-2">
-                <LogIn className="h-4 w-4 text-orange-500" />
-                <span className="text-xs text-muted-foreground">
-                  Animal Events
-                </span>
-              </div>
-
-              <p className="mt-2 text-2xl font-bold">{intakeOutcomeCount}</p>
-            </div>
-
-            <div className="rounded-lg border bg-card p-4">
-              <div className="flex items-center gap-2">
-                <UserIcon className="h-4 w-4 text-blue-500" />
-                <span className="text-xs text-muted-foreground">Role</span>
-              </div>
-
-              <p className="mt-2 font-semibold">
-                {person.user
-                  ? formatSingleEnumOption(person.user.role)
-                  : "No Account"}
-              </p>
-            </div>
-
-            <div className="rounded-lg border bg-card p-4">
-              <div className="flex items-center gap-2">
-                <Mail className="h-4 w-4 text-purple-500" />
-                <span className="text-xs text-muted-foreground">
-                  Email Verified
-                </span>
-              </div>
-
-              <p className="mt-2 font-semibold">
-                {person.user
-                  ? person.user.emailVerified
-                    ? "Yes"
-                    : "No"
-                  : "N/A"}
-              </p>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
-      {/* Secondary Card - Contact & Account Details */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Contact & Account Details</CardTitle>
-          <CardDescription>Address and account information</CardDescription>
-          <CardAction>
-            <span
-              className={cn("inline-block", !canManage && "cursor-not-allowed")}
-            >
-              <Button
-                asChild
-                size="sm"
-                variant={canManage ? "default" : "outline"}
-                className={cn(!canManage && "pointer-events-none opacity-50")}
-              >
-                <Link
-                  href={`/dashboard/people-directory/${person.id}/edit`}
-                  aria-disabled={!canManage}
-                  tabIndex={canManage ? undefined : -1}
-                >
-                  Edit Contact Info
-                </Link>
-              </Button>
-            </span>
-          </CardAction>
-        </CardHeader>
-
-        <CardContent className="space-y-5">
-          {/* Address */}
-          <div>
-            <h4 className="mb-3 text-sm font-semibold text-foreground">
-              Address
-            </h4>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">Street</span>
-                <span className="font-medium text-foreground">
-                  {person.address || "N/A"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">City</span>
-                <span className="font-medium text-foreground">
-                  {person.city || "N/A"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">State</span>
-                <span className="font-medium text-foreground">
-                  {person.state || "N/A"}
-                </span>
-              </div>
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">Zip Code</span>
-                <span className="font-medium text-foreground">
-                  {person.zipCode || "N/A"}
-                </span>
-              </div>
+      {/* Right column — stat tiles */}
+      <div className="grid grid-cols-2 gap-4 content-start">
+        {tiles.map((tile) => (
+          <div key={tile.label} className="rounded-lg border bg-card p-4">
+            <div className="flex items-center gap-2">
+              <tile.icon className={cn("h-4 w-4", tile.color)} />
+              <span className="text-xs text-muted-foreground">{tile.label}</span>
             </div>
+            <p className={cn("mt-2", tile.valueClass)}>{tile.value}</p>
           </div>
-
-          {/* Account Information */}
-          <div>
-            <h4 className="mb-3 text-sm font-semibold text-foreground">
-              Account Information
-            </h4>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between border-b pb-2 text-sm">
-                <span className="text-muted-foreground">Login Account</span>
-                <span className="font-medium text-foreground">
-                  {person.user ? "Yes" : "No"}
-                </span>
-              </div>
-              {person.user && (
-                <>
-                  <div className="flex items-center justify-between border-b pb-2 text-sm">
-                    <span className="text-muted-foreground">Role</span>
-                    <span className="font-medium text-foreground">
-                      {formatSingleEnumOption(person.user.role)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between border-b pb-2 text-sm">
-                    <span className="text-muted-foreground">
-                      Email Verified
-                    </span>
-                    <span className="font-medium text-foreground">
-                      {person.user.emailVerified ? "Yes" : "No"}
-                    </span>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        ))}
+      </div>
     </div>
   );
 };

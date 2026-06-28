@@ -8,8 +8,19 @@ import { DataTableColumnHeader } from "../../../table-common/data-table-column-h
 import { PersonAdoptionApplicationPayload } from "@/app/lib/data/people-directory/person-adoption-applications.data";
 import { formatTimeAgo } from "@/app/lib/utils/date-utils";
 import { userApplicationStatusOptions } from "@/app/lib/utils/enum-formatter";
+import { DataTableRowActions } from "./person-adoption-applications-table-row-actions";
 
-export const columns: ColumnDef<PersonAdoptionApplicationPayload>[] = [
+export interface GetColumnsProps {
+  canManage: boolean;
+  canEdit: boolean;
+  personId: string;
+}
+
+export const getColumns = ({
+  canManage,
+  canEdit,
+  personId,
+}: GetColumnsProps): ColumnDef<PersonAdoptionApplicationPayload>[] => [
   {
     id: "animal",
     accessorFn: (row) => row.animal.name,
@@ -105,5 +116,16 @@ export const columns: ColumnDef<PersonAdoptionApplicationPayload>[] = [
       const date = row.getValue("updatedAt") as string | Date | null;
       return <span>{formatTimeAgo(date)}</span>;
     },
+  },
+  {
+    id: "actions",
+    cell: ({ row }) => (
+      <DataTableRowActions
+        row={row}
+        personId={personId}
+        canManage={canManage}
+        canEdit={canEdit}
+      />
+    ),
   },
 ];

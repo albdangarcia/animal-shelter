@@ -57,9 +57,12 @@ export const getColumns = ({
       return (
         <div className="flex space-x-2">
           {status && <Badge variant="outline">{status.label}</Badge>}
-          <span className="max-w-125 truncate font-medium">
+          <Link
+            href={`/dashboard/people-directory/${row.original.applicantId}`}
+            className="max-w-125 truncate font-medium hover:underline"
+          >
             {row.getValue("applicantName")}
-          </span>
+          </Link>
         </div>
       );
     },

@@ -13,6 +13,7 @@ import { ApplicationStatus, Prisma } from "@prisma/client";
 export type ApplicationWithAnimal = Prisma.AdoptionApplicationGetPayload<{
   select: {
     id: true;
+    applicantId: true;
     applicantName: true;
     applicantEmail: true;
     applicantPhone: true;
@@ -61,6 +62,15 @@ export type ApplicationWithOutcome = Prisma.AdoptionApplicationGetPayload<{
       select: {
         id: true;
         outcomeDate: true;
+      };
+    };
+    applicant: {
+      select: {
+        user: {
+          select: {
+            id: true;
+          };
+        };
       };
     };
   };
@@ -153,6 +163,7 @@ const _fetchUserApplications = async (
         where: whereClause,
         select: {
           id: true,
+          applicantId: true,
           applicantName: true,
           applicantEmail: true,
           applicantPhone: true,
@@ -230,6 +241,15 @@ const _fetchUserApplicationById = async (
           select: {
             id: true,
             outcomeDate: true,
+          },
+        },
+        applicant: {
+          select: {
+            user: {
+              select: {
+                id: true,
+              },
+            },
           },
         },
       },

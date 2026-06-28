@@ -99,6 +99,7 @@ const _fetchAnimalApplications = async (
         where: whereClause,
         select: {
           id: true,
+          applicantId: true,
           applicantName: true,
           applicantEmail: true,
           applicantPhone: true,

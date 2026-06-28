@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { ApplicationStatus } from "@prisma/client";
+import { cuidSchema } from "./common.schemas";
+import { MyAdoptionAppFormSchema } from "./myApplication.schema";
 
 // Exclude 'ADOPTED' from this list.
 const updatableApplicationStatuses = [
@@ -21,3 +23,8 @@ export const StaffUpdateAdoptionAppFormSchema = z
     internalNotes: z.string().optional(),
     statusChangeReason: z.string().optional(),
   });
+
+// Extends the public schema with the animal selection field.
+// Any future changes to MyAdoptionAppFormSchema are inherited automatically.
+export const StaffAdoptionApplicationFormSchema =
+  MyAdoptionAppFormSchema.extend({ animalId: cuidSchema });
