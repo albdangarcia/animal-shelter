@@ -221,6 +221,52 @@ model PartnerContact {
 }
 
 // ═══════════════════════════════════════════════════
+// LOCATION MANAGEMENT
+// ═══════════════════════════════════════════════════
+
+enum LocationType {
+  KENNEL
+  ISOLATION
+  MEDICAL
+  QUARANTINE
+  FOSTER
+  OFFSITE
+  OTHER
+}
+
+model Location {
+  id   String       @id @default(cuid())
+  name String       @unique
+  type LocationType
+
+  units Unit[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
+
+  @@map("locations")
+}
+
+model Unit {
+  id         String   @id @default(cuid())
+  locationId String   @map(name: "location_id")
+  location   Location @relation(fields: [locationId], references: [id])
+  name       String
+  capacity   Int      @default(1)
+
+  animals Animal[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
+
+  @@unique([name, locationId])
+  @@index([locationId])
+  @@map("units")
+}
+
+// ═══════════════════════════════════════════════════
 // ANIMAL CORE
 // ═══════════════════════════════════════════════════
 
@@ -296,8 +342,8 @@ model Animal {
   species              Species               @relation(fields: [speciesId], references: [id])
   breeds               Breed[]
   colors               Color[] // all colors, including the primary
-  primaryColorId       String               @map("primary_color_id")
-  primaryColor         Color                @relation("PrimaryColor", fields: [primaryColorId], references: [id])
+  primaryColorId       String                @map("primary_color_id")
+  primaryColor         Color                 @relation("PrimaryColor", fields: [primaryColorId], references: [id])
   characteristics      Characteristic[]
   animalImages         AnimalImage[]
   medicalRecords       MedicalRecord[]
@@ -317,9 +363,13 @@ model Animal {
   // isMixedBreed    Boolean           @default(false)
   isSpayedNeutered Boolean @default(false)
 
-  /// If the animal is currently in a foster home, this links to the active FosterProfile.
+  // If the animal is currently in a foster home, this links to the active FosterProfile.
   fosterProfileId String?        @map(name: "foster_profile_id")
   fosterProfile   FosterProfile? @relation(fields: [fosterProfileId], references: [id])
+
+  // The kennel the animal is currently housed in. Null for fostered or not-yet-placed animals.
+  currentUnitId String? @map(name: "current_unit_id")
+  currentUnit   Unit?   @relation(fields: [currentUnitId], references: [id], onDelete: SetNull)
 
   MedicationSchedule MedicationSchedule[]
   MedicationLog      MedicationLog[]
@@ -329,6 +379,7 @@ model Animal {
   updatedAt   DateTime  @updatedAt @map(name: "updated_at")
   publishedAt DateTime? @map(name: "published_at")
 
+  @@index([currentUnitId])
   @@map(name: "animals")
 }
 
@@ -361,10 +412,10 @@ model Breed {
 }
 
 model Color {
-  id                String    @id @default(cuid())
-  name              String    @unique // "Black", "White", "Brown", "Brindle", "Tabby"
+  id                String   @id @default(cuid())
+  name              String   @unique // "Black", "White", "Brown", "Brindle", "Tabby"
   animals           Animal[] // animals that have this color (in their full color set)
-  primaryForAnimals Animal[]  @relation("PrimaryColor") // animals where this is the primary color
+  primaryForAnimals Animal[] @relation("PrimaryColor") // animals where this is the primary color
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
