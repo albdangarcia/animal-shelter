@@ -12,7 +12,8 @@ import {
   AssessmentType,
   ApplicationStatus,
   LivingSituation,
-  OutcomeType
+  OutcomeType,
+  LocationType
 } from "@prisma/client";
 
 /**
@@ -96,3 +97,5 @@ export const myApplicationStatusOptions = formatEnumAsOptions(ApplicationStatus)
 export const userApplicationStatusOptions = formatEnumAsOptions(ApplicationStatus);
 
 export const outcomeTypeOptions = formatEnumAsOptions(OutcomeType)
+
+export const locationTypeOptions = formatEnumAsOptions(LocationType);

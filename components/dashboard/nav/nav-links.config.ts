@@ -26,6 +26,7 @@ export type IconName =
   | "IconChecks"
   | "IconCheckbox"
   | "IconBuildingStore"
+  | "IconLayoutBoard"
 
 export interface NavItem {
   title: string;
@@ -96,6 +97,12 @@ export const navMainItems: readonly NavItem[] = [
     url: "/dashboard/animal-tasks",
     icon: "IconCheckbox",
     permission: AppPermissions.ANIMAL_TASK_READ,
+  },
+  {
+    title: "Housing Board",
+    url: "/dashboard/locations",
+    icon: "IconLayoutBoard",
+    permission: AppPermissions.ANIMAL_INFO_READ,
   },
 ] as const;
 

@@ -62,6 +62,7 @@ export const AppPermissions = {
   MANAGE_CHARACTERISTICS_CATALOG: "characteristics_catalog:manage",
   MANAGE_ASSESSMENT_TEMPLATES: "assessment_templates:manage",
   MANAGE_ANIMAL_TAXONOMY: "animal_taxonomy:manage",
+  MANAGE_LOCATIONS: "locations:manage",
 } as const;
 
 export type AppPermission =

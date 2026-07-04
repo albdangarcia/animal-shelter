@@ -49,6 +49,7 @@ const adminPermissions: readonly AppPermission[] = [
   AppPermissions.MANAGE_CHARACTERISTICS_CATALOG,
   AppPermissions.MANAGE_ASSESSMENT_TEMPLATES,
   AppPermissions.MANAGE_ANIMAL_TAXONOMY,
+  AppPermissions.MANAGE_LOCATIONS,
 ] as const;
 
 export const rolePermissions: Record<Role, readonly AppPermission[]> = {

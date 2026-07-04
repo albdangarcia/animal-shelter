@@ -8,7 +8,6 @@ import {
   IntakeType,
   AnimalHealthStatus,
   AnimalLegalStatus,
-  AnimalSize,
   NoteCategory,
   TaskCategory,
   TaskPriority,
@@ -18,6 +17,7 @@ import {
   AssessmentOutcome,
   FieldType,
   OutcomeType,
+  LocationType,
   Prisma,
 } from "@prisma/client";
 import { isDemo } from "@/lib/flags";
@@ -26,6 +26,7 @@ import {
   getRandomDateWithinLastDays,
   getRandomItem,
 } from "@/app/lib/utils/seeding-utils";
+import { getAnimalSize } from "@/app/lib/utils/animal-size";
 import { env } from "prisma/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 
@@ -216,14 +217,55 @@ const partnerData: Prisma.PartnerCreateManyInput[] = [
   },
 ];
 
+// Locations, each with their units. Unit `name` must be unique within a location.
+// Referenced by animals below via `location`/`unit` keys.
+const allLocations = {
+  DOG_BLOCK_A: {
+    name: "Dog block A",
+    type: LocationType.KENNEL,
+    units: {
+      A1: { name: "A-1", capacity: 1 },
+      A2: { name: "A-2", capacity: 1 },
+      A3: { name: "A-3", capacity: 2 },
+      A4: { name: "A-4", capacity: 2 },
+    },
+  },
+  ISOLATION: {
+    name: "Isolation",
+    type: LocationType.ISOLATION,
+    units: {
+      ISO1: { name: "ISO-1", capacity: 1 },
+      ISO2: { name: "ISO-2", capacity: 1 },
+    },
+  },
+  MEDICAL_WING: {
+    name: "Medical wing",
+    type: LocationType.MEDICAL,
+    units: {
+      MED1: { name: "MED-1", capacity: 1 },
+      MED2: { name: "MED-2", capacity: 1 },
+    },
+  },
+  CAT_ROOM: {
+    name: "Cat room",
+    type: LocationType.KENNEL,
+    units: {
+      C1: { name: "C-1", capacity: 3 },
+      C2: { name: "C-2", capacity: 3 },
+    },
+  },
+};
+
 const animalSeedData = [
   {
     name: "Frisco",
     sex: Sex.FEMALE,
-    size: AnimalSize.LARGE,
+    weightKg: 30,
+    heightCm: 58,
+    microchipNumber: "985141000100001",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.GOLDEN_RETRIEVER],
-    colors: [allColors.GOLDEN],
+    colors: [allColors.GOLDEN, allColors.WHITE],
     primaryColor: allColors.GOLDEN,
     characteristics: [
       allCharacteristics.GOOD_WITH_KIDS,
@@ -233,28 +275,34 @@ const animalSeedData = [
     healthStatus: AnimalHealthStatus.HEALTHY,
     legalStatus: AnimalLegalStatus.NONE,
     images: [`${baseUrl}/dog1.jpg`, `${baseUrl}/dog1-1.webp`],
+    unit: allLocations.DOG_BLOCK_A.units.A1,
   },
   {
     name: "Flash",
     sex: Sex.MALE,
-    size: AnimalSize.SMALL,
+    weightKg: 8,
+    heightCm: 32,
+    microchipNumber: "985141000100002",
     species: allSpecies.DOG,
     breeds: [
       allSpecies.DOG.breeds.AMERICAN_ESKIMO,
       allSpecies.DOG.breeds.MIXED_BREED,
     ],
-    colors: [allColors.WHITE],
+    colors: [allColors.WHITE, allColors.BROWN],
     primaryColor: allColors.WHITE,
     characteristics: [allCharacteristics.NEEDS_QUIET_HOME],
     intakeType: IntakeType.STRAY,
     healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
     legalStatus: AnimalLegalStatus.STRAY_HOLD,
     images: [`${baseUrl}/dog2.jpg`, `${baseUrl}/dog2-1.webp`],
+    unit: allLocations.DOG_BLOCK_A.units.A2,
   },
   {
     name: "Fido",
     sex: Sex.MALE,
-    size: AnimalSize.MEDIUM,
+    weightKg: 18,
+    heightCm: 45,
+    microchipNumber: "985141000100003",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.AIREDALE_TERRIER],
     colors: [allColors.BROWN, allColors.BLACK],
@@ -264,11 +312,14 @@ const animalSeedData = [
     healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
     legalStatus: AnimalLegalStatus.NONE,
     images: [`${baseUrl}/dog3.jpg`, `${baseUrl}/dog3-1.jpg`],
+    unit: allLocations.MEDICAL_WING.units.MED1,
   },
   {
     name: "Whiskers",
     sex: Sex.FEMALE,
-    size: AnimalSize.SMALL,
+    weightKg: 3.5,
+    heightCm: 24,
+    microchipNumber: "985141000100004",
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.SIAMESE],
     colors: [allColors.WHITE, allColors.BROWN],
@@ -282,14 +333,17 @@ const animalSeedData = [
       `${baseUrl}/cat1-1.jpg`,
       `${baseUrl}/cat1-2.jpg`,
     ],
+    unit: allLocations.CAT_ROOM.units.C1,
   },
   {
     name: "Misty",
     sex: Sex.FEMALE,
-    size: AnimalSize.SMALL,
+    weightKg: 3,
+    heightCm: 23,
+    microchipNumber: "985141000100005",
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.DOMESTIC_SHORTHAIR],
-    colors: [allColors.GRAY, allColors.TABBY],
+    colors: [allColors.GRAY, allColors.TABBY, allColors.WHITE],
     primaryColor: allColors.GRAY,
     characteristics: [],
     intakeType: IntakeType.BORN_IN_CARE,
@@ -300,14 +354,17 @@ const animalSeedData = [
       `${baseUrl}/cat2-1.jpg`,
       `${baseUrl}/cat2-2.jpg`,
     ],
+    unit: allLocations.CAT_ROOM.units.C1,
   },
   {
     name: "Godzilla",
     sex: Sex.MALE,
-    size: AnimalSize.MEDIUM,
+    weightKg: 6,
+    heightCm: 40,
+    microchipNumber: "985141000100006",
     species: allSpecies.REPTILE,
     breeds: [allSpecies.REPTILE.breeds.IGUANA],
-    colors: [allColors.GREEN],
+    colors: [allColors.GREEN, allColors.ORANGE],
     primaryColor: allColors.GREEN,
     characteristics: [],
     intakeType: IntakeType.SEIZE,
@@ -318,14 +375,17 @@ const animalSeedData = [
       `${baseUrl}/reptile2-1.jpg`,
       `${baseUrl}/reptile2-2.jpg`,
     ],
+    unit: allLocations.ISOLATION.units.ISO1,
   },
   {
     name: "Buddy",
     sex: Sex.MALE,
-    size: AnimalSize.LARGE,
+    weightKg: 32,
+    heightCm: 57,
+    microchipNumber: "985141000100007",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.LABRADOR, allSpecies.DOG.breeds.MIXED_BREED],
-    colors: [allColors.BLACK],
+    colors: [allColors.BLACK, allColors.WHITE],
     primaryColor: allColors.BLACK,
     characteristics: [
       allCharacteristics.GOOD_WITH_KIDS,
@@ -335,11 +395,14 @@ const animalSeedData = [
     healthStatus: AnimalHealthStatus.HEALTHY,
     legalStatus: AnimalLegalStatus.STRAY_HOLD,
     images: [`${baseUrl}/dog3-2.webp`],
+    unit: allLocations.DOG_BLOCK_A.units.A3,
   },
   {
     name: "Leo",
     sex: Sex.MALE,
-    size: AnimalSize.SMALL,
+    weightKg: 3.2,
+    heightCm: 22,
+    microchipNumber: "985141000100008",
     species: allSpecies.CAT,
     breeds: [
       allSpecies.CAT.breeds.TABBY,
@@ -352,20 +415,25 @@ const animalSeedData = [
     healthStatus: AnimalHealthStatus.HEALTHY,
     legalStatus: AnimalLegalStatus.NONE,
     images: [`${baseUrl}/dog1-3.webp`],
+    // Unplaced: not yet assigned to a unit (shows in the "Unplaced" column).
+    unit: null,
   },
   {
     name: "Daisy",
     sex: Sex.FEMALE,
-    size: AnimalSize.LARGE,
+    weightKg: 28,
+    heightCm: 55,
+    microchipNumber: "985141000100009",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.GOLDEN_RETRIEVER],
-    colors: [allColors.GOLDEN],
+    colors: [allColors.GOLDEN, allColors.WHITE],
     primaryColor: allColors.GOLDEN,
     characteristics: [allCharacteristics.DEAF],
     intakeType: IntakeType.TRANSFER_IN,
     healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
     legalStatus: AnimalLegalStatus.NONE,
     images: [`${baseUrl}/dog1-2.jpg`],
+    unit: allLocations.MEDICAL_WING.units.MED2,
   },
 ];
 
@@ -674,6 +742,30 @@ async function seedAssessmentTemplates() {
   console.log("Seeded assessment templates.");
 }
 
+async function seedLocationsAndUnits() {
+  console.log("Seeding locations and units...");
+  try {
+    for (const locationData of Object.values(allLocations)) {
+      await prisma.location.create({
+        data: {
+          name: locationData.name,
+          type: locationData.type,
+          units: {
+            create: Object.values(locationData.units).map((unit) => ({
+              name: unit.name,
+              capacity: unit.capacity,
+            })),
+          },
+        },
+      });
+    }
+    console.log("Seeded locations and units.");
+  } catch (error) {
+    console.error("Error seeding locations and units:", error);
+    throw error;
+  }
+}
+
 async function seedAnimalsAndRelations() {
   console.log("Seeding animals and their relations...");
   // Fetch all created lookup data to get their IDs for relations
@@ -688,6 +780,7 @@ async function seedAnimalsAndRelations() {
   const dbColors = await prisma.color.findMany();
   const dbChars = await prisma.characteristic.findMany();
   const dbSpecies = await prisma.species.findMany();
+  const dbUnits = await prisma.unit.findMany();
 
   if (staffMembers.length === 0) {
     throw new Error(
@@ -732,13 +825,30 @@ async function seedAnimalsAndRelations() {
 
       const processingStaff = getRandomItem(staffMembers);
 
+      // Resolve the housing unit for this animal (if any). Animals with
+      // `unit: null` stay unplaced (no currentUnit assigned).
+      const targetUnitName = animalData.unit?.name;
+      const currentUnit = targetUnitName
+        ? dbUnits.find((u) => u.name === targetUnitName)
+        : undefined;
+      if (targetUnitName && !currentUnit) {
+        console.warn(
+          `Animal "${animalData.name}" references unit "${targetUnitName}" which was not found. Leaving it unplaced.`,
+        );
+      }
+
       //  Create Animal and Intake within a transaction
       const animal = await prisma.animal.create({
         data: {
           name: animalData.name,
           birthDate: getRandomDate(),
           sex: animalData.sex,
-          size: animalData.size,
+          // Size is derived from weight (same invariant the app enforces), so
+          // seeded animals stay consistent and survive edits.
+          size: getAnimalSize(species.name, animalData.weightKg),
+          weightKg: animalData.weightKg,
+          heightCm: animalData.heightCm,
+          microchipNumber: animalData.microchipNumber,
           city: "New York",
           state: "NY",
           description: "A wonderful companion looking for a home.",
@@ -754,6 +864,9 @@ async function seedAnimalsAndRelations() {
           animalImages: {
             create: animalData.images.map((imageUrl) => ({ url: imageUrl })),
           },
+          ...(currentUnit
+            ? { currentUnit: { connect: { id: currentUnit.id } } }
+            : {}),
         },
       });
 
@@ -991,6 +1104,11 @@ async function clearDatabase() {
   await prisma.medicalRecord.deleteMany();
   await prisma.animal.deleteMany();
 
+  // Units reference Location; Animal references Unit (SetNull). Animals are
+  // already cleared above, so units then locations can be removed safely.
+  await prisma.unit.deleteMany();
+  await prisma.location.deleteMany();
+
   await prisma.assessmentTemplate.deleteMany();
 
   await prisma.partner.deleteMany();
@@ -1014,6 +1132,7 @@ export async function main() {
   await seedLookupTables();
   await seedPartners();
   await seedAssessmentTemplates();
+  await seedLocationsAndUnits();
   await seedAnimalsAndRelations();
   await seedTasks();
   await seedAssessments();

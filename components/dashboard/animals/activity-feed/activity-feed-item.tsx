@@ -12,6 +12,7 @@ import {
   HeartPulse,
   PackagePlus,
   ArrowRightLeft,
+  MapPin,
   LucideProps,
 } from "lucide-react";
 import { AnimalActivityType } from "@prisma/client";
@@ -43,35 +44,39 @@ const activityConfig: Record<
   },
   [AnimalActivityType.INTAKE_PROCESSED]: {
     icon: LogIn,
-    text: "was processed for intake",
+    text: "processed an intake",
   },
   [AnimalActivityType.OUTCOME_PROCESSED]: {
     icon: LogOut,
-    text: "was processed for outcome",
+    text: "processed an outcome",
   },
   [AnimalActivityType.MEDICAL_RECORD_ADDED]: {
     icon: HeartPulse,
-    text: "had a medical record added",
+    text: "added a medical record",
   },
   [AnimalActivityType.CREATED]: {
     icon: PackagePlus,
-    text: "was created in the system",
+    text: "added this animal to the system",
   },
   [AnimalActivityType.STATUS_CHANGE]: {
     icon: ArrowRightLeft,
-    text: "had a status change",
+    text: "changed the status",
+  },
+  [AnimalActivityType.LOCATION_CHANGE]: {
+    icon: MapPin,
+    text: "moved this animal",
   },
   [AnimalActivityType.ASSESSMENT_COMPLETED]: {
     icon: ClipboardList,
-    text: "had an assessment completed",
+    text: "completed an assessment",
   },
   [AnimalActivityType.TASK_CREATED]: {
     icon: ClipboardList,
-    text: "had a task created",
+    text: "created a task",
   },
   [AnimalActivityType.TASK_STATUS_CHANGED]: {
     icon: ClipboardList,
-    text: "had a task status updated",
+    text: "updated a task's status",
   },
 };
 

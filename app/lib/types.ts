@@ -79,6 +79,12 @@ export type AnimalSectionCardPayload = Prisma.AnimalGetPayload<{
     colors: {
       select: { name: true };
     };
+    currentUnit: {
+      select: {
+        name: true;
+        location: { select: { name: true } };
+      };
+    };
     adoptionApplications: {
       select: { status: true };
     };
@@ -116,6 +122,7 @@ export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{
     healthStatus: true;
     speciesId: true;
     primaryColorId: true;
+    currentUnitId: true;
     breeds: {
       select: {
         id: true;
@@ -160,8 +167,6 @@ export type AdoptionApplicationPayload = Prisma.AdoptionApplicationGetPayload<{
   };
 }>;
 
-// Type for the animal object returned by getAnimalForApplication
-// This includes basic animal details and a minimal list of adoption applications
 export type AnimalForApplicationPayload = Prisma.AnimalGetPayload<{
   select: {
     id: true;

@@ -152,6 +152,9 @@ export const AnimalFormSchema = z
     description: z.string().optional(),
     city: z.string().optional(),
     state: z.string().optional(),
+    // Optional kennel placement. Empty = Unplaced (null). Location is only a UI
+    // cascade helper and is NOT persisted — the unit implies its location.
+    currentUnitId: z.cuid2().optional().or(z.literal("")),
 
     // Intake-Only Details
     intakeType: z.enum(IntakeType).optional(),

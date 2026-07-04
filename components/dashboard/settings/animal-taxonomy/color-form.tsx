@@ -2,7 +2,7 @@
 
 import { startTransition, useActionState, useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,13 +23,8 @@ import {
   updateColor,
 } from "@/app/lib/actions/colors-catalog.actions";
 import { ColorFormSchema } from "@/app/lib/zod-schemas/color.schemas";
+import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import { toast } from "sonner";
-
-const INITIAL_FORM_STATE: ColorFormState = {
-  success: false,
-  message: null,
-  errors: {},
-};
 
 type ColorFormValues = z.infer<typeof ColorFormSchema>;
 
@@ -46,8 +41,8 @@ export const ColorForm = ({ onFormSubmit, color }: Props) => {
     FormData
   >(action, INITIAL_FORM_STATE);
 
-  const form = useForm<ColorFormValues>({
-    resolver: zodResolver(ColorFormSchema),
+  const form = useForm({
+    resolver: standardSchemaResolver(ColorFormSchema),
     defaultValues: color ? { name: color.name } : { name: "" },
   });
 

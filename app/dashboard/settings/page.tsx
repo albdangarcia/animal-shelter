@@ -45,6 +45,13 @@ const settingsCards: readonly SettingsCard[] = [
         url: "/dashboard/settings/assessment-templates",
         permission: AppPermissions.MANAGE_ASSESSMENT_TEMPLATES,
     },
+    {
+        title: "Locations",
+        description:
+            "Manage kennel locations and the units within each one.",
+        url: "/dashboard/settings/locations",
+        permission: AppPermissions.MANAGE_LOCATIONS,
+    },
 ] as const;
 
 const Page = async () => {

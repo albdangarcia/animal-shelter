@@ -2,7 +2,7 @@ import { ColorsSection } from "@/components/dashboard/settings/animal-taxonomy/c
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { fetchColorsCatalog } from "@/app/lib/data/colors/olors-catalog.data";
+import { fetchColorsCatalog } from "@/app/lib/data/colors/colors-catalog.data";
 import { fetchSpeciesCatalog } from "@/app/lib/data/species/species-catalog.data";
 import { fetchBreedsCatalog } from "@/app/lib/data/breeds/breeds-catalog.data";
 import { SpeciesSection } from "@/components/dashboard/settings/animal-taxonomy/species-section";
