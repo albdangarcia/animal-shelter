@@ -23,37 +23,39 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { Breed, Species } from "@prisma/client";
+import { Location, LocationType } from "@prisma/client";
 import {
-  BreedFormState,
-  createBreed,
-  updateBreed,
-} from "@/app/lib/actions/breeds-catalog.actions";
-import { BreedFormSchema } from "@/app/lib/zod-schemas/taxonomy.schemas";
+  LocationFormState,
+  createLocation,
+  updateLocation,
+} from "@/app/lib/actions/locations.actions";
+import { LocationFormSchema } from "@/app/lib/zod-schemas/location.schemas";
+import { locationTypeOptions } from "@/app/lib/utils/enum-formatter";
 import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import { toast } from "sonner";
 
-type BreedFormValues = z.infer<typeof BreedFormSchema>;
+type LocationFormValues = z.infer<typeof LocationFormSchema>;
 
 interface Props {
   onFormSubmit: () => void;
-  species: Species[]; // active species, for the selector
-  breed?: Breed;
+  location?: Location;
 }
 
-export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
-  const action = breed ? updateBreed.bind(null, breed.id) : createBreed;
+export const LocationForm = ({ onFormSubmit, location }: Props) => {
+  const action = location
+    ? updateLocation.bind(null, location.id)
+    : createLocation;
 
   const [state, formAction, isPending] = useActionState<
-    BreedFormState,
+    LocationFormState,
     FormData
   >(action, INITIAL_FORM_STATE);
 
   const form = useForm({
-    resolver: standardSchemaResolver(BreedFormSchema),
-    defaultValues: breed
-      ? { name: breed.name, speciesId: breed.speciesId }
-      : { name: "", speciesId: "" },
+    resolver: standardSchemaResolver(LocationFormSchema),
+    defaultValues: location
+      ? { name: location.name, type: location.type }
+      : { name: "", type: "" as LocationType },
   });
 
   useEffect(() => {
@@ -65,7 +67,7 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
     } else if (state.errors) {
       toast.error(state.message || "Please check the form for errors.");
       for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof BreedFormValues, {
+        form.setError(key as keyof LocationFormValues, {
           type: "server",
           message: value?.join(", "),
         });
@@ -75,10 +77,10 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
     }
   }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: BreedFormValues) => {
+  const onSubmit = (data: LocationFormValues) => {
     const formData = new FormData();
     formData.append("name", data.name);
-    formData.append("speciesId", data.speciesId);
+    formData.append("type", data.type);
 
     startTransition(() => {
       formAction(formData);
@@ -89,36 +91,6 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 gap-4">
-          {/* Species */}
-          <FormField
-            control={form.control}
-            name="speciesId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel htmlFor="speciesId">Species</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                  name={field.name}
-                >
-                  <FormControl>
-                    <SelectTrigger className="w-full" id="speciesId">
-                      <SelectValue placeholder="Select a species" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {species.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
           {/* Name */}
           <FormField
             control={form.control}
@@ -127,8 +99,38 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
               <FormItem>
                 <FormLabel htmlFor="name">Name</FormLabel>
                 <FormControl>
-                  <Input id="name" placeholder="e.g. Labrador" {...field} />
+                  <Input id="name" placeholder="e.g. Main Kennel" {...field} />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Type */}
+          <FormField
+            control={form.control}
+            name="type"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel htmlFor="type">Type</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                  name={field.name}
+                >
+                  <FormControl>
+                    <SelectTrigger className="w-full" id="type">
+                      <SelectValue placeholder="Select a location type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {locationTypeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
@@ -145,12 +147,12 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
             {isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {breed ? "Updating..." : "Creating..."}
+                {location ? "Updating..." : "Creating..."}
               </>
-            ) : breed ? (
-              "Update Breed"
+            ) : location ? (
+              "Update Location"
             ) : (
-              "Create Breed"
+              "Create Location"
             )}
           </Button>
         </DialogFooter>

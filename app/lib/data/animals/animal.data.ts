@@ -155,6 +155,16 @@ const _fetchSectionCardsAnimalData = async (
             name: true,
           },
         },
+        currentUnit: {
+          select: {
+            name: true,
+            location: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
         adoptionApplications: {
           select: {
             status: true,
@@ -220,6 +230,7 @@ const _fetchAnimalById = async (
         healthStatus: true,
         speciesId: true,
         primaryColorId: true,
+        currentUnitId: true,
         breeds: {
           select: {
             id: true,

@@ -82,9 +82,15 @@ import {
   PartnerPayload,
   SpeciesPayload,
 } from "@/app/lib/types";
+import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { IntakeFormFields } from "./intake-form-fields";
 import { IntakeFieldsValues } from "@/app/lib/zod-schemas/intake.schema";
+import { UnitPickerLocation } from "@/app/lib/data/locations/unit-picker.data";
+
+// Sentinel for the "Unplaced" option — Radix Select forbids empty-string item
+// values, so we map this back to "" (currentUnitId = null) on change.
+const UNPLACED_VALUE = "__unplaced__";
 
 type AnimalFormValues = z.infer<typeof AnimalFormSchema>;
 
@@ -92,6 +98,7 @@ interface AnimalFormProps {
   speciesList: SpeciesPayload[];
   partners: PartnerPayload[];
   colors: ColorPayload[];
+  unitOptions: UnitPickerLocation[];
   animal?: AnimalIntakeFormPayload;
 }
 
@@ -99,6 +106,7 @@ const AnimalForm = ({
   speciesList,
   partners,
   colors,
+  unitOptions,
   animal,
 }: AnimalFormProps) => {
   const isEditMode = !!animal;
@@ -137,6 +145,16 @@ const AnimalForm = ({
     animal?.speciesId || "",
   );
 
+  // Location is only a UI cascade helper (not persisted). In edit mode, derive
+  // the initial location from the animal's placed unit so both selects pre-fill.
+  const [currentLocationId, setCurrentLocationId] = useState(
+    animal?.currentUnitId
+      ? (unitOptions.find((loc) =>
+          loc.units.some((u) => u.id === animal.currentUnitId),
+        )?.id ?? "")
+      : "",
+  );
+
   const form = useForm({
     resolver: standardSchemaResolver(AnimalFormSchema),
     defaultValues: isEditMode
@@ -159,6 +177,7 @@ const AnimalForm = ({
           city: animal.city || "",
           state: animal.state || "",
           description: animal.description || "",
+          currentUnitId: animal.currentUnitId || "",
         }
       : {
           intakeDate: new Date(),
@@ -176,6 +195,7 @@ const AnimalForm = ({
           heightCm: "",
           microchipNumber: "",
           listingStatus: AnimalListingStatus.DRAFT,
+          currentUnitId: "",
           notes: "",
           healthStatus: animalHealthStatusOptions[0].value,
           sourcePartnerId: "",
@@ -222,6 +242,14 @@ const AnimalForm = ({
   };
 
   const selectedSpecies = speciesList.find((s) => s.id === currentSpeciesId);
+
+  const selectedLocation = unitOptions.find((l) => l.id === currentLocationId);
+
+  // Advisory occupancy hint, e.g. "A-3 · 2/2" or "A-3 · 2/2 (full)". Never blocks.
+  const formatUnitOption = (unit: UnitPickerLocation["units"][number]) => {
+    const hint = `${unit.name} · ${unit.occupancy}/${unit.capacity}`;
+    return unit.occupancy >= unit.capacity ? `${hint} (full)` : hint;
+  };
 
   return (
     <Form {...form}>
@@ -682,6 +710,67 @@ const AnimalForm = ({
                           {US_STATES.map((state) => (
                             <SelectItem key={state.code} value={state.code}>
                               {state.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {/* Kennel placement (Location -> Unit cascade). Optional:
+                    "Unplaced" leaves currentUnitId null. Location is a UI-only
+                    helper; only the chosen unit is persisted. */}
+                <FormItem className="col-span-3">
+                  <Label>Location</Label>
+                  <Select
+                    value={currentLocationId || UNPLACED_VALUE}
+                    onValueChange={(value) => {
+                      const locationId =
+                        value === UNPLACED_VALUE ? "" : value;
+                      setCurrentLocationId(locationId);
+                      // Clear any previously-selected unit, mirroring the
+                      // species -> breed reset.
+                      form.setValue("currentUnitId", "");
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select a location" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={UNPLACED_VALUE}>Unplaced</SelectItem>
+                      {unitOptions.map((location) => (
+                        <SelectItem key={location.id} value={location.id}>
+                          {location.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-muted-foreground text-sm">
+                    Where the animal is physically housed. Leave as Unplaced if
+                    unknown.
+                  </p>
+                </FormItem>
+                <FormField
+                  control={form.control}
+                  name="currentUnitId"
+                  render={({ field }) => (
+                    <FormItem className="col-span-3">
+                      <FormLabel>Unit</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ""}
+                        disabled={!currentLocationId}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select a unit" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {(selectedLocation?.units || []).map((unit) => (
+                            <SelectItem key={unit.id} value={unit.id}>
+                              {formatUnitOption(unit)}
                             </SelectItem>
                           ))}
                         </SelectContent>

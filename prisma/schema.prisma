@@ -229,7 +229,6 @@ enum LocationType {
   ISOLATION
   MEDICAL
   QUARANTINE
-  FOSTER
   OFFSITE
   OTHER
 }
@@ -998,6 +997,7 @@ enum AnimalActivityType {
   INTAKE_PROCESSED // The initial intake event
   OUTCOME_PROCESSED // A final outcome event
   CREATED // The animal record itself was created
+  LOCATION_CHANGE // The animal was moved to a different unit/location (or unplaced)
 }
 
 model AnimalActivityLog {

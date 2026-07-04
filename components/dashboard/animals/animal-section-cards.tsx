@@ -311,6 +311,18 @@ const AnimalSectionCards = async ({ params }: Props) => {
             </h4>
             <div className="space-y-2">
               <div className="flex items-center justify-between border-b pb-2 text-sm">
+                <span className="text-muted-foreground">Location</span>
+                {animal.currentUnit ? (
+                  <span className="flex items-center gap-1 font-medium text-foreground">
+                    <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                    {animal.currentUnit.location.name} ·{" "}
+                    {animal.currentUnit.name}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">Unplaced</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between border-b pb-2 text-sm">
                 <span className="text-muted-foreground">Microchip</span>
                 <span className="font-mono text-xs font-medium">
                   {animal.microchipNumber || "Not microchipped"}

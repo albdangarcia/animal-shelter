@@ -20,6 +20,7 @@ import {
   IntakeType,
 } from "@prisma/client";
 import { getAnimalSize } from "../utils/animal-size";
+import { buildLocationChangeSummary } from "../utils/location-activity";
 import { ConflictError, NotFoundError } from "../utils/errors";
 import { del } from "@vercel/blob";
 import { isDemo } from "@/lib/flags";
@@ -84,6 +85,7 @@ const _createAnimal = async (
     surrenderingPersonPhone,
     weightKg,
     heightCm,
+    currentUnitId,
   } = validatedFields.data;
 
   // Full color set = primary + additionals, de-duped in case the primary
@@ -116,6 +118,29 @@ const _createAnimal = async (
         weightKg as number | null
       );
 
+      // verify the chosen unit still exists and isn't
+      // soft-deleted. Treat a stale/deleted unit as Unplaced rather than
+      // erroring. Capacity is never enforced.
+      let resolvedUnitId: string | null = null;
+      let resolvedUnitLabel: {
+        name: string;
+        location: { name: string };
+      } | null = null;
+      if (currentUnitId) {
+        const unit = await tx.unit.findFirst({
+          where: { id: currentUnitId, deletedAt: null },
+          select: {
+            id: true,
+            name: true,
+            location: { select: { name: true } },
+          },
+        });
+        resolvedUnitId = unit?.id ?? null;
+        resolvedUnitLabel = unit
+          ? { name: unit.name, location: unit.location }
+          : null;
+      }
+
       let surrenderingPersonId: string | undefined;
       if (intakeType === IntakeType.OWNER_SURRENDER && surrenderingPersonName) {
         const person = await tx.person.create({
@@ -146,6 +171,9 @@ const _createAnimal = async (
           microchipNumber: microchipNumber,
           city: validatedFields.data.foundCity || null,
           state: validatedFields.data.foundState || null,
+          currentUnit: resolvedUnitId
+            ? { connect: { id: resolvedUnitId } }
+            : undefined,
           species: { connect: { id: speciesId } },
           breeds: { connect: { id: breedId } },
           colors: { connect: allColorIds.map((id) => ({ id })) },
@@ -173,14 +201,22 @@ const _createAnimal = async (
         },
       });
 
+      const intakeSummaryBase = `Animal was admitted as ${intakeType
+        .replace(/_/g, " ")
+        .toLowerCase()}`;
+      // Intake is not a relocation and must not emit its own LOCATION_CHANGE
+      // (that would double-log). If a unit was chosen at intake, note the
+      // initial placement inline on this same summary instead.
+      const intakeSummary = resolvedUnitLabel
+        ? `${intakeSummaryBase}; placed in ${resolvedUnitLabel.location.name} · ${resolvedUnitLabel.name}.`
+        : `${intakeSummaryBase}.`;
+
       await tx.animalActivityLog.create({
         data: {
           animalId: newAnimal.id,
           activityType: AnimalActivityType.INTAKE_PROCESSED,
           changedById: staffMemberId,
-          changeSummary: `Animal was admitted as ${intakeType
-            .replace(/_/g, " ")
-            .toLowerCase()}.`,
+          changeSummary: intakeSummary,
         },
       });
 
@@ -252,6 +288,7 @@ const _updateAnimal = async (
     heightCm,
     city,
     state,
+    currentUnitId,
   } = validatedFields.data;
 
   // This guard prevents archiving from the intake form.
@@ -278,7 +315,14 @@ const _updateAnimal = async (
     await prisma.$transaction(async (tx) => {
       const currentAnimal = await tx.animal.findUnique({
         where: { id: validatedAnimalId },
-        select: { listingStatus: true, publishedAt: true },
+        select: {
+          listingStatus: true,
+          publishedAt: true,
+          currentUnitId: true,
+          currentUnit: {
+            select: { name: true, location: { select: { name: true } } },
+          },
+        },
       });
 
       if (!currentAnimal) {
@@ -337,6 +381,29 @@ const _updateAnimal = async (
         numericWeight as number | null
       );
 
+      // verify the chosen unit still exists and isn't
+      // soft-deleted. Treat a stale/deleted unit as Unplaced rather than
+      // erroring. Capacity is never enforced.
+      let resolvedUnitId: string | null = null;
+      let resolvedUnitLabel: {
+        name: string;
+        location: { name: string };
+      } | null = null;
+      if (currentUnitId) {
+        const unit = await tx.unit.findFirst({
+          where: { id: currentUnitId, deletedAt: null },
+          select: {
+            id: true,
+            name: true,
+            location: { select: { name: true } },
+          },
+        });
+        resolvedUnitId = unit?.id ?? null;
+        resolvedUnitLabel = unit
+          ? { name: unit.name, location: unit.location }
+          : null;
+      }
+
       let publishedAt = currentAnimal.publishedAt;
       if (
         listingStatus === AnimalListingStatus.PUBLISHED &&
@@ -361,6 +428,9 @@ const _updateAnimal = async (
           microchipNumber: microchipNumber,
           city: city,
           state: state,
+          currentUnit: resolvedUnitId
+            ? { connect: { id: resolvedUnitId } }
+            : { disconnect: true },
           species: { connect: { id: speciesId } },
           breeds: { set: [{ id: breedId }] },
           colors: { set: allColorIds.map((id) => ({ id })) },
@@ -375,6 +445,22 @@ const _updateAnimal = async (
             activityType: AnimalActivityType.STATUS_CHANGE,
             changedById: staffMemberId,
             changeSummary: `Listing status changed from ${currentAnimal.listingStatus} to ${listingStatus}.`,
+          },
+        });
+      }
+
+      // Log a relocation only when the unit actually changed. The edit action
+      // writes no generic FIELD_UPDATE, so LOCATION_CHANGE is purely additive.
+      if (currentAnimal.currentUnitId !== resolvedUnitId && staffMemberId) {
+        await tx.animalActivityLog.create({
+          data: {
+            animalId: validatedAnimalId,
+            activityType: AnimalActivityType.LOCATION_CHANGE,
+            changedById: staffMemberId,
+            changeSummary: buildLocationChangeSummary(
+              currentAnimal.currentUnit,
+              resolvedUnitLabel
+            ),
           },
         });
       }

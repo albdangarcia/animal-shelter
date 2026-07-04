@@ -8,13 +8,6 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Form,
   FormControl,
   FormField,
@@ -23,37 +16,37 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { Breed, Species } from "@prisma/client";
+import { Unit } from "@prisma/client";
 import {
-  BreedFormState,
-  createBreed,
-  updateBreed,
-} from "@/app/lib/actions/breeds-catalog.actions";
-import { BreedFormSchema } from "@/app/lib/zod-schemas/taxonomy.schemas";
+  UnitFormState,
+  createUnit,
+  updateUnit,
+} from "@/app/lib/actions/locations.actions";
+import { UnitFormSchema } from "@/app/lib/zod-schemas/location.schemas";
 import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import { toast } from "sonner";
 
-type BreedFormValues = z.infer<typeof BreedFormSchema>;
+type UnitFormValues = z.infer<typeof UnitFormSchema>;
 
 interface Props {
   onFormSubmit: () => void;
-  species: Species[]; // active species, for the selector
-  breed?: Breed;
+  locationId: string; // the parent location this unit belongs to
+  unit?: Unit;
 }
 
-export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
-  const action = breed ? updateBreed.bind(null, breed.id) : createBreed;
+export const UnitForm = ({ onFormSubmit, locationId, unit }: Props) => {
+  const action = unit ? updateUnit.bind(null, unit.id) : createUnit;
 
   const [state, formAction, isPending] = useActionState<
-    BreedFormState,
+    UnitFormState,
     FormData
   >(action, INITIAL_FORM_STATE);
 
   const form = useForm({
-    resolver: standardSchemaResolver(BreedFormSchema),
-    defaultValues: breed
-      ? { name: breed.name, speciesId: breed.speciesId }
-      : { name: "", speciesId: "" },
+    resolver: standardSchemaResolver(UnitFormSchema),
+    defaultValues: unit
+      ? { name: unit.name, capacity: unit.capacity, locationId }
+      : { name: "", capacity: 1, locationId },
   });
 
   useEffect(() => {
@@ -65,7 +58,7 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
     } else if (state.errors) {
       toast.error(state.message || "Please check the form for errors.");
       for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof BreedFormValues, {
+        form.setError(key as keyof UnitFormValues, {
           type: "server",
           message: value?.join(", "),
         });
@@ -75,10 +68,12 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
     }
   }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: BreedFormValues) => {
+  const onSubmit = (data: UnitFormValues) => {
     const formData = new FormData();
     formData.append("name", data.name);
-    formData.append("speciesId", data.speciesId);
+    formData.append("capacity", String(data.capacity));
+    // locationId is not a visible field — the unit keeps its parent location.
+    formData.append("locationId", locationId);
 
     startTransition(() => {
       formAction(formData);
@@ -89,36 +84,6 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 gap-4">
-          {/* Species */}
-          <FormField
-            control={form.control}
-            name="speciesId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel htmlFor="speciesId">Species</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                  name={field.name}
-                >
-                  <FormControl>
-                    <SelectTrigger className="w-full" id="speciesId">
-                      <SelectValue placeholder="Select a species" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {species.map((s) => (
-                      <SelectItem key={s.id} value={s.id}>
-                        {s.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
           {/* Name */}
           <FormField
             control={form.control}
@@ -127,11 +92,45 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
               <FormItem>
                 <FormLabel htmlFor="name">Name</FormLabel>
                 <FormControl>
-                  <Input id="name" placeholder="e.g. Labrador" {...field} />
+                  <Input id="name" placeholder="e.g. A-1" {...field} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
+          />
+
+          {/* Capacity */}
+          <FormField
+            control={form.control}
+            name="capacity"
+            render={({ field }) => {
+              // Keep the number input controlled as a string, parsing to an int
+              // on change (mirrors weightKg/heightCm in the animal intake form).
+              const value =
+                field.value === undefined || field.value === ""
+                  ? ""
+                  : String(field.value);
+
+              return (
+                <FormItem>
+                  <FormLabel htmlFor="capacity">Capacity</FormLabel>
+                  <FormControl>
+                    <Input
+                      id="capacity"
+                      type="number"
+                      min="1"
+                      {...field}
+                      value={value}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        field.onChange(val === "" ? "" : parseInt(val, 10));
+                      }}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
           />
         </div>
 
@@ -145,12 +144,12 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
             {isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                {breed ? "Updating..." : "Creating..."}
+                {unit ? "Updating..." : "Creating..."}
               </>
-            ) : breed ? (
-              "Update Breed"
+            ) : unit ? (
+              "Update Unit"
             ) : (
-              "Create Breed"
+              "Create Unit"
             )}
           </Button>
         </DialogFooter>
