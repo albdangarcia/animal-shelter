@@ -22,6 +22,7 @@ const volunteerPermissions: readonly AppPermission[] = [
   AppPermissions.ANIMAL_PHOTO_READ,
   AppPermissions.APPLICATIONS_READ,
   AppPermissions.OUTCOMES_READ,
+  AppPermissions.REPORTS_READ,
   AppPermissions.PARTNERS_READ,
   AppPermissions.PERSONS_READ,
 ] as const;

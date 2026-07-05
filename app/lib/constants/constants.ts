@@ -8,3 +8,12 @@ export const ALLOWED_MIME_TYPES = [
 
 // Maximum file size for image uploads (5MB)
 export const MAX_FILE_SIZE = 5 * 1024 * 1024;
+
+/**
+ * The single IANA timezone the shelter operates in. All reporting date-range
+ * boundaries are computed in this zone so that every viewer sees identical
+ * numbers regardless of their own browser/OS timezone. Configurable via the
+ * `SHELTER_TIMEZONE` env var, with a sensible fallback.
+ */
+export const SHELTER_TIMEZONE =
+  process.env.SHELTER_TIMEZONE || "America/New_York";
