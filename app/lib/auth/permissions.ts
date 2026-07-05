@@ -1,7 +1,11 @@
 export const AppPermissions = {
   // Dashboard Analytics Permissions
   ANIMAL_READ_ANALYTICS: "animal:read_analytics", // For pet analytics (e.g., on the main dashboard overview)
-  
+
+  // Reporting (historical/compliance statistics)
+  // reports are the historical/compliance surface over a user-selected range.
+  REPORTS_READ: "reports:read",
+
   // Intake Management
   // INTAKE_READ: "intake:read",
   INTAKE_MANAGE: "intake:create",

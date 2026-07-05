@@ -93,6 +93,12 @@ export const navMainItems: readonly NavItem[] = [
     permission: AppPermissions.OUTCOMES_READ,
   },
   {
+    title: "Reports",
+    url: "/dashboard/reports",
+    icon: "IconReport",
+    permission: AppPermissions.REPORTS_READ,
+  },
+  {
     title: "Animal Tasks",
     url: "/dashboard/animal-tasks",
     icon: "IconCheckbox",
@@ -162,10 +168,4 @@ export const navSecondaryItems: readonly NavItem[] = [
 ] as const;
 
 // Documents/Quick actions
-export const documentItems: readonly NavDocument[] = [
-  {
-    name: "Reports",
-    url: "#",
-    icon: "IconReport",
-  },
-] as const;
+export const documentItems: readonly NavDocument[] = [] as const;

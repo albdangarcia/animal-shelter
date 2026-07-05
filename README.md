@@ -127,6 +127,12 @@ Add the following variables to your `.env` file. See `.env.example` for a full r
 | ----------------------- | ----------- | ---------------------------------------------------------------- |
 | `BLOB_READ_WRITE_TOKEN` | ✅ Required | Read/write token for Vercel Blob Storage (stores animal images). |
 
+### Reporting
+
+| Variable           | Required    | Description                                                                                                                                         |
+| ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SHELTER_TIMEZONE` | ⚪ Optional | IANA timezone the shelter operates in (e.g. `America/New_York`). All report date-range boundaries are computed in this zone. Defaults to `America/New_York`. |
+
 ### Generating `AUTH_SECRET`
 
 Run the following command to generate a secure secret key:
