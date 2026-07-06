@@ -528,6 +528,15 @@ export type PartnerNotePayload = Prisma.PartnerNoteGetPayload<{
   };
 }>;
 
+export type PersonPickerOption = Prisma.PersonGetPayload<{
+  select: {
+    id: true;
+    name: true;
+    email: true;
+    phone: true;
+  };
+}>;
+
 export type PersonNotePayload = Prisma.PersonNoteGetPayload<{
   select: {
     id: true;

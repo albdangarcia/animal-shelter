@@ -17,8 +17,7 @@ export const ReIntakeFormSchema = z
     foundState: z.string().optional(),
 
     // Owner surrender-specific fields
-    surrenderingPersonName: z.string().optional(),
-    surrenderingPersonPhone: z.string().optional(),
+    surrenderingPersonId: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     // Validate Transfer In
@@ -49,21 +48,15 @@ export const ReIntakeFormSchema = z
     }
 
     // Validate Owner Surrender
-    if (data.intakeType === IntakeType.OWNER_SURRENDER) {
-      if (!data.surrenderingPersonName) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Surrendering person's name is required",
-          path: ["surrenderingPersonName"],
-        });
-      }
-      if (!data.surrenderingPersonPhone) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Surrendering person's phone is required",
-          path: ["surrenderingPersonPhone"],
-        });
-      }
+    if (
+      data.intakeType === IntakeType.OWNER_SURRENDER &&
+      !data.surrenderingPersonId
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "A surrendering person is required.",
+        path: ["surrenderingPersonId"],
+      });
     }
   });
 
@@ -75,8 +68,7 @@ export const IntakeFieldsSchema = z.object({
   foundAddress: z.string().optional(),
   foundCity: z.string().optional(),
   foundState: z.string().optional(),
-  surrenderingPersonName: z.string().optional(),
-  surrenderingPersonPhone: z.string().optional(),
+  surrenderingPersonId: z.string().optional(),
 });
 
 export type IntakeFieldsValues = z.infer<typeof IntakeFieldsSchema>;

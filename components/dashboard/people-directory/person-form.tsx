@@ -5,7 +5,7 @@ import {
   updateMyProfile,
   updatePerson,
 } from "@/app/lib/actions/person.actions";
-import { startTransition, useActionState, useEffect } from "react";
+import { startTransition, useActionState, useEffect, useState } from "react";
 import {
   INITIAL_FORM_STATE,
   PersonFormState,
@@ -13,7 +13,7 @@ import {
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { Loader2 } from "lucide-react";
+import { Loader2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -40,7 +40,11 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { PersonFormSchema } from "@/app/lib/zod-schemas/people-directory.schemas";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import {
+  PersonFormSchema,
+  StaffPersonFormSchema,
+} from "@/app/lib/zod-schemas/people-directory.schemas";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import Link from "next/link";
 import { PersonFormPayload } from "@/app/lib/types";
@@ -80,8 +84,12 @@ const PersonForm = ({
     FormData
   >(action, INITIAL_FORM_STATE);
 
+  // Staff-managed records (create + staff edit) require a contact method;
+  // self-profile updates don't (see StaffPersonFormSchema's doc comment).
+  const validationSchema = mode === "self" ? PersonFormSchema : StaffPersonFormSchema;
+
   const form = useForm({
-    resolver: standardSchemaResolver(PersonFormSchema),
+    resolver: standardSchemaResolver(validationSchema),
     defaultValues: isEditMode
       ? {
           name: person.name,
@@ -118,6 +126,11 @@ const PersonForm = ({
     }
   }, [state, form]);
 
+  // Holds the most recently submitted FormData so "Continue anyway" can
+  // resubmit the exact same values with confirmDuplicate set, without
+  // re-serializing from (possibly since-changed) form state.
+  const [lastFormData, setLastFormData] = useState<FormData | null>(null);
+
   const onSubmit = (data: PersonFormValues) => {
     const formData = new FormData();
     for (const [key, value] of Object.entries(data)) {
@@ -128,8 +141,17 @@ const PersonForm = ({
     if (returnTo) {
       formData.append("returnTo", returnTo);
     }
+    setLastFormData(formData);
     startTransition(() => {
       formAction(formData);
+    });
+  };
+
+  const handleConfirmDuplicate = () => {
+    if (!lastFormData) return;
+    lastFormData.set("confirmDuplicate", "true");
+    startTransition(() => {
+      formAction(lastFormData);
     });
   };
 
@@ -154,10 +176,55 @@ const PersonForm = ({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-10">
+            {state.duplicate && (
+              <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
+                <TriangleAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <AlertTitle className="text-amber-800 dark:text-amber-300">
+                  Possible duplicate person
+                </AlertTitle>
+                <AlertDescription className="text-amber-800 dark:text-amber-400">
+                  <span>
+                    A person with this {state.duplicate.matchedOn} already
+                    exists: {state.duplicate.name}.
+                  </span>
+                  {state.duplicate.matchedOn === "email" && (
+                    <span>
+                      This email is already in use by another person — it
+                      can&apos;t be saved here too.
+                    </span>
+                  )}
+                  <div className="mt-2 flex items-center gap-3">
+                    <Link
+                      href={`/dashboard/people-directory/${state.duplicate.id}`}
+                      className="font-semibold underline"
+                    >
+                      Use them instead
+                    </Link>
+                    {state.duplicate.matchedOn === "phone" && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={isPending}
+                        onClick={handleConfirmDuplicate}
+                      >
+                        Continue anyway
+                      </Button>
+                    )}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-6">
               <h3 className="font-semibold border-b pb-2">
                 Contact Information
               </h3>
+              {mode !== "self" && (
+                <p className="text-sm text-muted-foreground">
+                  Provide at least an email or phone number so this person can
+                  be contacted.
+                </p>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-6 gap-x-4 gap-y-8">
                 <FormField
                   control={form.control}
@@ -181,7 +248,15 @@ const PersonForm = ({
                   name="email"
                   render={({ field }) => (
                     <FormItem className="col-span-3">
-                      <FormLabel>Email</FormLabel>
+                      <FormLabel>
+                        Email
+                        {mode !== "self" && (
+                          <span className="text-muted-foreground font-normal">
+                            {" "}
+                            (or phone)
+                          </span>
+                        )}
+                      </FormLabel>
                       <FormControl>
                         <Input
                           type="email"
@@ -198,7 +273,15 @@ const PersonForm = ({
                   name="phone"
                   render={({ field }) => (
                     <FormItem className="col-span-3">
-                      <FormLabel>Phone</FormLabel>
+                      <FormLabel>
+                        Phone
+                        {mode !== "self" && (
+                          <span className="text-muted-foreground font-normal">
+                            {" "}
+                            (or email)
+                          </span>
+                        )}
+                      </FormLabel>
                       <FormControl>
                         <Input placeholder="e.g., (555) 123-4567" {...field} />
                       </FormControl>

@@ -81,12 +81,23 @@ const _createAnimal = async (
     foundAddress,
     foundCity,
     foundState,
-    surrenderingPersonName,
-    surrenderingPersonPhone,
+    surrenderingPersonId,
     weightKg,
     heightCm,
     currentUnitId,
   } = validatedFields.data;
+
+  if (intakeType === IntakeType.OWNER_SURRENDER) {
+    const parsedPersonId = cuidSchema.safeParse(surrenderingPersonId);
+    if (!parsedPersonId.success) {
+      return {
+        errors: {
+          surrenderingPersonId: ["A surrendering person is required."],
+        },
+        message: "Missing or invalid fields. Failed to create intake record.",
+      };
+    }
+  }
 
   // Full color set = primary + additionals, de-duped in case the primary
   // also appears in the additional list.
@@ -139,17 +150,6 @@ const _createAnimal = async (
         resolvedUnitLabel = unit
           ? { name: unit.name, location: unit.location }
           : null;
-      }
-
-      let surrenderingPersonId: string | undefined;
-      if (intakeType === IntakeType.OWNER_SURRENDER && surrenderingPersonName) {
-        const person = await tx.person.create({
-          data: {
-            name: surrenderingPersonName,
-            phone: surrenderingPersonPhone,
-          },
-        });
-        surrenderingPersonId = person.id;
       }
 
       // Set publishedAt if listing status is PUBLISHED

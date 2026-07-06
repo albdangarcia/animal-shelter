@@ -225,7 +225,7 @@ const AnimalSectionCards = async ({ params }: Props) => {
                 {approvedApplications > 0
                   ? "Complete Adoption"
                   : animal.listingStatus === AnimalListingStatus.ARCHIVED
-                    ? "Create Intake"
+                    ? "Create Re-Intake"
                     : "Create Outcome"}
               </Link>
             </Button>

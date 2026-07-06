@@ -2,6 +2,7 @@ import { prisma } from "@/app/lib/prisma";
 import {
   AnimalListingStatus,
   ApplicationStatus,
+  IntakeType,
   Sex,
   Prisma,
 } from "@prisma/client";
@@ -353,6 +354,19 @@ const _fetchAnimalForOutcomeForm = async (id: string) => {
         id: true,
         name: true,
         listingStatus: true,
+        intake: {
+          where: {
+            type: IntakeType.OWNER_SURRENDER,
+            surrenderingPersonId: { not: null },
+          },
+          orderBy: { intakeDate: "desc" },
+          take: 1,
+          select: {
+            surrenderingPerson: {
+              select: { id: true, name: true },
+            },
+          },
+        },
       },
     });
     return animal;

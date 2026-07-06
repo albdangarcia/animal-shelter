@@ -164,8 +164,7 @@ export const AnimalFormSchema = z
     foundAddress: z.string().optional(),
     foundCity: z.string().optional(),
     foundState: z.string().optional(),
-    surrenderingPersonName: z.string().optional(),
-    surrenderingPersonPhone: z.string().optional(),
+    surrenderingPersonId: z.cuid2().optional().or(z.literal("")),
   })
   .superRefine((data, ctx) => {
     if (data.intakeType === "TRANSFER_IN" && !data.sourcePartnerId) {
@@ -184,11 +183,11 @@ export const AnimalFormSchema = z
       });
     }
 
-    if (data.intakeType === "OWNER_SURRENDER" && !data.surrenderingPersonName) {
+    if (data.intakeType === "OWNER_SURRENDER" && !data.surrenderingPersonId) {
       ctx.addIssue({
         code: "custom",
-        message: "Surrenderer's name is required for owner surrenders.",
-        path: ["surrenderingPersonName"],
+        message: "A surrendering person is required.",
+        path: ["surrenderingPersonId"],
       });
     }
 
