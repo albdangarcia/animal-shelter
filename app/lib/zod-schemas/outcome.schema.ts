@@ -12,6 +12,7 @@ export const OutcomeFormSchema = z
         issue.input === undefined ? "An outcome type is required." : undefined,
     }),
     destinationPartnerId: z.string().optional(),
+    ownerId: z.string().optional(),
     notes: z.string().optional(),
   })
   .refine(
@@ -25,5 +26,18 @@ export const OutcomeFormSchema = z
     {
       path: ["destinationPartnerId"], // Field that will display the error
       error: "A destination partner is required for transfers.",
+    }
+  )
+  .refine(
+    (data) => {
+      // If the outcome type is RETURN_TO_OWNER, an owner must be selected.
+      if (data.outcomeType === "RETURN_TO_OWNER") {
+        return !!data.ownerId;
+      }
+      return true;
+    },
+    {
+      path: ["ownerId"], // Field that will display the error
+      error: "An owner is required for return-to-owner outcomes.",
     }
   );

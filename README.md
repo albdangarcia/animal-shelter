@@ -133,6 +133,12 @@ Add the following variables to your `.env` file. See `.env.example` for a full r
 | ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SHELTER_TIMEZONE` | ⚪ Optional | IANA timezone the shelter operates in (e.g. `America/New_York`). All report date-range boundaries are computed in this zone. Defaults to `America/New_York`. |
 
+### Seeding
+
+| Variable              | Required    | Description                                                                                                                                                                                                    |
+| ---------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SEED_IMAGE_BASE_URL` | ⚪ Optional | Base URL/path the seed uses for animal images. Read at seed time and baked into stored image paths. `/uploads` for local dev (default); a blob/CDN base URL for hosted deploys. Independent of the demo flag. Re-seed after changing it. |
+
 ### Generating `AUTH_SECRET`
 
 Run the following command to generate a secure secret key:

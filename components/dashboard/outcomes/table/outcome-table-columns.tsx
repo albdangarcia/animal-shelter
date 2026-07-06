@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ColumnDef } from "@tanstack/react-table";
+import { OutcomeType } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { OutcomeTypesOptions } from "./outcome-options";
@@ -9,6 +10,14 @@ import { DataTableColumnHeader } from "../../../table-common/data-table-column-h
 import { DataTableRowActions } from "./outcome-table-row-actions";
 import { OutcomeWithDetails } from "@/app/lib/data/animals/outcome.data";
 import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+
+// Maps outcome types to their recipient's relationship label. Types not
+// listed here (deceased, euthanized, other) genuinely have no recipient.
+const recipientRelationshipLabel: Partial<Record<OutcomeType, string>> = {
+  ADOPTION: "Adopter",
+  TRANSFER_OUT: "Partner",
+  RETURN_TO_OWNER: "Owner",
+};
 
 export interface GetColumnsProps {
   canManage: boolean;
@@ -71,11 +80,23 @@ export const getColumns = ({
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Recipient" />
     ),
-    cell: ({ row }) => (
-      <span className="max-w-125 truncate font-medium">
-        {row.getValue("recipient") || "N/A"}
-      </span>
-    ),
+    cell: ({ row }) => {
+      const name = row.getValue("recipient") as string;
+      const relationshipLabel = recipientRelationshipLabel[row.original.type];
+
+      if (!name || !relationshipLabel) {
+        return <span className="text-muted-foreground">N/A</span>;
+      }
+
+      return (
+        <div className="flex max-w-125 items-center gap-2">
+          <span className="truncate font-medium">{name}</span>
+          <Badge variant="outline" className="shrink-0">
+            {relationshipLabel}
+          </Badge>
+        </div>
+      );
+    },
   },
   {
     accessorKey: "type",

@@ -12,14 +12,18 @@ import {
   withAuthenticatedUser,
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { PersonFormSchema } from "../zod-schemas/people-directory.schemas";
+import {
+  PersonFormSchema,
+  StaffPersonFormSchema,
+} from "../zod-schemas/people-directory.schemas";
+import { fetchDuplicatePersonCandidate } from "../data/people-directory/people-directory.data";
 import { z } from "zod";
 
 const _createPerson = async (
   prevState: PersonFormState,
   formData: FormData,
 ): Promise<PersonFormState> => {
-  const validatedFields = PersonFormSchema.safeParse(
+  const validatedFields = StaffPersonFormSchema.safeParse(
     Object.fromEntries(formData.entries()),
   );
 
@@ -32,6 +36,29 @@ const _createPerson = async (
 
   const { name, email, phone, address, city, state, zipCode } =
     validatedFields.data;
+
+  const returnTo = formData.get("returnTo");
+  const resolvedReturnTo =
+    typeof returnTo === "string" && returnTo ? returnTo : null;
+
+  // Soft duplicate warning: keyed on the contact method alone, never on
+  // name. Skipped when the user has already confirmed they want to proceed.
+  const confirmDuplicate = formData.get("confirmDuplicate") === "true";
+  if (!confirmDuplicate) {
+    const duplicate = await fetchDuplicatePersonCandidate(
+      email || null,
+      phone || null,
+    );
+    if (duplicate) {
+      const matchedOn: "email" | "phone" =
+        email && duplicate.email?.toLowerCase() === email.toLowerCase()
+          ? "email"
+          : "phone";
+      return {
+        duplicate: { id: duplicate.id, name: duplicate.name, matchedOn },
+      };
+    }
+  }
 
   let newPersonId: string;
 
@@ -66,7 +93,7 @@ const _createPerson = async (
   }
 
   revalidatePath("/dashboard/people-directory");
-  redirect(`/dashboard/people-directory/${newPersonId}`);
+  redirect(resolvedReturnTo ?? `/dashboard/people-directory/${newPersonId}`);
 };
 
 const _updatePerson = async (
@@ -79,7 +106,7 @@ const _updatePerson = async (
     return { message: "Invalid person ID format." };
   }
 
-  const validatedFields = PersonFormSchema.safeParse(
+  const validatedFields = StaffPersonFormSchema.safeParse(
     Object.fromEntries(formData.entries()),
   );
 
@@ -92,6 +119,27 @@ const _updatePerson = async (
 
   const { name, email, phone, address, city, state, zipCode } =
     validatedFields.data;
+
+  // Soft duplicate warning, same as create: keyed on email/phone, never
+  // name. excludePersonId is critical here — without it, this person would
+  // always "match" themselves on their own unchanged email/phone.
+  const confirmDuplicate = formData.get("confirmDuplicate") === "true";
+  if (!confirmDuplicate) {
+    const duplicate = await fetchDuplicatePersonCandidate(
+      email || null,
+      phone || null,
+      parsedId.data,
+    );
+    if (duplicate) {
+      const matchedOn: "email" | "phone" =
+        email && duplicate.email?.toLowerCase() === email.toLowerCase()
+          ? "email"
+          : "phone";
+      return {
+        duplicate: { id: duplicate.id, name: duplicate.name, matchedOn },
+      };
+    }
+  }
 
   try {
     await prisma.person.update({

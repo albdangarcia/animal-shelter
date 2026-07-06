@@ -30,12 +30,19 @@ import { US_STATES } from "@/app/lib/constants/us-states";
 import { PartnerPayload } from "@/app/lib/types";
 import { FieldValues, Control, UseFormWatch, Path } from "react-hook-form";
 import { IntakeFieldsValues } from "@/app/lib/zod-schemas/intake.schema";
+import { PersonPicker } from "@/components/common/person-picker";
 
 interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
   control: Control<T>;
   watch: UseFormWatch<T>;
   partners: PartnerPayload[];
   isEditMode?: boolean;
+  returnTo: string;
+  suggestedSurrenderingPersonId?: string;
+  suggestedSurrenderingPersonLabel?: string;
+  // See PersonPicker's allowCreate — disabled where the host form holds
+  // unsaved data that a round-trip to the person-create page would lose.
+  allowCreatePerson?: boolean;
 }
 
 export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
@@ -43,6 +50,10 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
   watch,
   partners,
   isEditMode = false,
+  returnTo,
+  suggestedSurrenderingPersonId,
+  suggestedSurrenderingPersonLabel,
+  allowCreatePerson = true,
 }: IntakeFormFieldsProps<T>) => {
   const intakeType = watch("intakeType" as Path<T>);
 
@@ -259,32 +270,18 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
             </h4>
             <FormField
               control={control}
-              name={"surrenderingPersonName" as Path<T>}
+              name={"surrenderingPersonId" as Path<T>}
               render={({ field }) => (
-                <FormItem className="col-span-3">
-                  <FormLabel>Full Name</FormLabel>
+                <FormItem className="col-span-full">
+                  <FormLabel>Surrendering Person</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="e.g., Mary Public"
-                      {...field}
-                      disabled={isEditMode}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={control}
-              name={"surrenderingPersonPhone" as Path<T>}
-              render={({ field }) => (
-                <FormItem className="col-span-3">
-                  <FormLabel>Phone Number</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="(555) 123-4567"
-                      {...field}
-                      disabled={isEditMode}
+                    <PersonPicker
+                      value={field.value || null}
+                      onChange={(id) => field.onChange(id ?? "")}
+                      suggestedPersonId={suggestedSurrenderingPersonId}
+                      suggestedPersonLabel={suggestedSurrenderingPersonLabel}
+                      returnTo={returnTo}
+                      allowCreate={allowCreatePerson}
                     />
                   </FormControl>
                   <FormMessage />

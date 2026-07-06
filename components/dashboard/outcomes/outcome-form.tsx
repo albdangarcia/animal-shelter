@@ -3,10 +3,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { startTransition, useActionState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { OutcomeType } from "@prisma/client";
 import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import {
   AdoptionApplicationPayload,
@@ -44,6 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { PersonPicker } from "@/components/common/person-picker";
 import { format } from "date-fns";
 import { outcomeTypeOptions } from "@/app/lib/utils/enum-formatter";
 import {
@@ -65,6 +68,8 @@ interface OutcomeFormProps {
   application?: AdoptionApplicationPayload; // Optional, for internal adoptions
   outcome?: OutcomePayload; // For edit mode
   partners: PartnerPayload[]; // For the 'Transfer' option
+  suggestedOwnerId?: string; // For the 'Return to Owner' option
+  suggestedOwnerLabel?: string;
 }
 
 export function OutcomeForm({
@@ -72,8 +77,15 @@ export function OutcomeForm({
   application,
   outcome,
   partners,
+  suggestedOwnerId,
+  suggestedOwnerLabel,
 }: OutcomeFormProps) {
   const isEditMode = !!outcome;
+
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const query = searchParams.toString();
+  const returnTo = query ? `${pathname}?${query}` : pathname;
 
   const isAdoptionOutcome = !!application;
 
@@ -98,8 +110,10 @@ export function OutcomeForm({
     resolver: zodResolver(OutcomeFormSchema),
     defaultValues: {
       outcomeDate: outcome?.outcomeDate ?? new Date(),
-      outcomeType: outcome?.type ?? (application ? "ADOPTION" : undefined),
+      outcomeType:
+        outcome?.type ?? (application ? "ADOPTION" : ("" as OutcomeType)),
       destinationPartnerId: outcome?.destinationPartnerId ?? "",
+      ownerId: outcome?.ownerId ?? "",
       notes: outcome?.notes ?? "",
     },
   });
@@ -261,6 +275,28 @@ export function OutcomeForm({
                         ))}
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {outcomeTypeValue === "RETURN_TO_OWNER" && (
+              <FormField
+                control={form.control}
+                name="ownerId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Owner *</FormLabel>
+                    <FormControl>
+                      <PersonPicker
+                        value={field.value || null}
+                        onChange={(id) => field.onChange(id ?? "")}
+                        suggestedPersonId={suggestedOwnerId}
+                        suggestedPersonLabel={suggestedOwnerLabel}
+                        returnTo={returnTo}
+                      />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}

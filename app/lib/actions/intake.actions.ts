@@ -28,8 +28,7 @@ export type IntakeFormState = {
     foundAddress?: string[];
     foundCity?: string[];
     foundState?: string[];
-    surrenderingPersonName?: string[];
-    surrenderingPersonPhone?: string[];
+    surrenderingPersonId?: string[];
     notes?: string[];
   };
 };
@@ -66,10 +65,7 @@ const _createReIntake = async (
     foundAddress: formData.get("foundAddress") as string | undefined,
     foundCity: formData.get("foundCity") as string | undefined,
     foundState: formData.get("foundState") as string | undefined,
-    surrenderingPersonName: formData.get("surrenderingPersonName") as
-      | string
-      | undefined,
-    surrenderingPersonPhone: formData.get("surrenderingPersonPhone") as
+    surrenderingPersonId: formData.get("surrenderingPersonId") as
       | string
       | undefined,
   };
@@ -92,9 +88,20 @@ const _createReIntake = async (
     foundAddress,
     foundCity,
     foundState,
-    surrenderingPersonName,
-    surrenderingPersonPhone,
+    surrenderingPersonId,
   } = validatedFields.data;
+
+  if (intakeType === IntakeType.OWNER_SURRENDER) {
+    const parsedPersonId = cuidSchema.safeParse(surrenderingPersonId);
+    if (!parsedPersonId.success) {
+      return {
+        errors: {
+          surrenderingPersonId: ["A surrendering person is required."],
+        },
+        message: "Missing or invalid fields. Failed to process re-intake.",
+      };
+    }
+  }
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -116,18 +123,6 @@ const _createReIntake = async (
         throw new Error(
           "Cannot process re-intake: This animal is not currently archived or was just re-intaked."
         );
-      }
-
-      // Create surrendering person if needed
-      let surrenderingPersonId: string | undefined;
-      if (intakeType === IntakeType.OWNER_SURRENDER && surrenderingPersonName) {
-        const person = await tx.person.create({
-          data: {
-            name: surrenderingPersonName,
-            phone: surrenderingPersonPhone,
-          },
-        });
-        surrenderingPersonId = person.id;
       }
 
       // Create a new Intake record for this event

@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   INITIAL_FORM_STATE,
   AnimalFormState,
@@ -109,6 +110,11 @@ const AnimalForm = ({
   unitOptions,
   animal,
 }: AnimalFormProps) => {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const query = searchParams.toString();
+  const returnTo = query ? `${pathname}?${query}` : pathname;
+
   const isEditMode = !!animal;
 
   const isStatusLocked =
@@ -202,8 +208,7 @@ const AnimalForm = ({
           foundAddress: "",
           foundCity: "",
           foundState: "",
-          surrenderingPersonName: "",
-          surrenderingPersonPhone: "",
+          surrenderingPersonId: "",
         },
   });
 
@@ -813,6 +818,8 @@ const AnimalForm = ({
                 }
                 partners={partners}
                 isEditMode={false}
+                returnTo={returnTo}
+                allowCreatePerson={false}
               />
             )}
           </CardContent>

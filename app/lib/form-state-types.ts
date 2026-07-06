@@ -20,8 +20,7 @@ export type AnimalFormState = {
     foundAddress?: string[];
     foundCity?: string[];
     foundState?: string[];
-    surrenderingPersonName?: string[];
-    surrenderingPersonPhone?: string[];
+    surrenderingPersonId?: string[];
     notes?: string[];
   };
 };
@@ -32,6 +31,7 @@ export type OutcomeFormState = {
     outcomeDate?: string[];
     outcomeType?: string[];
     destinationPartnerId?: string[];
+    ownerId?: string[];
     notes?: string[];
   };
 };
@@ -98,6 +98,14 @@ export type PersonFormState = {
     state?: string[];
     zipCode?: string[];
   };
+  // Soft duplicate warning from _createPerson: a possible match was found by
+  // email/phone, but the record was NOT created — the user must resubmit
+  // with confirmDuplicate to proceed anyway.
+  duplicate?: {
+    id: string;
+    name: string;
+    matchedOn: "email" | "phone";
+  } | null;
 };
 
 export interface HouseholdProfileFormState {

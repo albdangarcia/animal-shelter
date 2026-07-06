@@ -10,6 +10,7 @@ import {
 import { AppPermissions } from "../auth/permissions";
 import { OutcomeFormSchema } from "../zod-schemas/outcome.schema";
 import {
+  AnimalActivityType,
   AnimalListingStatus,
   ApplicationStatus,
   OutcomeType,
@@ -43,6 +44,7 @@ const _createOutcome = async (
     outcomeDate: new Date(formData.get("outcomeDate") as string),
     outcomeType: formData.get("outcomeType"),
     destinationPartnerId: formData.get("destinationPartnerId") || undefined,
+    ownerId: formData.get("ownerId") || undefined,
     notes: formData.get("notes") || undefined,
   });
 
@@ -53,7 +55,7 @@ const _createOutcome = async (
     };
   }
 
-  const { outcomeDate, outcomeType, destinationPartnerId, notes } =
+  const { outcomeDate, outcomeType, destinationPartnerId, ownerId, notes } =
     validatedFields.data;
 
   try {
@@ -114,6 +116,23 @@ const _createOutcome = async (
           ...(destinationPartnerId && {
             destinationPartner: { connect: { id: destinationPartnerId } },
           }),
+          ...(ownerId && {
+            owner: { connect: { id: ownerId } },
+          }),
+        },
+      });
+
+      // Log this closing event in the animal's history, mirroring the
+      // INTAKE_PROCESSED log written on every intake — without this, the
+      // activity feed shows consecutive intakes with no outcome between them.
+      await tx.animalActivityLog.create({
+        data: {
+          animalId,
+          activityType: AnimalActivityType.OUTCOME_PROCESSED,
+          changedById: staffMemberId,
+          changeSummary: `Animal was processed for outcome: ${outcomeType
+            .replace(/_/g, " ")
+            .toLowerCase()}.`,
         },
       });
 
@@ -208,6 +227,7 @@ const _updateOutcome = async (
     outcomeDate: new Date(formData.get("outcomeDate") as string),
     outcomeType: formData.get("outcomeType"),
     destinationPartnerId: formData.get("destinationPartnerId") || undefined,
+    ownerId: formData.get("ownerId") || undefined,
     notes: formData.get("notes") || undefined,
   });
 
@@ -218,7 +238,7 @@ const _updateOutcome = async (
     };
   }
 
-  const { outcomeDate, outcomeType, destinationPartnerId, notes } =
+  const { outcomeDate, outcomeType, destinationPartnerId, ownerId, notes } =
     validatedFields.data;
 
   try {
@@ -242,6 +262,10 @@ const _updateOutcome = async (
           notes,
           destinationPartnerId:
             outcomeType === "TRANSFER_OUT" ? destinationPartnerId : null,
+          ownerId: outcomeType === "RETURN_TO_OWNER" ? ownerId : null,
+          // Adoption outcomes are not editable to/from via this form, so only
+          // clear the application link when the type isn't (and can't become) ADOPTION.
+          ...(outcomeType !== "ADOPTION" && { adoptionApplicationId: null }),
         },
       });
 

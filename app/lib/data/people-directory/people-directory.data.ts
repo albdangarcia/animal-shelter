@@ -12,10 +12,35 @@ import {
   PeopleDirectoryPayload,
   PersonForApplicationFormPayload,
   PersonFormPayload,
+  PersonPickerOption,
   PersonProfileTabPayload,
   PersonSectionCardPayload,
 } from "../../types";
-import { cuidSchema } from "../../zod-schemas/common.schemas";
+import { cuidSchema, searchQuerySchema } from "../../zod-schemas/common.schemas";
+
+const PICKER_RESULT_LIMIT = 10;
+
+// Walk-in contacts with no account (user: null), and any registered account
+// except ADMIN. Staff/volunteers are intentionally included since they may
+// appear as finders/surrenderers via Intake. Shared by every non-admin person
+// lookup: the directory list, the picker search, and the duplicate check.
+const nonAdminPersonFilter: Prisma.PersonWhereInput = {
+  OR: [{ user: null }, { user: { role: { not: Role.ADMIN } } }],
+};
+
+// Shared with _fetchPeopleForPicker. Matched against name/email/phone.
+const personSearchWhereClause = (query: string): Prisma.PersonWhereInput => ({
+  AND: [
+    nonAdminPersonFilter,
+    {
+      OR: [
+        { name: { contains: query, mode: "insensitive" } },
+        { email: { contains: query, mode: "insensitive" } },
+        { phone: { contains: query, mode: "insensitive" } },
+      ],
+    },
+  ],
+});
 
 const _fetchPeople = async (
   queryInput: string,
@@ -65,23 +90,7 @@ const _fetchPeople = async (
     }
   })();
 
-  const whereClause: Prisma.PersonWhereInput = {
-    AND: [
-      // Include walk-in contacts with no account (user: null), and any
-      // registered account except ADMIN. Staff/volunteers are intentionally
-      // included since they may appear as finders/surrenderers via Intake.
-      {
-        OR: [{ user: null }, { user: { role: { not: Role.ADMIN } } }],
-      },
-      {
-        OR: [
-          { name: { contains: query, mode: "insensitive" } },
-          { email: { contains: query, mode: "insensitive" } },
-          { phone: { contains: query, mode: "insensitive" } },
-        ],
-      },
-    ],
-  };
+  const whereClause: Prisma.PersonWhereInput = personSearchWhereClause(query);
 
   // REPLACE with account filtering.
   // The faceted filter sends a comma-separated string; only filter when
@@ -135,6 +144,76 @@ const _fetchPeople = async (
   } catch (error) {
     console.error("Error fetching people.", error);
     throw new Error("Error fetching people.");
+  }
+};
+
+// Lightweight person search for the PersonPicker form field. Reuses the same
+// non-admin filter as _fetchPeople, but with a small select shape and no
+// pagination — just the top N matches.
+const _fetchPeopleForPicker = async (
+  queryInput: string,
+): Promise<PersonPickerOption[]> => {
+  const parsedQuery = searchQuerySchema.safeParse(queryInput);
+  const query = parsedQuery.success ? parsedQuery.data : "";
+
+  try {
+    return await prisma.person.findMany({
+      where: personSearchWhereClause(query),
+      orderBy: { name: "asc" },
+      take: PICKER_RESULT_LIMIT,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+      },
+    });
+  } catch (error) {
+    console.error("Error fetching people for picker.", error);
+    throw new Error("Error fetching people for picker.");
+  }
+};
+
+// Soft duplicate check for the staff walk-in create/edit forms. Keyed on the
+// contact method alone (email or phone) — never on name, since a matching
+// name with different contact info is not a reliable signal of a duplicate.
+//
+// excludePersonId is required on edit: without it, a person editing their own
+// record would always "match" themselves on their own unchanged email/phone.
+// Create passes no excludePersonId since there's no existing row to exclude.
+const _fetchDuplicatePersonCandidate = async (
+  email: string | null,
+  phone: string | null,
+  excludePersonId?: string,
+): Promise<PersonPickerOption | null> => {
+  if (!email && !phone) {
+    return null;
+  }
+
+  try {
+    return await prisma.person.findFirst({
+      where: {
+        AND: [
+          nonAdminPersonFilter,
+          {
+            OR: [
+              ...(email ? [{ email: { equals: email, mode: "insensitive" as const } }] : []),
+              ...(phone ? [{ phone }] : []),
+            ],
+          },
+          ...(excludePersonId ? [{ NOT: { id: excludePersonId } }] : []),
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+      },
+    });
+  } catch (error) {
+    console.error("Error checking for a duplicate person.", error);
+    throw new Error("Error checking for a duplicate person.");
   }
 };
 
@@ -443,3 +522,11 @@ export const fetchSectionCardsPersonData = RequirePermission(
 export const fetchPeople = RequirePermission(AppPermissions.PERSONS_READ)(
   _fetchPeople,
 );
+
+export const fetchPeopleForPicker = RequirePermission(
+  AppPermissions.PERSONS_READ,
+)(_fetchPeopleForPicker);
+
+export const fetchDuplicatePersonCandidate = RequirePermission(
+  AppPermissions.PERSONS_READ,
+)(_fetchDuplicatePersonCandidate);

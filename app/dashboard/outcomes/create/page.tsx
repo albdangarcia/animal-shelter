@@ -42,6 +42,8 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
     return notFound();
   }
 
+  const suggestedOwner = animal.intake[0]?.surrenderingPerson ?? undefined;
+
   return (
     <main className="container mx-auto">
       <Button asChild variant="ghost" className="mb-4">
@@ -68,6 +70,8 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
             animal={{ id: animal.id, name: animal.name }}
             application={application || undefined}
             partners={partners}
+            suggestedOwnerId={suggestedOwner?.id}
+            suggestedOwnerLabel={suggestedOwner?.name}
           />
         </Suspense>
       )}

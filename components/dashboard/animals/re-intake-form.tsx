@@ -2,6 +2,7 @@
 
 import { createReIntake } from "@/app/lib/actions/intake.actions";
 import { startTransition, useActionState, useEffect } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -46,6 +47,11 @@ interface ReIntakeFormProps {
 }
 
 const ReIntakeForm = ({ animal, partners }: ReIntakeFormProps) => {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const query = searchParams.toString();
+  const returnTo = query ? `${pathname}?${query}` : pathname;
+
   const action = createReIntake.bind(null, animal.id);
 
   const [state, formAction, isPending] = useActionState(
@@ -64,8 +70,7 @@ const ReIntakeForm = ({ animal, partners }: ReIntakeFormProps) => {
       foundAddress: "",
       foundCity: "",
       foundState: "",
-      surrenderingPersonName: "",
-      surrenderingPersonPhone: "",
+      surrenderingPersonId: "",
     },
   });
 
@@ -153,6 +158,7 @@ const ReIntakeForm = ({ animal, partners }: ReIntakeFormProps) => {
               watch={form.watch}
               partners={partners}
               isEditMode={false}
+              returnTo={returnTo}
             />
           </CardContent>
 
