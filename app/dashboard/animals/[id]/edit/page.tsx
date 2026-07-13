@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import {
   fetchAnimalById,
@@ -42,15 +41,13 @@ const Page = async ({ params }: Props) => {
         </Link>
       </Button>
 
-      <Suspense fallback={<div>Loading form...</div>}>
-        <AnimalForm
-          speciesList={speciesList}
-          partners={partners}
-          colors={colors}
-          animal={animal}
-          unitOptions={unitOptions}
-        />
-      </Suspense>
+      <AnimalForm
+        speciesList={speciesList}
+        partners={partners}
+        colors={colors}
+        animal={animal}
+        unitOptions={unitOptions}
+      />
     </main>
   );
 };

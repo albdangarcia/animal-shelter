@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useOptimistic, useState, useTransition } from "react";
+import Link from "next/link";
 import {
   DndContext,
   DragOverlay,
@@ -37,22 +38,27 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
+import { formatDateOrNA } from "@/app/lib/utils/date-utils";
 import type {
   BoardAnimal,
   BoardLocation,
   BoardUnit,
+  FosteredBoardAnimal,
   ShelterBoardData,
 } from "@/app/lib/data/locations/shelter-board.data";
 import { moveAnimalToUnit } from "@/app/lib/actions/animal-placement.actions";
 import { AnimalChip } from "./animal-chip";
-import { DraggableAnimalChip, type AnimalDragData } from "./draggable-animal-chip";
+import {
+  DraggableAnimalChip,
+  type AnimalDragData,
+} from "./draggable-animal-chip";
 import { UnitOccupants } from "./unit-occupants";
 import { boardKeyboardCoordinates } from "./board-keyboard-coordinates";
 
 // Droppable id for the Unplaced tray; every other droppable id is a unit id.
 const UNPLACED_ID = "unplaced";
 
-// ── Capacity states ──────────────────────────────────────────────────────────
+// Capacity states
 type CapacityState = "empty" | "hasSpace" | "atCapacity" | "overCapacity";
 
 const getCapacityState = (count: number, capacity: number): CapacityState => {
@@ -95,7 +101,7 @@ const legendDotClass: Record<CapacityState, string> = {
   overCapacity: "bg-red-500",
 };
 
-// ── Optimistic move reducer ──────────────────────────────────────────────────
+// Optimistic move reducer
 interface BoardMove {
   animalId: string;
   toUnitId: string | null; // null = Unplaced tray
@@ -158,7 +164,10 @@ const applyMoveToBoard = (
   const onSite = locations.reduce(
     (sum, location) =>
       sum +
-      location.units.reduce((unitSum, unit) => unitSum + unit.animals.length, 0),
+      location.units.reduce(
+        (unitSum, unit) => unitSum + unit.animals.length,
+        0,
+      ),
     0,
   );
 
@@ -181,7 +190,7 @@ const boardCollisionDetection: CollisionDetection = (args) => {
 const getDragData = (active: Active | null): AnimalDragData | undefined =>
   active?.data.current as AnimalDragData | undefined;
 
-// ── Summary strip ────────────────────────────────────────────────────────────
+// Summary strip
 function MetricCard({
   label,
   value,
@@ -215,14 +224,21 @@ function MetricCard({
   );
 }
 
-// ── Unit tile ────────────────────────────────────────────────────────────────
-function UnitTile({ unit, locationName }: { unit: BoardUnit; locationName: string }) {
+// Unit tile
+function UnitTile({
+  unit,
+  locationName,
+}: {
+  unit: BoardUnit;
+  locationName: string;
+}) {
   const count = unit.animals.length;
   const state = getCapacityState(count, unit.capacity);
 
   const { setNodeRef, isOver, active } = useDroppable({ id: unit.id });
   const dragData = getDragData(active);
-  const isIncoming = isOver && dragData != null && dragData.fromUnitId !== unit.id;
+  const isIncoming =
+    isOver && dragData != null && dragData.fromUnitId !== unit.id;
   // Pre-drop hint only — dropping over capacity is always allowed.
   const wouldOverflow = isIncoming && count + 1 > unit.capacity;
 
@@ -258,7 +274,7 @@ function UnitTile({ unit, locationName }: { unit: BoardUnit; locationName: strin
   );
 }
 
-// ── Location group ───────────────────────────────────────────────────────────
+// Location group
 function LocationGroup({ location }: { location: BoardLocation }) {
   return (
     <div className="flex flex-col gap-3">
@@ -287,7 +303,7 @@ function LocationGroup({ location }: { location: BoardLocation }) {
   );
 }
 
-// ── Side column ──────────────────────────────────────────────────────────────
+// Side column
 function UnplacedTray({ animals }: { animals: ShelterBoardData["unplaced"] }) {
   const { setNodeRef, isOver, active } = useDroppable({ id: UNPLACED_ID });
   const dragData = getDragData(active);
@@ -333,7 +349,36 @@ function UnplacedTray({ animals }: { animals: ShelterBoardData["unplaced"] }) {
   );
 }
 
-function FosterCard({ count }: { count: number }) {
+// Display-only row for a fostered animal — no draggable/droppable wiring
+// placements are form-driven, not a board drag target.
+function FosterRow({
+  animal,
+  canReadFosters,
+}: {
+  animal: FosteredBoardAnimal;
+  canReadFosters: boolean;
+}) {
+  return (
+    <Link
+      href={`/dashboard/animals/${animal.id}`}
+      className="flex flex-col gap-1 rounded-md border bg-background px-2 py-1.5 hover:bg-accent"
+    >
+      <AnimalChip animal={animal} />
+      <p className="truncate pl-8 text-[10px] text-muted-foreground">
+        With {canReadFosters ? animal.fosterPersonName : "a foster"} · since{" "}
+        {formatDateOrNA(animal.since)}
+      </p>
+    </Link>
+  );
+}
+
+function FosterCard({
+  animals,
+  canReadFosters,
+}: {
+  animals: FosteredBoardAnimal[];
+  canReadFosters: boolean;
+}) {
   return (
     <Card>
       <CardHeader>
@@ -341,18 +386,29 @@ function FosterCard({ count }: { count: number }) {
           <IconHome className="size-4 text-muted-foreground" />
           In foster
           <Badge variant="outline" className="ml-auto tabular-nums">
-            {count}
+            {animals.length}
           </Badge>
         </CardTitle>
         <CardDescription>
           Fostered animals aren&apos;t shown on the physical board.
         </CardDescription>
       </CardHeader>
+      {animals.length > 0 && (
+        <CardContent className="flex flex-col gap-1.5">
+          {animals.map((animal) => (
+            <FosterRow
+              key={animal.id}
+              animal={animal}
+              canReadFosters={canReadFosters}
+            />
+          ))}
+        </CardContent>
+      )}
     </Card>
   );
 }
 
-// ── Top-level layout ─────────────────────────────────────────────────────────
+// Top-level layout
 const screenReaderInstructions: ScreenReaderInstructions = {
   draggable:
     "To pick up an animal, press space or enter. While dragging, use the arrow keys to move it to a unit or the Unplaced tray. Press space or enter again to drop it there, or press escape to cancel.",
@@ -360,9 +416,12 @@ const screenReaderInstructions: ScreenReaderInstructions = {
 
 interface Props {
   data: ShelterBoardData;
+  // the fostering fact shows to every board viewer, but
+  // the foster's identity is gated behind FOSTERS_READ.
+  canReadFosters: boolean;
 }
 
-export const ShelterBoard = ({ data }: Props) => {
+export const ShelterBoard = ({ data, canReadFosters }: Props) => {
   // Optimistic copy of the server-fetched board: a move renders immediately,
   // then reconciles to server truth when the action's revalidate lands (or
   // rolls back automatically if the action fails).
@@ -370,7 +429,7 @@ export const ShelterBoard = ({ data }: Props) => {
   const [isPending, startTransition] = useTransition();
   const [activeAnimal, setActiveAnimal] = useState<BoardAnimal | null>(null);
 
-  const { locations, unplaced, totals } = board;
+  const { locations, unplaced, fostered, totals } = board;
 
   const sensors = useSensors(
     // Small activation distance so a plain click on a chip isn't a drag.
@@ -379,7 +438,9 @@ export const ShelterBoard = ({ data }: Props) => {
   );
 
   const dropTargetLabel = useMemo(() => {
-    const labels = new Map<UniqueIdentifier, string>([[UNPLACED_ID, "Unplaced"]]);
+    const labels = new Map<UniqueIdentifier, string>([
+      [UNPLACED_ID, "Unplaced"],
+    ]);
     for (const location of locations) {
       for (const unit of location.units) {
         labels.set(unit.id, `${unit.name} in ${location.name}`);
@@ -464,14 +525,22 @@ export const ShelterBoard = ({ data }: Props) => {
             value={totals.onSite}
             icon={IconStethoscope}
           />
-          <MetricCard label="Units" value={totals.units} icon={IconBuildingWarehouse} />
+          <MetricCard
+            label="Units"
+            value={totals.units}
+            icon={IconBuildingWarehouse}
+          />
           <MetricCard
             label="Unplaced"
             value={totals.unplaced}
             icon={IconAlertTriangle}
             highlight
           />
-          <MetricCard label="In foster" value={totals.inFoster} icon={IconHome} />
+          <MetricCard
+            label="In foster"
+            value={totals.inFoster}
+            icon={IconHome}
+          />
         </div>
 
         {/* Legend */}
@@ -480,7 +549,10 @@ export const ShelterBoard = ({ data }: Props) => {
           {legendItems.map((item) => (
             <span key={item.state} className="flex items-center gap-1.5">
               <span
-                className={cn("size-2.5 rounded-full", legendDotClass[item.state])}
+                className={cn(
+                  "size-2.5 rounded-full",
+                  legendDotClass[item.state],
+                )}
               />
               {item.label}
             </span>
@@ -511,7 +583,7 @@ export const ShelterBoard = ({ data }: Props) => {
 
           <div className="flex flex-col gap-4">
             <UnplacedTray animals={unplaced} />
-            <FosterCard count={totals.inFoster} />
+            <FosterCard animals={fostered} canReadFosters={canReadFosters} />
           </div>
         </div>
       </div>

@@ -11,17 +11,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MyApplicationPayload } from "@/app/lib/types";
+import { MyAdoptionApplicationPayload } from "@/app/lib/types";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  reactivateMyApplication,
-  withdrawMyApplication,
-} from "@/app/lib/actions/my-application.action";
+  reactivateMyAdoptionApplication,
+  withdrawMyAdoptionApplication,
+} from "@/app/lib/actions/my-adoption-application.actions";
 import { ApplicationStatus } from "@prisma/client";
 
 interface DataTableRowActionsProps {
-  row: Row<MyApplicationPayload>;
+  row: Row<MyAdoptionApplicationPayload>;
 }
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
@@ -30,7 +30,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
   const onWithdraw = () => {
     startTransition(async () => {
-      const result = await withdrawMyApplication(myApplication.id);
+      const result = await withdrawMyAdoptionApplication(myApplication.id);
       if (result.success) {
         toast.success("Application withdrawn successfully.");
       } else {
@@ -41,7 +41,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
 
   const onReactivate = () => {
     startTransition(async () => {
-      const result = await reactivateMyApplication(myApplication.id);
+      const result = await reactivateMyAdoptionApplication(myApplication.id);
       if (result.success) {
         toast.success("Application reactivated successfully.");
       } else {
@@ -68,7 +68,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         {/* Only show Edit link if the application is in PENDING status */}
         {isEditable && (
           <>
-            <Link href={`/dashboard/my-applications/${myApplication.id}/edit`}>
+            <Link href={`/dashboard/my-adoption-applications/${myApplication.id}/edit`}>
               <DropdownMenuItem>Edit</DropdownMenuItem>
             </Link>
             <DropdownMenuSeparator />

@@ -1,6 +1,6 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
-import { fetchApplicationById } from "@/app/lib/data/user-application.data";
+import { fetchAdoptionApplicationById } from "@/app/lib/data/user-adoption-application.data";
 import { StaffApplicationUpdateForm } from "@/components/dashboard/adoption-applications/adoption-staff-edit-application-form";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -13,7 +13,7 @@ interface Props {
 const Page = async ({ params }: Props) => {
   const { applicationId } = await params;
 
-  const userApplication = await fetchApplicationById(applicationId);
+  const userApplication = await fetchAdoptionApplicationById(applicationId);
 
   if (!userApplication) {
     notFound();

@@ -6,6 +6,8 @@ const userPermissions: readonly AppPermission[] = [
   AppPermissions.MY_APPLICATIONS_READ,
   AppPermissions.MY_APPLICATIONS_MANAGE,
   AppPermissions.MY_PROFILE_UPDATE,
+  AppPermissions.MY_FOSTER_APPLICATION_MANAGE,
+  AppPermissions.MY_FOSTER_ANIMALS_READ,
 ] as const;
 
 // Volunteers inherit user permissions + read-only access to operational data
@@ -25,6 +27,7 @@ const volunteerPermissions: readonly AppPermission[] = [
   AppPermissions.REPORTS_READ,
   AppPermissions.PARTNERS_READ,
   AppPermissions.PERSONS_READ,
+  AppPermissions.FOSTERS_READ,
 ] as const;
 
 // Staff inherit volunteer permissions + management of operational data
@@ -41,6 +44,7 @@ const staffPermissions: readonly AppPermission[] = [
   AppPermissions.OUTCOMES_MANAGE,
   AppPermissions.PERSONS_MANAGE,
   AppPermissions.PARTNERS_MANAGE,
+  AppPermissions.FOSTERS_MANAGE,
 ] as const;
 
 // Admin inherits all staff permissions

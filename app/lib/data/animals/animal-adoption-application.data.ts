@@ -9,7 +9,7 @@ import {
   searchQuerySchema,
 } from "../../zod-schemas/common.schemas";
 import z from "zod";
-import { ApplicationWithAnimal } from "../user-application.data";
+import { AdoptionApplicationWithAnimal } from "../user-adoption-application.data";
 
 export const fetchAnimalApplicationsSchema = z.object({
   animalId: cuidSchema,
@@ -28,7 +28,7 @@ const _fetchAnimalApplications = async (
   statusInput: string | undefined,
   pageSizeInput: number,
 ): Promise<{
-  applications: ApplicationWithAnimal[];
+  applications: AdoptionApplicationWithAnimal[];
   totalPages: number;
   totalRows: number;
 }> => {

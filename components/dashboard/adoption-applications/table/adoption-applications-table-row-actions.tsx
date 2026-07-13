@@ -12,10 +12,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
-import { ApplicationWithAnimal } from "@/app/lib/data/user-application.data";
+import { AdoptionApplicationWithAnimal } from "@/app/lib/data/user-adoption-application.data";
 
 interface DataTableRowActionsProps {
-  row: Row<ApplicationWithAnimal>;
+  row: Row<AdoptionApplicationWithAnimal>;
   canManage: boolean;
 }
 

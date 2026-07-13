@@ -12,7 +12,7 @@ import { SearchParamsType } from "@/app/lib/types";
 import MyAppTableToolbar from "@/components/dashboard/my-adoption-applications/table/my-applications-table-toolbar";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { fetchMyApplications } from "@/app/lib/data/my-applications.data";
+import { fetchMyAdoptionApplications } from "@/app/lib/data/my-adoption-applications.data";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 
@@ -31,7 +31,7 @@ const Page = async ({ searchParams }: Props) => {
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
-  const { myApplications, totalPages, totalRows } = await fetchMyApplications(
+  const { myApplications, totalPages, totalRows } = await fetchMyAdoptionApplications(
     query,
     currentPage,
     sort,
@@ -43,7 +43,7 @@ const Page = async ({ searchParams }: Props) => {
     <Card className="@container/card">
       <CardHeader>
         <CardTitle className="@[650px]/card:text-xl">
-          My applications
+          My Adoption applications
         </CardTitle>
         <CardDescription>
           List of your submitted adoption applications.

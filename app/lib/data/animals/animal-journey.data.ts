@@ -30,7 +30,7 @@ export type AnimalJourneyLogPayload = Prisma.AnimalActivityLogGetPayload<{
 }>;
 
 const _fetchAnimalJourney = async (
-  animalId: string
+  animalId: string,
 ): Promise<AnimalJourneyLogPayload[]> => {
   const validatedId = cuidSchema.safeParse(animalId);
   if (!validatedId.success) {
@@ -42,6 +42,12 @@ const _fetchAnimalJourney = async (
     AnimalActivityType.INTAKE_PROCESSED,
     AnimalActivityType.STATUS_CHANGE,
     AnimalActivityType.OUTCOME_PROCESSED,
+    // A foster placement isn't an outcome — the animal stays "in
+    // care" the whole time — but its start/end are still significant enough
+    // to surface here, so the journey doesn't read as a silent gap between
+    // intake and outcome.
+    AnimalActivityType.FOSTER_PLACED,
+    AnimalActivityType.FOSTER_RETURNED,
   ];
 
   try {
@@ -87,5 +93,5 @@ const _fetchAnimalJourney = async (
 };
 
 export const fetchAnimalJourney = RequirePermission(
-  AppPermissions.ANIMAL_JOURNEY_READ
+  AppPermissions.ANIMAL_JOURNEY_READ,
 )(_fetchAnimalJourney);

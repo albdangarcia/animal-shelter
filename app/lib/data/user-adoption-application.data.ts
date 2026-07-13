@@ -10,7 +10,7 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import z from "zod";
 import { ApplicationStatus, Prisma } from "@prisma/client";
 
-export type ApplicationWithAnimal = Prisma.AdoptionApplicationGetPayload<{
+export type AdoptionApplicationWithAnimal = Prisma.AdoptionApplicationGetPayload<{
   select: {
     id: true;
     applicantId: true;
@@ -35,7 +35,7 @@ export type ApplicationWithAnimal = Prisma.AdoptionApplicationGetPayload<{
   };
 }>;
 
-export type ApplicationWithOutcome = Prisma.AdoptionApplicationGetPayload<{
+export type AdoptionApplicationWithOutcome = Prisma.AdoptionApplicationGetPayload<{
   include: {
     animal: {
       select: {
@@ -76,7 +76,7 @@ export type ApplicationWithOutcome = Prisma.AdoptionApplicationGetPayload<{
   };
 }>;
 
-export const fetchUserApplicationsSchema = z.object({
+export const fetchUserAdoptionApplicationsSchema = z.object({
   query: searchQuerySchema,
   currentPage: currentPageSchema,
   sort: z.string().optional(),
@@ -84,18 +84,18 @@ export const fetchUserApplicationsSchema = z.object({
   pageSize: pageSizeSchema,
 });
 
-const _fetchUserApplications = async (
+const _fetchUserAdoptionApplications = async (
   queryInput: string,
   currentPageInput: number,
   sortInput: string | undefined,
   statusInput: string | undefined,
   pageSizeInput: number,
 ): Promise<{
-  userApplications: ApplicationWithAnimal[];
+  userApplications: AdoptionApplicationWithAnimal[];
   totalPages: number;
   totalRows: number;
 }> => {
-  const validatedArgs = fetchUserApplicationsSchema.safeParse({
+  const validatedArgs = fetchUserAdoptionApplicationsSchema.safeParse({
     query: queryInput,
     currentPage: currentPageInput,
     sort: sortInput,
@@ -201,9 +201,9 @@ const _fetchUserApplications = async (
   }
 };
 
-const _fetchUserApplicationById = async (
+const _fetchAdoptionApplicationById = async (
   id: string,
-): Promise<ApplicationWithOutcome | null> => {
+): Promise<AdoptionApplicationWithOutcome | null> => {
   const parsedId = cuidSchema.safeParse(id);
   if (!parsedId.success) {
     throw new Error("Invalid Application ID format.");
@@ -261,10 +261,10 @@ const _fetchUserApplicationById = async (
   }
 };
 
-export const fetchUserApplications = RequirePermission(
+export const fetchUserAdoptionApplications = RequirePermission(
   AppPermissions.APPLICATIONS_READ,
-)(_fetchUserApplications);
+)(_fetchUserAdoptionApplications);
 
-export const fetchApplicationById = RequirePermission(
+export const fetchAdoptionApplicationById = RequirePermission(
   AppPermissions.APPLICATIONS_READ,
-)(_fetchUserApplicationById);
+)(_fetchAdoptionApplicationById);

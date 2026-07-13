@@ -78,7 +78,12 @@ const _fetchPersonAnimalHistory = async (
         },
         fosterProfile: {
           select: {
-            animalsFostered: { select: animalSelect },
+            placements: {
+              select: {
+                startDate: true,
+                animal: { select: animalSelect },
+              },
+            },
           },
         },
       },
@@ -110,14 +115,14 @@ const _fetchPersonAnimalHistory = async (
         animal: application.animal,
         applicationStatus: application.status,
       })),
-      ...(person.fosterProfile?.animalsFostered.map((animal) => ({
+      ...(person.fosterProfile?.placements.map((placement) => ({
         role: "FOSTER_CARER" as const,
-        date: null,
-        animal,
+        date: placement.startDate,
+        animal: placement.animal,
       })) ?? []),
     ];
 
-    // Most recent first; entries without a date (foster) sort last
+    // Most recent first; entries without a date sort last
     history.sort((a, b) => {
       if (!a.date && !b.date) return 0;
       if (!a.date) return 1;

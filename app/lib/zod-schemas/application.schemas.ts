@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ApplicationStatus } from "@prisma/client";
 import { cuidSchema } from "./common.schemas";
-import { MyAdoptionAppFormSchema } from "./myApplication.schema";
+import { MyAdoptionAppFormSchema } from "./myAdoptionApplication.schema";
 
 // Exclude 'ADOPTED' from this list.
 const updatableApplicationStatuses = [

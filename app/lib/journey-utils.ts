@@ -2,7 +2,7 @@ import { AnimalJourneyLogPayload } from "./data/animals/animal-journey.data";
 import { AnimalActivityType } from "@prisma/client";
 
 export const formatJourneyItem = (
-  item: AnimalJourneyLogPayload
+  item: AnimalJourneyLogPayload,
 ): { title: string; description: string } | null => {
   const animalName = item.animal?.name || "The animal";
 
@@ -44,6 +44,20 @@ export const formatJourneyItem = (
         title: "Status Change",
         description:
           item.changeSummary || `The animal's adoption status was updated.`,
+      };
+
+    case AnimalActivityType.FOSTER_PLACED:
+      return {
+        title: "Foster: Placed",
+        description:
+          item.changeSummary || `${animalName} was placed with a foster.`,
+      };
+
+    case AnimalActivityType.FOSTER_RETURNED:
+      return {
+        title: "Foster: Returned",
+        description:
+          item.changeSummary || `${animalName} was returned from foster care.`,
       };
 
     case AnimalActivityType.OUTCOME_PROCESSED:

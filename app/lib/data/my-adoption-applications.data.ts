@@ -2,15 +2,15 @@ import { prisma } from "../prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   AdoptionApplicationPayload,
-  MyApplicationPayload,
-  AnimalForApplicationPayload,
+  MyAdoptionApplicationPayload,
+  AnimalForAdoptionApplicationPayload,
 } from "../types";
-import { MyApplicationsSchema } from "../zod-schemas/animal.schemas";
+import { MyAdoptionApplicationsSchema } from "../zod-schemas/animal.schemas";
 import { AnimalListingStatus, ApplicationStatus, Prisma } from "@prisma/client";
 import { RequirePermission, SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
 
-const _fetchMyApplications = async (
+const _fetchMyAdoptionApplications = async (
   user: SessionUser,
   queryInput: string,
   currentPageInput: number,
@@ -18,13 +18,13 @@ const _fetchMyApplications = async (
   statusInput: string | undefined,
   pageSizeInput: number
 ): Promise<{
-  myApplications: MyApplicationPayload[];
+  myApplications: MyAdoptionApplicationPayload[];
   totalPages: number;
   totalRows: number;
 }> => {
   const personId = user.personId;
 
-  const validatedArgs = MyApplicationsSchema.safeParse({
+  const validatedArgs = MyAdoptionApplicationsSchema.safeParse({
     query: queryInput,
     currentPage: currentPageInput,
     sort: sortInput,
@@ -114,7 +114,7 @@ const _fetchMyApplications = async (
   }
 };
 
-const _fetchMyAppById = async (
+const _fetchMyAdoptionAppById = async (
   user: SessionUser,
   adoptionAppId: string // Adoption Application id from route params
 ): Promise<AdoptionApplicationPayload | null> => {
@@ -168,10 +168,10 @@ const _fetchMyAppById = async (
 };
 
 // Fetch the animal information the user is trying to adopt (for edit/create application form)
-const _getAnimalForApplication = async (
+const _getAnimalForAdoptionApplication = async (
   user: SessionUser,
   animalId: string
-): Promise<AnimalForApplicationPayload | null> => {
+): Promise<AnimalForAdoptionApplicationPayload | null> => {
   const personId = user.personId;
 
   // Validate the animalId
@@ -219,7 +219,7 @@ const _getAnimalForApplication = async (
   }
 };
 
-export type ApplicantDefaultsPayload = Prisma.PersonGetPayload<{
+export type AdoptionApplicantDefaultsPayload = Prisma.PersonGetPayload<{
   select: {
     name: true;
     email: true;
@@ -243,9 +243,9 @@ export type ApplicantDefaultsPayload = Prisma.PersonGetPayload<{
   };
 }>;
 
-const _fetchApplicantDefaults = async (
+const _fetchAdoptionApplicantDefaults = async (
   user: SessionUser
-): Promise<ApplicantDefaultsPayload | null> => {
+): Promise<AdoptionApplicantDefaultsPayload | null> => {
   try {
     const person = await prisma.person.findUnique({
       where: { id: user.personId },
@@ -279,12 +279,18 @@ const _fetchApplicantDefaults = async (
   }
 };
 
-export const fetchApplicantDefaults = withAuthenticatedUser(
-  RequirePermission(AppPermissions.MY_APPLICATIONS_MANAGE)(_fetchApplicantDefaults)
+export const fetchAdoptionApplicantDefaults = withAuthenticatedUser(
+  RequirePermission(AppPermissions.MY_APPLICATIONS_MANAGE)(
+    _fetchAdoptionApplicantDefaults
+  )
 );
 
-export const fetchMyApplications = withAuthenticatedUser(_fetchMyApplications);
-export const fetchMyAppById = withAuthenticatedUser(_fetchMyAppById);
-export const getAnimalForApplication = withAuthenticatedUser(
-  _getAnimalForApplication
+export const fetchMyAdoptionApplications = withAuthenticatedUser(
+  _fetchMyAdoptionApplications
+);
+export const fetchMyAdoptionAppById = withAuthenticatedUser(
+  _fetchMyAdoptionAppById
+);
+export const getAnimalForAdoptionApplication = withAuthenticatedUser(
+  _getAnimalForAdoptionApplication
 );

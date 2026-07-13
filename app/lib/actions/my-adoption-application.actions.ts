@@ -6,7 +6,7 @@ import { prisma } from "../prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AnimalListingStatus, ApplicationStatus } from "@prisma/client";
-import { MyAdoptionAppFormSchema } from "../zod-schemas/myApplication.schema";
+import { MyAdoptionAppFormSchema } from "../zod-schemas/myAdoptionApplication.schema";
 import { SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { ActionResult } from "../types";
 import { z } from "zod";
@@ -131,14 +131,14 @@ const _updateMyAdoptionApp = async (
   }
 
   // Revalidate relevant paths
-  revalidatePath("/dashboard/my-applications");
-  revalidatePath(`/dashboard/my-applications/${validatedApplicationId}`);
+  revalidatePath("/dashboard/my-adoption-applications");
+  revalidatePath(`/dashboard/my-adoption-applications/${validatedApplicationId}`);
 
   // Redirect to the updated application's page
-  redirect(`/dashboard/my-applications`);
+  redirect(`/dashboard/my-adoption-applications`);
 };
 
-const _withdrawMyApplication = async (
+const _withdrawMyAdoptionApplication = async (
   user: SessionUser, // Injected by withAuthenticatedUser
   applicationId: string,
 ): Promise<ActionResult> => {
@@ -231,12 +231,12 @@ const _withdrawMyApplication = async (
     };
   }
 
-  revalidatePath(`/dashboard/my-applications/${validatedApplicationId}`);
+  revalidatePath(`/dashboard/my-adoption-applications/${validatedApplicationId}`);
 
   return { success: true, message: "Application withdrawn successfully." };
 };
 
-const _reactivateMyApplication = async (
+const _reactivateMyAdoptionApplication = async (
   user: SessionUser, // Injected by withAuthenticatedUser
   applicationId: string,
 ): Promise<ActionResult> => {
@@ -318,7 +318,7 @@ const _reactivateMyApplication = async (
     };
   }
 
-  revalidatePath("/dashboard/my-applications");
+  revalidatePath("/dashboard/my-adoption-applications");
 
   return { success: true, message: "Application reactivated successfully." };
 };
@@ -487,18 +487,18 @@ const _createMyAdoptionApp = async (
     };
   }
   revalidatePath(`/pets/${validatedAnimalId}`);
-  revalidatePath("/dashboard/my-applications");
-  redirect("/dashboard/my-applications");
+  revalidatePath("/dashboard/my-adoption-applications");
+  redirect("/dashboard/my-adoption-applications");
 };
 
 export const updateMyAdoptionApp = withAuthenticatedUser(_updateMyAdoptionApp);
 
-export const withdrawMyApplication = withAuthenticatedUser(
-  _withdrawMyApplication,
+export const withdrawMyAdoptionApplication = withAuthenticatedUser(
+  _withdrawMyAdoptionApplication,
 );
 
 export const createMyAdoptionApp = withAuthenticatedUser(_createMyAdoptionApp);
 
-export const reactivateMyApplication = withAuthenticatedUser(
-  _reactivateMyApplication,
+export const reactivateMyAdoptionApplication = withAuthenticatedUser(
+  _reactivateMyAdoptionApplication,
 );

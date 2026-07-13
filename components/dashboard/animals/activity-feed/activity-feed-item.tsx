@@ -13,6 +13,8 @@ import {
   PackagePlus,
   ArrowRightLeft,
   MapPin,
+  Home,
+  Undo2,
   LucideProps,
 } from "lucide-react";
 import { AnimalActivityType } from "@prisma/client";
@@ -65,6 +67,14 @@ const activityConfig: Record<
   [AnimalActivityType.LOCATION_CHANGE]: {
     icon: MapPin,
     text: "moved this animal",
+  },
+  [AnimalActivityType.FOSTER_PLACED]: {
+    icon: Home,
+    text: "placed this animal with a foster",
+  },
+  [AnimalActivityType.FOSTER_RETURNED]: {
+    icon: Undo2,
+    text: "returned this animal from foster",
   },
   [AnimalActivityType.ASSESSMENT_COMPLETED]: {
     icon: ClipboardList,

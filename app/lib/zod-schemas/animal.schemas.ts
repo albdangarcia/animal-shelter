@@ -9,12 +9,12 @@ import {
   NoteCategory,
   AnimalListingStatus,
 } from "@prisma/client";
-import { US_STATES } from "@/app/lib/constants/us-states";
 import {
   cuidSchema,
   currentPageSchema,
   pageSizeSchema,
   searchQuerySchema,
+  usStateSchema,
 } from "./common.schemas";
 
 const speciesNameSchema = z
@@ -59,7 +59,7 @@ export const PublishedPetsSchema = z.object({
   sort: sortSchema,
 });
 
-export const MyApplicationsSchema = z.object({
+export const MyAdoptionApplicationsSchema = z.object({
   query: searchQuerySchema,
   currentPage: currentPageSchema,
   sort: sortSchema,
@@ -85,11 +85,6 @@ export const AnimalTasksSchema = z.object({
   sort: z.string().optional(),
   animalId: cuidSchema,
 });
-
-const stateCodes = US_STATES.map((state) => state.code) as [
-  string,
-  ...string[]
-];
 
 export const AnimalFormSchema = z
   .object({
@@ -212,7 +207,7 @@ export const AnimalFormSchema = z
           message: "State is required for strays.",
           path: ["foundState"],
         });
-      } else if (!stateCodes.includes(data.foundState)) {
+      } else if (!usStateSchema.options.includes(data.foundState)) {
         ctx.addIssue({
           code: "custom",
           message: "Please select a valid US state.",

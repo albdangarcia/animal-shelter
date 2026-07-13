@@ -10,7 +10,7 @@ import { SearchParamsType } from "@/app/lib/types";
 import DataTable from "@/components/table-common/data-table";
 import { getColumns } from "@/components/dashboard/adoption-applications/table/adoption-applications-table-columns";
 import UserAppTableToolbar from "@/components/dashboard/adoption-applications/table/adoption-applications-table-toolbar";
-import { fetchUserApplications } from "@/app/lib/data/user-application.data";
+import { fetchUserAdoptionApplications } from "@/app/lib/data/user-adoption-application.data";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -43,7 +43,7 @@ const PageContent = async ({ searchParams }: Props) => {
   const currentPageSize = Number(pageSize);
 
   const { userApplications, totalPages, totalRows } =
-    await fetchUserApplications(
+    await fetchUserAdoptionApplications(
       query,
       currentPage,
       sort,

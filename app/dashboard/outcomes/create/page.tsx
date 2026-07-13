@@ -3,8 +3,7 @@ import {
   fetchAnimalForOutcomeForm,
 } from "@/app/lib/data/animals/animal.data";
 import { OutcomeForm } from "@/components/dashboard/outcomes/outcome-form";
-import { fetchApplicationById } from "@/app/lib/data/user-application.data";
-import { Suspense } from "react";
+import { fetchAdoptionApplicationById } from "@/app/lib/data/user-adoption-application.data";
 import { SearchParamsType } from "@/app/lib/types";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -24,7 +23,7 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
   let application = null;
 
   if (applicationId) {
-    application = await fetchApplicationById(applicationId);
+    application = await fetchAdoptionApplicationById(applicationId);
     if (!application || !application.animal) {
       return notFound();
     }
@@ -65,15 +64,13 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
           </p>
         </ActionBlockedMessage>
       ) : (
-        <Suspense fallback={<div>Loading form...</div>}>
-          <OutcomeForm
-            animal={{ id: animal.id, name: animal.name }}
-            application={application || undefined}
-            partners={partners}
-            suggestedOwnerId={suggestedOwner?.id}
-            suggestedOwnerLabel={suggestedOwner?.name}
-          />
-        </Suspense>
+        <OutcomeForm
+          animal={{ id: animal.id, name: animal.name }}
+          application={application || undefined}
+          partners={partners}
+          suggestedOwnerId={suggestedOwner?.id}
+          suggestedOwnerLabel={suggestedOwner?.name}
+        />
       )}
     </main>
   );

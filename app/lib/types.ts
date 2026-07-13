@@ -85,6 +85,21 @@ export type AnimalSectionCardPayload = Prisma.AnimalGetPayload<{
         location: { select: { name: true } };
       };
     };
+    // Open foster placement (endDate == null), if any — "currently
+    // in foster" is derived, never stored. At most one can exist per animal.
+    fosterPlacements: {
+      where: { endDate: null };
+      select: {
+        id: true;
+        type: true;
+        startDate: true;
+        expectedEndDate: true;
+        fosterProfile: {
+          select: { person: { select: { id: true; name: true } } };
+        };
+      };
+      take: 1;
+    };
     adoptionApplications: {
       select: { status: true };
     };
@@ -167,7 +182,7 @@ export type AdoptionApplicationPayload = Prisma.AdoptionApplicationGetPayload<{
   };
 }>;
 
-export type AnimalForApplicationPayload = Prisma.AnimalGetPayload<{
+export type AnimalForAdoptionApplicationPayload = Prisma.AnimalGetPayload<{
   select: {
     id: true;
     name: true;
@@ -215,7 +230,26 @@ export type AnimalsPayload = Prisma.AnimalGetPayload<{
   };
 }>;
 
-export type MyApplicationPayload = Prisma.AdoptionApplicationGetPayload<{
+export type MyFosterApplicationPayload = Prisma.FosterApplicationGetPayload<{
+  include: {
+    speciesCapabilities: {
+      select: {
+        id: true;
+        name: true;
+      };
+    };
+    history: {
+      orderBy: { changedAt: "desc" };
+      include: {
+        changedBy: {
+          select: { name: true };
+        };
+      };
+    };
+  };
+}>;
+
+export type MyAdoptionApplicationPayload = Prisma.AdoptionApplicationGetPayload<{
   select: {
     id: true;
     status: true;

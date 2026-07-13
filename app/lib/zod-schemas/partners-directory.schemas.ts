@@ -2,10 +2,10 @@ import { z } from "zod";
 import { PartnerType } from "@prisma/client";
 import {
   currentPageSchema,
+  optionalUsStateSchema,
   pageSizeSchema,
   searchQuerySchema,
 } from "./common.schemas";
-import { US_STATES } from "@/app/lib/constants/us-states";
 
 export const PeopleDirectoryParamsSchema = z.object({
   query: searchQuerySchema,
@@ -24,11 +24,6 @@ export const PartnersDirectoryParamsSchema = z.object({
   status: z.string().optional(),
 });
 
-const stateCodes = US_STATES.map((state) => state.code) as [
-  string,
-  ...string[],
-];
-
 export const PersonFormSchema = z.object({
   name: z.string().min(1, {
     error: "Name is required.",
@@ -40,12 +35,7 @@ export const PersonFormSchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   city: z.string().optional(),
-  state: z
-    .string()
-    .optional()
-    .refine((val) => !val || stateCodes.includes(val), {
-      error: "Please select a valid US state.",
-    }),
+  state: optionalUsStateSchema,
   zipCode: z.string().optional(),
 });
 
@@ -66,12 +56,7 @@ export const PartnerFormSchema = z.object({
     .or(z.literal("")),
   address: z.string().optional(),
   city: z.string().optional(),
-  state: z
-    .string()
-    .optional()
-    .refine((val) => !val || stateCodes.includes(val), {
-      error: "Please select a valid US state.",
-    }),
+  state: optionalUsStateSchema,
   zipCode: z.string().optional(),
   isActive: z.boolean().optional(),
   notes: z.string().optional(),

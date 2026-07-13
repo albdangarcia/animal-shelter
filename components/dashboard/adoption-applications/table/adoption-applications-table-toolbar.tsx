@@ -4,10 +4,10 @@ import { Table } from "@tanstack/react-table";
 import { userApplicationStatusOptions } from "@/app/lib/utils/enum-formatter";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
-import { ApplicationWithAnimal } from "@/app/lib/data/user-application.data";
+import { AdoptionApplicationWithAnimal } from "@/app/lib/data/user-adoption-application.data";
 
 interface UserAppTableToolbarProps {
-  table: Table<ApplicationWithAnimal>;
+  table: Table<AdoptionApplicationWithAnimal>;
 }
 
 const UserAppTableToolbar = ({ table }: UserAppTableToolbarProps) => {

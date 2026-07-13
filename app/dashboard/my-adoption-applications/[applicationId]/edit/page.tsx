@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { MyApplicationForm } from "@/components/dashboard/my-adoption-applications/my-adoption-application-form";
-import { fetchMyAppById } from "@/app/lib/data/my-applications.data";
+import { fetchMyAdoptionAppById } from "@/app/lib/data/my-adoption-applications.data";
 
 interface Props {
   params: Promise<{ applicationId: string }>;
@@ -17,7 +17,7 @@ interface Props {
 const Page = async ({ params }: Props) => {
   const { applicationId } = await params;
 
-  const myApplication = await fetchMyAppById(applicationId);
+  const myApplication = await fetchMyAdoptionAppById(applicationId);
 
   if (!myApplication) {
     notFound();

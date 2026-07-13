@@ -6,11 +6,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ApplicationStatuses } from "./my-applications-options";
 import { DataTableColumnHeader } from "../../../table-common/data-table-column-header";
 import { DataTableRowActions } from "./my-applications-table-row-actions";
-import { MyApplicationPayload } from "@/app/lib/types";
+import { MyAdoptionApplicationPayload } from "@/app/lib/types";
 import { formatTimeAgo } from "@/app/lib/utils/date-utils";
 import Link from "next/link";
 
-export const columns: ColumnDef<MyApplicationPayload>[] = [
+export const columns: ColumnDef<MyAdoptionApplicationPayload>[] = [
   {
     id: "select",
     header: ({ table }) => (

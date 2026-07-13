@@ -1,8 +1,8 @@
 import {
-  fetchApplicantDefaults,
-  getAnimalForApplication,
-} from "@/app/lib/data/my-applications.data";
-import { IDParamType, AnimalForApplicationPayload } from "@/app/lib/types";
+  fetchAdoptionApplicantDefaults,
+  getAnimalForAdoptionApplication,
+} from "@/app/lib/data/my-adoption-applications.data";
+import { IDParamType, AnimalForAdoptionApplicationPayload } from "@/app/lib/types";
 import { auth } from "@/auth";
 import { notFound, redirect } from "next/navigation";
 import { MyApplicationForm } from "@/components/dashboard/my-adoption-applications/my-adoption-application-form";
@@ -19,8 +19,8 @@ const Page = async ({ params }: Props) => {
     redirect("/api/auth/signin");
   }
 
-  const animalToAdopt: AnimalForApplicationPayload | null =
-    await getAnimalForApplication(id);
+  const animalToAdopt: AnimalForAdoptionApplicationPayload | null =
+    await getAnimalForAdoptionApplication(id);
 
   if (!animalToAdopt) {
     notFound();
@@ -31,10 +31,10 @@ const Page = async ({ params }: Props) => {
     animalToAdopt.adoptionApplications.length > 0;
 
   if (currentUserHasActiveApplication) {
-    redirect(`/dashboard/my-applications`);
+    redirect(`/dashboard/my-adoption-applications`);
   }
 
-  const applicantDefaults = await fetchApplicantDefaults();
+  const applicantDefaults = await fetchAdoptionApplicantDefaults();
 
   return (
     <main className="max-w-3xl mx-auto pb-10 pt-5">

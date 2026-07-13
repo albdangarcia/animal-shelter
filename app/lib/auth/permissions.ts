@@ -57,6 +57,14 @@ export const AppPermissions = {
   PERSONS_READ: "persons:read", // Listing + detail
   PERSONS_MANAGE: "persons:manage",
 
+  // Foster Management (staff/admins manage; volunteers read-only)
+  FOSTERS_READ: "fosters:read", // Roster + foster applications + placements, read-only
+  FOSTERS_MANAGE: "fosters:manage", // Review applications, manage profiles, create/end placements
+
+  // My Foster Management (users managing their own foster application/animals)
+  MY_FOSTER_APPLICATION_MANAGE: "my_foster_application:manage",
+  MY_FOSTER_ANIMALS_READ: "my_foster_animals:read",
+
   MY_PROFILE_UPDATE: "my_profile:update", // Self-service profile feature
 
   // Role Management (admins only)
