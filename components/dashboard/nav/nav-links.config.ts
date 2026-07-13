@@ -27,6 +27,9 @@ export type IconName =
   | "IconCheckbox"
   | "IconBuildingStore"
   | "IconLayoutBoard"
+  | "IconHomeHeart"
+  | "IconClipboardHeart"
+  | "IconDog"
 
 export interface NavItem {
   title: string;
@@ -75,16 +78,40 @@ export const navMainItems: readonly NavItem[] = [
     permission: AppPermissions.PARTNERS_READ,
   },
   {
-    title: "My Applications",
-    url: "/dashboard/my-applications",
+    title: "My Adoption Applications",
+    url: "/dashboard/my-adoption-applications",
     icon: "IconFileText",
     permission: AppPermissions.MY_APPLICATIONS_READ,
+  },
+  {
+    title: "My Foster Application",
+    url: "/dashboard/my-foster-application",
+    icon: "IconClipboardHeart",
+    permission: AppPermissions.MY_FOSTER_APPLICATION_MANAGE,
+  },
+  {
+    title: "My Foster Animals",
+    url: "/dashboard/my-foster-animals",
+    icon: "IconDog",
+    permission: AppPermissions.MY_FOSTER_ANIMALS_READ,
   },
   {
     title: "Adoption Applications",
     url: "/dashboard/adoption-applications",
     icon: "IconHeartHandshake",
     permission: AppPermissions.APPLICATIONS_READ,
+  },
+  {
+    title: "Fosters",
+    url: "/dashboard/fosters",
+    icon: "IconHomeHeart",
+    permission: AppPermissions.FOSTERS_READ,
+  },
+  {
+    title: "Foster Applications",
+    url: "/dashboard/foster-applications",
+    icon: "IconClipboardList",
+    permission: AppPermissions.FOSTERS_READ,
   },
   {
     title: "Outcomes",

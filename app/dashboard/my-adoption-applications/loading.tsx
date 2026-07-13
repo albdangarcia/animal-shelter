@@ -13,7 +13,7 @@ const Loading = () => {
     <Card className="@container/card">
       <CardHeader className="relative">
         <CardTitle className="@[650px]/card:text-xl">
-          My applications
+          My Adoption applications
         </CardTitle>
         <CardDescription>
           List of your submitted adoption applications.

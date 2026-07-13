@@ -10,7 +10,7 @@ import {
   withAuthenticatedUser,
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { HouseholdProfileFormSchema } from "../zod-schemas/household-profile.schemas";
+import { HouseholdFieldsSchema } from "../zod-schemas/household-profile.schemas";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { z } from "zod";
 
@@ -21,7 +21,7 @@ const _updateMyHouseholdProfile = async (
 ): Promise<HouseholdProfileFormState> => {
   const personId = user.personId;
 
-  const validatedFields = HouseholdProfileFormSchema.safeParse(
+  const validatedFields = HouseholdFieldsSchema.safeParse(
     Object.fromEntries(formData.entries()),
   );
 
@@ -111,7 +111,7 @@ const _updateStaffHouseholdProfile = async (
     };
   }
 
-  const validatedFields = HouseholdProfileFormSchema.safeParse(
+  const validatedFields = HouseholdFieldsSchema.safeParse(
     Object.fromEntries(formData.entries()),
   );
 

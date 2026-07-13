@@ -1,17 +1,17 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ApplicationStatus } from "@prisma/client";
 import { ArrowRight, Info, Loader2, Pencil } from "lucide-react";
 import Link from "next/link";
 import { startTransition, useActionState, useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { ApplicationWithOutcome } from "@/app/lib/data/user-application.data";
+import { AdoptionApplicationWithOutcome } from "@/app/lib/data/user-adoption-application.data";
 import { staffUpdateAdoptionApp } from "@/app/lib/actions/adoption-application.actions";
 import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
-import { AnimalForApplicationPayload } from "@/app/lib/types";
+import { AnimalForAdoptionApplicationPayload } from "@/app/lib/types";
+import { ALLOWED_APPLICATION_TRANSITIONS } from "@/app/lib/utils/application-status";
 import {
   formatSingleEnumOption,
   livingSituationOptions,
@@ -50,23 +50,9 @@ import { US_STATES } from "@/app/lib/constants/us-states";
 
 type StaffUpdateFormData = z.infer<typeof StaffUpdateAdoptionAppFormSchema>;
 
-const updatableApplicationStatuses = [
-  ApplicationStatus.PENDING,
-  ApplicationStatus.REVIEWING,
-  ApplicationStatus.WAITLISTED,
-  ApplicationStatus.APPROVED,
-  ApplicationStatus.REJECTED,
-  ApplicationStatus.WITHDRAWN,
-] as const;
-
-type StatusOption = {
-  value: ApplicationStatus;
-  label: string;
-};
-
 interface StaffApplicationUpdateFormProps {
-  animal: AnimalForApplicationPayload;
-  application: ApplicationWithOutcome;
+  animal: AnimalForAdoptionApplicationPayload;
+  application: AdoptionApplicationWithOutcome;
 }
 
 export function StaffApplicationUpdateForm({
@@ -78,18 +64,8 @@ export function StaffApplicationUpdateForm({
   const outcome = application.outcome;
   const isWalkIn = application.applicant?.user === null;
 
-  const applicationStatusOptions: StatusOption[] =
-    updatableApplicationStatuses.map((status) => ({
-      value: status,
-      label: formatSingleEnumOption(status),
-    }));
-
-  if (isAdopted) {
-    applicationStatusOptions.unshift({
-      value: "ADOPTED",
-      label: "Adopted",
-    });
-  }
+  const currentStatus = application.status;
+  const allowedNextStatuses = ALLOWED_APPLICATION_TRANSITIONS[currentStatus];
 
   const action = staffUpdateAdoptionApp.bind(null, application.id);
   const [state, formAction, isPending] = useActionState(
@@ -100,14 +76,12 @@ export function StaffApplicationUpdateForm({
   const form = useForm<StaffUpdateFormData>({
     resolver: zodResolver(StaffUpdateAdoptionAppFormSchema),
     defaultValues: {
-      status:
-        application.status as (typeof updatableApplicationStatuses)[number],
+      status: application.status as StaffUpdateFormData["status"],
       internalNotes: application.internalNotes ?? "",
       statusChangeReason: "",
     },
   });
 
-  const currentStatus = application.status;
   const newStatus = useWatch({ control: form.control, name: "status" });
   const isStatusChanging = newStatus && newStatus !== currentStatus;
 
@@ -227,17 +201,19 @@ export function StaffApplicationUpdateForm({
                       <Select
                         onValueChange={field.onChange}
                         defaultValue={field.value}
-                        disabled={isPending || isAdopted}
+                        disabled={isPending || allowedNextStatuses.length === 0}
                       >
                         <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select a new status" />
+                            <SelectValue placeholder="Select a new status">
+                              {formatSingleEnumOption(field.value)}
+                            </SelectValue>
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {applicationStatusOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
+                          {allowedNextStatuses.map((status) => (
+                            <SelectItem key={status} value={status}>
+                              {formatSingleEnumOption(status)}
                             </SelectItem>
                           ))}
                         </SelectContent>

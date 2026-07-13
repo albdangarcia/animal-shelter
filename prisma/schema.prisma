@@ -40,19 +40,23 @@ model Person {
 
   adoptionApplications     AdoptionApplication[]
   applicationStatusHistory ApplicationStatusHistory[]
+  fosterApplications       FosterApplication[]
+  fosterApplicationHistory FosterApplicationStatusHistory[]
+  fosterPlacementsPlaced   FosterPlacement[]                @relation("FosterPlacementPlacedBy")
+  fosterPlacementsReturned FosterPlacement[]                @relation("FosterPlacementReturnedBy")
   likes                    Like[]
-  animalNotesAuthored      AnimalNote[]               @relation("AnimalNoteAuthor")
-  personNotesAuthored      PersonNote[]               @relation("PersonNoteAuthor")
-  partnerNotesAuthored     PartnerNote[]              @relation("PartnerNoteAuthor")
-  personNotes              PersonNote[]               @relation("PersonNoteSubject") // notes written ABOUT this person
+  animalNotesAuthored      AnimalNote[]                     @relation("AnimalNoteAuthor")
+  personNotesAuthored      PersonNote[]                     @relation("PersonNoteAuthor")
+  partnerNotesAuthored     PartnerNote[]                    @relation("PartnerNoteAuthor")
+  personNotes              PersonNote[]                     @relation("PersonNoteSubject") // notes written ABOUT this person
   partnerContacts          PartnerContact[]
-  tasksAssigned            Task[]                     @relation("TasksAssignedTo")
-  tasksCreated             Task[]                     @relation("TasksCreatedBy")
-  reclaimedAnimalsAsOwner  Outcome[]                  @relation("ReclaimedByOwner")
-  processedOutcomes        Outcome[]                  @relation("ProcessedOutcome")
-  surrenderedAnimals       Intake[]                   @relation("SurrenderedBy")
-  foundAnimals             Intake[]                   @relation("FoundBy")
-  processedIntakes         Intake[]                   @relation("ProcessedBy")
+  tasksAssigned            Task[]                           @relation("TasksAssignedTo")
+  tasksCreated             Task[]                           @relation("TasksCreatedBy")
+  reclaimedAnimalsAsOwner  Outcome[]                        @relation("ReclaimedByOwner")
+  processedOutcomes        Outcome[]                        @relation("ProcessedOutcome")
+  surrenderedAnimals       Intake[]                         @relation("SurrenderedBy")
+  foundAnimals             Intake[]                         @relation("FoundBy")
+  processedIntakes         Intake[]                         @relation("ProcessedBy")
 
   // financialTransactions  FinancialTransaction[]
   // processedTransactions  FinancialTransaction[] @relation("ProcessedFinance")
@@ -120,16 +124,38 @@ enum LivingSituation {
   OTHER
 }
 
-/// Stores the application and approval status for a user wanting to become a foster parent.
+enum FosterStatus {
+  ACTIVE
+  PAUSED
+  INACTIVE
+}
+
+/// The roster record for an approved foster parent: their capabilities and current
+/// standing. Distinct from `FosterApplication` (the reviewable request to become one)
+/// and `FosterPlacement` (a dated event of an animal actually staying with them).
 model FosterProfile {
-  id            String  @id @default(cuid())
-  isActive      Boolean @default(false) @map(name: "is_active")
+  id            String       @id @default(cuid())
+  status        FosterStatus @default(ACTIVE)
   internalNotes String?
 
-  animalsFostered Animal[]
+  maxAnimals         Int      @default(1) @map(name: "max_animals")
+  hasQuarantineSpace Boolean? @map(name: "has_quarantine_space")
+  canGiveOralMeds    Boolean? @map(name: "can_give_oral_meds")
+  canBottleFeed      Boolean? @map(name: "can_bottle_feed")
+  canTransport       Boolean? @map(name: "can_transport")
+  acceptsMedical     Boolean? @map(name: "accepts_medical")
+  acceptsHospice     Boolean? @map(name: "accepts_hospice")
+  availabilityNotes  String?  @map(name: "availability_notes")
+
+  speciesCapabilities Species[] @relation("FosterProfileSpeciesCapability")
+
+  approvedAt DateTime? @map(name: "approved_at")
 
   personId String @unique @map(name: "person_id")
-  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+  // Restrict: a foster's placements are care history.
+  person   Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+
+  placements FosterPlacement[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -256,6 +282,9 @@ model Unit {
 
   animals Animal[]
 
+  // Informational only — a placement's `previousUnitId`, set null if the unit is deleted.
+  fosterPlacementsAsPrevious FosterPlacement[]
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map(name: "deleted_at")
@@ -362,9 +391,9 @@ model Animal {
   // isMixedBreed    Boolean           @default(false)
   isSpayedNeutered Boolean @default(false)
 
-  // If the animal is currently in a foster home, this links to the active FosterProfile.
-  fosterProfileId String?        @map(name: "foster_profile_id")
-  fosterProfile   FosterProfile? @relation(fields: [fosterProfileId], references: [id])
+  // Dated foster placement events. "Currently in foster" is derived — an open
+  // placement (endDate == null) exists — never stored as a flag on the animal.
+  fosterPlacements FosterPlacement[]
 
   // The kennel the animal is currently housed in. Null for fostered or not-yet-placed animals.
   currentUnitId String? @map(name: "current_unit_id")
@@ -387,6 +416,9 @@ model Species {
   name    String   @unique
   animals Animal[]
   breeds  Breed[] // A species can have many breeds
+
+  fosterProfiles     FosterProfile[]     @relation("FosterProfileSpeciesCapability")
+  fosterApplications FosterApplication[] @relation("FosterApplicationSpeciesCapability")
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -531,6 +563,9 @@ model Outcome {
   // For ADOPTION
   adoptionApplicationId String?              @unique
   adoptionApplication   AdoptionApplication? @relation(fields: [adoptionApplicationId], references: [id])
+
+  // Set when this outcome was created via a FOSTER_TO_ADOPT placement conversion.
+  fosterPlacement FosterPlacement?
 
   // For RETURN_TO_OWNER
   ownerId String?
@@ -805,8 +840,9 @@ model AdoptionApplication {
   status        ApplicationStatus @default(PENDING)
   internalNotes String? // For persistent staff notes about the application as a whole
 
-  outcome Outcome?
-  history ApplicationStatusHistory[]
+  outcome         Outcome?
+  history         ApplicationStatusHistory[]
+  fosterPlacement FosterPlacement?
 
   // Relations
   applicantId String @map(name: "applicant_id")
@@ -839,6 +875,153 @@ model ApplicationStatusHistory {
 
   @@index([applicationId])
   @@map(name: "application_status_history")
+}
+
+// ═══════════════════════════════════════════════════
+// FOSTERING WORKFLOW
+// ═══════════════════════════════════════════════════
+
+/// Represents a person's request to become an approved foster. This is a snapshot-in-time
+/// record, same convention as `AdoptionApplication`. Reuses `ApplicationStatus` (the
+/// `ADOPTED` value is simply never used here). Approval creates/activates the
+/// `FosterProfile` from this application's capability snapshot.
+model FosterApplication {
+  id String @id @default(cuid())
+
+  // Applicant details (snapshot in time for this specific application)
+  applicantName         String  @map(name: "applicant_name")
+  applicantEmail        String  @map(name: "applicant_email")
+  applicantPhone        String  @map(name: "applicant_phone")
+  applicantAddressLine1 String  @map(name: "applicant_address_line1")
+  applicantAddressLine2 String? @map(name: "applicant_address_line2")
+  applicantCity         String  @map(name: "applicant_city")
+  applicantState        String  @map(name: "applicant_state")
+  applicantZipCode      String  @map(name: "applicant_zip_code")
+
+  // Home and lifestyle details (household snapshot, same convention as AdoptionApplication)
+  livingSituation         LivingSituation @map(name: "living_situation")
+  hasYard                 Boolean?        @map(name: "has_yard")
+  landlordPermission      Boolean?        @map(name: "landlord_permission")
+  householdSize           Int             @map(name: "household_size")
+  hasChildren             Boolean?        @map(name: "has_children")
+  childrenAges            Int[]           @map(name: "children_ages")
+  otherAnimalsDescription String?         @map(name: "other_animals_description")
+  animalExperience        String?         @map(name: "animal_experience")
+
+  // Foster capability snapshot (mirrors FosterProfile's capability fields as submitted)
+  maxAnimals          Int       @default(1) @map(name: "max_animals")
+  hasQuarantineSpace  Boolean?  @map(name: "has_quarantine_space")
+  canGiveOralMeds     Boolean?  @map(name: "can_give_oral_meds")
+  canBottleFeed       Boolean?  @map(name: "can_bottle_feed")
+  canTransport        Boolean?  @map(name: "can_transport")
+  acceptsMedical      Boolean?  @map(name: "accepts_medical")
+  acceptsHospice      Boolean?  @map(name: "accepts_hospice")
+  availabilityNotes   String?   @map(name: "availability_notes")
+  speciesCapabilities Species[] @relation("FosterApplicationSpeciesCapability")
+
+  // Status and Workflow Management
+  status        ApplicationStatus @default(PENDING)
+  internalNotes String?
+
+  history FosterApplicationStatusHistory[]
+
+  personId String @map(name: "person_id")
+  // Restrict: prevents deleting a Person with foster application history.
+  person   Person @relation(fields: [personId], references: [id], onDelete: Restrict)
+
+  submittedAt DateTime @default(now()) @map(name: "submitted_at")
+  updatedAt   DateTime @updatedAt @map(name: "updated_at")
+
+  @@index([personId])
+  @@index([status])
+  @@map(name: "foster_applications")
+}
+
+model FosterApplicationStatusHistory {
+  id            String            @id @default(cuid())
+  applicationId String            @map(name: "application_id")
+  application   FosterApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  status             ApplicationStatus // The status being set (e.g., APPROVED)
+  statusChangeReason String // e.g., "Approved after a successful home visit." or a rejection reason.
+
+  changedAt DateTime @default(now()) @map(name: "changed_at")
+
+  changedById String? @map(name: "changed_by_id")
+  changedBy   Person? @relation(fields: [changedById], references: [id], onDelete: SetNull)
+
+  @@index([applicationId])
+  @@map(name: "foster_application_status_history")
+}
+
+enum FosterPlacementType {
+  GENERAL
+  MEDICAL
+  FOSTER_TO_ADOPT
+  LONG_TERM
+}
+
+enum FosterReturnReason {
+  RETURNED_TO_SHELTER
+  ADOPTED_BY_FOSTER
+  TRANSFERRED
+  MEDICAL
+  OTHER
+}
+
+/// A dated event: this animal is with this foster for this window. NOT an outcome —
+/// the animal remains in the shelter's care, a sibling of a location change rather
+/// than of an outcome. "Currently in foster" is derived by checking for an open
+/// placement (endDate == null), never stored as a flag.
+model FosterPlacement {
+  id   String              @id @default(cuid())
+  type FosterPlacementType
+
+  startDate       DateTime  @default(now()) @map(name: "start_date")
+  expectedEndDate DateTime? @map(name: "expected_end_date")
+  endDate         DateTime? @map(name: "end_date")
+
+  returnReason FosterReturnReason? @map(name: "return_reason")
+  returnNotes  String?             @map(name: "return_notes")
+
+  animalId String @map(name: "animal_id")
+  // Restrict: placements are care history.
+  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Restrict)
+
+  fosterProfileId String        @map(name: "foster_profile_id")
+  // Restrict: placements are care history.
+  fosterProfile   FosterProfile @relation(fields: [fosterProfileId], references: [id], onDelete: Restrict)
+
+  // Informational only — the unit is NOT reserved while the animal is fostered.
+  previousUnitId String? @map(name: "previous_unit_id")
+  previousUnit   Unit?   @relation(fields: [previousUnitId], references: [id], onDelete: SetNull)
+
+  // For FOSTER_TO_ADOPT: the animal's listingStatus before it was set to
+  // PENDING_ADOPTION, restored if the placement ends without converting.
+  previousListingStatus AnimalListingStatus? @map(name: "previous_listing_status")
+
+  // Staff attribution, mirroring the Intake/Outcome staffMember convention.
+  placedById String @map(name: "placed_by_id")
+  placedBy   Person @relation("FosterPlacementPlacedBy", fields: [placedById], references: [id])
+
+  returnedById String? @map(name: "returned_by_id")
+  returnedBy   Person? @relation("FosterPlacementReturnedBy", fields: [returnedById], references: [id])
+
+  // Optional link for FOSTER_TO_ADOPT conversions.
+  adoptionApplicationId String?              @unique @map(name: "adoption_application_id")
+  adoptionApplication   AdoptionApplication? @relation(fields: [adoptionApplicationId], references: [id], onDelete: SetNull)
+
+  outcomeId String?  @unique @map(name: "outcome_id")
+  outcome   Outcome? @relation(fields: [outcomeId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // "One open placement per animal" (endDate == null) cannot be expressed as a
+  // Prisma partial unique constraint — it is enforced in the action layer.
+  @@index([animalId])
+  @@index([fosterProfileId])
+  @@map("foster_placements")
 }
 
 model Like {
@@ -998,6 +1181,8 @@ enum AnimalActivityType {
   OUTCOME_PROCESSED // A final outcome event
   CREATED // The animal record itself was created
   LOCATION_CHANGE // The animal was moved to a different unit/location (or unplaced)
+  FOSTER_PLACED // The animal was placed with a foster
+  FOSTER_RETURNED // The animal was returned from a foster placement
 }
 
 model AnimalActivityLog {

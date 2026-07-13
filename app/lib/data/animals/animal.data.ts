@@ -28,8 +28,12 @@ const _fetchAnimals = async (
   listingStatusInput: string | undefined,
   sexInput: string | undefined,
   pageSizeInput: number,
-  sortInput: string | undefined
-): Promise<{ animals: AnimalsPayload[]; totalPages: number; totalRows: number }> => {
+  sortInput: string | undefined,
+): Promise<{
+  animals: AnimalsPayload[];
+  totalPages: number;
+  totalRows: number;
+}> => {
   // Parse the query and currentPage
   const validatedArgs = DashboardAnimalsSchema.safeParse({
     query: queryInput,
@@ -95,7 +99,7 @@ const _fetchAnimals = async (
 };
 
 const _fetchSectionCardsAnimalData = async (
-  id: string
+  id: string,
 ): Promise<AnimalSectionCardPayload | null> => {
   const parsedId = cuidSchema.safeParse(id);
 
@@ -166,6 +170,19 @@ const _fetchSectionCardsAnimalData = async (
             },
           },
         },
+        fosterPlacements: {
+          where: { endDate: null },
+          select: {
+            id: true,
+            type: true,
+            startDate: true,
+            expectedEndDate: true,
+            fosterProfile: {
+              select: { person: { select: { id: true, name: true } } },
+            },
+          },
+          take: 1,
+        },
         adoptionApplications: {
           select: {
             status: true,
@@ -203,7 +220,7 @@ const _fetchSectionCardsAnimalData = async (
 };
 
 const _fetchAnimalById = async (
-  id: string
+  id: string,
 ): Promise<AnimalIntakeFormPayload | null> => {
   const parsedId = cuidSchema.safeParse(id);
 
@@ -376,7 +393,9 @@ const _fetchAnimalForOutcomeForm = async (id: string) => {
   }
 };
 
-const _fetchAnimalForReIntake = async (id: string): Promise<AnimalReIntakeFormPayload | null> => {
+const _fetchAnimalForReIntake = async (
+  id: string,
+): Promise<AnimalReIntakeFormPayload | null> => {
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
@@ -411,7 +430,7 @@ export type AnimalSearchResult = Prisma.AnimalGetPayload<{
 
 const _searchPublishedAnimals = async (
   query: string,
-  excludePersonId?: string
+  excludePersonId?: string,
 ) => {
   const parsed = searchQuerySchema.safeParse(query);
   const q = parsed.success ? parsed.data : "";
@@ -453,34 +472,33 @@ const _searchPublishedAnimals = async (
 };
 
 export const searchPublishedAnimals = RequirePermission(
-  AppPermissions.PERSONS_MANAGE
+  AppPermissions.PERSONS_MANAGE,
 )(_searchPublishedAnimals);
 
 export const fetchAnimalForReIntake = RequirePermission(
-  AppPermissions.ANIMAL_INFO_READ
+  AppPermissions.ANIMAL_INFO_READ,
 )(_fetchAnimalForReIntake);
 
 export const fetchAnimalForOutcomeForm = RequirePermission(
-  AppPermissions.ANIMAL_INFO_READ
+  AppPermissions.ANIMAL_INFO_READ,
 )(_fetchAnimalForOutcomeForm);
 
 export const fetchAnimalForPhotosPage = RequirePermission(
-  AppPermissions.ANIMAL_INFO_READ
+  AppPermissions.ANIMAL_INFO_READ,
 )(_fetchAnimalForPhotoPage);
 
 export const fetchPartners = RequirePermission(AppPermissions.PARTNERS_READ)(
-  _fetchPartners
+  _fetchPartners,
 );
 
 export const fetchAnimals = RequirePermission(AppPermissions.ANIMAL_INFO_READ)(
-  _fetchAnimals
+  _fetchAnimals,
 );
 
 export const fetchAnimalById = RequirePermission(
-  AppPermissions.ANIMAL_INFO_READ
+  AppPermissions.ANIMAL_INFO_READ,
 )(_fetchAnimalById);
 
-export const fetchSectionCardsAnimalData = RequirePermission(AppPermissions.ANIMAL_INFO_READ)(
-  _fetchSectionCardsAnimalData
-);
-
+export const fetchSectionCardsAnimalData = RequirePermission(
+  AppPermissions.ANIMAL_INFO_READ,
+)(_fetchSectionCardsAnimalData);

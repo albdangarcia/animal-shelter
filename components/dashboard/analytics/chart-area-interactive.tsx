@@ -164,17 +164,15 @@ export function ChartAreaInteractive({ data }: ChartAreaInteractiveProps) {
             />
             <Area
               dataKey="outcomes"
-              type="natural"
+              type="monotone"
               fill="url(#fillOutcomes)"
               stroke="var(--color-outcomes)"
-              stackId="a"
             />
             <Area
               dataKey="intakes"
-              type="natural"
+              type="monotone"
               fill="url(#fillIntakes)"
               stroke="var(--color-intakes)"
-              stackId="a"
             />
           </AreaChart>
         </ChartContainer>

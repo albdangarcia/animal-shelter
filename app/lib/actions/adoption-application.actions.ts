@@ -5,13 +5,17 @@ import { redirect } from "next/navigation";
 import { prisma } from "../prisma";
 import { StaffUpdateAppFormState, StaffAdoptionApplicationFormState } from "../form-state-types";
 import { StaffUpdateAdoptionAppFormSchema, StaffAdoptionApplicationFormSchema } from "../zod-schemas/application.schemas";
-import { MyAdoptionAppFormSchema } from "../zod-schemas/myApplication.schema";
+import { MyAdoptionAppFormSchema } from "../zod-schemas/myAdoptionApplication.schema";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { ApplicationStatus, AnimalListingStatus, Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import { ConflictError } from "../utils/errors";
+import {
+  isAllowedTransition,
+  illegalTransitionMessage,
+} from "../utils/application-status";
 import { z } from "zod";
 
 const _staffUpdateAdoptionApp = async (
@@ -76,6 +80,15 @@ const _staffUpdateAdoptionApp = async (
 
   const isStatusActuallyChanging =
     newStatus !== undefined && newStatus !== existingApplication.status;
+
+  if (
+    isStatusActuallyChanging &&
+    !isAllowedTransition(existingApplication.status, newStatus)
+  ) {
+    return {
+      message: illegalTransitionMessage(existingApplication.status, newStatus),
+    };
+  }
 
   if (isStatusActuallyChanging) {
     const isExemptedChange =
@@ -376,7 +389,7 @@ const _staffCreateAdoptionApplication = async (
         },
       });
 
-      // Unlike _updateStaffHouseholdProfile (Task 03) which blocks edits for registered users,
+      // Unlike _updateStaffHouseholdProfile which blocks edits for registered users,
       // here we always upsert because the H&L data was captured verbally during the application
       // intake. The "Add Application" flow is only accessible via the staff dashboard, so this
       // is acceptable behavior.

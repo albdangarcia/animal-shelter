@@ -20,7 +20,10 @@ import {
   IconChecks,
   IconCheckbox,
   IconBuildingStore,
-  IconLayoutBoard
+  IconLayoutBoard,
+  IconHomeHeart,
+  IconClipboardHeart,
+  IconDog,
 } from "@tabler/icons-react";
 import type { TablerIcon } from "@tabler/icons-react";
 import type { IconName } from "./nav-links.config";
@@ -48,6 +51,9 @@ export const iconMap: Record<IconName, TablerIcon> = {
   IconCheckbox,
   IconBuildingStore,
   IconLayoutBoard,
+  IconHomeHeart,
+  IconClipboardHeart,
+  IconDog,
 };
 
 // Helper function to get icon component from string name

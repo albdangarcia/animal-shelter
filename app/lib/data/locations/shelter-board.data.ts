@@ -30,10 +30,18 @@ export interface BoardLocation {
   units: BoardUnit[];
 }
 
+// Bucket 2 chip, extended with the open placement's foster identity — display
+// only no dnd-kit droppable/draggable wiring for this rail.
+export interface FosteredBoardAnimal extends BoardAnimal {
+  fosterPersonId: string;
+  fosterPersonName: string;
+  since: Date;
+}
+
 export interface ShelterBoardData {
   locations: BoardLocation[];
   unplaced: BoardAnimal[]; // bucket 3: no unit, no foster
-  fosterCount: number; // bucket 2: no unit, in foster
+  fostered: FosteredBoardAnimal[]; // bucket 2: no unit, in foster
   totals: {
     onSite: number; // sum of animals across all units (bucket 1)
     unplaced: number;
@@ -80,8 +88,8 @@ const _fetchShelterBoard = async (): Promise<ShelterBoardData> => {
     // Live board: exclude soft-deleted locations/units and archived animals
     // everywhere. Occupancy is always derived from currentUnitId, there is no
     // stored occupancy field.
-    const [locationRows, unplacedRows, fosterCount] = await Promise.all([
-      // (a) locations -> units -> placed animals, in one query
+    const [locationRows, unplacedRows, fosteredRows] = await Promise.all([
+      // locations -> units -> placed animals, in one query
       prisma.location.findMany({
         where: { deletedAt: null },
         orderBy: { name: "asc" },
@@ -105,22 +113,36 @@ const _fetchShelterBoard = async (): Promise<ShelterBoardData> => {
           },
         },
       }),
-      // (b) bucket 3 — unplaced: no unit, not in foster
+      // bucket 3 — unplaced: no unit, no open foster placement
       prisma.animal.findMany({
         where: {
           currentUnitId: null,
-          fosterProfileId: null,
+          fosterPlacements: { none: { endDate: null } },
           listingStatus: { not: "ARCHIVED" },
         },
         orderBy: { name: "asc" },
         select: animalChipSelect,
       }),
-      // (c) bucket 2 — in foster: no unit, has a foster profile (count only)
-      prisma.animal.count({
+      // bucket 2 — in foster: no unit, has an open foster placement
+      prisma.animal.findMany({
         where: {
           currentUnitId: null,
-          fosterProfileId: { not: null },
+          fosterPlacements: { some: { endDate: null } },
           listingStatus: { not: "ARCHIVED" },
+        },
+        orderBy: { name: "asc" },
+        select: {
+          ...animalChipSelect,
+          fosterPlacements: {
+            where: { endDate: null },
+            select: {
+              startDate: true,
+              fosterProfile: {
+                select: { person: { select: { id: true, name: true } } },
+              },
+            },
+            take: 1,
+          },
         },
       }),
     ]);
@@ -139,10 +161,25 @@ const _fetchShelterBoard = async (): Promise<ShelterBoardData> => {
 
     const unplaced = unplacedRows.map(toBoardAnimal);
 
+    // Every row here matched `fosterPlacements: { some: { endDate: null } }`,
+    // so `fosterPlacements[0]` is always present.
+    const fostered: FosteredBoardAnimal[] = fosteredRows.map((animal) => {
+      const placement = animal.fosterPlacements[0];
+      return {
+        ...toBoardAnimal(animal),
+        fosterPersonId: placement.fosterProfile.person.id,
+        fosterPersonName: placement.fosterProfile.person.name,
+        since: placement.startDate,
+      };
+    });
+
     const onSite = locations.reduce(
       (sum, location) =>
         sum +
-        location.units.reduce((unitSum, unit) => unitSum + unit.animals.length, 0),
+        location.units.reduce(
+          (unitSum, unit) => unitSum + unit.animals.length,
+          0,
+        ),
       0,
     );
     const unitCount = locations.reduce(
@@ -153,11 +190,11 @@ const _fetchShelterBoard = async (): Promise<ShelterBoardData> => {
     return {
       locations,
       unplaced,
-      fosterCount,
+      fostered,
       totals: {
         onSite,
         unplaced: unplaced.length,
-        inFoster: fosterCount,
+        inFoster: fostered.length,
         units: unitCount,
       },
     };

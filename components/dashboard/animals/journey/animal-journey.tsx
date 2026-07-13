@@ -1,13 +1,17 @@
 import { fetchAnimalJourney } from "@/app/lib/data/animals/animal-journey.data";
 import { formatJourneyItem } from "@/app/lib/journey-utils";
-import { Briefcase, HeartHandshake, LogIn } from "lucide-react";
+import { Briefcase, HeartHandshake, Home, LogIn, Undo2 } from "lucide-react";
 
 // The icon map
 const iconMap = {
   CREATED: <LogIn className="h-5 w-5 text-muted-foreground" />,
   INTAKE_PROCESSED: <LogIn className="h-5 w-5 text-muted-foreground" />,
   STATUS_CHANGE: <Briefcase className="h-5 w-5 text-muted-foreground" />,
-  OUTCOME_PROCESSED: <HeartHandshake className="h-5 w-5 text-muted-foreground" />,
+  OUTCOME_PROCESSED: (
+    <HeartHandshake className="h-5 w-5 text-muted-foreground" />
+  ),
+  FOSTER_PLACED: <Home className="h-5 w-5 text-muted-foreground" />,
+  FOSTER_RETURNED: <Undo2 className="h-5 w-5 text-muted-foreground" />,
 };
 
 const getIcon = (activityType: string) => {

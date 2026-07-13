@@ -42,7 +42,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { HouseholdProfileFormSchema } from "@/app/lib/zod-schemas/household-profile.schemas";
+import { HouseholdFieldsSchema } from "@/app/lib/zod-schemas/household-profile.schemas";
 import {
   formatSingleEnumOption,
   livingSituationOptions,
@@ -50,7 +50,7 @@ import {
 import { HouseholdProfilePayload } from "@/app/lib/types";
 import { boolToSelectValue } from "@/app/lib/utils/form-utils";
 
-type HouseholdProfileFormValues = z.input<typeof HouseholdProfileFormSchema>;
+export type HouseholdProfileFormValues = z.input<typeof HouseholdFieldsSchema>;
 
 interface HouseholdProfileFormProps {
   householdProfile?: HouseholdProfilePayload | null;
@@ -60,14 +60,14 @@ interface HouseholdProfileFormProps {
   returnTo?: string;
 }
 
-// ─── Shared read-only rows ────────────────────────────────────────────────────
+// Shared read-only rows
 
 const boolDisplay = (val: boolean | null | undefined) => {
   if (val === null || val === undefined) return "N/A";
   return val ? "Yes" : "No";
 };
 
-const HouseholdReadOnlyRows = ({
+export const HouseholdReadOnlyRows = ({
   hp,
 }: {
   hp: HouseholdProfilePayload | null | undefined;
@@ -119,7 +119,7 @@ const HouseholdReadOnlyRows = ({
   );
 };
 
-const HouseholdFormFields = ({
+export const HouseholdFormFields = ({
   form,
 }: {
   form: ReturnType<typeof useForm<HouseholdProfileFormValues>>;
@@ -163,11 +163,7 @@ const HouseholdFormFields = ({
                 type="number"
                 min={1}
                 {...field}
-                onChange={(e) =>
-                  field.onChange(
-                    e.target.value === "" ? "" : parseInt(e.target.value, 10),
-                  )
-                }
+                onChange={(e) => field.onChange(e.target.value)}
               />
             </FormControl>
             <FormMessage />
@@ -181,7 +177,10 @@ const HouseholdFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-2">
             <FormLabel>Do you have a yard?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
+            {/* value coerced to "" so Select stays controlled from the first
+                render — undefined->defined later trips React's
+                "uncontrolled to controlled" warning. */}
+            <Select onValueChange={field.onChange} value={field.value ?? ""}>
               <FormControl>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Not specified" />
@@ -202,7 +201,7 @@ const HouseholdFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-2">
             <FormLabel>Landlord permission (if renting)</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
+            <Select onValueChange={field.onChange} value={field.value ?? ""}>
               <FormControl>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Not specified" />
@@ -223,7 +222,7 @@ const HouseholdFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-2">
             <FormLabel>Do you have children at home?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
+            <Select onValueChange={field.onChange} value={field.value ?? ""}>
               <FormControl>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Not specified" />
@@ -306,7 +305,7 @@ const SelfHouseholdForm = ({
   >(updateMyHouseholdProfile, INITIAL_FORM_STATE);
 
   const form = useForm<HouseholdProfileFormValues>({
-    resolver: standardSchemaResolver(HouseholdProfileFormSchema),
+    resolver: standardSchemaResolver(HouseholdFieldsSchema),
     defaultValues: {
       livingSituation:
         householdProfile?.livingSituation || livingSituationOptions[0].value,
@@ -337,7 +336,11 @@ const SelfHouseholdForm = ({
   const onSubmit = (data: HouseholdProfileFormValues) => {
     const formData = new FormData();
     for (const [key, value] of Object.entries(data)) {
-      if (value != null && value !== "") {
+      if (value != null) {
+        // Empty string is a meaningful value here (e.g. childrenAges when
+        // hasChildren is "false") — omitting it would drop a key the server
+        // schema requires to be present, failing validation invisibly since
+        // the corresponding field isn't always rendered.
         formData.append(key, String(value));
       }
     }
@@ -396,7 +399,7 @@ const StaffHouseholdCard = ({
   const [isEditing, setIsEditing] = useState(false);
 
   const form = useForm<HouseholdProfileFormValues>({
-    resolver: standardSchemaResolver(HouseholdProfileFormSchema),
+    resolver: standardSchemaResolver(HouseholdFieldsSchema),
     defaultValues: {
       livingSituation:
         householdProfile?.livingSituation || livingSituationOptions[0].value,
@@ -433,7 +436,11 @@ const StaffHouseholdCard = ({
   const onSubmit = (data: HouseholdProfileFormValues) => {
     const formData = new FormData();
     for (const [key, value] of Object.entries(data)) {
-      if (value != null && value !== "") {
+      if (value != null) {
+        // Empty string is a meaningful value here (e.g. childrenAges when
+        // hasChildren is "false") — omitting it would drop a key the server
+        // schema requires to be present, failing validation invisibly since
+        // the corresponding field isn't always rendered.
         formData.append(key, String(value));
       }
     }
@@ -507,7 +514,7 @@ const StaffHouseholdCard = ({
   );
 };
 
-// ─── Public export ────────────────────────────────────────────────────────────
+// Public export
 
 const HouseholdProfileForm = ({
   householdProfile,

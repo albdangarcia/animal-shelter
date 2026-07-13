@@ -10,13 +10,13 @@ import { z } from "zod";
 import {
   createMyAdoptionApp,
   updateMyAdoptionApp,
-} from "@/app/lib/actions/my-application.action";
+} from "@/app/lib/actions/my-adoption-application.actions";
 import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import {
   AdoptionApplicationPayload,
-  AnimalForApplicationPayload,
+  AnimalForAdoptionApplicationPayload,
 } from "@/app/lib/types";
-import { MyAdoptionAppFormSchema } from "@/app/lib/zod-schemas/myApplication.schema";
+import { MyAdoptionAppFormSchema } from "@/app/lib/zod-schemas/myAdoptionApplication.schema";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -47,15 +47,15 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import { livingSituationOptions } from "@/app/lib/utils/enum-formatter";
-import { ApplicantDefaultsPayload } from "@/app/lib/data/my-applications.data";
+import { AdoptionApplicantDefaultsPayload } from "@/app/lib/data/my-adoption-applications.data";
 import { toYesNo } from "@/app/lib/utils/form-utils";
 
 type MyApplicationFormData = z.infer<typeof MyAdoptionAppFormSchema>;
 
 interface MyApplicationFormProps {
-  animal: AnimalForApplicationPayload;
+  animal: AnimalForAdoptionApplicationPayload;
   application?: AdoptionApplicationPayload;
-  applicantDefaults?: ApplicantDefaultsPayload | null;
+  applicantDefaults?: AdoptionApplicantDefaultsPayload | null;
 }
 
 export function MyApplicationForm({
@@ -66,7 +66,7 @@ export function MyApplicationForm({
   const isEditMode = !!application;
 
   const cancelHref = isEditMode
-    ? "/dashboard/my-applications"
+    ? "/dashboard/my-adoption-applications"
     : `/pets/${animal.id}`;
 
   const action = isEditMode

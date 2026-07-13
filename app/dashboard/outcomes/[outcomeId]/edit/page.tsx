@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { fetchPartners } from "@/app/lib/data/animals/animal.data";
 import { OutcomeForm } from "@/components/dashboard/outcomes/outcome-form";
 import { fetchOutcomeById } from "@/app/lib/data/animals/outcome.data";
@@ -38,14 +37,12 @@ const EditOutcomePage = async ({ params }: Props) => {
         </Link>
       </Button>
 
-      <Suspense fallback={<div>Loading form...</div>}>
-        <OutcomeForm
-          outcome={outcome}
-          animal={{ id: animal.id, name: animal.name }}
-          application={application || undefined}
-          partners={partners}
-        />
-      </Suspense>
+      <OutcomeForm
+        outcome={outcome}
+        animal={{ id: animal.id, name: animal.name }}
+        application={application || undefined}
+        partners={partners}
+      />
     </main>
   );
 };

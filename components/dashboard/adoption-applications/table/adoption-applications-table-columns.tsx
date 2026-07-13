@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ApplicationStatuses } from "./adoption-applications-options";
 import { DataTableColumnHeader } from "../../../table-common/data-table-column-header";
 import { DataTableRowActions } from "./adoption-applications-table-row-actions";
-import { ApplicationWithAnimal } from "@/app/lib/data/user-application.data";
+import { AdoptionApplicationWithAnimal } from "@/app/lib/data/user-adoption-application.data";
 import { formatTimeAgo } from "@/app/lib/utils/date-utils";
 import Link from "next/link";
 
@@ -16,7 +16,7 @@ export interface GetColumnsProps {
 
 export const getColumns = ({
   canManage,
-}: GetColumnsProps): ColumnDef<ApplicationWithAnimal>[] => [
+}: GetColumnsProps): ColumnDef<AdoptionApplicationWithAnimal>[] => [
   {
     id: "select",
     header: ({ table }) => (

@@ -20,6 +20,9 @@ import {
   LocationType,
   ApplicationStatus,
   LivingSituation,
+  FosterStatus,
+  FosterPlacementType,
+  FosterReturnReason,
   Prisma,
 } from "@prisma/client";
 import {
@@ -1000,7 +1003,7 @@ interface GeneratedWalkInPerson {
 }
 
 // Generates a walk-in person pool: each has a name, a phone, a full address
-// (task 2's applications snapshot the applicant address), and a UNIQUE email
+// (applications snapshot the applicant address), and a UNIQUE email
 // guaranteed by an index suffix (Person.email is unique in the schema).
 function generateWalkInPersons(count: number): GeneratedWalkInPerson[] {
   const persons: GeneratedWalkInPerson[] = [];
@@ -1193,6 +1196,13 @@ function addDaysClamped(base: Date, days: number, notAfter: Date): Date {
     return new Date(notAfter.getTime() - 60 * 60 * 1000);
   }
   return candidate;
+}
+
+// A date `n` days before now — used for the fostering seed's historical dates.
+function daysAgo(n: number): Date {
+  const date = new Date();
+  date.setDate(date.getDate() - n);
+  return date;
 }
 
 // Creates one AdoptionApplication with its full ApplicationStatusHistory
@@ -2122,7 +2132,7 @@ async function seedAnimalsAndRelations() {
         },
       });
 
-      // Only in-care animals get an open follow-up task — an archived
+      // Only in-care animals get an open follow-up — an archived
       // animal has already left the shelter's care.
       if (isInCare && blueprint.healthStatus !== AnimalHealthStatus.HEALTHY) {
         await prisma.task.create({
@@ -2157,6 +2167,481 @@ async function seedAnimalsAndRelations() {
   }
 
   console.log(`Seeded ${blueprints.length} animals and their relations.`);
+}
+
+// Seeds the fostering feature's three models: a roster of FosterProfiles
+// with varied status/capabilities, a couple of in-review FosterApplications,
+// and a spread of FosterPlacements — one open (an actual in-care animal with
+// its currentUnitId nulled), two closed with varied return reasons, and one
+// FOSTER_TO_ADOPT placement fully converted into an adoption (its own animal,
+// so the intake -> placement -> adoption cascade is unambiguous).
+async function seedFostering() {
+  console.log("Seeding foster profiles, applications, and placements...");
+
+  const staffMembers = await prisma.person.findMany({
+    where: { user: { role: Role.STAFF } },
+  });
+  const walkInPersons = await prisma.person.findMany({
+    where: { user: null, name: { notIn: ["External Agency", "SYSTEM"] } },
+  });
+  const volunteerPersons = await prisma.person.findMany({
+    where: { user: { role: Role.VOLUNTEER } },
+  });
+  const userRolePersons = await prisma.person.findMany({
+    where: { user: { role: Role.USER } },
+  });
+  const dbSpecies = await prisma.species.findMany();
+
+  if (staffMembers.length === 0 || walkInPersons.length < 6) {
+    console.log(
+      "Skipping foster seeding: insufficient staff or walk-in persons.",
+    );
+    return;
+  }
+
+  const dogSpecies = dbSpecies.find((s) => s.name === "Dog");
+  const catSpecies = dbSpecies.find((s) => s.name === "Cat");
+  const rabbitSpecies = dbSpecies.find((s) => s.name === "Rabbit");
+  const approver = getRandomItem(staffMembers);
+
+  const shuffledWalkIns = [...walkInPersons].sort(() => Math.random() - 0.5);
+  // The roster: one volunteer, one USER account, and two walk-ins with no
+  // account at all — covers "at least one on a Person with no User account".
+  const fosterPeople: ApplicantPerson[] = [
+    volunteerPersons[0] ?? shuffledWalkIns[0],
+    userRolePersons[0] ?? shuffledWalkIns[1],
+    shuffledWalkIns[2],
+    shuffledWalkIns[3],
+  ];
+  // Distinct from the roster above, for the standalone application pool.
+  const applicantPeople = shuffledWalkIns.slice(4, 6);
+
+  const speciesIds = (species: (typeof dbSpecies)[number] | undefined) =>
+    species ? { connect: [{ id: species.id }] } : undefined;
+
+  const [activeGeneralist, activeMedical, paused, activeHighCapacity] =
+    await Promise.all([
+      prisma.fosterProfile.create({
+        data: {
+          personId: fosterPeople[0].id,
+          status: FosterStatus.ACTIVE,
+          maxAnimals: 2,
+          canGiveOralMeds: true,
+          canTransport: true,
+          availabilityNotes: "Available most weekends, prefers dogs.",
+          approvedAt: daysAgo(90),
+          speciesCapabilities: {
+            connect: [dogSpecies, catSpecies]
+              .filter((s): s is NonNullable<typeof s> => !!s)
+              .map((s) => ({ id: s.id })),
+          },
+        },
+      }),
+      prisma.fosterProfile.create({
+        data: {
+          personId: fosterPeople[1].id,
+          status: FosterStatus.ACTIVE,
+          maxAnimals: 1,
+          hasQuarantineSpace: true,
+          canGiveOralMeds: true,
+          acceptsMedical: true,
+          availabilityNotes: "Experienced with post-surgical recovery cats.",
+          approvedAt: daysAgo(150),
+          speciesCapabilities: speciesIds(catSpecies),
+        },
+      }),
+      prisma.fosterProfile.create({
+        data: {
+          personId: fosterPeople[2].id,
+          status: FosterStatus.PAUSED,
+          maxAnimals: 1,
+          canBottleFeed: true,
+          acceptsHospice: true,
+          availabilityNotes:
+            "Currently paused — traveling until further notice.",
+          approvedAt: daysAgo(200),
+          speciesCapabilities: speciesIds(dogSpecies),
+        },
+      }),
+      prisma.fosterProfile.create({
+        data: {
+          personId: fosterPeople[3].id,
+          status: FosterStatus.ACTIVE,
+          maxAnimals: 3,
+          hasQuarantineSpace: true,
+          canGiveOralMeds: true,
+          canTransport: true,
+          availabilityNotes: "High-capacity home, happy to take litters.",
+          approvedAt: daysAgo(45),
+          speciesCapabilities: {
+            connect: [dogSpecies, catSpecies, rabbitSpecies]
+              .filter((s): s is NonNullable<typeof s> => !!s)
+              .map((s) => ({ id: s.id })),
+          },
+        },
+      }),
+    ]);
+  // `paused` isn't otherwise referenced — it exists purely as roster data.
+  void paused;
+
+  // --- Foster applications (PENDING / REVIEWING), same snapshot convention
+  // as AdoptionApplication.
+  const applicationPlans: { applicant: ApplicantPerson; reviewed: boolean }[] =
+    applicantPeople.map((applicant, i) => ({
+      applicant,
+      reviewed: i === 1,
+    }));
+
+  for (const plan of applicationPlans) {
+    const submittedAt = daysAgo(randomInt(5, 20));
+    const householdData = generateHouseholdProfileData();
+
+    const application = await prisma.fosterApplication.create({
+      data: {
+        ...applicantSnapshot(plan.applicant),
+        personId: plan.applicant.id,
+        ...householdData,
+        maxAnimals: randomInt(1, 2),
+        canGiveOralMeds: Math.random() < 0.5,
+        canTransport: Math.random() < 0.5,
+        availabilityNotes: "Submitted via the foster application form.",
+        status: ApplicationStatus.PENDING,
+        submittedAt,
+        speciesCapabilities: speciesIds(dogSpecies),
+        history: {
+          create: {
+            status: ApplicationStatus.PENDING,
+            statusChangeReason: "Application submitted by applicant.",
+            changedById: plan.applicant.id,
+            changedAt: submittedAt,
+          },
+        },
+      },
+    });
+
+    await prisma.householdProfile.upsert({
+      where: { personId: plan.applicant.id },
+      create: { personId: plan.applicant.id, ...householdData },
+      update: householdData,
+    });
+
+    if (plan.reviewed) {
+      const reviewedAt = addDaysClamped(
+        submittedAt,
+        randomInt(1, 4),
+        new Date(),
+      );
+      await prisma.fosterApplication.update({
+        where: { id: application.id },
+        data: { status: ApplicationStatus.REVIEWING },
+      });
+      await prisma.fosterApplicationStatusHistory.create({
+        data: {
+          applicationId: application.id,
+          status: ApplicationStatus.REVIEWING,
+          statusChangeReason: "Application moved to review.",
+          changedById: approver.id,
+          changedAt: reviewedAt,
+        },
+      });
+    }
+  }
+
+  // --- Placements: one open, two closed with varied return reasons ---
+
+  // Pull real in-care, currently-housed animals so the open placement
+  // faithfully seeds "currentUnitId nulled, previousUnitId set".
+  const housedInCareAnimals = await prisma.animal.findMany({
+    where: {
+      listingStatus: {
+        in: [AnimalListingStatus.PUBLISHED, AnimalListingStatus.DRAFT],
+      },
+      currentUnitId: { not: null },
+    },
+    select: { id: true, currentUnitId: true },
+  });
+
+  if (housedInCareAnimals.length >= 3) {
+    const [openAnimal, closedAnimal1, closedAnimal2] = pickDistinct(
+      housedInCareAnimals,
+      3,
+    );
+
+    const openStart = daysAgo(6);
+    await prisma.fosterPlacement.create({
+      data: {
+        animalId: openAnimal.id,
+        // USER-linked foster profile: the "my foster animals" page
+        // needs a seeded USER account with a real open placement to view.
+        fosterProfileId: activeMedical.id,
+        type: FosterPlacementType.GENERAL,
+        startDate: openStart,
+        previousUnitId: openAnimal.currentUnitId,
+        placedById: approver.id,
+      },
+    });
+    await prisma.animal.update({
+      where: { id: openAnimal.id },
+      data: { currentUnitId: null },
+    });
+    await prisma.animalActivityLog.create({
+      data: {
+        animalId: openAnimal.id,
+        activityType: "FOSTER_PLACED",
+        changedById: approver.id,
+        changedAt: openStart,
+        changeSummary: "Animal was placed with a foster.",
+      },
+    });
+
+    const closedPlans = [
+      {
+        animal: closedAnimal1,
+        reason: FosterReturnReason.RETURNED_TO_SHELTER,
+        profile: activeGeneralist,
+        notes: "Foster's circumstances changed; animal returned to the shelter.",
+      },
+      {
+        animal: closedAnimal2,
+        reason: FosterReturnReason.MEDICAL,
+        profile: activeHighCapacity,
+        notes:
+          "Returned for a vet follow-up the foster couldn't provide at home.",
+      },
+    ];
+
+    for (const plan of closedPlans) {
+      const start = daysAgo(randomInt(90, 150));
+      const end = addDaysClamped(start, randomInt(20, 45), new Date());
+      const returnStaff = getRandomItem(staffMembers);
+
+      await prisma.fosterPlacement.create({
+        data: {
+          animalId: plan.animal.id,
+          fosterProfileId: plan.profile.id,
+          type: FosterPlacementType.GENERAL,
+          startDate: start,
+          endDate: end,
+          previousUnitId: plan.animal.currentUnitId,
+          placedById: approver.id,
+          returnedById: returnStaff.id,
+          returnReason: plan.reason,
+          returnNotes: plan.notes,
+        },
+      });
+      await prisma.animalActivityLog.create({
+        data: {
+          animalId: plan.animal.id,
+          activityType: "FOSTER_PLACED",
+          changedById: approver.id,
+          changedAt: start,
+          changeSummary: "Animal was placed with a foster.",
+        },
+      });
+      await prisma.animalActivityLog.create({
+        data: {
+          animalId: plan.animal.id,
+          activityType: "FOSTER_RETURNED",
+          changedById: returnStaff.id,
+          changedAt: end,
+          changeSummary: `Animal was returned from foster: ${plan.reason
+            .replace(/_/g, " ")
+            .toLowerCase()}.`,
+        },
+      });
+    }
+  } else {
+    console.log(
+      "Skipping open/closed placement seeding: not enough housed in-care animals.",
+    );
+  }
+
+  // --- Foster-to-adopt conversion: a dedicated animal, so its
+  // intake -> placement -> adoption cascade is unambiguous ---
+  const dogBreeds = dogSpecies
+    ? await prisma.breed.findMany({ where: { speciesId: dogSpecies.id } })
+    : [];
+  const dbColors = await prisma.color.findMany();
+  const dbUnits = await prisma.unit.findMany();
+
+  if (
+    dogSpecies &&
+    dogBreeds.length > 0 &&
+    dbColors.length > 0 &&
+    dbUnits.length > 0
+  ) {
+    const primaryColor = getRandomItem(dbColors);
+    const breed = getRandomItem(dogBreeds);
+    const startUnit = getRandomItem(dbUnits);
+
+    const fosterAdopter = fosterPeople[0];
+    const intakeDate = daysAgo(70);
+    const placedAt = daysAgo(45);
+    const reviewedAt = daysAgo(30);
+    const approvedAt = daysAgo(15);
+    const adoptedAt = daysAgo(3);
+
+    const animal = await prisma.animal.create({
+      data: {
+        name: "Winston",
+        birthDate: getRandomDate(2),
+        sex: Sex.MALE,
+        size: getAnimalSize(dogSpecies.name, 22),
+        weightKg: 22,
+        heightCm: 48,
+        city: "New York",
+        state: "NY",
+        description: "A wonderful companion looking for a home.",
+        listingStatus: AnimalListingStatus.PUBLISHED,
+        publishedAt: intakeDate,
+        healthStatus: AnimalHealthStatus.HEALTHY,
+        legalStatus: AnimalLegalStatus.NONE,
+        species: { connect: { id: dogSpecies.id } },
+        breeds: { connect: [{ id: breed.id }] },
+        colors: { connect: [{ id: primaryColor.id }] },
+        primaryColor: { connect: { id: primaryColor.id } },
+        animalImages: { create: [{ url: `${baseUrl}/${PLACEHOLDER_IMAGE}` }] },
+        currentUnit: { connect: { id: startUnit.id } },
+      },
+    });
+
+    const surrenderer = getRandomItem(walkInPersons);
+    await prisma.intake.create({
+      data: {
+        animalId: animal.id,
+        type: IntakeType.OWNER_SURRENDER,
+        intakeDate,
+        staffMemberId: approver.id,
+        surrenderingPersonId: surrenderer.id,
+      },
+    });
+    await prisma.animalActivityLog.create({
+      data: {
+        animalId: animal.id,
+        activityType: "INTAKE_PROCESSED",
+        changedById: approver.id,
+        changedAt: intakeDate,
+        changeSummary: "Animal was admitted as owner surrender.",
+      },
+    });
+
+    const placement = await prisma.fosterPlacement.create({
+      data: {
+        animalId: animal.id,
+        fosterProfileId: activeGeneralist.id,
+        type: FosterPlacementType.FOSTER_TO_ADOPT,
+        startDate: placedAt,
+        previousUnitId: startUnit.id,
+        previousListingStatus: AnimalListingStatus.PUBLISHED,
+        placedById: approver.id,
+      },
+    });
+    await prisma.animal.update({
+      where: { id: animal.id },
+      data: {
+        currentUnitId: null,
+        listingStatus: AnimalListingStatus.PENDING_ADOPTION,
+      },
+    });
+    await prisma.animalActivityLog.create({
+      data: {
+        animalId: animal.id,
+        activityType: "FOSTER_PLACED",
+        changedById: approver.id,
+        changedAt: placedAt,
+        changeSummary: "Animal was placed with a foster (foster-to-adopt).",
+      },
+    });
+
+    const applicationId = await seedApplicationWithHistory({
+      animalId: animal.id,
+      applicant: fosterAdopter,
+      submittedAt: placedAt,
+      reasonForAdoption:
+        "Fell in love with this foster placement and decided to make it permanent.",
+      householdProfileData: generateHouseholdProfileData(),
+      transitions: [
+        {
+          status: ApplicationStatus.REVIEWING,
+          reason: "Application moved to review.",
+          changedById: approver.id,
+          at: reviewedAt,
+        },
+        {
+          status: ApplicationStatus.APPROVED,
+          reason: "Approved — foster-to-adopt conversion.",
+          changedById: approver.id,
+          at: approvedAt,
+        },
+      ],
+    });
+
+    const outcome = await prisma.outcome.create({
+      data: {
+        animalId: animal.id,
+        type: OutcomeType.ADOPTION,
+        outcomeDate: adoptedAt,
+        staffMemberId: approver.id,
+        adoptionApplicationId: applicationId,
+      },
+    });
+    await prisma.animalActivityLog.create({
+      data: {
+        animalId: animal.id,
+        activityType: "OUTCOME_PROCESSED",
+        changedById: approver.id,
+        changedAt: adoptedAt,
+        changeSummary: "Animal was processed for outcome: adoption.",
+      },
+    });
+    await prisma.adoptionApplication.update({
+      where: { id: applicationId },
+      data: { status: ApplicationStatus.ADOPTED },
+    });
+    await prisma.applicationStatusHistory.create({
+      data: {
+        applicationId,
+        status: ApplicationStatus.ADOPTED,
+        statusChangeReason: "Animal adopted by their foster.",
+        changedById: approver.id,
+        changedAt: adoptedAt,
+      },
+    });
+
+    await prisma.fosterPlacement.update({
+      where: { id: placement.id },
+      data: {
+        endDate: adoptedAt,
+        returnReason: FosterReturnReason.ADOPTED_BY_FOSTER,
+        returnedById: approver.id,
+        outcomeId: outcome.id,
+        adoptionApplicationId: applicationId,
+      },
+    });
+    await prisma.animalActivityLog.create({
+      data: {
+        animalId: animal.id,
+        activityType: "FOSTER_RETURNED",
+        changedById: approver.id,
+        changedAt: adoptedAt,
+        changeSummary: "Foster-to-adopt placement converted to an adoption.",
+      },
+    });
+
+    await prisma.animal.update({
+      where: { id: animal.id },
+      data: {
+        listingStatus: AnimalListingStatus.ARCHIVED,
+        archiveReason: OutcomeType.ADOPTION,
+      },
+    });
+  } else {
+    console.log(
+      "Skipping foster-to-adopt conversion seeding: missing species/breed/color/unit data.",
+    );
+  }
+
+  console.log("Seeded foster profiles, applications, and placements.");
 }
 
 // Sprinkles standalone adoption applications (not tied to a completed
@@ -2413,6 +2898,13 @@ async function clearDatabase() {
   await prisma.applicationStatusHistory.deleteMany();
   await prisma.adoptionApplication.deleteMany();
 
+  // FosterPlacement restricts deletion of Animal/FosterProfile, so it must go
+  // before both. Its links to AdoptionApplication/Outcome are SetNull, so
+  // order relative to those doesn't matter.
+  await prisma.fosterPlacement.deleteMany();
+  // FosterApplicationStatusHistory cascades from FosterApplication.
+  await prisma.fosterApplication.deleteMany();
+
   await prisma.animalNote.deleteMany();
   await prisma.personNote.deleteMany();
   await prisma.partnerNote.deleteMany();
@@ -2576,6 +3068,7 @@ export async function main() {
   await seedAssessmentTemplates();
   await seedLocationsAndUnits();
   await seedAnimalsAndRelations();
+  await seedFostering();
   await seedApplicationNoise();
   await seedTasks();
   await seedAssessments();

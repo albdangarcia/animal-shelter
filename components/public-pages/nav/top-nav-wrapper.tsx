@@ -8,7 +8,7 @@ const TopNavWrapper = async () => {
 
   let dashboardHref = "/dashboard";
   if (session?.user?.role === Role.USER) {
-    dashboardHref = "/dashboard/my-applications"; // Specific link for regular users
+    dashboardHref = "/dashboard/my-adoption-applications"; // Specific link for regular users
   }
 
   // Define the navigation links dynamically

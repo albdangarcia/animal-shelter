@@ -2,12 +2,12 @@
 
 import { Table } from "@tanstack/react-table";
 import { myApplicationStatusOptions } from "@/app/lib/utils/enum-formatter";
-import { MyApplicationPayload } from "@/app/lib/types";
+import { MyAdoptionApplicationPayload } from "@/app/lib/types";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
 
 interface MyAppTableToolbarProps {
-  table: Table<MyApplicationPayload>;
+  table: Table<MyAdoptionApplicationPayload>;
 }
 
 const MyAppTableToolbar = ({ table }: MyAppTableToolbarProps) => {

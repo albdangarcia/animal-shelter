@@ -18,7 +18,7 @@ import { Form } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import Link from "next/link";
-import { MyAdoptionAppFormSchema } from "@/app/lib/zod-schemas/myApplication.schema";
+import { MyAdoptionAppFormSchema } from "@/app/lib/zod-schemas/myAdoptionApplication.schema";
 import {
   INITIAL_FORM_STATE,
   StaffAdoptionApplicationFormState,

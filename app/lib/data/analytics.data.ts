@@ -197,34 +197,31 @@ const _fetchChartData = async (): Promise<ChartData> => {
     );
 
     const [intakeData, outcomeData] = await Promise.all([
-      prisma.intake.groupBy({
-        by: ["intakeDate"],
+      prisma.intake.findMany({
         where: { intakeDate: { gte: startDate } },
-        _count: { id: true },
-        orderBy: { intakeDate: "asc" },
+        select: { intakeDate: true },
       }),
-      prisma.outcome.groupBy({
-        by: ["outcomeDate"],
-        where: {
-          outcomeDate: { gte: startDate },
-        },
-        _count: { id: true },
-        orderBy: { outcomeDate: "asc" },
+      prisma.outcome.findMany({
+        where: { outcomeDate: { gte: startDate } },
+        select: { outcomeDate: true },
       }),
     ]);
 
-    const intakeMap = new Map(
-      intakeData.map((item) => [
-        item.intakeDate.toISOString().split("T")[0],
-        item._count.id,
-      ]),
-    );
-    const outcomeMap = new Map(
-      outcomeData.map((item) => [
-        item.outcomeDate.toISOString().split("T")[0],
-        item._count.id,
-      ]),
-    );
+    // intakeDate/outcomeDate are full timestamps, so events on the same
+    // calendar day rarely share an exact value. Bucket by day in JS instead
+    // of using a DB-level groupBy, which would group by exact timestamp and
+    // undercount days with multiple events.
+    const countByDay = (dates: Date[]) => {
+      const map = new Map<string, number>();
+      for (const date of dates) {
+        const key = date.toISOString().split("T")[0];
+        map.set(key, (map.get(key) ?? 0) + 1);
+      }
+      return map;
+    };
+
+    const intakeMap = countByDay(intakeData.map((item) => item.intakeDate));
+    const outcomeMap = countByDay(outcomeData.map((item) => item.outcomeDate));
 
     const chartData = Array.from({ length: days }, (_, i) => {
       const date = new Date(startDate);

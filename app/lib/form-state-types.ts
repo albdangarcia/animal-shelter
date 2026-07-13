@@ -140,6 +140,84 @@ export type PartnerFormState = {
   };
 };
 
+export interface FosterApplicationFormState {
+  success?: boolean;
+  message?: string | null;
+  errors?: {
+    applicantName?: string[];
+    applicantEmail?: string[];
+    applicantPhone?: string[];
+    applicantAddressLine1?: string[];
+    applicantAddressLine2?: string[];
+    applicantCity?: string[];
+    applicantState?: string[];
+    applicantZipCode?: string[];
+    livingSituation?: string[];
+    hasYard?: string[];
+    landlordPermission?: string[];
+    householdSize?: string[];
+    hasChildren?: string[];
+    childrenAges?: string[];
+    otherAnimalsDescription?: string[];
+    animalExperience?: string[];
+    speciesIds?: string[];
+    maxAnimals?: string[];
+    hasQuarantineSpace?: string[];
+    canGiveOralMeds?: string[];
+    canBottleFeed?: string[];
+    canTransport?: string[];
+    acceptsMedical?: string[];
+    acceptsHospice?: string[];
+    availabilityNotes?: string[];
+  };
+}
+
+// Covers the placement lifecycle actions: create, return-from-foster, and
+// foster-to-adopt conversion.
+export interface FosterPlacementFormState {
+  success?: boolean;
+  message?: string | null;
+  errors?: {
+    animalId?: string[];
+    fosterProfileId?: string[];
+    type?: string[];
+    expectedEndDate?: string[];
+    notes?: string[];
+    placementId?: string[];
+    returnReason?: string[];
+    returnNotes?: string[];
+    unitId?: string[];
+    adoptionApplicationId?: string[];
+  };
+}
+
+export interface FosterProfileFormState {
+  success?: boolean;
+  message?: string | null;
+  errors?: {
+    personId?: string[];
+    speciesIds?: string[];
+    maxAnimals?: string[];
+    hasQuarantineSpace?: string[];
+    canGiveOralMeds?: string[];
+    canBottleFeed?: string[];
+    canTransport?: string[];
+    acceptsMedical?: string[];
+    acceptsHospice?: string[];
+    availabilityNotes?: string[];
+  };
+}
+
+export interface FosterStatusChangeFormState {
+  success?: boolean;
+  message?: string | null;
+  errors?: {
+    applicationId?: string[];
+    status?: string[];
+    statusChangeReason?: string[];
+  };
+}
+
 export type StaffAdoptionApplicationFormState = {
   success?: boolean;
   message?: string | null;

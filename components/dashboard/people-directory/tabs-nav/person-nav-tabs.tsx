@@ -18,19 +18,28 @@ const personTabDefinitions = [
   { suffix: "", label: "Profile" },
   { suffix: "/history", label: "Animal History" },
   { suffix: "/adoption-applications", label: "Adoption Applications" },
+  { suffix: "/fostering", label: "Fostering", permission: "fosters" as const },
   { suffix: "/activity", label: "Activity" },
   { suffix: "/notes", label: "Notes" },
 ];
 
-export function PersonNavTabs() {
+interface PersonNavTabsProps {
+  // Gates the Fostering tab (FOSTERS_READ is volunteer+, not
+  // guaranteed for every role that can see this page).
+  showFostering: boolean;
+}
+
+export function PersonNavTabs({ showFostering }: PersonNavTabsProps) {
   const pathname = usePathname();
 
   const basePath = pathname.split("/").slice(0, 4).join("/");
 
-  const dynamicLinks = personTabDefinitions.map((tab) => ({
-    href: `${basePath}${tab.suffix}`,
-    label: tab.label,
-  }));
+  const dynamicLinks = personTabDefinitions
+    .filter((tab) => tab.permission !== "fosters" || showFostering)
+    .map((tab) => ({
+      href: `${basePath}${tab.suffix}`,
+      label: tab.label,
+    }));
 
   return (
     <div className="@container/tabs">

@@ -60,7 +60,7 @@ const Page = async ({ params }: Props) => {
       </div>
     ) : currentUserHasActiveApplication ? (
       <Link
-        href="/dashboard/my-applications"
+        href="/dashboard/my-adoption-applications"
         className="block w-full text-center bg-gray-500 hover:bg-gray-600 text-white px-8 py-3 rounded-md font-semibold text-lg transition-colors duration-150 ease-in-out shadow-sm hover:shadow-md"
       >
         View Your Application
