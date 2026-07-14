@@ -40,19 +40,6 @@ export const healthColumns: ColumnDef<AnimalsRequiringAttentionPayload>[] = [
     },
   },
   {
-    accessorKey: "legalStatus",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Legal Status" />
-    ),
-    meta: {
-      displayName: "Legal Status",
-    },
-    cell: ({ row }) => {
-      const status = row.getValue("legalStatus") as string;
-      return <Badge variant="outline">{formatSingleEnumOption(status)}</Badge>;
-    },
-  },
-  {
     accessorKey: "intakeDate",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Intake Date" />

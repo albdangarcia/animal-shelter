@@ -7,7 +7,6 @@ import {
   AnimalListingStatus,
   IntakeType,
   AnimalHealthStatus,
-  AnimalLegalStatus,
   NoteCategory,
   TaskCategory,
   TaskPriority,
@@ -443,7 +442,6 @@ interface AnimalBlueprint {
   archetype: Archetype;
   intakeType: IntakeType;
   healthStatus: AnimalHealthStatus;
-  legalStatus: AnimalLegalStatus;
   listingStatus: AnimalListingStatus;
   // A minority of open stays run long (90-160 days) so the length-of-stay
   // report's "over 90 days" bucket has real entries.
@@ -470,7 +468,6 @@ const animalSeedData: AnimalBlueprint[] = [
     ],
     intakeType: IntakeType.OWNER_SURRENDER,
     healthStatus: AnimalHealthStatus.HEALTHY,
-    legalStatus: AnimalLegalStatus.NONE,
     images: [`${baseUrl}/dog1.jpg`, `${baseUrl}/dog1-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A1.name,
     archetype: "IN_CARE",
@@ -492,7 +489,6 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.NEEDS_QUIET_HOME],
     intakeType: IntakeType.STRAY,
     healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
-    legalStatus: AnimalLegalStatus.STRAY_HOLD,
     images: [`${baseUrl}/dog2.jpg`, `${baseUrl}/dog2-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A2.name,
     archetype: "IN_CARE",
@@ -511,7 +507,6 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.HOUSEBROKEN],
     intakeType: IntakeType.TRANSFER_IN,
     healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
-    legalStatus: AnimalLegalStatus.NONE,
     images: [`${baseUrl}/dog3.jpg`, `${baseUrl}/dog3-1.jpg`],
     unitName: allLocations.MEDICAL_WING.units.MED1.name,
     archetype: "IN_CARE",
@@ -530,7 +525,6 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.GOOD_WITH_CATS],
     intakeType: IntakeType.OWNER_SURRENDER,
     healthStatus: AnimalHealthStatus.HEALTHY,
-    legalStatus: AnimalLegalStatus.NONE,
     images: [
       `${baseUrl}/cat1.webp`,
       `${baseUrl}/cat1-1.jpg`,
@@ -553,7 +547,6 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [],
     intakeType: IntakeType.BORN_IN_CARE,
     healthStatus: AnimalHealthStatus.AWAITING_SPAY_NEUTER,
-    legalStatus: AnimalLegalStatus.NONE,
     images: [
       `${baseUrl}/cat2.webp`,
       `${baseUrl}/cat2-1.jpg`,
@@ -576,7 +569,6 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [],
     intakeType: IntakeType.SEIZE,
     healthStatus: AnimalHealthStatus.AWAITING_TRIAGE,
-    legalStatus: AnimalLegalStatus.POLICE_HOLD,
     images: [
       `${baseUrl}/reptile2.webp`,
       `${baseUrl}/reptile2-1.jpg`,
@@ -602,7 +594,6 @@ const animalSeedData: AnimalBlueprint[] = [
     ],
     intakeType: IntakeType.STRAY,
     healthStatus: AnimalHealthStatus.HEALTHY,
-    legalStatus: AnimalLegalStatus.STRAY_HOLD,
     images: [`${baseUrl}/dog3-2.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A3.name,
     archetype: "IN_CARE",
@@ -624,7 +615,6 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.GOOD_WITH_CATS],
     intakeType: IntakeType.BORN_IN_CARE,
     healthStatus: AnimalHealthStatus.HEALTHY,
-    legalStatus: AnimalLegalStatus.NONE,
     images: [`${baseUrl}/dog1-3.webp`],
     // Unplaced: not yet assigned to a unit (shows in the "Unplaced" column).
     unitName: null,
@@ -645,7 +635,6 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.DEAF],
     intakeType: IntakeType.TRANSFER_IN,
     healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
-    legalStatus: AnimalLegalStatus.NONE,
     images: [`${baseUrl}/dog1-2.jpg`],
     unitName: allLocations.MEDICAL_WING.units.MED2.name,
     archetype: "IN_CARE",
@@ -899,23 +888,6 @@ function pickHealthStatus(): AnimalHealthStatus {
   ]);
 }
 
-function pickLegalStatus(intakeType: IntakeType): AnimalLegalStatus {
-  if (intakeType === IntakeType.STRAY && Math.random() < 0.3) {
-    return AnimalLegalStatus.STRAY_HOLD;
-  }
-  if (intakeType === IntakeType.SEIZE && Math.random() < 0.5) {
-    return getRandomItem([
-      AnimalLegalStatus.POLICE_HOLD,
-      AnimalLegalStatus.COURT_HOLD,
-      AnimalLegalStatus.PROTECTIVE_CUSTODY,
-    ]);
-  }
-  if (intakeType === IntakeType.ACO_IMPOUND && Math.random() < 0.2) {
-    return AnimalLegalStatus.BITE_QUARANTINE;
-  }
-  return AnimalLegalStatus.NONE;
-}
-
 function pickBreeds(
   species: (typeof allSpecies)[keyof typeof allSpecies],
 ): { name: string }[] {
@@ -1068,7 +1040,6 @@ function generateAnimalBlueprints(
       archetype,
       intakeType,
       healthStatus: pickHealthStatus(),
-      legalStatus: pickLegalStatus(intakeType),
       listingStatus: isDraft
         ? AnimalListingStatus.DRAFT
         : AnimalListingStatus.PUBLISHED,
@@ -1507,7 +1478,6 @@ async function seedReturnAndReadoptAnimal(opts: {
       listingStatus: AnimalListingStatus.PUBLISHED,
       publishedAt: stay1.intakeDate,
       healthStatus: blueprint.healthStatus,
-      legalStatus: blueprint.legalStatus,
       species: { connect: { id: species.id } },
       breeds: { connect: connectedBreeds },
       colors: { connect: connectedColors },
@@ -1567,7 +1537,7 @@ async function seedReturnAndReadoptAnimal(opts: {
   });
 
   // Re-intake: mirrors `_createReIntake` — a new Intake event, the animal's
-  // prior archive reason is cleared, and a fresh health/legal status is set.
+  // prior archive reason is cleared, and a fresh health status is set.
   const reIntakeType = pickWeighted([
     { value: IntakeType.OWNER_SURRENDER, weight: 70 },
     { value: IntakeType.STRAY, weight: 20 },
@@ -1594,7 +1564,6 @@ async function seedReturnAndReadoptAnimal(opts: {
     where: { id: animal.id },
     data: {
       healthStatus: reIntakeHealthStatus,
-      legalStatus: AnimalLegalStatus.NONE,
     },
   });
 
@@ -2009,7 +1978,6 @@ async function seedAnimalsAndRelations() {
           listingStatus: interimListingStatus,
           publishedAt: stay.intakeDate,
           healthStatus: blueprint.healthStatus,
-          legalStatus: blueprint.legalStatus,
           species: { connect: { id: species.id } },
           breeds: { connect: connectedBreeds },
           colors: { connect: connectedColors },
@@ -2495,7 +2463,6 @@ async function seedFostering() {
         listingStatus: AnimalListingStatus.PUBLISHED,
         publishedAt: intakeDate,
         healthStatus: AnimalHealthStatus.HEALTHY,
-        legalStatus: AnimalLegalStatus.NONE,
         species: { connect: { id: dogSpecies.id } },
         breeds: { connect: [{ id: breed.id }] },
         colors: { connect: [{ id: primaryColor.id }] },

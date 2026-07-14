@@ -330,14 +330,6 @@ const AnimalSectionCards = async ({ params }: Props) => {
                       : formatSingleEnumOption(animal.healthStatus)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between border-b pb-2 text-sm">
-                  <span className="text-muted-foreground">Legal Status</span>
-                  <span className="font-medium">
-                    {animal.legalStatus === "NONE" || !animal.legalStatus
-                      ? "Clear"
-                      : formatSingleEnumOption(animal.legalStatus)}
-                  </span>
-                </div>
               </div>
             </div>
 
