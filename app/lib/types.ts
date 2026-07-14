@@ -57,7 +57,6 @@ export type AnimalSectionCardPayload = Prisma.AnimalGetPayload<{
     city: true;
     state: true;
     healthStatus: true;
-    legalStatus: true;
     animalImages: {
       select: {
         url: true;

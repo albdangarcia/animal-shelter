@@ -124,7 +124,6 @@ const _fetchSectionCardsAnimalData = async (
         city: true,
         state: true,
         healthStatus: true,
-        legalStatus: true,
         animalImages: {
           select: {
             url: true,

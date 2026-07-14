@@ -332,15 +332,6 @@ enum AnimalListingStatus {
   ARCHIVED // Profile is no longer public (e.g., animal adopted, transferred, or otherwise unavailable) and is kept for records.
 }
 
-enum AnimalLegalStatus {
-  NONE
-  STRAY_HOLD
-  BITE_QUARANTINE
-  COURT_HOLD
-  POLICE_HOLD
-  PROTECTIVE_CUSTODY
-}
-
 enum CharacteristicCategory {
   BEHAVIOR // For behavioral notes like "Bite History", "On-Leash Reactivity"
   MEDICAL // For health-related tags like "Deaf", "Heartworm Positive"
@@ -383,8 +374,7 @@ model Animal {
   Outcome              Outcome[]
   activityLog          AnimalActivityLog[]
   healthStatus         AnimalHealthStatus?
-  legalStatus          AnimalLegalStatus?    @default(NONE)
-  //  This is a "denormalized" field that you would update to true after a 
+  //  This is a "denormalized" field that you would update to true after a
   // MedicalRecord for the procedure is created. It makes sorting and filtering trivial.
 
   // denormalized flags to animal

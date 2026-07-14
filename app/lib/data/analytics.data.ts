@@ -1,7 +1,6 @@
 import { prisma } from "@/app/lib/prisma";
 import {
   AnimalHealthStatus,
-  AnimalLegalStatus,
   AnimalListingStatus,
   OutcomeType,
   Prisma,
@@ -319,7 +318,6 @@ type AnimalForAttentionQueryPayload = Prisma.AnimalGetPayload<{
     id: true;
     name: true;
     healthStatus: true;
-    legalStatus: true;
     intake: {
       select: {
         intakeDate: true;
@@ -341,18 +339,9 @@ const _fetchAnimalsRequiringAttention = async (): Promise<
   try {
     const animals = await prisma.animal.findMany({
       where: {
-        OR: [
-          {
-            healthStatus: {
-              not: AnimalHealthStatus.HEALTHY,
-            },
-          },
-          {
-            legalStatus: {
-              not: AnimalLegalStatus.NONE,
-            },
-          },
-        ],
+        healthStatus: {
+          not: AnimalHealthStatus.HEALTHY,
+        },
       },
       take: 10,
       orderBy: {
@@ -362,7 +351,6 @@ const _fetchAnimalsRequiringAttention = async (): Promise<
         id: true,
         name: true,
         healthStatus: true,
-        legalStatus: true,
         intake: {
           select: {
             intakeDate: true,
@@ -381,7 +369,6 @@ const _fetchAnimalsRequiringAttention = async (): Promise<
         id: animal.id,
         name: animal.name,
         healthStatus: animal.healthStatus,
-        legalStatus: animal.legalStatus,
         intakeDate: animal.intake[0].intakeDate,
       }));
   } catch (error) {
