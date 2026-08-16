@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TaskAssignee } from "@/app/lib/types";
 import { updateAnimalTaskStatus } from "@/app/lib/actions/animal-task.actions";
-import { TaskStatus } from "@prisma/client";
+import { TaskStatus } from "@/prisma/generated/enums";
 import { TaskStatusOptions } from "@/app/lib/utils/enum-formatter";
 import { TaskForm } from "../../../animals/tasks/task-form";
 import { TaskAnalyticsPayload } from "@/app/lib/data/analytics.data";

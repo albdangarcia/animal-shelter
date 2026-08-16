@@ -1,4 +1,4 @@
-import { prisma } from "../prisma";
+import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   AdoptionApplicationPayload,
@@ -6,7 +6,8 @@ import {
   AnimalForAdoptionApplicationPayload,
 } from "../types";
 import { MyAdoptionApplicationsSchema } from "../zod-schemas/animal.schemas";
-import { AnimalListingStatus, ApplicationStatus, Prisma } from "@prisma/client";
+import { AnimalListingStatus, type ApplicationStatus } from "@/prisma/generated/client";
+import type { Prisma } from "@/prisma/generated/client";
 import { RequirePermission, SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
 

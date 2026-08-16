@@ -1,4 +1,4 @@
-import { ApplicationStatus } from "@prisma/client";
+import type { ApplicationStatus } from "@/prisma/generated/enums";
 import type { LucideIcon } from "lucide-react";
 import { Hourglass, FileCheck2, List, UserCheck, UserX, XCircle } from "lucide-react";
 import { buildOptions } from "@/app/lib/utils/option-utils";

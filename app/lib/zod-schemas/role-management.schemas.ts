@@ -4,7 +4,7 @@ import {
   pageSizeSchema,
   searchQuerySchema,
 } from "./common.schemas";
-import { Role } from "@prisma/client";
+import { Role } from "@/prisma/generated/enums";
 
 // Schema for the parameters of _fetchUserRoles function
 export const UsersRoleParamsSchema = z.object({

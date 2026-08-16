@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { main } from "@/prisma/seed";
 import { isDemo } from "@/lib/flags";
-import {prisma} from "@/app/lib/prisma";
+import prisma from "@/app/lib/prisma";
 
 export async function GET(request: Request) {
   // Hard exit if not a demo environment

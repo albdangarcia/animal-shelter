@@ -1,4 +1,4 @@
-import { OutcomeType } from "@prisma/client"
+import type { OutcomeType } from "@/prisma/generated/enums";
 import {
   HeartHandshake,
   ArrowRightLeft,

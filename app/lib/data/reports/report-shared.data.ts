@@ -1,5 +1,5 @@
-import { prisma } from "@/app/lib/prisma";
-import { OutcomeType } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import { OutcomeType } from "@/prisma/generated/enums";
 import { type StayEvent } from "@/app/lib/utils/stay-utils";
 import { cuidSchema } from "@/app/lib/zod-schemas/common.schemas";
 

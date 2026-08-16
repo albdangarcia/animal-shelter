@@ -1,5 +1,5 @@
-import { prisma } from "@/app/lib/prisma";
-import { IntakeType, OutcomeType } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import type { IntakeType, OutcomeType } from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import { resolveReportRange } from "@/app/lib/utils/report-date-utils";

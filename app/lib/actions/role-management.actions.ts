@@ -2,8 +2,9 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { Role, Prisma } from "@prisma/client";
-import { prisma } from "@/app/lib/prisma";
+import { Role } from "@/prisma/generated/enums";
+import { Prisma } from "@/prisma/generated/client";
+import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";

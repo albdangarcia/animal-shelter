@@ -8,7 +8,7 @@ import {
   TaskPriority,
   NoteCategory,
   AnimalListingStatus,
-} from "@prisma/client";
+} from "@/prisma/generated/enums";
 import {
   cuidSchema,
   currentPageSchema,

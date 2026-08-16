@@ -8,8 +8,8 @@ import { SearchParamsType } from "@/app/lib/types";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowLeft, ArchiveIcon } from "lucide-react";
-import { AnimalListingStatus } from "@prisma/client";
+import { ArrowLeft, Archive } from "lucide-react";
+import { AnimalListingStatus } from "@/prisma/generated/enums";
 import ActionBlockedMessage from "@/components/action-blocked-message";
 
 interface Props {
@@ -54,7 +54,7 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
 
       {animal.listingStatus === AnimalListingStatus.ARCHIVED ? (
         <ActionBlockedMessage
-          icon={ArchiveIcon}
+          icon={Archive}
           title="Outcome Already Processed"
         >
           <p>

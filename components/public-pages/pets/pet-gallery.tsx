@@ -3,14 +3,14 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import { PhotoIcon } from "@heroicons/react/24/outline";
-import { AnimalImage as PrismaPetImage } from "@prisma/client";
+import type { AnimalImageModel } from "@/prisma/generated/models/AnimalImage";
 import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
 import LikeButton from "../like-button";
 import clsx from "clsx";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 interface PetGalleryProps {
-  images: PrismaPetImage[];
+  images: AnimalImageModel[];
   currentUserPersonId: string | undefined;
   animalId: string;
   isLikedByCurrentUser: boolean;

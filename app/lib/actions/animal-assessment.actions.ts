@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { prisma } from "@/app/lib/prisma";
+import prisma from "@/app/lib/prisma";
 import { createDynamicSchema } from "../zod-schemas/dynamic-form-schema";
 import { TemplateField } from "../types";
 import {
@@ -13,7 +13,7 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { cuidSchema } from "../zod-schemas/common.schemas";
-import { AnimalActivityType, AssessmentOutcome } from "@prisma/client";
+import { AnimalActivityType, AssessmentOutcome } from "@/prisma/generated/enums";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
 
 // Define a state for the form action

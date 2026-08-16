@@ -1,5 +1,6 @@
-import { prisma } from "@/app/lib/prisma";
-import { PartnerType, Prisma } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import { PartnerType } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { PartnersDirectoryParamsSchema } from "../../zod-schemas/partners-directory.schemas";

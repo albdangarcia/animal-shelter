@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "../prisma";
+import prisma from "@/app/lib/prisma";
 import {
   RequirePermission,
   SessionUser,
@@ -14,7 +14,7 @@ import {
   AnimalListingStatus,
   ApplicationStatus,
   OutcomeType,
-} from "@prisma/client";
+} from "@/prisma/generated/enums";
 import { OutcomeFormState } from "../form-state-types";
 import { redirect } from "next/navigation";
 import {

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ApplicationStatus } from "@prisma/client";
+import { ApplicationStatus } from "@/prisma/generated/enums";
 import { cuidSchema } from "./common.schemas";
 import { MyAdoptionAppFormSchema } from "./myAdoptionApplication.schema";
 

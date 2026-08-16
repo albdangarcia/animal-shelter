@@ -1,8 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { AnimalActivityType, Prisma } from "@prisma/client";
-import { prisma } from "@/app/lib/prisma";
+import { AnimalActivityType } from "@/prisma/generated/enums";
+import { Prisma } from "@/prisma/generated/client";
+import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   RequirePermission,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Color } from "@prisma/client";
+import type { ColorModel } from "@/prisma/generated/models/Color";
 import { clsx } from "clsx";
 import {
   Card,
@@ -26,7 +26,7 @@ import { ColorForm } from "./color-form";
 import { ColorActions } from "./color-actions";
 
 interface Props {
-  colors: Color[];
+  colors: ColorModel[];
 }
 
 export const ColorsSection = ({ colors }: Props) => {

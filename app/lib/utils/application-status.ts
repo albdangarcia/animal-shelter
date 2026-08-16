@@ -1,4 +1,4 @@
-import { ApplicationStatus } from "@prisma/client";
+import { ApplicationStatus } from "@/prisma/generated/enums";
 import { formatSingleEnumOption } from "./enum-formatter";
 
 // Shared by adoption and foster application status-change actions so both

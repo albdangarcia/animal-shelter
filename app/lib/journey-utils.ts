@@ -1,5 +1,5 @@
 import { AnimalJourneyLogPayload } from "./data/animals/animal-journey.data";
-import { AnimalActivityType } from "@prisma/client";
+import { AnimalActivityType } from "@/prisma/generated/enums";
 
 export const formatJourneyItem = (
   item: AnimalJourneyLogPayload,

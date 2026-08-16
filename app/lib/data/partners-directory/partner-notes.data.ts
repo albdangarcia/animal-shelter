@@ -1,5 +1,5 @@
-import { prisma } from "@/app/lib/prisma";
-import { Prisma } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import type { Prisma } from "@/prisma/generated/client";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";

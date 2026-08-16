@@ -32,7 +32,7 @@ import { PartnerNoteForm } from "./partner-note-form";
 import { SimplePagination } from "../../../simple-pagination";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { ServerSideSort } from "@/components/table-common/server-side-sort";
-import { PartnerNoteActions } from "@/app/lib/actions/partner-note-actions";
+import { PartnerNoteActions } from "@/components/dashboard/partners-directory/notes/partner-note-actions"
 
 const noteStatusOptions = [
   { value: "active", label: "Active" },

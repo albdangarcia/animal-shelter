@@ -2,10 +2,10 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { IDParamType } from "@/app/lib/types";
-import { AnimalListingStatus } from "@prisma/client";
+import { AnimalListingStatus } from "@/prisma/generated/enums";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, AlertTriangleIcon } from "lucide-react";
+import { ArrowLeft, TriangleAlert } from "lucide-react";
 import {
   fetchAnimalForReIntake,
   fetchPartners,
@@ -52,7 +52,7 @@ const PageContent = async ({ animalId }: { animalId: string }) => {
         </Button>
 
         <ActionBlockedMessage
-          icon={AlertTriangleIcon}
+          icon={TriangleAlert}
           title="Cannot Process Re-Intake"
         >
           <p>

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LocationType } from "@prisma/client";
+import { LocationType } from "@/prisma/generated/enums";
 import { cuidSchema } from "./common.schemas";
 
 export const LocationFormSchema = z.object({

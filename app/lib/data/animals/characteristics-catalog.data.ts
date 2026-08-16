@@ -1,9 +1,9 @@
-import { prisma } from "@/app/lib/prisma";
-import { Characteristic } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import type { CharacteristicModel } from "@/prisma/generated/models/Characteristic";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 
-const _fetchCharacteristicsCatalog = async (): Promise<Characteristic[]> => {
+const _fetchCharacteristicsCatalog = async (): Promise<CharacteristicModel[]> => {
   try {
     // Management view: return everything, including soft-deleted rows
     return await prisma.characteristic.findMany({

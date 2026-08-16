@@ -2,14 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { prisma } from "../prisma";
+import prisma from "@/app/lib/prisma";
 import { StaffUpdateAppFormState, StaffAdoptionApplicationFormState } from "../form-state-types";
 import { StaffUpdateAdoptionAppFormSchema, StaffAdoptionApplicationFormSchema } from "../zod-schemas/application.schemas";
 import { MyAdoptionAppFormSchema } from "../zod-schemas/myAdoptionApplication.schema";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { ApplicationStatus, AnimalListingStatus, Prisma } from "@prisma/client";
+import { ApplicationStatus, AnimalListingStatus } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 import { auth } from "@/auth";
 import { ConflictError } from "../utils/errors";
 import {

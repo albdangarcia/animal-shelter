@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/app/lib/prisma";
+import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   RequirePermission,

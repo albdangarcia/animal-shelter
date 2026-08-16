@@ -16,7 +16,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { Unit } from "@prisma/client";
+import type { UnitModel } from "@/prisma/generated/models/Unit";
 import {
   UnitFormState,
   createUnit,
@@ -31,7 +31,7 @@ type UnitFormValues = z.infer<typeof UnitFormSchema>;
 interface Props {
   onFormSubmit: () => void;
   locationId: string; // the parent location this unit belongs to
-  unit?: Unit;
+  unit?: UnitModel;
 }
 
 export const UnitForm = ({ onFormSubmit, locationId, unit }: Props) => {

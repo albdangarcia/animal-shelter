@@ -16,7 +16,7 @@ import {
   LocationType,
   FosterPlacementType,
   FosterReturnReason
-} from "@prisma/client";
+} from "@/prisma/generated/enums";
 
 /**
  * Formats a Prisma enum's string values for display.

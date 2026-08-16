@@ -23,7 +23,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { Breed, Species } from "@prisma/client";
+import type { BreedModel } from "@/prisma/generated/models/Breed";
+import type { SpeciesModel } from "@/prisma/generated/models/Species";
 import {
   BreedFormState,
   createBreed,
@@ -37,8 +38,8 @@ type BreedFormValues = z.infer<typeof BreedFormSchema>;
 
 interface Props {
   onFormSubmit: () => void;
-  species: Species[]; // active species, for the selector
-  breed?: Breed;
+  species: SpeciesModel[]; // active species, for the selector
+  breed?: BreedModel;
 }
 
 export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {

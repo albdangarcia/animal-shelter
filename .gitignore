@@ -43,3 +43,6 @@ Dockerfile_prod
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# prisma generated client
+/prisma/generated/

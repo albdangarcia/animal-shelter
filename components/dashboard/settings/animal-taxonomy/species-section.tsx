@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { clsx } from "clsx";
 import { MoreHorizontal, PlusCircle } from "lucide-react";
-import { Species } from "@prisma/client";
+import type { SpeciesModel } from "@/prisma/generated/models/Species";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -35,7 +35,7 @@ import {
 } from "@/app/lib/actions/species-catalog.actions";
 import { toast } from "sonner";
 
-function SpeciesActions({ species }: { species: Species }) {
+function SpeciesActions({ species }: { species: SpeciesModel }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -111,7 +111,7 @@ function SpeciesActions({ species }: { species: Species }) {
 }
 
 interface Props {
-  species: Species[];
+  species: SpeciesModel[];
 }
 
 export const SpeciesSection = ({ species }: Props) => {

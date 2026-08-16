@@ -1,7 +1,7 @@
 "use client";
 
 import { Control, UseFormWatch } from "react-hook-form";
-import { LivingSituation } from "@prisma/client";
+import type { LivingSituation } from "@/prisma/generated/enums";
 import {
   FormControl,
   FormDescription,

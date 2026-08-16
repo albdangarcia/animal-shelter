@@ -1,19 +1,8 @@
-import { FieldType, Prisma } from "@prisma/client";
+import type { FieldType } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 
 export type SearchParamsType = Promise<{ [key: string]: string | undefined }>;
 export type IDParamType = Promise<{ id: string }>;
-
-// Type for the pet object when images are included
-export type AnimalByIDPayload = Prisma.AnimalGetPayload<{
-  include: {
-    animalImages: true;
-    breeds: {
-      include: {
-        species: true;
-      };
-    };
-  };
-}>;
 
 export type OutcomePayload = Prisma.OutcomeGetPayload<{
   include: {

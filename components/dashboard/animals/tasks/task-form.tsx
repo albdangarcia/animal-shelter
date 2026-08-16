@@ -40,7 +40,7 @@ import { AnimalTaskFormState } from "@/app/lib/form-state-types";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { TaskFormSchema } from "@/app/lib/zod-schemas/animal.schemas";
 import { TaskAssignee } from "@/app/lib/types";
-import { TaskPriority, TaskStatus } from "@prisma/client";
+import { TaskPriority, TaskStatus } from "@/prisma/generated/enums";
 import {
   createAnimalTask,
   updateAnimalTask,

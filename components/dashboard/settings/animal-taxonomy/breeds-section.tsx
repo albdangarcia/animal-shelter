@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { clsx } from "clsx";
 import { MoreHorizontal, PlusCircle } from "lucide-react";
-import { Species } from "@prisma/client";
+import type { SpeciesModel } from "@/prisma/generated/models/Species";
 import { BreedWithSpecies } from "@/app/lib/data/breeds/breeds-catalog.data";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,7 +41,7 @@ function BreedActions({
   species,
 }: {
   breed: BreedWithSpecies;
-  species: Species[];
+  species: SpeciesModel[];
 }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -120,7 +120,7 @@ function BreedActions({
 
 interface Props {
   breeds: BreedWithSpecies[];
-  species: Species[];
+  species: SpeciesModel[];
 }
 
 export const BreedsSection = ({ breeds, species }: Props) => {

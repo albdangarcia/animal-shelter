@@ -1,5 +1,6 @@
-import { prisma } from "@/app/lib/prisma";
-import { Prisma, NoteCategory } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import type { NoteCategory } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 import {
   cuidSchema,
   currentPageSchema,

@@ -6,7 +6,7 @@ import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
-import { FosterStatus } from "@prisma/client";
+import { FosterStatus } from "@/prisma/generated/enums";
 import {
   AlertDialog,
   AlertDialogAction,

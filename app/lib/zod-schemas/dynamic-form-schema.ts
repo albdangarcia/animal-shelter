@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { FieldType, AssessmentOutcome } from "@prisma/client";
+import { FieldType, AssessmentOutcome } from "@/prisma/generated/enums";
 import { TemplateField } from "../types";
 
 export function createDynamicSchema(fields: TemplateField[]) {

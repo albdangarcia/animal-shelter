@@ -1,5 +1,5 @@
-import { prisma } from "@/app/lib/prisma";
-import { LocationType } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import type { LocationType } from "@/prisma/generated/enums";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 

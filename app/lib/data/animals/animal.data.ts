@@ -1,11 +1,11 @@
-import { prisma } from "@/app/lib/prisma";
+import prisma from "@/app/lib/prisma";
 import {
   AnimalListingStatus,
   ApplicationStatus,
   IntakeType,
-  Sex,
-  Prisma,
-} from "@prisma/client";
+  type Sex,
+} from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 import {
   AnimalsPayload,
   SpeciesPayload,

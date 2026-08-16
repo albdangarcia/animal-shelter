@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { LivingSituation } from "@prisma/client";
+import { LivingSituation } from "@/prisma/generated/enums";
 
 // The single definition of "what a complete household record looks like."
 // Optional to have (no row until someone submits), but complete if it

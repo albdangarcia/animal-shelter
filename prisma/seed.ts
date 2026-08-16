@@ -1,6 +1,7 @@
 import bcrypt from "bcrypt";
+import { PrismaClient } from "@/prisma/generated/client";
+import { Prisma } from "@/prisma/generated/client";
 import {
-  PrismaClient,
   Role,
   Sex,
   PartnerType,
@@ -22,8 +23,7 @@ import {
   FosterStatus,
   FosterPlacementType,
   FosterReturnReason,
-  Prisma,
-} from "@prisma/client";
+} from "@/prisma/generated/enums";
 import {
   getRandomDate,
   getRandomItem,
@@ -32,10 +32,18 @@ import {
 } from "@/app/lib/utils/seeding-utils";
 import { getAnimalSize } from "@/app/lib/utils/animal-size";
 import { computeStays } from "@/app/lib/utils/stay-utils";
-import { env } from "prisma/config";
 import { PrismaPg } from "@prisma/adapter-pg";
 
-const connectionString = `${process.env.DATABASE_URL ?? env("DATABASE_URL")}`;
+const connectionString =
+  process.env.DATABASE_URL_UNPOOLED ??
+  process.env.POSTGRES_URL_NON_POOLING ??
+  process.env.POSTGRES_URL ??
+  process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("Missing DB URL - set DATABASE_URL_UNPOOLED or POSTGRES_URL");
+}
+
 const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 

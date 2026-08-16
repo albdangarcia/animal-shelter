@@ -47,7 +47,7 @@ import { PartnerTypesOptions } from "@/components/dashboard/partners-directory/t
 import { US_STATES } from "@/app/lib/constants/us-states";
 import Link from "next/link";
 import { PartnerFormPayload } from "@/app/lib/types";
-import { PartnerType } from "@prisma/client";
+import type { PartnerType } from "@/prisma/generated/enums";
 
 type PartnerFormValues = z.infer<typeof PartnerFormSchema>;
 

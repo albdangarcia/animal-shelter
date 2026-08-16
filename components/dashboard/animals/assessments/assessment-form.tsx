@@ -9,7 +9,7 @@ import React, {
 } from "react";
 import { useForm, Controller, Control, FieldValues } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FieldType, AssessmentType } from "@prisma/client";
+import { FieldType, AssessmentType } from "@/prisma/generated/enums";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useActionState } from "react";

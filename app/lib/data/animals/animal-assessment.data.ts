@@ -1,5 +1,6 @@
-import { prisma } from "@/app/lib/prisma";
-import { Prisma, AssessmentType, AssessmentOutcome } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import type { AssessmentType, AssessmentOutcome } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 import z from "zod";
 import {
   cuidSchema,

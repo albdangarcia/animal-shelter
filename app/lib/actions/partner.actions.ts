@@ -2,8 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/app/lib/prisma";
+import { Prisma } from "@/prisma/generated/client";
+import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { PartnerFormState } from "../form-state-types";
 import { RequirePermission } from "../auth/protected-actions";

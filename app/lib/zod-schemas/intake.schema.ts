@@ -1,4 +1,4 @@
-import { AnimalHealthStatus, IntakeType } from "@prisma/client";
+import { AnimalHealthStatus, IntakeType } from "@/prisma/generated/enums";
 import { z } from "zod";
 
 export const ReIntakeFormSchema = z

@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
 import { z } from "zod";
-import { CalendarIcon, Loader2, X } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { CharacteristicCategory } from "@prisma/client";
+import { CharacteristicCategory } from "@/prisma/generated/enums";
 
 export const CharacteristicFormSchema = z.object({
   name: z

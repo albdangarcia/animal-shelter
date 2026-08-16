@@ -1,11 +1,12 @@
-import { Prisma, OutcomeType } from "@prisma/client";
+import type { OutcomeType } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 import { z } from "zod";
 import {
   currentPageSchema,
   pageSizeSchema,
   searchQuerySchema,
 } from "../../zod-schemas/common.schemas";
-import { prisma } from "../../prisma";
+import prisma from "@/app/lib/prisma";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "../../auth/permissions";
 

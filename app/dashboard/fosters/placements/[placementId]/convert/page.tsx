@@ -4,7 +4,7 @@ import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import ActionBlockedMessage from "@/components/action-blocked-message";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { FosterPlacementType } from "@prisma/client";
+import { FosterPlacementType } from "@/prisma/generated/enums";
 import { fetchFosterPlacementById } from "@/app/lib/data/fosters/fosters.data";
 import { ConvertFosterToAdoptionForm } from "@/components/dashboard/fosters/placements/convert-foster-to-adoption-form";
 

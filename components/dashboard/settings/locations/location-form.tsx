@@ -23,7 +23,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { Location, LocationType } from "@prisma/client";
+import type { LocationModel } from "@/prisma/generated/models/Location";
+import type { LocationType } from "@/prisma/generated/enums";
 import {
   LocationFormState,
   createLocation,
@@ -38,7 +39,7 @@ type LocationFormValues = z.infer<typeof LocationFormSchema>;
 
 interface Props {
   onFormSubmit: () => void;
-  location?: Location;
+  location?: LocationModel;
 }
 
 export const LocationForm = ({ onFormSubmit, location }: Props) => {

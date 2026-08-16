@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Image from "next/image";
-import { AnimalImage } from "@prisma/client";
+import { AnimalImageModel } from "@/prisma/generated/models/AnimalImage";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import { deleteAnimalImage } from "@/app/lib/actions/animal.actions";
@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/tooltip";
 
 interface AnimalImageGalleryProps {
-  images: AnimalImage[];
+  images: AnimalImageModel[];
   animalId: string;
   canManage: boolean;
 }

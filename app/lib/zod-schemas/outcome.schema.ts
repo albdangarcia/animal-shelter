@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { OutcomeType } from "@prisma/client";
+import { OutcomeType } from "@/prisma/generated/enums";
 
 export const OutcomeFormSchema = z
   .object({

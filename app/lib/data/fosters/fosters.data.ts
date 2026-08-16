@@ -1,5 +1,6 @@
-import { prisma } from "@/app/lib/prisma";
-import { AnimalListingStatus, FosterStatus, Prisma } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import { AnimalListingStatus, FosterStatus } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 import { z } from "zod";
 import {
   cuidSchema,

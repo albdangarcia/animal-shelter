@@ -23,7 +23,8 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { Characteristic, CharacteristicCategory } from "@prisma/client";
+import { CharacteristicCategory } from "@/prisma/generated/enums";
+import type { CharacteristicModel } from "@/prisma/generated/models/Characteristic";
 import {
   CharacteristicFormState,
   createCharacteristic,
@@ -43,7 +44,7 @@ type CharacteristicFormValues = z.infer<typeof CharacteristicFormSchema>;
 
 interface Props {
   onFormSubmit: () => void; // To close the dialog on success
-  characteristic?: Characteristic;
+  characteristic?: CharacteristicModel;
 }
 
 export const CharacteristicForm = ({ onFormSubmit, characteristic }: Props) => {

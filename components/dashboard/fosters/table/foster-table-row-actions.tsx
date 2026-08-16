@@ -3,7 +3,7 @@
 import { Row } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
-import { FosterStatus } from "@prisma/client";
+import { FosterStatus } from "@/prisma/generated/enums";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

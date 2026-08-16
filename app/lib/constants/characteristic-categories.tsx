@@ -1,5 +1,5 @@
 import React from "react";
-import { CharacteristicCategory } from "@prisma/client";
+import { CharacteristicCategory } from "@/prisma/generated/enums";
 import {
   HeartPulse,
   Stethoscope,

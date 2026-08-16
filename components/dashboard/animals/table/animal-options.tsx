@@ -1,4 +1,4 @@
-import { Sex, AnimalSize } from "@prisma/client"
+import type { Sex, AnimalSize } from "@/prisma/generated/enums";
 import type { LucideIcon } from "lucide-react"
 import {
   Mars, Venus, HelpCircle as UnknownIcon,

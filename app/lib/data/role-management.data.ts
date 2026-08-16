@@ -1,5 +1,6 @@
-import { prisma } from "@/app/lib/prisma";
-import { Prisma, Role } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import type { Prisma } from "@/prisma/generated/client";
+import { Role } from "@/prisma/generated/enums";
 import { UsersRoleParamsSchema } from "../zod-schemas/role-management.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";

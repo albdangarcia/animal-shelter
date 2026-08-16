@@ -1,4 +1,4 @@
-import { PartnerType } from "@prisma/client";
+import type { PartnerType } from "@/prisma/generated/enums";
 import {
   Building2,
   HeartHandshake,

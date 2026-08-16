@@ -1,10 +1,10 @@
-import { prisma } from "@/app/lib/prisma";
+import prisma from "@/app/lib/prisma";
+import type { Prisma } from "@/prisma/generated/client";
 import {
   AnimalHealthStatus,
   AnimalListingStatus,
   OutcomeType,
-  Prisma,
-} from "@prisma/client";
+} from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../auth/protected-actions";
 import { Prettify } from "../utils/type-utils";

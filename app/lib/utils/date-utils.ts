@@ -8,7 +8,7 @@ import {
   isPast,
   formatDistanceToNowStrict,
 } from "date-fns";
-import { TaskStatus } from "@prisma/client";
+import { TaskStatus } from "@/prisma/generated/enums";
 
 interface calculateAgeStringProps {
   /**

@@ -11,8 +11,8 @@ import {
   FosterReturnReason,
   FosterStatus,
   OutcomeType,
-} from "@prisma/client";
-import { prisma } from "../prisma";
+} from "@/prisma/generated/enums";
+import prisma from "@/app/lib/prisma";
 import {
   RequirePermission,
   SessionUser,

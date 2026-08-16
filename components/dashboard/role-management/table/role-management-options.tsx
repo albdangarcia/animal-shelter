@@ -1,4 +1,4 @@
-import { Role } from "@prisma/client";
+import type { Role } from "@/prisma/generated/enums";
 import type { LucideIcon } from "lucide-react";
 import { User, Users, Handshake, CheckCircle2, XCircle } from "lucide-react";
 import { buildOptions } from "@/app/lib/utils/option-utils";

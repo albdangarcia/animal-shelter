@@ -1,5 +1,6 @@
-import { prisma } from "@/app/lib/prisma";
-import { AnimalActivityType, Prisma } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import { AnimalActivityType } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";

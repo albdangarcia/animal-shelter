@@ -1,4 +1,4 @@
-import { FosterStatus } from "@prisma/client";
+import { FosterStatus } from "@/prisma/generated/enums";
 import { IDParamType } from "@/app/lib/types";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";

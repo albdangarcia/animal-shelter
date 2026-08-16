@@ -1,4 +1,4 @@
-import { Role } from "@prisma/client";
+import { Role } from "@/prisma/generated/enums";
 import { AppPermission, AppPermissions } from "./permissions";
 
 // Permissions for the base user role
