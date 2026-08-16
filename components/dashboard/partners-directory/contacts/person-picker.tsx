@@ -75,7 +75,7 @@ export const PersonPicker = ({ people, value, onChange, disabled }: Props) => {
               {people.map((person) => (
                 <CommandItem
                   key={person.id}
-                  value={`${person.name} ${person.email ?? ""}`}
+                  value={`${person.name} ${person.email ?? ""} ${person.id}`}
                   onSelect={() => handleSelect(person)}
                 >
                   <Check

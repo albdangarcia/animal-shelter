@@ -71,8 +71,7 @@ export const PersonPicker = ({
   const [results, setResults] = useState<PersonPickerOption[]>([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // Aborts the previous in-flight search whenever a new one starts, so a
-  // slower earlier response can't resolve later and clobber fresher results.
+  // Aborts the previous in-flight search whenever a new one starts or on close.
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const search = async (q: string) => {
@@ -107,6 +106,14 @@ export const PersonPicker = ({
 
   const debouncedSearch = useDebouncedCallback(search, 300);
 
+  const resetSearch = () => {
+    debouncedSearch.cancel();
+    abortControllerRef.current?.abort();
+    setQuery("");
+    setResults([]);
+    setIsSearching(false);
+  };
+
   useEffect(() => {
     return () => {
       debouncedSearch.cancel();
@@ -118,7 +125,7 @@ export const PersonPicker = ({
     setSelected(person);
     onChange(person.id);
     setOpen(false);
-    setQuery("");
+    resetSearch();
   };
 
   const handleClear = () => {
@@ -150,8 +157,8 @@ export const PersonPicker = ({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (next) {
-          search(query);
+        if (!next) {
+          resetSearch();
         }
       }}
     >
@@ -177,7 +184,14 @@ export const PersonPicker = ({
             value={query}
             onValueChange={(newQuery) => {
               setQuery(newQuery);
-              debouncedSearch(newQuery);
+              if (!newQuery.trim()) {
+                debouncedSearch.cancel();
+                abortControllerRef.current?.abort();
+                setResults([]);
+                setIsSearching(false);
+              } else {
+                debouncedSearch(newQuery);
+              }
             }}
           />
           <CommandList>
@@ -197,8 +211,9 @@ export const PersonPicker = ({
                 </CommandGroup>
               ) : (
                 <CommandEmpty>
-                  No matching person found. Add them to the directory first,
-                  then start this intake.
+                  {query.trim()
+                    ? "No matching person found. Add them to the directory first, then start this intake."
+                    : "Type a name, email, or phone number to search."}
                 </CommandEmpty>
               )
             ) : (
