@@ -12,7 +12,10 @@ import {
 import Link from "next/link";
 import { TaskAnalyticsPayload } from "@/app/lib/data/analytics.data";
 
-export const recentTasksColumns: ColumnDef<StockFeatures, TaskAnalyticsPayload>[] = [
+export const recentTasksColumns: ColumnDef<
+  StockFeatures,
+  TaskAnalyticsPayload
+>[] = [
   {
     accessorKey: "title",
     header: ({ column }) => (
@@ -110,8 +113,8 @@ export const recentTasksColumns: ColumnDef<StockFeatures, TaskAnalyticsPayload>[
     filterFn: (row, id, value) => value.includes(row.getValue(id)),
   },
   {
-    // Read-only text — no editable Select, no assignee mutation
-    accessorKey: "assignee",
+    accessorFn: (row) => row.assignee?.name ?? "",
+    id: "assignee",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Assignee" />
     ),

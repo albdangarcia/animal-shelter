@@ -52,8 +52,25 @@ const _fetchAnimals = async (
 
   const orderBy: Prisma.AnimalOrderByWithRelationInput = (() => {
     if (!sort) return { createdAt: "desc" };
+
     const [id, dir] = sort.split(".");
-    return { [id]: dir === "desc" ? "desc" : "asc" };
+    const direction: "asc" | "desc" = dir === "desc" ? "desc" : "asc";
+
+    const sortableFields = new Set([
+      "name",
+      "birthDate",
+      "city",
+      "state",
+      "listingStatus",
+      "sex",
+      "size",
+      "createdAt",
+    ]);
+    if (sortableFields.has(id)) {
+      return { [id]: direction };
+    }
+
+    return { createdAt: "desc" };
   })();
 
   // Calculate the number of records to skip based on the current page

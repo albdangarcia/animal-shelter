@@ -21,7 +21,15 @@ import type {
   Table,
   StockFeatures,
 } from "@tanstack/react-table";
-import { flexRender, stockFeatures, useTable } from "@tanstack/react-table";
+import {
+  flexRender,
+  stockFeatures,
+  useTable,
+  createSortedRowModel,
+  sortFn_text,
+  sortFn_datetime,
+  sortFn_alphanumeric,
+} from "@tanstack/react-table";
 import {
   Table as UITable,
   TableBody,
@@ -36,7 +44,9 @@ interface DataTableProps<TData extends RowData, TExtra = {}> {
   getColumns?: (props: TExtra) => ColumnDef<StockFeatures, TData>[];
   columnProps?: TExtra;
   data: TData[];
-  ToolbarComponent?: React.ComponentType<{ table: Table<StockFeatures, TData> } & TExtra>;
+  ToolbarComponent?: React.ComponentType<
+    { table: Table<StockFeatures, TData> } & TExtra
+  >;
   toolbarProps?: TExtra;
 }
 
@@ -49,7 +59,9 @@ const DataTable = <TData extends RowData, TExtra = {}>({
   toolbarProps,
 }: DataTableProps<TData, TExtra>) => {
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    [],
+  );
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] =
     React.useState<ColumnVisibilityState>({});
@@ -59,8 +71,18 @@ const DataTable = <TData extends RowData, TExtra = {}>({
     return staticColumns ?? [];
   }, [getColumns, columnProps, staticColumns]);
 
+  const features = {
+    ...stockFeatures,
+    sortedRowModel: createSortedRowModel(),
+    sortFns: {
+      text: sortFn_text,
+      datetime: sortFn_datetime,
+      alphanumeric: sortFn_alphanumeric,
+    },
+  };
+
   const table = useTable<StockFeatures, TData>({
-    features: stockFeatures,
+    features,
     data,
     columns,
     state: {
@@ -93,7 +115,7 @@ const DataTable = <TData extends RowData, TExtra = {}>({
                       ? null
                       : flexRender(
                           header.column.columnDef.header,
-                          header.getContext()
+                          header.getContext(),
                         )}
                   </TableHead>
                 ))}
@@ -111,7 +133,7 @@ const DataTable = <TData extends RowData, TExtra = {}>({
                     <TableCell key={cell.id}>
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}
@@ -119,7 +141,10 @@ const DataTable = <TData extends RowData, TExtra = {}>({
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center"
+                >
                   No results.
                 </TableCell>
               </TableRow>

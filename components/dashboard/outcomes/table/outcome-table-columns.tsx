@@ -80,6 +80,7 @@ export const getColumns = ({
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Recipient" />
     ),
+    enableSorting: false,
     cell: ({ row }) => {
       const name = row.getValue("recipient") as string;
       const relationshipLabel = recipientRelationshipLabel[row.original.type];
