@@ -33,3 +33,8 @@ export const currentPageSchema = z.int().positive({
 export const pageSizeSchema = z.coerce
   .number()
   .transform((val) => ([10, 20, 30, 40, 50].includes(val) ? val : 10));
+
+export const SignInFormSchema = z.object({
+  email: z.email(),
+  password: z.string().min(6),
+});

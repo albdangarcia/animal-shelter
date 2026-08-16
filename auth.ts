@@ -1,7 +1,6 @@
 import NextAuth, { NextAuthConfig } from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import prisma from "@/app/lib/prisma";
-import { z } from "zod";
 import { type DefaultSession } from "next-auth";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { JWT } from "next-auth/jwt";
@@ -11,6 +10,7 @@ import { authProviderConfigList } from "./auth.config";
 import type { AdapterUser } from "@auth/core/adapters";
 import type { UserModel } from "@/prisma/generated/models/User";
 import type { Role } from "@/prisma/generated/enums";
+import { SignInFormSchema } from "@/app/lib/zod-schemas/common.schemas";
 
 // declare custom user properties
 declare module "next-auth" {
@@ -120,9 +120,7 @@ const credentialsConfig = Credentials({
   // The authorize callback validates credentials
   authorize: async (credentials) => {
     // Validate the credentials for the user
-    const parsedCredentials = z
-      .object({ email: z.email(), password: z.string().min(6) })
-      .safeParse(credentials);
+    const parsedCredentials = SignInFormSchema.safeParse(credentials);
 
     // If the credentials are valid, return the user object
     if (parsedCredentials.success) {
