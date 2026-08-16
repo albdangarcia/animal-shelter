@@ -1,6 +1,6 @@
 "use client";
 
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ApplicationStatuses } from "./my-applications-options";
@@ -10,7 +10,7 @@ import { MyAdoptionApplicationPayload } from "@/app/lib/types";
 import { formatTimeAgo } from "@/app/lib/utils/date-utils";
 import Link from "next/link";
 
-export const columns: ColumnDef<MyAdoptionApplicationPayload>[] = [
+export const columns: ColumnDef<StockFeatures, MyAdoptionApplicationPayload>[] = [
   {
     id: "select",
     header: ({ table }) => (

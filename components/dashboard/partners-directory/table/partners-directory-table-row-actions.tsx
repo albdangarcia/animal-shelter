@@ -1,6 +1,6 @@
 "use client";
 
-import { Row } from "@tanstack/react-table";
+import type { Row, StockFeatures } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,7 @@ import {
 import { PartnersDirectoryPayload } from "@/app/lib/types";
 
 interface DataTableRowActionsProps {
-  row: Row<PartnersDirectoryPayload>;
+  row: Row<StockFeatures, PartnersDirectoryPayload>;
   canManage: boolean;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ApplicationStatuses } from "./adoption-applications-options";
@@ -16,7 +16,7 @@ export interface GetColumnsProps {
 
 export const getColumns = ({
   canManage,
-}: GetColumnsProps): ColumnDef<AdoptionApplicationWithAnimal>[] => [
+}: GetColumnsProps): ColumnDef<StockFeatures, AdoptionApplicationWithAnimal>[] => [
   {
     id: "select",
     header: ({ table }) => (

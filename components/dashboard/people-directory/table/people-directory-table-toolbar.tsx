@@ -1,13 +1,13 @@
 "use client";
 
-import { Table } from "@tanstack/react-table";
+import type { StockFeatures, Table } from "@tanstack/react-table";
 import { PeopleDirectoryPayload } from "@/app/lib/types";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
 import { AccountStatuses } from "./people-directory-options";
 
 interface PeopleTableToolbarProps {
-  table: Table<PeopleDirectoryPayload>;
+  table: Table<StockFeatures, PeopleDirectoryPayload>;
 }
 
 const PeopleTableToolbar = ({ table }: PeopleTableToolbarProps) => {

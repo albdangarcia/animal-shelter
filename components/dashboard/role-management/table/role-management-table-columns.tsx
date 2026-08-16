@@ -1,6 +1,6 @@
 "use client";
 
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserRoles } from "./role-management-options";
@@ -8,7 +8,7 @@ import { DataTableColumnHeader } from "../../../table-common/data-table-column-h
 import { DataTableRowActions } from "./role-management-table-row-actions";
 import { RoleManagementPayload } from "@/app/lib/types";
 
-export const columns: ColumnDef<RoleManagementPayload>[] = [
+export const columns: ColumnDef<StockFeatures, RoleManagementPayload>[] = [
   {
     id: "select",
     header: ({ table }) => (

@@ -1,6 +1,6 @@
 "use client";
 
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { categories, priorities, statuses } from "./task-options";
 import { DataTableRowActions } from "./task-table-row-actions";
@@ -21,7 +21,7 @@ export const getColumns = ({
   animalId,
   assigneeList,
   canManage,
-}: GetColumnsProps): ColumnDef<FetchAnimalTasksPayload>[] => [
+}: GetColumnsProps): ColumnDef<StockFeatures, FetchAnimalTasksPayload>[] => [
   {
     accessorKey: "title",
     header: ({ column }) => (

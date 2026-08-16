@@ -1,13 +1,13 @@
 "use client";
 
-import { Table } from "@tanstack/react-table";
+import type { StockFeatures, Table } from "@tanstack/react-table";
 import { RoleManagementPayload } from "@/app/lib/types";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
 import { UserRoles, UserStatuses } from "./role-management-options";
 
 interface UsersTableToolbarProps {
-  table: Table<RoleManagementPayload>;
+  table: Table<StockFeatures, RoleManagementPayload>;
 }
 
 const UsersTableToolbar = ({ table }: UsersTableToolbarProps) => {

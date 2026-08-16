@@ -1,13 +1,13 @@
 "use client";
 
-import { Table } from "@tanstack/react-table";
+import type { StockFeatures, Table } from "@tanstack/react-table";
 import { PartnersDirectoryPayload } from "@/app/lib/types";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
 import { PartnerTypesOptions, ActiveStatusesOptions } from "./partners-directory-options";
 
 interface PartnersTableToolbarProps {
-  table: Table<PartnersDirectoryPayload>;
+  table: Table<StockFeatures, PartnersDirectoryPayload>;
 }
 
 const PartnersTableToolbar = ({ table }: PartnersTableToolbarProps) => {

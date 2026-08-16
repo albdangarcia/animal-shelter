@@ -1,6 +1,6 @@
 "use client";
 
-import { Row } from "@tanstack/react-table";
+import type { Row, StockFeatures } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,7 @@ import { AnimalsRequiringAttentionPayload } from "@/app/lib/data/analytics.data"
 import Link from "next/link";
 
 interface DataTableRowActionsProps {
-  row: Row<AnimalsRequiringAttentionPayload>;
+  row: Row<StockFeatures, AnimalsRequiringAttentionPayload>;
 }
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {

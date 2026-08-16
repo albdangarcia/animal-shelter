@@ -1,6 +1,6 @@
 "use client";
 
-import { Table } from "@tanstack/react-table";
+import type { StockFeatures, Table } from "@tanstack/react-table";
 import { sexOptions } from "./animal-options";
 import { animalListingStatusOptions } from "@/app/lib/utils/enum-formatter";
 import { AnimalsPayload } from "@/app/lib/types";
@@ -8,7 +8,7 @@ import { ServerSideFacetedFilter } from "@/components/table-common/server-side-f
 import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
 
 interface AnimalsDataTableToolbarProps {
-  table: Table<AnimalsPayload>;
+  table: Table<StockFeatures, AnimalsPayload>;
 }
 
 const AnimalsDataTableToolbar = ({ table }: AnimalsDataTableToolbarProps) => {

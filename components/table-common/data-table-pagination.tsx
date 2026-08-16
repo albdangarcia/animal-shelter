@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Table } from "@tanstack/react-table";
+import type { RowData, StockFeatures, Table } from "@tanstack/react-table";
 import {
   ChevronLeft,
   ChevronRight,
@@ -20,13 +20,13 @@ import {
 
 const PAGE_SIZE_OPTIONS = [10, 20, 30, 40, 50];
 
-interface DataTablePaginationProps<TData> {
-  table: Table<TData>;
+interface DataTablePaginationProps<TData extends RowData> {
+  table: Table<StockFeatures, TData>;
   totalPages: number;
   totalRows: number;
 }
 
-export function DataTablePagination<TData>({
+export function DataTablePagination<TData extends RowData>({
   table,
   totalPages,
   totalRows,

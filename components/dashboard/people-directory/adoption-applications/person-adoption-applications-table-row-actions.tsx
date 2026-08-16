@@ -1,6 +1,6 @@
 "use client";
 
-import { Row } from "@tanstack/react-table";
+import type { Row, StockFeatures } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,7 +15,7 @@ import Link from "next/link";
 import { PersonAdoptionApplicationPayload } from "@/app/lib/data/people-directory/person-adoption-applications.data";
 
 interface DataTableRowActionsProps {
-  row: Row<PersonAdoptionApplicationPayload>;
+  row: Row<StockFeatures, PersonAdoptionApplicationPayload>;
   personId: string;
   canManage: boolean;
   canEdit: boolean;
