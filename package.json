@@ -58,6 +58,7 @@
     "@uppy/react": "5.1.0",
     "@uppy/xhr-upload": "^5.2.0",
     "@vercel/blob": "^2.0.0",
+    "babel-plugin-react-compiler": "^1.0.0",
     "bcrypt": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
