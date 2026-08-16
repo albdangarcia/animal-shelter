@@ -1,6 +1,6 @@
 "use client";
 
-import { Row } from "@tanstack/react-table";
+import type { Row, StockFeatures } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,7 @@ import {
 import { ApplicationStatus } from "@/prisma/generated/enums";
 
 interface DataTableRowActionsProps {
-  row: Row<MyAdoptionApplicationPayload>;
+  row: Row<StockFeatures, MyAdoptionApplicationPayload>;
 }
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {

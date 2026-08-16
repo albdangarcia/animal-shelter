@@ -1,6 +1,6 @@
 "use client";
 
-import { Row } from "@tanstack/react-table";
+import type { Row, StockFeatures } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 import { useTransition } from "react";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import { Role } from "@/prisma/generated/enums";
 import { updateUserRole } from "@/app/lib/actions/role-management.actions";
 
 interface DataTableRowActionsProps {
-  row: Row<RoleManagementPayload>;
+  row: Row<StockFeatures, RoleManagementPayload>;
 }
 
 const assignableRoles: Role[] = [Role.STAFF, Role.USER, Role.VOLUNTEER];

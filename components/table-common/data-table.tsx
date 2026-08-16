@@ -2,15 +2,15 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
+import type {
   ColumnDef,
   SortingState,
-  VisibilityState,
-  flexRender,
-  getCoreRowModel,
-  useReactTable,
+  ColumnVisibilityState,
+  RowData,
   Table,
+  StockFeatures,
 } from "@tanstack/react-table";
+import { flexRender, stockFeatures, useTable } from "@tanstack/react-table";
 import {
   Table as UITable,
   TableBody,
@@ -21,18 +21,18 @@ import {
 } from "@/components/ui/table";
 import { DataTablePagination } from "@/components/table-common/data-table-pagination";
 
-interface DataTableProps<TData, TValue, TExtra = {}> {
-  columns?: ColumnDef<TData, TValue>[];
-  getColumns?: (props: TExtra) => ColumnDef<TData, TValue>[];
+interface DataTableProps<TData extends RowData, TExtra = {}> {
+  columns?: ColumnDef<StockFeatures, TData>[];
+  getColumns?: (props: TExtra) => ColumnDef<StockFeatures, TData>[];
   columnProps?: TExtra;
   data: TData[];
-  ToolbarComponent?: React.ComponentType<{ table: Table<TData> } & TExtra>;
+  ToolbarComponent?: React.ComponentType<{ table: Table<StockFeatures, TData> } & TExtra>;
   toolbarProps?: TExtra;
   totalPages: number;
   totalRows: number;
 }
 
-const DataTable = <TData, TValue, TExtra = {}>({
+const DataTable = <TData extends RowData, TExtra = {}>({
   columns: staticColumns,
   getColumns,
   columnProps,
@@ -41,7 +41,7 @@ const DataTable = <TData, TValue, TExtra = {}>({
   toolbarProps,
   totalPages,
   totalRows,
-}: DataTableProps<TData, TValue, TExtra>) => {
+}: DataTableProps<TData, TExtra>) => {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -60,9 +60,10 @@ const DataTable = <TData, TValue, TExtra = {}>({
 
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+    React.useState<ColumnVisibilityState>({});
 
-  const table = useReactTable({
+  const table = useTable<StockFeatures, TData>({
+    features: stockFeatures,
     data,
     columns,
     manualPagination: true,
@@ -85,7 +86,6 @@ const DataTable = <TData, TValue, TExtra = {}>({
     onRowSelectionChange: setRowSelection,
     onColumnVisibilityChange: setColumnVisibility,
     enableRowSelection: true,
-    getCoreRowModel: getCoreRowModel(),
   });
 
   return (

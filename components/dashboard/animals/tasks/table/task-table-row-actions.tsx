@@ -1,6 +1,6 @@
 "use client";
 
-import { Row } from "@tanstack/react-table";
+import type { Row, StockFeatures } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ import { TaskStatus } from "@/prisma/generated/enums";
 import { TaskStatusOptions } from "@/app/lib/utils/enum-formatter";
 
 interface DataTableRowActionsProps {
-  row: Row<FetchAnimalTasksPayload>;
+  row: Row<StockFeatures, FetchAnimalTasksPayload>;
   assigneeList: TaskAssignee[];
   animalId: string;
   canManage: boolean;

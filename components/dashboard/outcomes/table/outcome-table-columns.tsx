@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import type { OutcomeType } from "@/prisma/generated/enums";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -25,7 +25,7 @@ export interface GetColumnsProps {
 
 export const getColumns = ({
   canManage,
-}: GetColumnsProps): ColumnDef<OutcomeWithDetails>[] => [
+}: GetColumnsProps): ColumnDef<StockFeatures, OutcomeWithDetails>[] => [
   {
     id: "select",
     header: ({ table }) => (

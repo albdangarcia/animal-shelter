@@ -1,6 +1,6 @@
 "use client";
 
-import { Table } from "@tanstack/react-table";
+import type { StockFeatures, Table } from "@tanstack/react-table";
 import { outcomeTypeOptions } from "@/app/lib/utils/enum-formatter";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { ServerSideSort } from "@/components/table-common/server-side-sort";
@@ -8,7 +8,7 @@ import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
 import { OutcomeWithDetails } from "@/app/lib/data/animals/outcome.data";
 
 interface OutcomeTableToolbarProps {
-  table: Table<OutcomeWithDetails>;
+  table: Table<StockFeatures, OutcomeWithDetails>;
 }
 
 const OutcomeTableToolbar = ({ table }: OutcomeTableToolbarProps) => {

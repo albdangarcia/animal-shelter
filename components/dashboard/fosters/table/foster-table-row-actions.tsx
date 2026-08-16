@@ -1,6 +1,6 @@
 "use client";
 
-import { Row } from "@tanstack/react-table";
+import type { Row, StockFeatures } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { FosterStatus } from "@/prisma/generated/enums";
@@ -16,7 +16,7 @@ import {
 import { FosterRosterListItem } from "@/app/lib/data/fosters/fosters.data";
 
 interface DataTableRowActionsProps {
-  row: Row<FosterRosterListItem>;
+  row: Row<StockFeatures, FosterRosterListItem>;
   canManage: boolean;
 }
 

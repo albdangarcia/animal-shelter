@@ -1,6 +1,6 @@
 "use client";
 
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import Image from "next/image";
@@ -20,7 +20,7 @@ export const getColumns = ({
   canManage,
   canEdit,
   personId,
-}: GetColumnsProps): ColumnDef<PersonAdoptionApplicationPayload>[] => [
+}: GetColumnsProps): ColumnDef<StockFeatures, PersonAdoptionApplicationPayload>[] => [
   {
     id: "animal",
     accessorFn: (row) => row.animal.name,

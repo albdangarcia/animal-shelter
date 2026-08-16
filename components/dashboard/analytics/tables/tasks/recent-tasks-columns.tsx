@@ -1,6 +1,6 @@
 "use client";
 
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { formatDateOrNA, formatDueDate } from "@/app/lib/utils/date-utils";
 import { DataTableColumnHeader } from "@/components/table-common/data-table-column-header";
@@ -12,7 +12,7 @@ import {
 import Link from "next/link";
 import { TaskAnalyticsPayload } from "@/app/lib/data/analytics.data";
 
-export const recentTasksColumns: ColumnDef<TaskAnalyticsPayload>[] = [
+export const recentTasksColumns: ColumnDef<StockFeatures, TaskAnalyticsPayload>[] = [
   {
     accessorKey: "title",
     header: ({ column }) => (

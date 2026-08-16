@@ -2,14 +2,14 @@
 
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import { useDebouncedCallback } from "use-debounce";
-import { Table } from "@tanstack/react-table";
+import type { RowData, StockFeatures, Table } from "@tanstack/react-table";
 import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DataTableViewOptions } from "@/components/table-common/data-table-view-options";
 
-interface DataTableToolbarProps<TData> {
-  table: Table<TData>;
+interface DataTableToolbarProps<TData extends RowData> {
+  table: Table<StockFeatures, TData>;
   searchPlaceholder: string;
   searchId: string;
   /** param keys (besides "query") that count toward "isFiltered" */
@@ -19,7 +19,7 @@ interface DataTableToolbarProps<TData> {
   extraActions?: React.ReactNode;
 }
 
-export function DataTableToolbar<TData>({
+export function DataTableToolbar<TData extends RowData>({
   table,
   searchPlaceholder,
   searchId,

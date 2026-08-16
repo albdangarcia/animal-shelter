@@ -1,6 +1,6 @@
 "use client";
 
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { sexOptions, sizeOptions } from "./animal-options";
@@ -11,7 +11,7 @@ import { AnimalsPayload } from "@/app/lib/types";
 import { animalListingStatusOptions } from "@/app/lib/utils/enum-formatter";
 import Link from "next/link";
 
-export const columns: ColumnDef<AnimalsPayload>[] = [
+export const columns: ColumnDef<StockFeatures, AnimalsPayload>[] = [
   {
     id: "select",
     header: ({ table }) => (

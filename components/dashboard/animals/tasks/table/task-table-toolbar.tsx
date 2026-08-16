@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Table } from "@tanstack/react-table";
+import type { StockFeatures, Table } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,7 +22,7 @@ import { ServerSideFacetedFilter } from "@/components/table-common/server-side-f
 import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
 
 interface TasksDataTableToolbarProps {
-  table: Table<FetchAnimalTasksPayload>;
+  table: Table<StockFeatures, FetchAnimalTasksPayload>;
   animalId: string;
   assigneeList: TaskAssignee[];
   canManage: boolean;

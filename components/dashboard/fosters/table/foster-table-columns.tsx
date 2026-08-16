@@ -1,6 +1,6 @@
 "use client";
 
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -19,7 +19,7 @@ export interface GetColumnsProps {
 
 export const getColumns = ({
   canManage,
-}: GetColumnsProps): ColumnDef<FosterRosterListItem>[] => [
+}: GetColumnsProps): ColumnDef<StockFeatures, FosterRosterListItem>[] => [
   {
     id: "select",
     header: ({ table }) => (

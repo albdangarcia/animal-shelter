@@ -1,6 +1,6 @@
 "use client";
 
-import { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { formatDateOrNA } from "@/app/lib/utils/date-utils";
 import { DataTableColumnHeader } from "@/components/table-common/data-table-column-header";
@@ -9,7 +9,7 @@ import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import Link from "next/link";
 import { DataTableRowActions } from "./recent-health-row-actions";
 
-export const healthColumns: ColumnDef<AnimalsRequiringAttentionPayload>[] = [
+export const healthColumns: ColumnDef<StockFeatures, AnimalsRequiringAttentionPayload>[] = [
   {
     accessorKey: "name",
     header: ({ column }) => (

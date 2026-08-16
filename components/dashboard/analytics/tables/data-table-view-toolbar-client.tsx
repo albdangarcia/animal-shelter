@@ -1,13 +1,13 @@
 "use client";
 
-import { Table } from "@tanstack/react-table";
+import type { RowData, StockFeatures, Table } from "@tanstack/react-table";
 import { DataTableViewOptions } from "@/components/table-common/data-table-view-options";
 
-interface DataTableViewToolbarProps<TData> {
-  table: Table<TData>;
+interface DataTableViewToolbarProps<TData extends RowData> {
+  table: Table<StockFeatures, TData>;
 }
 
-export function DataTableViewToolbarClient<TData>({
+export function DataTableViewToolbarClient<TData extends RowData>({
   table,
 }: DataTableViewToolbarProps<TData>) {
   return (

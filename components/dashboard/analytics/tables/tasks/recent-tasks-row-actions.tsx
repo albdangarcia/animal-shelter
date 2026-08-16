@@ -1,6 +1,6 @@
 "use client";
 
-import { Row } from "@tanstack/react-table";
+import type { Row, StockFeatures } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ import { TaskForm } from "../../../animals/tasks/task-form";
 import { TaskAnalyticsPayload } from "@/app/lib/data/analytics.data";
 
 interface DataTableRowActionsProps {
-  row: Row<TaskAnalyticsPayload>;
+  row: Row<StockFeatures, TaskAnalyticsPayload>;
   assigneeList: TaskAssignee[];
 }
 

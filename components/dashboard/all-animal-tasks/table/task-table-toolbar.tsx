@@ -1,6 +1,6 @@
 "use client";
 
-import { Table } from "@tanstack/react-table";
+import type { StockFeatures, Table } from "@tanstack/react-table";
 import {
   TaskCategoryOptions,
   TaskStatusOptions,
@@ -10,7 +10,7 @@ import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
 import { AllAnimalsTasksPayload } from "@/app/lib/data/all-animal-tasks.data";
 
 interface TasksDataTableToolbarProps {
-  table: Table<AllAnimalsTasksPayload>;
+  table: Table<StockFeatures, AllAnimalsTasksPayload>;
 }
 
 const TasksDataTableToolbar = ({ table }: TasksDataTableToolbarProps) => {
