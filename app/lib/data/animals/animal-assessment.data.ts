@@ -1,5 +1,8 @@
 import prisma from "@/app/lib/prisma";
-import type { AssessmentType, AssessmentOutcome } from "@/prisma/generated/enums";
+import type {
+  AssessmentType,
+  AssessmentOutcome,
+} from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
 import z from "zod";
 import {
@@ -101,8 +104,28 @@ const _fetchAnimalAssessments = async (
   // Determine the sorting order, defaulting to newest first
   const orderBy: Prisma.AssessmentOrderByWithRelationInput = (() => {
     if (!sort) return { date: "desc" };
+
     const [id, dir] = sort.split(".");
-    return { [id]: dir === "desc" ? "desc" : "asc" };
+    const direction: "asc" | "desc" = dir === "desc" ? "desc" : "asc";
+
+    if (id === "assessor") {
+      return { assessor: { name: direction } };
+    }
+    if (id === "template") {
+      return { template: { type: direction } };
+    }
+
+    const sortableFields = new Set([
+      "date",
+      "overallOutcome",
+      "summary",
+      "deletedAt",
+    ]);
+    if (sortableFields.has(id)) {
+      return { [id]: direction };
+    }
+
+    return { date: "desc" };
   })();
 
   // Status filter: deleted assessments show only when "deleted" is selected.

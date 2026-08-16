@@ -1,5 +1,9 @@
 import prisma from "@/app/lib/prisma";
-import { Role, type TaskCategory, type TaskStatus } from "@/prisma/generated/enums";
+import {
+  Role,
+  type TaskCategory,
+  type TaskStatus,
+} from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
 import { AnimalTasksSchema } from "../../zod-schemas/animal.schemas";
 import { RequirePermission } from "../../auth/protected-actions";
@@ -27,8 +31,12 @@ const _fetchAnimalTasks = async (
   statusInput: string | undefined,
   pageSizeInput: number,
   sortInput: string | undefined,
-  inputAnimalId: string
-): Promise<{ tasks: FetchAnimalTasksPayload[]; totalPages: number; totalRows: number }> => {
+  inputAnimalId: string,
+): Promise<{
+  tasks: FetchAnimalTasksPayload[];
+  totalPages: number;
+  totalRows: number;
+}> => {
   const validatedArgs = AnimalTasksSchema.safeParse({
     query: queryInput,
     currentPage: currentPageInput,
@@ -48,8 +56,27 @@ const _fetchAnimalTasks = async (
 
   const orderBy: Prisma.TaskOrderByWithRelationInput = (() => {
     if (!sort) return { createdAt: "desc" }; // Default sort
+
     const [id, dir] = sort.split(".");
-    return { [id]: dir === "desc" ? "desc" : "asc" };
+    const direction: "asc" | "desc" = dir === "desc" ? "desc" : "asc";
+
+    if (id === "assignee") {
+      return { assignee: { name: direction } };
+    }
+
+    const sortableFields = new Set([
+      "title",
+      "status",
+      "category",
+      "priority",
+      "dueDate",
+      "createdAt",
+    ]);
+    if (sortableFields.has(id)) {
+      return { [id]: direction };
+    }
+
+    return { createdAt: "desc" };
   })();
 
   // The where clause is updated to filter by animalId if it's provided
@@ -136,9 +163,9 @@ const _fetchTaskAssigneeList = async (): Promise<TaskAssignee[]> => {
 };
 
 export const fetchTaskAssigneeList = RequirePermission(
-  AppPermissions.ANIMAL_TASK_MANAGE
+  AppPermissions.ANIMAL_TASK_MANAGE,
 )(_fetchTaskAssigneeList);
 
 export const fetchAnimalTasks = RequirePermission(
-  AppPermissions.ANIMAL_TASK_READ
+  AppPermissions.ANIMAL_TASK_READ,
 )(_fetchAnimalTasks);

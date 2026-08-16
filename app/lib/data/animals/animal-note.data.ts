@@ -65,8 +65,20 @@ const _fetchAnimalNotes = async (
 
   const orderBy: Prisma.AnimalNoteOrderByWithRelationInput = (() => {
     if (!sort) return { createdAt: "desc" };
+
     const [id, dir] = sort.split(".");
-    return { [id]: dir === "desc" ? "desc" : "asc" };
+    const direction: "asc" | "desc" = dir === "desc" ? "desc" : "asc";
+
+    if (id === "author") {
+      return { author: { name: direction } };
+    }
+
+    const sortableFields = new Set(["createdAt", "category", "deletedAt"]);
+    if (sortableFields.has(id)) {
+      return { [id]: direction };
+    }
+
+    return { createdAt: "desc" };
   })();
 
   // Status filter: deleted notes show only when "deleted" is selected.

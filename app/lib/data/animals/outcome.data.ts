@@ -140,8 +140,16 @@ export const _fetchOutcomes = async (
       return { outcomeDate: direction };
     }
 
-    // This handles top-level fields like 'outcomeDate', 'type', etc.
-    return { [id]: direction };
+    // Only these top-level fields can be safely passed straight through to
+    // Prisma. Anything else (e.g. a derived/synthetic column id like
+    // "recipient" that has no matching field on Outcome) falls through to
+    // the safe default below instead of throwing a Prisma validation error.
+    const sortableFields = new Set(["outcomeDate", "type", "createdAt", "updatedAt"]);
+    if (sortableFields.has(id)) {
+      return { [id]: direction };
+    }
+
+    return { outcomeDate: "desc" };
   })();
 
   const whereClause: Prisma.OutcomeWhereInput = {
@@ -196,7 +204,7 @@ export const _fetchOutcomes = async (
 
     const totalPages = Math.ceil(totalCount / pageSize);
     return { outcomes, totalPages, totalRows: totalCount };
-} catch (error) {
+  } catch (error) {
     console.error("Database Error: Failed to fetch outcomes.", error);
     throw new Error("Failed to fetch outcomes.");
   }

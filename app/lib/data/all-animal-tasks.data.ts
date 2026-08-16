@@ -61,8 +61,31 @@ const _fetchAllAnimalsTasks = async (
   // Handles sorting logic
   const orderBy: Prisma.TaskOrderByWithRelationInput = (() => {
     if (!sort) return { createdAt: "desc" }; // Default sort
+
     const [id, dir] = sort.split(".");
-    return { [id]: dir === "desc" ? "desc" : "asc" };
+    const direction: "asc" | "desc" = dir === "desc" ? "desc" : "asc";
+
+    if (id === "animal_id") {
+      return { animal: { name: direction } };
+    }
+    if (id === "assignee") {
+      return { assignee: { name: direction } };
+    }
+
+    // Only these scalar fields can be passed straight through to Prisma.
+    const sortableFields = new Set([
+      "title",
+      "status",
+      "category",
+      "priority",
+      "dueDate",
+      "createdAt",
+    ]);
+    if (sortableFields.has(id)) {
+      return { [id]: direction };
+    }
+
+    return { createdAt: "desc" };
   })();
 
   // The 'where' clause for filtering, without the animalId constraint
