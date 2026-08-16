@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Characteristic, CharacteristicCategory } from "@prisma/client";
+import type { CharacteristicCategory } from "@/prisma/generated/enums";
+import type { CharacteristicModel } from "@/prisma/generated/models/Characteristic";
 import { clsx } from "clsx";
 import {
   Card,
@@ -30,20 +31,20 @@ import { CharacteristicForm } from "./characteristic-form";
 import { CharacteristicActions } from "./characteristic-actions";
 
 interface Props {
-  characteristics: Characteristic[];
+  characteristics: CharacteristicModel[];
 }
 
 const CharacteristicsCatalog = ({ characteristics }: Props) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   const groupedCharacteristics = characteristics.reduce
-    <Record<CharacteristicCategory, Characteristic[]>
+    <Record<CharacteristicCategory, CharacteristicModel[]>
     >(
       (acc, char) => {
         (acc[char.category] = acc[char.category] || []).push(char);
         return acc;
       },
-      {} as Record<CharacteristicCategory, Characteristic[]>,
+      {} as Record<CharacteristicCategory, CharacteristicModel[]>,
     );
 
   return (

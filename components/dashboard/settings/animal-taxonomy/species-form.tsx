@@ -16,7 +16,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { Species } from "@prisma/client";
+import type { SpeciesModel } from "@/prisma/generated/models/Species";
 import {
   SpeciesFormState,
   createSpecies,
@@ -35,7 +35,7 @@ type SpeciesFormValues = z.infer<typeof SpeciesFormSchema>;
 
 interface Props {
   onFormSubmit: () => void;
-  species?: Species;
+  species?: SpeciesModel;
 }
 
 export const SpeciesForm = ({ onFormSubmit, species }: Props) => {

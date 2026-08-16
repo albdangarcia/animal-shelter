@@ -18,7 +18,7 @@ import {
   reactivateMyAdoptionApplication,
   withdrawMyAdoptionApplication,
 } from "@/app/lib/actions/my-adoption-application.actions";
-import { ApplicationStatus } from "@prisma/client";
+import { ApplicationStatus } from "@/prisma/generated/enums";
 
 interface DataTableRowActionsProps {
   row: Row<MyAdoptionApplicationPayload>;

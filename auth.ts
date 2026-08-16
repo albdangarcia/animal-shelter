@@ -1,16 +1,16 @@
 import NextAuth, { NextAuthConfig } from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import { prisma } from "@/app/lib/prisma";
+import prisma from "@/app/lib/prisma";
 import { z } from "zod";
 import { type DefaultSession } from "next-auth";
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { JWT } from "next-auth/jwt";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcrypt";
-import { User } from "@prisma/client";
 import { authProviderConfigList } from "./auth.config";
 import type { AdapterUser } from "@auth/core/adapters";
-import { Role } from "@prisma/client";
+import type { UserModel } from "@/prisma/generated/models/User";
+import type { Role } from "@/prisma/generated/enums";
 
 // declare custom user properties
 declare module "next-auth" {
@@ -51,7 +51,7 @@ declare module "next-auth/jwt" {
 }
 
 // get user from db
-const getUser = async (email: string): Promise<User | null> => {
+const getUser = async (email: string): Promise<UserModel | null> => {
   try {
     const user = await prisma.user.findUnique({
       where: {
@@ -67,7 +67,7 @@ const getUser = async (email: string): Promise<User | null> => {
 
 const CustomPrismaAdapter = (p: typeof prisma) => {
   return {
-    ...PrismaAdapter(p),
+    ...PrismaAdapter(p as any),
     createUser: async (data: Omit<AdapterUser, "id">) => {
       // Use a transaction to ensure both Person and User are created successfully
       const user = await p.$transaction(async (tx) => {

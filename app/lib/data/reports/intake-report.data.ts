@@ -1,8 +1,8 @@
 import { format, parseISO } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 
-import { prisma } from "@/app/lib/prisma";
-import { IntakeType } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import { IntakeType } from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import { resolveReportRange } from "@/app/lib/utils/report-date-utils";

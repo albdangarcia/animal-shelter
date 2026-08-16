@@ -17,7 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Characteristic } from "@prisma/client";
+import type { CharacteristicModel } from "@/prisma/generated/models/Characteristic";
 import { CharacteristicForm } from "./characteristic-form";
 import {
   deleteCharacteristic,
@@ -26,7 +26,7 @@ import {
 import { toast } from "sonner";
 
 interface Props {
-  characteristic: Characteristic;
+  characteristic: CharacteristicModel;
 }
 
 export function CharacteristicActions({ characteristic }: Props) {

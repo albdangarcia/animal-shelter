@@ -14,7 +14,7 @@ import { AnimalSectionCardPayload, IDParamType } from "@/app/lib/types";
 import { fetchSectionCardsAnimalData } from "@/app/lib/data/animals/animal.data";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AnimalHealthStatus, AnimalListingStatus, Sex } from "@prisma/client";
+import { type AnimalHealthStatus, AnimalListingStatus, Sex } from "@/prisma/generated/enums";
 import { calculateAgeString, formatTimeAgo } from "@/app/lib/utils/date-utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import {

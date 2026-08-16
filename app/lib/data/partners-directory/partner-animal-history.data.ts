@@ -1,5 +1,5 @@
-import { prisma } from "@/app/lib/prisma";
-import { IntakeType, OutcomeType } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import type { IntakeType, OutcomeType } from "@/prisma/generated/enums";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";

@@ -1,5 +1,5 @@
 import { buildOptions } from "@/app/lib/utils/option-utils";
-import { TaskCategory, TaskPriority, TaskStatus } from "@prisma/client";
+import type { TaskCategory, TaskPriority, TaskStatus } from "@/prisma/generated/enums";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowDown,

@@ -1,6 +1,7 @@
-import { prisma } from "@/app/lib/prisma";
 import { auth } from "@/auth";
-import { AnimalListingStatus, AnimalSize, Prisma, Sex } from "@prisma/client";
+import { AnimalListingStatus, AnimalSize, Sex } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
+import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { PublishedPetsSchema } from "../zod-schemas/animal.schemas";
 

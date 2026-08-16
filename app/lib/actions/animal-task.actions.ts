@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "@/app/lib/prisma";
+import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { AnimalTaskFormState } from "../form-state-types";
 import {
@@ -11,7 +11,7 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { TaskFormSchema } from "../zod-schemas/animal.schemas";
-import { TaskStatus } from "@prisma/client";
+import type { TaskStatus } from "@/prisma/generated/enums";
 import z from "zod";
 
 const _createAnimalTask = async (

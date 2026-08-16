@@ -1,9 +1,9 @@
-import { prisma } from "@/app/lib/prisma";
-import { Species } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import type { SpeciesModel } from "@/prisma/generated/models/Species";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 
-const _fetchSpeciesCatalog = async (): Promise<Species[]> => {
+const _fetchSpeciesCatalog = async (): Promise<SpeciesModel[]> => {
   try {
     // Include soft-deleted rows so admins can restore.
     return await prisma.species.findMany({

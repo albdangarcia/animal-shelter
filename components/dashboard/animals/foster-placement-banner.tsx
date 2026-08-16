@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { formatDateOrNA } from "@/app/lib/utils/date-utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { AnimalSectionCardPayload } from "@/app/lib/types";
-import { FosterPlacementType } from "@prisma/client";
+import { FosterPlacementType } from "@/prisma/generated/enums";
 
 type OpenPlacement = AnimalSectionCardPayload["fosterPlacements"][number];
 

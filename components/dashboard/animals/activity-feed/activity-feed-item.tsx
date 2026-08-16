@@ -17,7 +17,7 @@ import {
   Undo2,
   LucideProps,
 } from "lucide-react";
-import { AnimalActivityType } from "@prisma/client";
+import { AnimalActivityType } from "@/prisma/generated/enums";
 import { AnimalActivityLogPayload } from "@/app/lib/data/animals/animal-activity.data";
 import { formatTimeAgo } from "@/app/lib/utils/date-utils";
 

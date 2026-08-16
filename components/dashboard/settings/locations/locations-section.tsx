@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { clsx } from "clsx";
 import { MoreHorizontal, PlusCircle } from "lucide-react";
-import { Unit } from "@prisma/client";
+import type { UnitModel } from "@/prisma/generated/models/Unit";
 import { LocationWithUnits } from "@/app/lib/data/locations/locations.data";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { Button } from "@/components/ui/button";
@@ -115,7 +115,7 @@ function LocationActions({ location }: { location: LocationWithUnits }) {
   );
 }
 
-function UnitActions({ unit, locationId }: { unit: Unit; locationId: string }) {
+function UnitActions({ unit, locationId }: { unit: UnitModel; locationId: string }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 

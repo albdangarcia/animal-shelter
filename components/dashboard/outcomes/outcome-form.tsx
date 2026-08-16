@@ -1,14 +1,14 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CalendarIcon, Loader2 } from "lucide-react";
+import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { startTransition, useActionState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
-import { OutcomeType } from "@prisma/client";
+import type { OutcomeType } from "@/prisma/generated/enums";
 import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import {
   AdoptionApplicationPayload,

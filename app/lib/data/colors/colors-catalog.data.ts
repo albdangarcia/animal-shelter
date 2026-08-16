@@ -1,9 +1,9 @@
-import { prisma } from "@/app/lib/prisma";
-import { Color } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import { ColorModel } from "@/prisma/generated/models/Color";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 
-const _fetchColorsCatalog = async (): Promise<Color[]> => {
+const _fetchColorsCatalog = async (): Promise<ColorModel[]> => {
   try {
     // Management view: include soft-deleted rows so admins can restore.
     return await prisma.color.findMany({

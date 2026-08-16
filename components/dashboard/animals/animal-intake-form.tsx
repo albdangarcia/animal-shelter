@@ -68,7 +68,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { AnimalListingStatus } from "@prisma/client";
+import { AnimalListingStatus } from "@/prisma/generated/enums";
 import {
   animalHealthStatusOptions,
   animalListingStatusOptions,

@@ -4,11 +4,12 @@ import {
   pageSizeSchema,
   searchQuerySchema,
 } from "../zod-schemas/common.schemas";
-import { prisma } from "../prisma";
+import prisma from "@/app/lib/prisma";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import z from "zod";
-import { ApplicationStatus, Prisma } from "@prisma/client";
+import type { ApplicationStatus } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 
 export type AdoptionApplicationWithAnimal = Prisma.AdoptionApplicationGetPayload<{
   select: {

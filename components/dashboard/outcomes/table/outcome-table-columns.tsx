@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { ColumnDef } from "@tanstack/react-table";
-import { OutcomeType } from "@prisma/client";
+import type { OutcomeType } from "@/prisma/generated/enums";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { OutcomeTypesOptions } from "./outcome-options";

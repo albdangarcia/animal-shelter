@@ -17,7 +17,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Color } from "@prisma/client";
+import type { ColorModel } from "@/prisma/generated/models/Color";
 import { ColorForm } from "./color-form";
 import {
   deleteColor,
@@ -26,7 +26,7 @@ import {
 import { toast } from "sonner";
 
 interface Props {
-  color: Color;
+  color: ColorModel;
 }
 
 export function ColorActions({ color }: Props) {

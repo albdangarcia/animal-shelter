@@ -2,16 +2,16 @@
 
 import { MyAdoptionAppFormState } from "../form-state-types";
 import { cuidSchema } from "../zod-schemas/common.schemas";
-import { prisma } from "../prisma";
+import prisma from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { AnimalListingStatus, ApplicationStatus } from "@prisma/client";
+import { AnimalListingStatus, ApplicationStatus } from "@/prisma/generated/enums";
 import { MyAdoptionAppFormSchema } from "../zod-schemas/myAdoptionApplication.schema";
 import { SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { ActionResult } from "../types";
 import { z } from "zod";
 import { isOwnedByUser } from "../auth/ownership";
-import { Prisma } from "@prisma/client";
+import { Prisma } from "@/prisma/generated/client";
 
 const _updateMyAdoptionApp = async (
   user: SessionUser, // Injected by withAuthenticatedUser

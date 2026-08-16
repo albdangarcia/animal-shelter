@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useTransition, useCallback } from "react";
-import { CharacteristicCategory } from "@prisma/client";
+import { useState, useMemo, useTransition, useCallback } from "react";
+import { CharacteristicCategory } from "@/prisma/generated/enums";
 import { clsx } from "clsx";
 import {
   X,

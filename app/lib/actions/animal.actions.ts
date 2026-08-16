@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { prisma } from "@/app/lib/prisma";
+import prisma from "@/app/lib/prisma";
 import { z } from "zod";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { AnimalFormSchema } from "../zod-schemas/animal.schemas";
@@ -18,7 +18,7 @@ import {
   AnimalListingStatus,
   ApplicationStatus,
   IntakeType,
-} from "@prisma/client";
+} from "@/prisma/generated/enums";
 import { getAnimalSize } from "../utils/animal-size";
 import { buildLocationChangeSummary } from "../utils/location-activity";
 import { ConflictError, NotFoundError } from "../utils/errors";

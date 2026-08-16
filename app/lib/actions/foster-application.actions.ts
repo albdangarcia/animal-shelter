@@ -3,8 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { ApplicationStatus, FosterStatus, Prisma } from "@prisma/client";
-import { prisma } from "../prisma";
+import { ApplicationStatus, FosterStatus } from "@/prisma/generated/enums";
+import { Prisma } from "@/prisma/generated/client";
+import prisma from "@/app/lib/prisma";
 import {
   FosterApplicationFormState,
   FosterProfileFormState,

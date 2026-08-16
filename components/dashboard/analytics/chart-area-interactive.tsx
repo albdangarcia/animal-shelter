@@ -44,7 +44,9 @@ const chartConfig = {
 
 export function ChartAreaInteractive({ data }: ChartAreaInteractiveProps) {
   const isMobile = useIsMobile();
-  const [timeRange, setTimeRange] = React.useState(() => isMobile ? "30d" : "90d");
+  const [timeRange, setTimeRange] = React.useState(() =>
+    isMobile ? "30d" : "90d",
+  );
 
   // Filter the data on the client-side based on the selected time range.
   const filteredData = React.useMemo(() => {
@@ -153,10 +155,13 @@ export function ChartAreaInteractive({ data }: ChartAreaInteractiveProps) {
               content={
                 <ChartTooltipContent
                   labelFormatter={(value) => {
-                    return new Date(value).toLocaleDateString("en-US", {
-                      month: "short",
-                      day: "numeric",
-                    });
+                    return new Date(value as string).toLocaleDateString(
+                      "en-US",
+                      {
+                        month: "short",
+                        day: "numeric",
+                      },
+                    );
                   }}
                   indicator="dot"
                 />

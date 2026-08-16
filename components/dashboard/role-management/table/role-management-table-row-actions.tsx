@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { RoleManagementPayload } from "@/app/lib/types";
-import { Role } from "@prisma/client";
+import { Role } from "@/prisma/generated/enums";
 import { updateUserRole } from "@/app/lib/actions/role-management.actions";
 
 interface DataTableRowActionsProps {

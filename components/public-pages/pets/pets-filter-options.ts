@@ -1,4 +1,4 @@
-import { Sex, AnimalSize } from "@prisma/client";
+import { Sex, AnimalSize } from "@/prisma/generated/enums";
 
 // Plain { label, value } options for the public pets faceted filters.
 //

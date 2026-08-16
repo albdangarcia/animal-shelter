@@ -26,7 +26,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { NoteCategory } from "@prisma/client";
+import { NoteCategory } from "@/prisma/generated/enums";
 import { NotePayload } from "@/app/lib/data/animals/animal-note.data";
 import { noteCategoryOptions } from "@/app/lib/utils/enum-formatter";
 import { formatDateOrNA, formatTimeAgo } from "@/app/lib/utils/date-utils";

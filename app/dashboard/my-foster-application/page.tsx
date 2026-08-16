@@ -8,7 +8,7 @@ import {
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { ApplicationStatus } from "@prisma/client";
+import { ApplicationStatus } from "@/prisma/generated/enums";
 import {
   fetchMyFosterApplication,
   FosterApplicantDefaultsPayload,

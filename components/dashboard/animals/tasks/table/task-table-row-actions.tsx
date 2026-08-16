@@ -29,7 +29,7 @@ import { FetchAnimalTasksPayload } from "@/app/lib/data/animals/animal-task.data
 import { TaskAssignee } from "@/app/lib/types";
 import { TaskForm } from "../task-form";
 import { updateAnimalTaskStatus } from "@/app/lib/actions/animal-task.actions";
-import { TaskStatus } from "@prisma/client";
+import { TaskStatus } from "@/prisma/generated/enums";
 import { TaskStatusOptions } from "@/app/lib/utils/enum-formatter";
 
 interface DataTableRowActionsProps {

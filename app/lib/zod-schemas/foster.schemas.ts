@@ -3,7 +3,7 @@ import {
   ApplicationStatus,
   FosterPlacementType,
   FosterReturnReason,
-} from "@prisma/client";
+} from "@/prisma/generated/enums";
 import { cuidSchema, usStateSchema } from "./common.schemas";
 import { HouseholdFieldsSchema } from "./household-profile.schemas";
 

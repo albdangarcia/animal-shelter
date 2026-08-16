@@ -32,7 +32,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { FieldType } from "@prisma/client";
+import { FieldType } from "@/prisma/generated/enums";
 
 interface DynamicFormFieldProps {
   field: TemplateField;

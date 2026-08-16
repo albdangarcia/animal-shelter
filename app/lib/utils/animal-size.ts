@@ -1,4 +1,4 @@
-import { AnimalSize } from "@prisma/client";
+import { AnimalSize } from "@/prisma/generated/enums";
 
 /**
  * Calculates the animal's size category based on its species and weight.

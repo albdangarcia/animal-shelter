@@ -1,5 +1,6 @@
-import { prisma } from "@/app/lib/prisma";
-import { ApplicationStatus, Prisma } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import type { ApplicationStatus } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 import z from "zod";
 import {
   cuidSchema,

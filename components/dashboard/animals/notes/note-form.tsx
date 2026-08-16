@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/form";
 import { noteCategoryOptions } from "@/app/lib/utils/enum-formatter";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { NoteCategory } from "@prisma/client";
+import { NoteCategory } from "@/prisma/generated/enums";
 import {
   AnimalNoteFormState,
   createAnimalNote,

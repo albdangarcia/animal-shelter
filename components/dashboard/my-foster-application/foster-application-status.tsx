@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { ApplicationStatus } from "@prisma/client";
+import { ApplicationStatus } from "@/prisma/generated/enums";
 import {
   AlertDialog,
   AlertDialogAction,

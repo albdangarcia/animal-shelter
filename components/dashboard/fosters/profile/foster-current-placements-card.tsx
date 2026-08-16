@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FosterPlacementType } from "@prisma/client";
+import { FosterPlacementType } from "@/prisma/generated/enums";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Species } from "@prisma/client";
+import type { SpeciesModel } from "@/prisma/generated/models/Species";
 import {
   Select,
   SelectContent,
@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/select";
 
 interface Props {
-  species: Species[];
+  species: SpeciesModel[];
   speciesName: string;
 }
 

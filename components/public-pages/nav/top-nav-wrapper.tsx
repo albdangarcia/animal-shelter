@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import TopNav from "./top-nav";
-import { Role } from "@prisma/client";
+import { Role } from "@/prisma/generated/enums";
 
 const TopNavWrapper = async () => {
   const session = await auth();

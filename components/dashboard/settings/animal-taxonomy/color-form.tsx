@@ -16,7 +16,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { Color } from "@prisma/client";
+import { ColorModel } from "@/prisma/generated/models/Color";
 import {
   ColorFormState,
   createColor,
@@ -30,7 +30,7 @@ type ColorFormValues = z.infer<typeof ColorFormSchema>;
 
 interface Props {
   onFormSubmit: () => void;
-  color?: Color;
+  color?: ColorModel;
 }
 
 export const ColorForm = ({ onFormSubmit, color }: Props) => {

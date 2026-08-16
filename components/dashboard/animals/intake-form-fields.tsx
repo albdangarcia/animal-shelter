@@ -24,7 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar as CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
-import { IntakeType } from "@prisma/client";
+import { IntakeType } from "@/prisma/generated/enums";
 import { intakeTypeOptions } from "@/app/lib/utils/enum-formatter";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import { PartnerPayload } from "@/app/lib/types";

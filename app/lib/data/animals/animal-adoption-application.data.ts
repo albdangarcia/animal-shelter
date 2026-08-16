@@ -1,6 +1,7 @@
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { ApplicationStatus, Prisma } from "@prisma/client";
-import { prisma } from "../../prisma";
+import type { ApplicationStatus } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
+import prisma from "@/app/lib/prisma";
 import { RequirePermission } from "../../auth/protected-actions";
 import {
   cuidSchema,

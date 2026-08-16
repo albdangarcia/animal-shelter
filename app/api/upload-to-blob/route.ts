@@ -1,10 +1,10 @@
 import { put, del } from "@vercel/blob";
-import { prisma } from "@/app/lib/prisma";
+import prisma from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
-import { AnimalActivityType } from "@prisma/client";
+import { AnimalActivityType } from "@/prisma/generated/client";
 
 export async function POST(request: Request) {
   const session = await auth();

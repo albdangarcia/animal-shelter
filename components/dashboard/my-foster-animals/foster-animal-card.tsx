@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { AnimalListingStatus } from "@prisma/client";
+import { AnimalListingStatus } from "@/prisma/generated/enums";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { calculateAgeString, formatDateOrNA } from "@/app/lib/utils/date-utils";

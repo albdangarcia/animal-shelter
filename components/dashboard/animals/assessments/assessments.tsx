@@ -20,7 +20,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { AnimalAssessmentListPayload } from "@/app/lib/data/animals/animal-assessment.data";
-import { AssessmentOutcome } from "@prisma/client";
+import { AssessmentOutcome } from "@/prisma/generated/enums";
 import { formatDateToLongString } from "@/app/lib/utils/date-utils";
 import {
   formatSingleEnumOption,

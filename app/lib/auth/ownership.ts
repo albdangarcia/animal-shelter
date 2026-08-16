@@ -1,4 +1,4 @@
-import { prisma } from "../prisma";
+import prisma from "@/app/lib/prisma";
 
 /**
  * Type-guard utility that checks if a resource is owned by the current user.

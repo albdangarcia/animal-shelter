@@ -1,13 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { prisma } from "../prisma";
+import prisma from "@/app/lib/prisma";
 import { AppPermissions } from "../auth/permissions";
 import {
   AnimalActivityType,
   AnimalListingStatus,
   IntakeType,
-} from "@prisma/client";
+} from "@/prisma/generated/enums";
 import { redirect } from "next/navigation";
 import {
   RequirePermission,

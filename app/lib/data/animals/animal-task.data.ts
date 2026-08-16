@@ -1,5 +1,6 @@
-import { prisma } from "@/app/lib/prisma";
-import { Prisma, Role, TaskCategory, TaskStatus } from "@prisma/client";
+import prisma from "@/app/lib/prisma";
+import { Role, type TaskCategory, type TaskStatus } from "@/prisma/generated/enums";
+import type { Prisma } from "@/prisma/generated/client";
 import { AnimalTasksSchema } from "../../zod-schemas/animal.schemas";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PartnerType } from "@prisma/client";
+import { PartnerType } from "@/prisma/generated/enums";
 import {
   currentPageSchema,
   optionalUsStateSchema,

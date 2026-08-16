@@ -5,7 +5,7 @@ import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied"
 import ActionBlockedMessage from "@/components/action-blocked-message";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { SearchParamsType } from "@/app/lib/types";
-import { FosterStatus } from "@prisma/client";
+import { FosterStatus } from "@/prisma/generated/enums";
 import {
   fetchAnimalForFosterPlacement,
   fetchAnimalsEligibleForFosterPlacement,
