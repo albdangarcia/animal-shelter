@@ -25,17 +25,24 @@ test("seeded admin can sign in and reach the dashboard", async ({ page }) => {
   await page.getByLabel(/email address/i).fill("admin@example.com");
   await page.getByLabel(/^password$/i).fill(adminPassword!);
 
-  await Promise.all([
-    page.waitForResponse(
-      (response) =>
-        response.url().includes("/sign-in") &&
-        response.request().method() === "POST"
-    ),
-    credentialsForm.getByRole("button", { name: /^sign in$/i }).click(),
-  ]);
+  await credentialsForm.getByRole("button", { name: /^sign in$/i }).click();
 
   await page.waitForURL(`**${adminDashboardPath}`, { timeout: 60_000 });
 
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
 });
 
+test("invalid credentials stay on sign-in and show an error", async ({ page }) => {
+  await page.goto("/sign-in");
+  await page.getByLabel(/email address/i).fill("admin@example.com");
+  await page.getByLabel(/^password$/i).fill("wrong-password");
+  await page.getByRole("button", { name: /^sign in$/i }).click();
+
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByText("Invalid email or password.")).toBeVisible();
+});
+
+test("dashboard redirects logged-out visitors to the auth sign-in page", async ({ page }) => {
+  await page.goto(adminDashboardPath);
+  await expect(page).toHaveURL(/\/api\/auth\/signin/);
+});
