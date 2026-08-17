@@ -19,7 +19,6 @@ import {
   ApplicationStatus,
   IntakeType,
 } from "@/prisma/generated/enums";
-import { getAnimalSize } from "../utils/animal-size";
 import { buildLocationChangeSummary } from "../utils/location-activity";
 import { ConflictError, NotFoundError } from "../utils/errors";
 import { del } from "@vercel/blob";
@@ -66,6 +65,7 @@ const _createAnimal = async (
     animalName,
     estimatedBirthDate,
     sex,
+    size,
     healthStatus,
     listingStatus,
     microchipNumber,
@@ -124,11 +124,6 @@ const _createAnimal = async (
         throw new Error("One or more selected colors are no longer available.");
       }
 
-      const calculatedSize = getAnimalSize(
-        speciesRecord.name,
-        weightKg as number | null
-      );
-
       // verify the chosen unit still exists and isn't
       // soft-deleted. Treat a stale/deleted unit as Unplaced rather than
       // erroring. Capacity is never enforced.
@@ -161,7 +156,7 @@ const _createAnimal = async (
           name: animalName,
           birthDate: estimatedBirthDate,
           sex: sex,
-          size: calculatedSize,
+          size: size || null,
           description: description,
           weightKg: weightKg ? Number(weightKg) : undefined,
           heightCm: heightCm ? Number(heightCm) : undefined,
@@ -276,6 +271,7 @@ const _updateAnimal = async (
     animalName,
     estimatedBirthDate,
     sex,
+    size,
     healthStatus,
     listingStatus,
     microchipNumber,
@@ -376,11 +372,6 @@ const _updateAnimal = async (
         );
       }
 
-      const calculatedSize = getAnimalSize(
-        speciesRecord.name,
-        numericWeight as number | null
-      );
-
       // verify the chosen unit still exists and isn't
       // soft-deleted. Treat a stale/deleted unit as Unplaced rather than
       // erroring. Capacity is never enforced.
@@ -418,7 +409,7 @@ const _updateAnimal = async (
           name: animalName,
           birthDate: estimatedBirthDate,
           sex: sex,
-          size: calculatedSize,
+          size: size || null,
           description: description,
           weightKg: numericWeight,
           heightCm: numericHeight,

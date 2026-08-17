@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   Sex,
+  AnimalSize,
   AnimalHealthStatus,
   IntakeType,
   TaskStatus,
@@ -109,6 +110,8 @@ export const AnimalFormSchema = z
       error: (issue) =>
         issue.input === undefined ? "Sex is required." : undefined,
     }),
+    // Expected adult size, staff-selected. Empty string = not specified (stored as null).
+    size: z.enum(AnimalSize).optional().or(z.literal("")),
     estimatedBirthDate: z.coerce.date({
       error: (issue) =>
         issue.input === undefined

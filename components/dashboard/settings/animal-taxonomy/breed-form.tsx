@@ -32,9 +32,14 @@ import {
 } from "@/app/lib/actions/breeds-catalog.actions";
 import { BreedFormSchema } from "@/app/lib/zod-schemas/taxonomy.schemas";
 import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
+import { sizeOptions } from "@/components/dashboard/animals/table/animal-options";
 import { toast } from "sonner";
 
 type BreedFormValues = z.infer<typeof BreedFormSchema>;
+
+// Sentinel for "Not specified" — Radix Select forbids an empty-string item
+// value, so we map this back to "" (typicalSize = null) on change.
+const NOT_SPECIFIED_VALUE = "__not_specified__";
 
 interface Props {
   onFormSubmit: () => void;
@@ -53,8 +58,12 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
   const form = useForm({
     resolver: standardSchemaResolver(BreedFormSchema),
     defaultValues: breed
-      ? { name: breed.name, speciesId: breed.speciesId }
-      : { name: "", speciesId: "" },
+      ? {
+          name: breed.name,
+          speciesId: breed.speciesId,
+          typicalSize: breed.typicalSize ?? "",
+        }
+      : { name: "", speciesId: "", typicalSize: "" },
   });
 
   useEffect(() => {
@@ -80,6 +89,7 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
     const formData = new FormData();
     formData.append("name", data.name);
     formData.append("speciesId", data.speciesId);
+    formData.append("typicalSize", data.typicalSize ?? "");
 
     startTransition(() => {
       formAction(formData);
@@ -130,6 +140,41 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
                 <FormControl>
                   <Input id="name" placeholder="e.g. Labrador" {...field} />
                 </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          {/* Typical Size */}
+          <FormField
+            control={form.control}
+            name="typicalSize"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel htmlFor="typicalSize">Typical Adult Size</FormLabel>
+                <Select
+                  onValueChange={(value) =>
+                    field.onChange(value === NOT_SPECIFIED_VALUE ? "" : value)
+                  }
+                  value={field.value || NOT_SPECIFIED_VALUE}
+                  name={field.name}
+                >
+                  <FormControl>
+                    <SelectTrigger className="w-full" id="typicalSize">
+                      <SelectValue placeholder="Not specified" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value={NOT_SPECIFIED_VALUE}>
+                      Not specified
+                    </SelectItem>
+                    {sizeOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}

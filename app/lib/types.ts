@@ -115,6 +115,7 @@ export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{
     name: true;
     birthDate: true;
     sex: true;
+    size: true;
     weightKg: true;
     heightCm: true;
     city: true;
@@ -306,6 +307,7 @@ export type SpeciesPayload = Prisma.SpeciesGetPayload<{
       select: {
         id: true;
         name: true;
+        typicalSize: true;
       };
     };
   };
