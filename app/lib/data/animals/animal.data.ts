@@ -254,6 +254,7 @@ const _fetchAnimalById = async (
         name: true,
         birthDate: true,
         sex: true,
+        size: true,
         weightKg: true,
         heightCm: true,
         city: true,
@@ -330,6 +331,7 @@ export const fetchSpecies = async (): Promise<SpeciesPayload[]> => {
           select: {
             id: true,
             name: true,
+            typicalSize: true,
           },
         },
       },

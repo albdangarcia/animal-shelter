@@ -34,7 +34,12 @@ import {
   deleteBreed,
   restoreBreed,
 } from "@/app/lib/actions/breeds-catalog.actions";
+import { sizeOptions } from "@/components/dashboard/animals/table/animal-options";
 import { toast } from "sonner";
+
+const sizeLabels = Object.fromEntries(
+  sizeOptions.map((option) => [option.value, option.label]),
+);
 
 function BreedActions({
   breed,
@@ -187,6 +192,18 @@ export const BreedsSection = ({ breeds, species }: Props) => {
                       )}
                     >
                       <span className="text-sm font-medium">{breed.name}</span>
+                      {breed.typicalSize ? (
+                        <Badge variant="outline" className="text-[10px] px-1 py-0">
+                          {sizeLabels[breed.typicalSize]}
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="text-[10px] px-1 py-0 text-muted-foreground"
+                        >
+                          No typical size
+                        </Badge>
+                      )}
                       {breed.deletedAt && (
                         <Badge
                           variant="destructive"

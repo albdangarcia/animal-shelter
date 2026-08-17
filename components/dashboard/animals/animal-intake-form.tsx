@@ -76,6 +76,7 @@ import {
   intakeTypeOptions,
 } from "@/app/lib/utils/enum-formatter";
 import { AnimalFormSchema } from "@/app/lib/zod-schemas/animal.schemas";
+import { sizeOptions } from "@/components/dashboard/animals/table/animal-options";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import {
   AnimalIntakeFormPayload,
@@ -92,6 +93,10 @@ import { UnitPickerLocation } from "@/app/lib/data/locations/unit-picker.data";
 // Sentinel for the "Unplaced" option — Radix Select forbids empty-string item
 // values, so we map this back to "" (currentUnitId = null) on change.
 const UNPLACED_VALUE = "__unplaced__";
+
+// Sentinel for "Not specified" — same Radix Select constraint as above, maps
+// back to "" (size = null) on change.
+const SIZE_NOT_SPECIFIED_VALUE = "__not_specified__";
 
 type AnimalFormValues = z.infer<typeof AnimalFormSchema>;
 
@@ -173,6 +178,7 @@ const AnimalForm = ({
             .filter((c) => c.id !== animal.primaryColorId)
             .map((c) => c.id),
           sex: animal.sex,
+          size: animal.size ?? "",
           estimatedBirthDate: new Date(animal.birthDate),
           weightKg: animal.weightKg ?? "",
           heightCm: animal.heightCm ?? "",
@@ -194,6 +200,7 @@ const AnimalForm = ({
           intakeType: intakeTypeOptions[0].value,
           species: "",
           sex: animalSexOptions[0].value,
+          size: "",
           breed: "",
           primaryColor: "",
           additionalColors: [],
@@ -247,6 +254,24 @@ const AnimalForm = ({
   };
 
   const selectedSpecies = speciesList.find((s) => s.id === currentSpeciesId);
+
+  // Prefill size from the selected breed's typicalSize — but only while the
+  // field is empty and untouched. A staff member's explicit choice (including
+  // deliberately clearing it back to "") must never be overwritten by a later
+  // breed change. RHF's dirtyFields compares against defaultValues, so in
+  // create mode (default ""), clearing the field back to "" would read as
+  // NOT dirty — an explicit touched flag is needed to catch that case.
+  const selectedBreedId = form.watch("breed");
+  const [isSizeTouched, setIsSizeTouched] = useState(false);
+
+  useEffect(() => {
+    if (isSizeTouched) return;
+    if (form.getValues("size")) return;
+    const breed = selectedSpecies?.breeds.find((b) => b.id === selectedBreedId);
+    if (breed?.typicalSize) {
+      form.setValue("size", breed.typicalSize);
+    }
+  }, [selectedBreedId, isSizeTouched, form, selectedSpecies]);
 
   const selectedLocation = unitOptions.find((l) => l.id === currentLocationId);
 
@@ -547,6 +572,45 @@ const AnimalForm = ({
                       </FormItem>
                     );
                   }}
+                />
+                <FormField
+                  control={form.control}
+                  name="size"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Expected Adult Size</FormLabel>
+                      <Select
+                        onValueChange={(value) => {
+                          setIsSizeTouched(true);
+                          field.onChange(
+                            value === SIZE_NOT_SPECIFIED_VALUE ? "" : value,
+                          );
+                        }}
+                        value={field.value || SIZE_NOT_SPECIFIED_VALUE}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Not specified" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value={SIZE_NOT_SPECIFIED_VALUE}>
+                            Not specified
+                          </SelectItem>
+                          {sizeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        How big this animal is expected to be when fully
+                        grown. Not its current size.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
                 <FormField
                   control={form.control}

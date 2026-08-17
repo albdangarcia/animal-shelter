@@ -4,6 +4,7 @@ import { Prisma } from "@/prisma/generated/client";
 import {
   Role,
   Sex,
+  AnimalSize,
   PartnerType,
   AnimalListingStatus,
   IntakeType,
@@ -30,7 +31,6 @@ import {
   generateOrderedTimeline,
   randomInt,
 } from "@/app/lib/utils/seeding-utils";
-import { getAnimalSize } from "@/app/lib/utils/animal-size";
 import { computeStays } from "@/app/lib/utils/stay-utils";
 import { PrismaPg } from "@prisma/adapter-pg";
 
@@ -123,50 +123,51 @@ const allSpecies = {
   DOG: {
     name: "Dog",
     breeds: {
-      GOLDEN_RETRIEVER: { name: "Golden Retriever" },
-      AMERICAN_ESKIMO: { name: "American Eskimo Dog" },
-      AIREDALE_TERRIER: { name: "Airedale Terrier" },
-      MIXED_BREED: { name: "Mixed Breed" },
-      LABRADOR: { name: "Labrador" },
+      GOLDEN_RETRIEVER: { name: "Golden Retriever", typicalSize: AnimalSize.LARGE },
+      AMERICAN_ESKIMO: { name: "American Eskimo Dog", typicalSize: AnimalSize.SMALL },
+      AIREDALE_TERRIER: { name: "Airedale Terrier", typicalSize: AnimalSize.MEDIUM },
+      // Mixed breed adult size is genuinely unpredictable — no typical size to prefill.
+      MIXED_BREED: { name: "Mixed Breed", typicalSize: null },
+      LABRADOR: { name: "Labrador", typicalSize: AnimalSize.LARGE },
     },
   },
   CAT: {
     name: "Cat",
     breeds: {
-      SIAMESE: { name: "Siamese" },
-      BRITISH_SHORTHAIR: { name: "British Shorthair" },
-      DOMESTIC_SHORTHAIR: { name: "Domestic Shorthair" },
-      TABBY: { name: "Tabby" },
+      SIAMESE: { name: "Siamese", typicalSize: AnimalSize.SMALL },
+      BRITISH_SHORTHAIR: { name: "British Shorthair", typicalSize: AnimalSize.MEDIUM },
+      DOMESTIC_SHORTHAIR: { name: "Domestic Shorthair", typicalSize: AnimalSize.MEDIUM },
+      TABBY: { name: "Tabby", typicalSize: AnimalSize.SMALL },
     },
   },
   BIRD: {
     name: "Bird",
     breeds: {
-      HOUSE_FINCH: { name: "House Finch" },
-      NORTHERN_CARDINAL: { name: "Northern Cardinal" },
-      PARAKEET: { name: "Parakeet" },
+      HOUSE_FINCH: { name: "House Finch", typicalSize: AnimalSize.SMALL },
+      NORTHERN_CARDINAL: { name: "Northern Cardinal", typicalSize: AnimalSize.SMALL },
+      PARAKEET: { name: "Parakeet", typicalSize: AnimalSize.SMALL },
     },
   },
   RABBIT: {
     name: "Rabbit",
     breeds: {
-      NETHERLAND_DWARF: { name: "Netherland Dwarf" },
-      LIONHEAD: { name: "Lionhead" },
+      NETHERLAND_DWARF: { name: "Netherland Dwarf", typicalSize: AnimalSize.SMALL },
+      LIONHEAD: { name: "Lionhead", typicalSize: AnimalSize.SMALL },
     },
   },
   REPTILE: {
     name: "Reptile",
     breeds: {
-      IGUANA: { name: "Iguana" },
-      GREEN_SEA_TURTLE: { name: "Green Sea Turtle" },
-      BEARDED_DRAGON: { name: "Bearded Dragon" },
+      IGUANA: { name: "Iguana", typicalSize: AnimalSize.LARGE },
+      GREEN_SEA_TURTLE: { name: "Green Sea Turtle", typicalSize: AnimalSize.LARGE },
+      BEARDED_DRAGON: { name: "Bearded Dragon", typicalSize: AnimalSize.MEDIUM },
     },
   },
   OTHER: {
     name: "Other",
     breeds: {
-      GUINEA_PIG: { name: "Guinea Pig" },
-      HAMSTER: { name: "Hamster" },
+      GUINEA_PIG: { name: "Guinea Pig", typicalSize: AnimalSize.SMALL },
+      HAMSTER: { name: "Hamster", typicalSize: AnimalSize.SMALL },
     },
   },
 };
@@ -362,8 +363,9 @@ function pickSpeciesImages(speciesName: string, count: number): string[] {
   return picked.map((filename) => `${baseUrl}/${filename}`);
 }
 
-// Realistic weight/height ranges per species, used to derive a plausible
-// AnimalSize via the same getAnimalSize the app uses on every write path.
+// Realistic weight/height ranges per species, used only to generate a
+// plausible current weight/height. Unrelated to AnimalSize — that's a
+// staff-set expected-adult-size judgment, not something derived from weight.
 const bodyStatsBySpecies: Record<
   keyof typeof allSpecies,
   { weightMin: number; weightMax: number; heightMin: number; heightMax: number }
@@ -437,6 +439,9 @@ type Archetype =
 interface AnimalBlueprint {
   name: string;
   sex: Sex;
+  // Staff-set expected adult size — independent of weightKg (a puppy/kitten's
+  // current weight does not predict it). Null exercises the "unknown" path.
+  size: AnimalSize | null;
   weightKg: number;
   heightCm: number;
   microchipNumber?: string;
@@ -463,6 +468,7 @@ const animalSeedData: AnimalBlueprint[] = [
   {
     name: "Frisco",
     sex: Sex.FEMALE,
+    size: AnimalSize.LARGE,
     weightKg: 30,
     heightCm: 58,
     microchipNumber: "985141000100001",
@@ -484,6 +490,9 @@ const animalSeedData: AnimalBlueprint[] = [
   {
     name: "Flash",
     sex: Sex.MALE,
+    // A young stray currently weighing 8kg but expected to grow into a large
+    // adult — proves size is a staff judgment, not a function of weightKg.
+    size: AnimalSize.XLARGE,
     weightKg: 8,
     heightCm: 32,
     microchipNumber: "985141000100002",
@@ -505,6 +514,7 @@ const animalSeedData: AnimalBlueprint[] = [
   {
     name: "Fido",
     sex: Sex.MALE,
+    size: AnimalSize.MEDIUM,
     weightKg: 18,
     heightCm: 45,
     microchipNumber: "985141000100003",
@@ -523,6 +533,7 @@ const animalSeedData: AnimalBlueprint[] = [
   {
     name: "Whiskers",
     sex: Sex.FEMALE,
+    size: AnimalSize.SMALL,
     weightKg: 3.5,
     heightCm: 24,
     microchipNumber: "985141000100004",
@@ -545,6 +556,9 @@ const animalSeedData: AnimalBlueprint[] = [
   {
     name: "Misty",
     sex: Sex.FEMALE,
+    // Born in care — too young for staff to have judged an expected adult
+    // size yet. Exercises the null "unknown" path end-to-end.
+    size: null,
     weightKg: 3,
     heightCm: 23,
     microchipNumber: "985141000100005",
@@ -567,6 +581,7 @@ const animalSeedData: AnimalBlueprint[] = [
   {
     name: "Godzilla",
     sex: Sex.MALE,
+    size: AnimalSize.LARGE,
     weightKg: 6,
     heightCm: 40,
     microchipNumber: "985141000100006",
@@ -589,6 +604,7 @@ const animalSeedData: AnimalBlueprint[] = [
   {
     name: "Buddy",
     sex: Sex.MALE,
+    size: AnimalSize.LARGE,
     weightKg: 32,
     heightCm: 57,
     microchipNumber: "985141000100007",
@@ -610,6 +626,7 @@ const animalSeedData: AnimalBlueprint[] = [
   {
     name: "Leo",
     sex: Sex.MALE,
+    size: AnimalSize.SMALL,
     weightKg: 3.2,
     heightCm: 22,
     microchipNumber: "985141000100008",
@@ -633,6 +650,7 @@ const animalSeedData: AnimalBlueprint[] = [
   {
     name: "Daisy",
     sex: Sex.FEMALE,
+    size: AnimalSize.LARGE,
     weightKg: 28,
     heightCm: 55,
     microchipNumber: "985141000100009",
@@ -883,6 +901,55 @@ function pickIntakeType(archetype: Archetype): IntakeType {
   ]);
 }
 
+// Plausible expected-adult-size distribution per species — a staff judgment,
+// deliberately NOT derived from the animal's generated current weightKg.
+// Each pool includes a chance of null (unknown/indeterminate), same as a
+// real intake where staff leave it unset.
+const typicalSizeWeightsBySpecies: Record<
+  keyof typeof allSpecies,
+  { value: AnimalSize | null; weight: number }[]
+> = {
+  DOG: [
+    { value: AnimalSize.SMALL, weight: 20 },
+    { value: AnimalSize.MEDIUM, weight: 30 },
+    { value: AnimalSize.LARGE, weight: 30 },
+    { value: AnimalSize.XLARGE, weight: 10 },
+    { value: null, weight: 10 },
+  ],
+  CAT: [
+    { value: AnimalSize.SMALL, weight: 35 },
+    { value: AnimalSize.MEDIUM, weight: 40 },
+    { value: AnimalSize.LARGE, weight: 15 },
+    { value: null, weight: 10 },
+  ],
+  BIRD: [
+    { value: AnimalSize.SMALL, weight: 80 },
+    { value: AnimalSize.MEDIUM, weight: 10 },
+    { value: null, weight: 10 },
+  ],
+  RABBIT: [
+    { value: AnimalSize.SMALL, weight: 70 },
+    { value: AnimalSize.MEDIUM, weight: 20 },
+    { value: null, weight: 10 },
+  ],
+  REPTILE: [
+    { value: AnimalSize.SMALL, weight: 40 },
+    { value: AnimalSize.MEDIUM, weight: 30 },
+    { value: AnimalSize.LARGE, weight: 20 },
+    { value: null, weight: 10 },
+  ],
+  OTHER: [
+    { value: AnimalSize.SMALL, weight: 80 },
+    { value: null, weight: 20 },
+  ],
+};
+
+function pickTypicalSize(
+  speciesKey: keyof typeof allSpecies,
+): AnimalSize | null {
+  return pickWeighted(typicalSizeWeightsBySpecies[speciesKey]);
+}
+
 function pickHealthStatus(): AnimalHealthStatus {
   return pickWeighted([
     { value: AnimalHealthStatus.HEALTHY, weight: 60 },
@@ -1033,6 +1100,7 @@ function generateAnimalBlueprints(
     blueprints.push({
       name: getRandomItem(generatedNamesBySpecies[speciesKey]),
       sex: getRandomItem([Sex.MALE, Sex.FEMALE]),
+      size: pickTypicalSize(speciesKey),
       weightKg: randomFloat(bodyStats.weightMin, bodyStats.weightMax),
       heightCm: randomFloat(bodyStats.heightMin, bodyStats.heightMax, 0),
       species,
@@ -1476,7 +1544,7 @@ async function seedReturnAndReadoptAnimal(opts: {
       name: blueprint.name,
       birthDate: getRandomDate(),
       sex: blueprint.sex,
-      size: getAnimalSize(species.name, blueprint.weightKg),
+      size: blueprint.size,
       weightKg: blueprint.weightKg,
       heightCm: blueprint.heightCm,
       microchipNumber: blueprint.microchipNumber,
@@ -1714,6 +1782,7 @@ async function seedLookupTables() {
           data: {
             name: breed.name,
             speciesId: species.id,
+            typicalSize: breed.typicalSize,
           },
         });
       }
@@ -1974,9 +2043,8 @@ async function seedAnimalsAndRelations() {
           name: blueprint.name,
           birthDate: getRandomDate(),
           sex: blueprint.sex,
-          // Size is derived from weight (same invariant the app enforces), so
-          // seeded animals stay consistent and survive edits.
-          size: getAnimalSize(species.name, blueprint.weightKg),
+          // Staff-set expected adult size — independent of weightKg.
+          size: blueprint.size,
           weightKg: blueprint.weightKg,
           heightCm: blueprint.heightCm,
           microchipNumber: blueprint.microchipNumber,
@@ -2462,7 +2530,7 @@ async function seedFostering() {
         name: "Winston",
         birthDate: getRandomDate(2),
         sex: Sex.MALE,
-        size: getAnimalSize(dogSpecies.name, 22),
+        size: AnimalSize.LARGE,
         weightKg: 22,
         heightCm: 48,
         city: "New York",

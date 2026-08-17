@@ -15,6 +15,7 @@ export interface BreedFormState {
   errors?: {
     name?: string[];
     speciesId?: string[];
+    typicalSize?: string[];
   };
 }
 
@@ -60,7 +61,7 @@ const _createBreed = async (
     };
   }
 
-  const { name, speciesId } = validatedFields.data;
+  const { name, speciesId, typicalSize } = validatedFields.data;
 
   try {
     if (!(await isActiveSpecies(speciesId))) {
@@ -78,7 +79,9 @@ const _createBreed = async (
       };
     }
 
-    await prisma.breed.create({ data: { name, speciesId } });
+    await prisma.breed.create({
+      data: { name, speciesId, typicalSize: typicalSize || null },
+    });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -122,7 +125,7 @@ const _updateBreed = async (
     };
   }
 
-  const { name, speciesId } = validatedFields.data;
+  const { name, speciesId, typicalSize } = validatedFields.data;
 
   try {
     if (!(await isActiveSpecies(speciesId))) {
@@ -142,7 +145,7 @@ const _updateBreed = async (
 
     await prisma.breed.update({
       where: { id: parsedId.data },
-      data: { name, speciesId },
+      data: { name, speciesId, typicalSize: typicalSize || null },
     });
   } catch (error) {
     if (

@@ -346,6 +346,10 @@ model Animal {
   name            String
   birthDate       DateTime            @map(name: "birth_date")
   sex             Sex
+  /// Expected ADULT size, set by staff. Never derived from current weight — a puppy's
+  /// current weight does not predict its adult size. Nullable: "unknown" is the honest
+  /// answer for an indeterminate mixed-breed stray. Note that a null size matches no
+  /// public size facet, so the animal will not appear in size-filtered search results.
   size            AnimalSize?
   weightKg        Float?              @map(name: "weight_kg")
   heightCm        Float?              @map(name: "height_cm")
@@ -424,6 +428,11 @@ model Breed {
   animals   Animal[]
   speciesId String   @map(name: "species_id")
   species   Species  @relation(fields: [speciesId], references: [id])
+
+  /// Typical expected adult size for this breed. Reference data only — used to
+  /// prefill the size select on the animal intake form. The authoritative value
+  /// for an individual animal is Animal.size, which staff can override.
+  typicalSize AnimalSize? @map(name: "typical_size")
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
