@@ -20,6 +20,7 @@ import { searchQuerySchema } from "../../zod-schemas/common.schemas";
 import { DashboardAnimalsSchema } from "../../zod-schemas/animal.schemas";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { LATEST_ENTRY_ORDER } from "../../utils/vitals-order";
 
 // data for the animals table in the dashboard
 const _fetchAnimals = async (
@@ -115,6 +116,14 @@ const _fetchAnimals = async (
   }
 };
 
+// Gated by ANIMAL_INFO_READ alone, deliberately — this is a cross-domain summary
+// card, not a domain detail view. It has always surfaced a slice of data that
+// otherwise lives behind its own permission (open foster placements normally
+// behind FOSTERS_READ, adoption application statuses behind APPLICATIONS_READ,
+// an active-task count behind ANIMAL_TASK_READ); the per-domain READ permissions
+// gate each one's dedicated tab, not the overview. The weight/vitals-trend field
+// follows that same established pattern rather than requiring ANIMAL_VITALS_READ
+// — keep it consistent with the fields beside it if this ever gets re-examined.
 const _fetchSectionCardsAnimalData = async (
   id: string,
 ): Promise<AnimalSectionCardPayload | null> => {
@@ -213,6 +222,12 @@ const _fetchSectionCardsAnimalData = async (
           },
           take: 1,
         },
+        vitalsLogs: {
+          where: { deletedAt: null, weightGrams: { not: null } },
+          select: { recordedAt: true, weightGrams: true },
+          orderBy: LATEST_ENTRY_ORDER,
+          take: 2,
+        },
         _count: {
           select: {
             likes: true,
@@ -235,6 +250,13 @@ const _fetchSectionCardsAnimalData = async (
   }
 };
 
+/**
+ * Selects currentWeightGrams and the last weigh-in date for read-only display on
+ * the edit form (weight is not editable here — it's recorded on the Vitals tab).
+ * This is a denormalized field on the animal row, not vitals history, so
+ * ANIMAL_INFO_READ is the correct gate. Anything that surfaces actual VitalsLog
+ * rows belongs behind ANIMAL_VITALS_READ.
+ */
 const _fetchAnimalById = async (
   id: string,
 ): Promise<AnimalIntakeFormPayload | null> => {
@@ -255,7 +277,7 @@ const _fetchAnimalById = async (
         birthDate: true,
         sex: true,
         size: true,
-        weightKg: true,
+        currentWeightGrams: true,
         heightCm: true,
         city: true,
         state: true,
@@ -275,6 +297,15 @@ const _fetchAnimalById = async (
           select: {
             id: true,
           },
+        },
+        // Only the timestamp — this is "as of when" for the cached weight above,
+        // not vitals data. Adding measurement fields here would surface VitalsLog
+        // content behind ANIMAL_INFO_READ; put those behind ANIMAL_VITALS_READ instead.
+        vitalsLogs: {
+          where: { deletedAt: null, weightGrams: { not: null } },
+          select: { recordedAt: true },
+          orderBy: LATEST_ENTRY_ORDER,
+          take: 1,
         },
       },
     });

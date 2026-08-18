@@ -82,7 +82,7 @@ const _createAnimal = async (
     foundCity,
     foundState,
     surrenderingPersonId,
-    weightKg,
+    weightGrams,
     heightCm,
     currentUnitId,
   } = validatedFields.data;
@@ -158,7 +158,7 @@ const _createAnimal = async (
           sex: sex,
           size: size || null,
           description: description,
-          weightKg: weightKg ? Number(weightKg) : undefined,
+          currentWeightGrams: weightGrams ? Number(weightGrams) : undefined,
           heightCm: heightCm ? Number(heightCm) : undefined,
           healthStatus: healthStatus,
           listingStatus: listingStatus,
@@ -195,6 +195,22 @@ const _createAnimal = async (
           foundState: intakeType === IntakeType.STRAY ? foundState : undefined,
         },
       });
+
+      // A dated first data point with real provenance, rather than a bare
+      // number with no history. See VitalsLog and recomputeCurrentWeight in
+      // animal-vitals.actions.ts for the cache invariant this must respect —
+      // safe to set currentWeightGrams directly here since this is the only
+      // entry that will exist for this animal.
+      if (weightGrams) {
+        await tx.vitalsLog.create({
+          data: {
+            animalId: newAnimal.id,
+            recordedById: staffMemberId,
+            recordedAt: intakeDate,
+            weightGrams: Number(weightGrams),
+          },
+        });
+      }
 
       const intakeSummaryBase = `Animal was admitted as ${intakeType
         .replace(/_/g, " ")
@@ -280,7 +296,6 @@ const _updateAnimal = async (
     breed: breedId,
     primaryColor: primaryColorId,
     additionalColors: additionalColorIds,
-    weightKg,
     heightCm,
     city,
     state,
@@ -298,7 +313,6 @@ const _updateAnimal = async (
     };
   }
 
-  const numericWeight = weightKg === "" ? undefined : weightKg;
   const numericHeight = heightCm === "" ? undefined : heightCm;
 
   // Full color set = primary + additionals, de-duped in case the primary
@@ -411,7 +425,6 @@ const _updateAnimal = async (
           sex: sex,
           size: size || null,
           description: description,
-          weightKg: numericWeight,
           heightCm: numericHeight,
           healthStatus: healthStatus,
           listingStatus: listingStatus,

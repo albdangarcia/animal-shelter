@@ -10,7 +10,11 @@ const userPermissions: readonly AppPermission[] = [
   AppPermissions.MY_FOSTER_ANIMALS_READ,
 ] as const;
 
-// Volunteers inherit user permissions + read-only access to operational data
+// Volunteers inherit user permissions + read-only access to operational data, with one
+// deliberate exception: ANIMAL_VITALS_MANAGE. The rule is "volunteers may record what they
+// observed, not change what the shelter asserts" — vitals are dated observations, soft-deleted
+// rather than destroyed. Do not treat this as precedent for other MANAGE permissions without
+// re-examining that distinction.
 const volunteerPermissions: readonly AppPermission[] = [
   ...userPermissions,
   AppPermissions.ANIMAL_READ_ANALYTICS,
@@ -22,6 +26,8 @@ const volunteerPermissions: readonly AppPermission[] = [
   AppPermissions.ANIMAL_TASK_READ,
   AppPermissions.ANIMAL_CHARACTERISTICS_READ,
   AppPermissions.ANIMAL_PHOTO_READ,
+  AppPermissions.ANIMAL_VITALS_READ,
+  AppPermissions.ANIMAL_VITALS_MANAGE,
   AppPermissions.APPLICATIONS_READ,
   AppPermissions.OUTCOMES_READ,
   AppPermissions.REPORTS_READ,

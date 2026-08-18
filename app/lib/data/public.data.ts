@@ -325,7 +325,7 @@ export const fetchPublicPagePetById = async (id: string) => {
         city: true,
         state: true,
         birthDate: true,
-        weightKg: true,
+        currentWeightGrams: true,
         heightCm: true,
         description: true,
         animalImages: true,

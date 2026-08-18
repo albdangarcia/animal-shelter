@@ -16,7 +16,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { type AnimalHealthStatus, AnimalListingStatus, Sex } from "@/prisma/generated/enums";
 import { calculateAgeString, formatTimeAgo } from "@/app/lib/utils/date-utils";
-import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
+import {
+  formatSingleEnumOption,
+  formatAnimalSize,
+} from "@/app/lib/utils/enum-formatter";
+import { formatWeight } from "@/app/lib/utils/weight-format";
+import { format } from "date-fns";
 import {
   Calendar,
   MapPin,
@@ -84,6 +89,20 @@ const AnimalSectionCards = async ({ params }: Props) => {
   const firstImage = animal.animalImages?.[0]?.url;
   const likesCount = animal._count.likes;
   const pendingTasksCount = animal._count.tasks;
+
+  // Trend, not just a bare number — the two most recent weigh-ins, e.g.
+  // "3.4 kg — up 40 g since Mar 14". Degrades cleanly with 0 or 1 entries.
+  const [latestVitals, previousVitals] = animal.vitalsLogs;
+  const weightTrend = (() => {
+    if (!latestVitals?.weightGrams) return null;
+    const label = formatWeight(latestVitals.weightGrams);
+    if (!previousVitals?.weightGrams) return label;
+    const delta = latestVitals.weightGrams - previousVitals.weightGrams;
+    if (delta === 0) return label;
+    return `${label} — ${delta > 0 ? "up" : "down"} ${formatWeight(
+      Math.abs(delta),
+    )} since ${format(previousVitals.recordedAt, "MMM d")}`;
+  })();
 
   const applicationCount = animal.adoptionApplications?.length || 0;
   const approvedApplications =
@@ -187,7 +206,7 @@ const AnimalSectionCards = async ({ params }: Props) => {
                 <div className="rounded-md p-2.5">
                   <p className="text-xs text-muted-foreground mb-0.5">Size</p>
                   <p className="font-semibold">
-                    {formatSingleEnumOption(animal.size)}
+                    {formatAnimalSize(animal.size)}
                   </p>
                 </div>
               </div>
@@ -328,6 +347,12 @@ const AnimalSectionCards = async ({ params }: Props) => {
                     {formatSingleEnumOption(animal.healthStatus) === "N/A"
                       ? "Healthy"
                       : formatSingleEnumOption(animal.healthStatus)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-b pb-2 text-sm">
+                  <span className="text-muted-foreground">Weight</span>
+                  <span className="font-medium text-foreground text-right">
+                    {weightTrend || "Not recorded"}
                   </span>
                 </div>
               </div>

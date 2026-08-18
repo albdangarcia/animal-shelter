@@ -96,6 +96,15 @@ export type AnimalSectionCardPayload = Prisma.AnimalGetPayload<{
       orderBy: { intakeDate: "desc" };
       take: 1;
     };
+    // Last two weigh-ins (non-deleted, non-null weight), newest first — enough
+    // to show a trend ("3.4 kg — up 40 g since Mar 14") without pulling the
+    // whole vitals history onto the overview.
+    vitalsLogs: {
+      where: { deletedAt: null; weightGrams: { not: null } };
+      select: { recordedAt: true; weightGrams: true };
+      orderBy: { recordedAt: "desc" };
+      take: 2;
+    };
     _count: {
       select: {
         likes: true;
@@ -116,7 +125,7 @@ export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{
     birthDate: true;
     sex: true;
     size: true;
-    weightKg: true;
+    currentWeightGrams: true;
     heightCm: true;
     city: true;
     state: true;
@@ -136,6 +145,14 @@ export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{
       select: {
         id: true;
       };
+    };
+    // Bounded to the single most recent weigh-in so the edit form can show
+    // "last known weight, as of <date>" next to the read-only display.
+    vitalsLogs: {
+      where: { deletedAt: null; weightGrams: { not: null } };
+      select: { recordedAt: true };
+      orderBy: { recordedAt: "desc" };
+      take: 1;
     };
   };
 }>;

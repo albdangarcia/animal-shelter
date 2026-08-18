@@ -15,6 +15,7 @@ import {
   MapPin,
   Home,
   Undo2,
+  Weight,
   LucideProps,
 } from "lucide-react";
 import { AnimalActivityType } from "@/prisma/generated/enums";
@@ -79,6 +80,10 @@ const activityConfig: Record<
   [AnimalActivityType.ASSESSMENT_COMPLETED]: {
     icon: ClipboardList,
     text: "completed an assessment",
+  },
+  [AnimalActivityType.VITALS_RECORDED]: {
+    icon: Weight,
+    text: "recorded vitals",
   },
   [AnimalActivityType.TASK_CREATED]: {
     icon: ClipboardList,

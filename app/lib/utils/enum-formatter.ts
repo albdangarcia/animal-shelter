@@ -71,6 +71,20 @@ export const formatSingleEnumOption = (type: string | null | undefined) => {
     .join(" ");
 };
 
+export const ANIMAL_SIZE_LABELS: Record<AnimalSize, string> = {
+  SMALL: "Small",
+  MEDIUM: "Medium",
+  LARGE: "Large",
+  XLARGE: "Extra Large",
+};
+
+/** Display label for an animal size. Returns null for null/undefined so callers
+ *  that hide empty values keep working — do NOT use formatSingleEnumOption here,
+ *  it renders XLARGE as "Xlarge" and null as "N/A". */
+export const formatAnimalSize = (
+  size: AnimalSize | null | undefined,
+): string | null => (size ? ANIMAL_SIZE_LABELS[size] : null);
+
 export const formattedIntakeTypes = formatEnumForDisplay(IntakeType);
 export const formattedSexes = formatEnumForDisplay(Sex);
 export const formattedPetHealthStatuses =
@@ -78,7 +92,9 @@ export const formattedPetHealthStatuses =
 
 export const intakeTypeOptions = formatEnumAsOptions(IntakeType);
 export const animalSexOptions = formatEnumAsOptions(Sex);
-export const animalSizeOptions = formatEnumAsOptions(AnimalSize);
+export const animalSizeOptions = Object.entries(ANIMAL_SIZE_LABELS).map(
+  ([value, label]) => ({ value: value as AnimalSize, label }),
+);
 export const animalHealthStatusOptions =
   formatEnumAsOptions(AnimalHealthStatus);
 export const animalListingStatusOptions =

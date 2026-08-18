@@ -439,10 +439,10 @@ type Archetype =
 interface AnimalBlueprint {
   name: string;
   sex: Sex;
-  // Staff-set expected adult size — independent of weightKg (a puppy/kitten's
+  // Staff-set expected adult size — independent of weightGrams (a puppy/kitten's
   // current weight does not predict it). Null exercises the "unknown" path.
   size: AnimalSize | null;
-  weightKg: number;
+  weightGrams: number;
   heightCm: number;
   microchipNumber?: string;
   species: { name: string };
@@ -469,7 +469,7 @@ const animalSeedData: AnimalBlueprint[] = [
     name: "Frisco",
     sex: Sex.FEMALE,
     size: AnimalSize.LARGE,
-    weightKg: 30,
+    weightGrams: 30000,
     heightCm: 58,
     microchipNumber: "985141000100001",
     species: allSpecies.DOG,
@@ -491,9 +491,9 @@ const animalSeedData: AnimalBlueprint[] = [
     name: "Flash",
     sex: Sex.MALE,
     // A young stray currently weighing 8kg but expected to grow into a large
-    // adult — proves size is a staff judgment, not a function of weightKg.
+    // adult — proves size is a staff judgment, not a function of weightGrams.
     size: AnimalSize.XLARGE,
-    weightKg: 8,
+    weightGrams: 8000,
     heightCm: 32,
     microchipNumber: "985141000100002",
     species: allSpecies.DOG,
@@ -515,7 +515,7 @@ const animalSeedData: AnimalBlueprint[] = [
     name: "Fido",
     sex: Sex.MALE,
     size: AnimalSize.MEDIUM,
-    weightKg: 18,
+    weightGrams: 18000,
     heightCm: 45,
     microchipNumber: "985141000100003",
     species: allSpecies.DOG,
@@ -534,7 +534,7 @@ const animalSeedData: AnimalBlueprint[] = [
     name: "Whiskers",
     sex: Sex.FEMALE,
     size: AnimalSize.SMALL,
-    weightKg: 3.5,
+    weightGrams: 3500,
     heightCm: 24,
     microchipNumber: "985141000100004",
     species: allSpecies.CAT,
@@ -559,7 +559,7 @@ const animalSeedData: AnimalBlueprint[] = [
     // Born in care — too young for staff to have judged an expected adult
     // size yet. Exercises the null "unknown" path end-to-end.
     size: null,
-    weightKg: 3,
+    weightGrams: 3000,
     heightCm: 23,
     microchipNumber: "985141000100005",
     species: allSpecies.CAT,
@@ -582,7 +582,7 @@ const animalSeedData: AnimalBlueprint[] = [
     name: "Godzilla",
     sex: Sex.MALE,
     size: AnimalSize.LARGE,
-    weightKg: 6,
+    weightGrams: 6000,
     heightCm: 40,
     microchipNumber: "985141000100006",
     species: allSpecies.REPTILE,
@@ -605,7 +605,7 @@ const animalSeedData: AnimalBlueprint[] = [
     name: "Buddy",
     sex: Sex.MALE,
     size: AnimalSize.LARGE,
-    weightKg: 32,
+    weightGrams: 32000,
     heightCm: 57,
     microchipNumber: "985141000100007",
     species: allSpecies.DOG,
@@ -627,7 +627,7 @@ const animalSeedData: AnimalBlueprint[] = [
     name: "Leo",
     sex: Sex.MALE,
     size: AnimalSize.SMALL,
-    weightKg: 3.2,
+    weightGrams: 3200,
     heightCm: 22,
     microchipNumber: "985141000100008",
     species: allSpecies.CAT,
@@ -651,7 +651,7 @@ const animalSeedData: AnimalBlueprint[] = [
     name: "Daisy",
     sex: Sex.FEMALE,
     size: AnimalSize.LARGE,
-    weightKg: 28,
+    weightGrams: 28000,
     heightCm: 55,
     microchipNumber: "985141000100009",
     species: allSpecies.DOG,
@@ -902,7 +902,7 @@ function pickIntakeType(archetype: Archetype): IntakeType {
 }
 
 // Plausible expected-adult-size distribution per species — a staff judgment,
-// deliberately NOT derived from the animal's generated current weightKg.
+// deliberately NOT derived from the animal's generated current weightGrams.
 // Each pool includes a chance of null (unknown/indeterminate), same as a
 // real intake where staff leave it unset.
 const typicalSizeWeightsBySpecies: Record<
@@ -1101,7 +1101,11 @@ function generateAnimalBlueprints(
       name: getRandomItem(generatedNamesBySpecies[speciesKey]),
       sex: getRandomItem([Sex.MALE, Sex.FEMALE]),
       size: pickTypicalSize(speciesKey),
-      weightKg: randomFloat(bodyStats.weightMin, bodyStats.weightMax),
+      // bodyStatsBySpecies is authored in kg for readability; convert to the
+      // canonical integer-grams unit here.
+      weightGrams: Math.round(
+        randomFloat(bodyStats.weightMin, bodyStats.weightMax) * 1000,
+      ),
       heightCm: randomFloat(bodyStats.heightMin, bodyStats.heightMax, 0),
       species,
       breeds: pickBreeds(species),
@@ -1250,6 +1254,89 @@ function daysAgo(n: number): Date {
   const date = new Date();
   date.setDate(date.getDate() - n);
   return date;
+}
+
+// Generates a dated weigh-in history for one animal, using the same
+// cursor-increment idiom as the adoption-application status history
+// (addDaysClamped walking forward toward `windowEnd`). Only called for a
+// representative subset of seeded animals — most just get the single
+// currentWeightGrams value set at creation. Exercises the cache-invariant
+// traps the Vitals feature exists to handle correctly: a temperature-only
+// entry must not blank the weight, and a soft-deleted entry must not count
+// as current.
+async function seedVitalsLogSeries(opts: {
+  animalId: string;
+  recordedById: string;
+  startWeightGrams: number;
+  trend: "rising" | "stable" | "falling";
+  entryCount: number;
+  windowEnd: Date;
+  includeTemperatureOnlyEntry?: boolean;
+  includeSoftDeletedEntry?: boolean;
+}) {
+  const {
+    animalId,
+    recordedById,
+    startWeightGrams,
+    trend,
+    entryCount,
+    windowEnd,
+    includeTemperatureOnlyEntry = false,
+    includeSoftDeletedEntry = false,
+  } = opts;
+
+  let cursor = addDaysClamped(
+    daysAgo(entryCount * 7),
+    randomInt(0, 3),
+    windowEnd,
+  );
+  let weight = startWeightGrams;
+  let latestWeightGrams: number | null = null;
+
+  for (let i = 0; i < entryCount; i++) {
+    if (i > 0) {
+      cursor = addDaysClamped(cursor, randomInt(4, 8), windowEnd);
+    }
+
+    if (trend === "rising") {
+      weight += randomInt(50, 150); // e.g. a growing neonate's weekly gain
+    } else if (trend === "falling") {
+      weight -= randomInt(20, 80);
+    } else {
+      weight += randomInt(-20, 20); // stable, within normal noise
+    }
+    weight = Math.max(weight, 50);
+
+    // "Latest entry has no weight" trap: a temperature-only check-in logged
+    // for a sick animal, second-to-last so it doesn't disturb the trend.
+    const isTemperatureOnly =
+      includeTemperatureOnlyEntry && i === entryCount - 2;
+    // "Delete must fall back" trap: the oldest entry is the one removed, so
+    // it never affects the current cached weight either way.
+    const isSoftDeleted = includeSoftDeletedEntry && i === 0;
+
+    await prisma.vitalsLog.create({
+      data: {
+        animalId,
+        recordedById,
+        recordedAt: cursor,
+        weightGrams: isTemperatureOnly ? null : Math.round(weight),
+        temperatureC: isTemperatureOnly ? randomFloat(37.8, 39.5, 1) : null,
+        deletedAt: isSoftDeleted ? cursor : null,
+      },
+    });
+
+    if (!isTemperatureOnly && !isSoftDeleted) {
+      latestWeightGrams = Math.round(weight);
+    }
+  }
+
+  if (latestWeightGrams != null) {
+    await prisma.animal.update({
+      where: { id: animalId },
+      data: { currentWeightGrams: latestWeightGrams },
+    });
+  }
 }
 
 // Creates one AdoptionApplication with its full ApplicationStatusHistory
@@ -1545,7 +1632,7 @@ async function seedReturnAndReadoptAnimal(opts: {
       birthDate: getRandomDate(),
       sex: blueprint.sex,
       size: blueprint.size,
-      weightKg: blueprint.weightKg,
+      currentWeightGrams: blueprint.weightGrams,
       heightCm: blueprint.heightCm,
       microchipNumber: blueprint.microchipNumber,
       city: "New York",
@@ -2043,9 +2130,9 @@ async function seedAnimalsAndRelations() {
           name: blueprint.name,
           birthDate: getRandomDate(),
           sex: blueprint.sex,
-          // Staff-set expected adult size — independent of weightKg.
+          // Staff-set expected adult size — independent of weightGrams.
           size: blueprint.size,
-          weightKg: blueprint.weightKg,
+          currentWeightGrams: blueprint.weightGrams,
           heightCm: blueprint.heightCm,
           microchipNumber: blueprint.microchipNumber,
           city: "New York",
@@ -2086,6 +2173,36 @@ async function seedAnimalsAndRelations() {
           ...intakeRelations,
         },
       });
+
+      // A representative subset gets a full weigh-in history, so the Vitals
+      // feature has real trend data to demo — a growing neonate, a stable
+      // adult, and one animal losing weight across consecutive weighings
+      // (the case the §11 follow-on welfare alert would key off). Also
+      // exercises the two cache-invariant traps a bare currentWeightGrams
+      // value can't: a temperature-only latest entry, and a soft-deleted one.
+      const vitalsSeriesByName: Record<
+        string,
+        {
+          trend: "rising" | "stable" | "falling";
+          entryCount: number;
+          includeTemperatureOnlyEntry?: boolean;
+          includeSoftDeletedEntry?: boolean;
+        }
+      > = {
+        Misty: { trend: "rising", entryCount: 6, includeTemperatureOnlyEntry: true },
+        Frisco: { trend: "stable", entryCount: 5, includeSoftDeletedEntry: true },
+        Buddy: { trend: "falling", entryCount: 5 },
+      };
+      const vitalsSeriesConfig = vitalsSeriesByName[blueprint.name];
+      if (vitalsSeriesConfig) {
+        await seedVitalsLogSeries({
+          animalId: animal.id,
+          recordedById: processingStaff.id,
+          startWeightGrams: blueprint.weightGrams,
+          windowEnd: new Date(),
+          ...vitalsSeriesConfig,
+        });
+      }
 
       // If this archetype ends in an outcome, create it. ADOPTED runs the
       // full application → approval → outcome → reject-others cascade
@@ -2531,7 +2648,7 @@ async function seedFostering() {
         birthDate: getRandomDate(2),
         sex: Sex.MALE,
         size: AnimalSize.LARGE,
-        weightKg: 22,
+        currentWeightGrams: 22000,
         heightCm: 48,
         city: "New York",
         state: "NY",
