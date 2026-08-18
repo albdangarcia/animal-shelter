@@ -1,5 +1,6 @@
 import "dotenv/config";
-import { defineConfig, env } from "prisma/config";
+import { defineConfig } from "prisma/config";
+import { resolveDatabaseUrl } from "./app/lib/db-url";
 
 export default defineConfig({
   schema: "./prisma/schema.prisma",
@@ -8,11 +9,6 @@ export default defineConfig({
     seed: "tsx prisma/seed.ts",
   },
   datasource: {
-    // Use process.env for optional vars, env() only for the final required one
-    url:
-      process.env.DATABASE_URL_UNPOOLED ??
-      process.env.POSTGRES_URL_NON_POOLING ??
-      process.env.POSTGRES_URL ??
-      env("DATABASE_URL"),
+    url: resolveDatabaseUrl("direct"),
   },
 });

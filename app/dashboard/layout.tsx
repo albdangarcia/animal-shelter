@@ -13,7 +13,7 @@ interface LayoutProps {
 const Layout = async ({ children }: LayoutProps) => {
   const session = await auth();
   if (!session || !session.user) {
-    redirect("/api/auth/signin");
+    redirect(`/sign-in?callbackUrl=${encodeURIComponent("/dashboard")}`);
   }
 
   // Filter navigation links based on user permissions
