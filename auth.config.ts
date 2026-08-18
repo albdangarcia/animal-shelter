@@ -7,6 +7,12 @@ export const providers: Provider[] = [github];
 
 export const authProviderConfigList = {
   providers,
+  pages: {
+    signIn: "/sign-in",
+  },
+  session: {
+    strategy: "jwt",
+  },
 } satisfies NextAuthConfig;
 
 // Export providerMap for frontend use

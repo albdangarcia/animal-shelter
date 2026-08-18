@@ -142,6 +142,7 @@ const credentialsConfig = Credentials({
 
 // auth config
 export const authConfig = {
+  ...authProviderConfigList,
   adapter: CustomPrismaAdapter(prisma),
   callbacks: {
     async jwt({ token, user: _user }) {
@@ -186,12 +187,6 @@ export const authConfig = {
     },
   },
 
-  session: {
-    strategy: "jwt",
-  },
-  pages: {
-    signIn: "/sign-in",
-  },
   providers: [...authProviderConfigList.providers, credentialsConfig],
 } satisfies NextAuthConfig;
 

@@ -33,18 +33,9 @@ import {
 } from "@/app/lib/utils/seeding-utils";
 import { computeStays } from "@/app/lib/utils/stay-utils";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { resolveDatabaseUrl } from "@/app/lib/db-url";
 
-const connectionString =
-  process.env.DATABASE_URL_UNPOOLED ??
-  process.env.POSTGRES_URL_NON_POOLING ??
-  process.env.POSTGRES_URL ??
-  process.env.DATABASE_URL;
-
-if (!connectionString) {
-  throw new Error("Missing DB URL - set DATABASE_URL_UNPOOLED or POSTGRES_URL");
-}
-
-const adapter = new PrismaPg({ connectionString });
+const adapter = new PrismaPg({ connectionString: resolveDatabaseUrl("direct") });
 const prisma = new PrismaClient({ adapter });
 
 
