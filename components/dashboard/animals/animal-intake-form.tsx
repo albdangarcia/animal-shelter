@@ -89,6 +89,15 @@ import Link from "next/link";
 import { IntakeFormFields } from "./intake-form-fields";
 import { IntakeFieldsValues } from "@/app/lib/zod-schemas/intake.schema";
 import { UnitPickerLocation } from "@/app/lib/data/locations/unit-picker.data";
+import { formatDateToLongString } from "@/app/lib/utils/date-utils";
+import {
+  WEIGHT_UNITS,
+  WeightUnit,
+  toGrams,
+  fromGrams,
+  roundForUnit,
+  formatWeight,
+} from "@/app/lib/utils/weight-format";
 
 // Sentinel for the "Unplaced" option — Radix Select forbids empty-string item
 // values, so we map this back to "" (currentUnitId = null) on change.
@@ -156,6 +165,11 @@ const AnimalForm = ({
     animal?.speciesId || "",
   );
 
+  // Which of the two WEIGHT_UNITS (g/kg or oz/lb) the weight input is
+  // currently expressed in. Only relevant at intake — there's no prior entry
+  // to infer a starting magnitude from, so this just starts on the large unit.
+  const [weightUnit, setWeightUnit] = useState<WeightUnit>(WEIGHT_UNITS[1]);
+
   // Location is only a UI cascade helper (not persisted). In edit mode, derive
   // the initial location from the animal's placed unit so both selects pre-fill.
   const [currentLocationId, setCurrentLocationId] = useState(
@@ -180,7 +194,6 @@ const AnimalForm = ({
           sex: animal.sex,
           size: animal.size ?? "",
           estimatedBirthDate: new Date(animal.birthDate),
-          weightKg: animal.weightKg ?? "",
           heightCm: animal.heightCm ?? "",
           healthStatus:
             animal.healthStatus || animalHealthStatusOptions[0].value,
@@ -204,7 +217,7 @@ const AnimalForm = ({
           breed: "",
           primaryColor: "",
           additionalColors: [],
-          weightKg: "",
+          weightGrams: "",
           heightCm: "",
           microchipNumber: "",
           listingStatus: AnimalListingStatus.DRAFT,
@@ -612,37 +625,91 @@ const AnimalForm = ({
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="weightKg"
-                  render={({ field }) => {
-                    // Convert number to string for the input, handle undefined and empty string
-                    const value =
-                      field.value === undefined || field.value === ""
-                        ? ""
-                        : String(field.value);
+                {isEditMode ? (
+                  // Weight becomes read-only on edit: it's a dated observation
+                  // now, not a plain field. Editing it here (with no "when was
+                  // this measured" field on this form) would stamp today's
+                  // date on an unknown observation — the Vitals tab is the
+                  // only honest place to record a new weight.
+                  <div className="col-span-1">
+                    <FormLabel className="mb-2 block">Weight</FormLabel>
+                    <p className="text-sm">
+                      {animal.currentWeightGrams != null
+                        ? formatWeight(animal.currentWeightGrams)
+                        : "Not recorded"}
+                    </p>
+                    {animal.vitalsLogs[0] && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        as of{" "}
+                        {formatDateToLongString(animal.vitalsLogs[0].recordedAt)}
+                      </p>
+                    )}
+                    <Link
+                      href={`/dashboard/animals/${animal.id}/vitals`}
+                      className="text-xs text-primary underline underline-offset-2 mt-1 inline-block"
+                    >
+                      View vitals history
+                    </Link>
+                  </div>
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name="weightGrams"
+                    render={({ field }) => {
+                      const grams =
+                        field.value === undefined || field.value === ""
+                          ? null
+                          : Number(field.value);
+                      const displayValue =
+                        grams == null
+                          ? ""
+                          : String(roundForUnit(fromGrams(grams, weightUnit), weightUnit));
 
-                    return (
-                      <FormItem className="col-span-1">
-                        <FormLabel>Weight (kg)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="e.g., 15.5"
-                            {...field}
-                            value={value}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              // Pass empty string as-is, otherwise parse as number
-                              field.onChange(val === "" ? "" : parseFloat(val));
-                            }}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
+                      return (
+                        <FormItem className="col-span-1">
+                          <FormLabel>Weight</FormLabel>
+                          <div className="flex gap-2">
+                            <FormControl>
+                              <Input
+                                type="number"
+                                step="any"
+                                placeholder="e.g., 15.5"
+                                value={displayValue}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val === "") {
+                                    field.onChange("");
+                                    return;
+                                  }
+                                  const parsed = parseFloat(val);
+                                  if (Number.isNaN(parsed)) return;
+                                  field.onChange(
+                                    Math.round(toGrams(parsed, weightUnit)),
+                                  );
+                                }}
+                              />
+                            </FormControl>
+                            <div className="flex rounded-md border overflow-hidden shrink-0">
+                              {WEIGHT_UNITS.map((u) => (
+                                <Button
+                                  key={u}
+                                  type="button"
+                                  size="sm"
+                                  variant={u === weightUnit ? "default" : "ghost"}
+                                  className="rounded-none px-2"
+                                  onClick={() => setWeightUnit(u)}
+                                >
+                                  {u}
+                                </Button>
+                              ))}
+                            </div>
+                          </div>
+                          <FormMessage />
+                        </FormItem>
+                      );
+                    }}
+                  />
+                )}
 
                 <FormField
                   control={form.control}

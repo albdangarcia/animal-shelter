@@ -3,12 +3,12 @@
 // ═══════════════════════════════════════════════════
 
 generator client {
-    provider = "prisma-client"
-    output   = "./generated"
+  provider = "prisma-client"
+  output   = "./generated"
 }
 
 datasource db {
-    provider = "postgresql"
+  provider = "postgresql"
 }
 
 // ═══════════════════════════════════════════════════
@@ -68,6 +68,7 @@ model Person {
   MedicationLog     MedicationLog[]
   Assessment        Assessment[]
   AnimalActivityLog AnimalActivityLog[]
+  vitalsLogs        VitalsLog[]
 
   @@map("persons")
 }
@@ -342,23 +343,26 @@ enum CharacteristicCategory {
 }
 
 model Animal {
-  id              String              @id @default(cuid())
-  name            String
-  birthDate       DateTime            @map(name: "birth_date")
-  sex             Sex
+  id                 String              @id @default(cuid())
+  name               String
+  birthDate          DateTime            @map(name: "birth_date")
+  sex                Sex
   /// Expected ADULT size, set by staff. Never derived from current weight — a puppy's
   /// current weight does not predict its adult size. Nullable: "unknown" is the honest
   /// answer for an indeterminate mixed-breed stray. Note that a null size matches no
   /// public size facet, so the animal will not appear in size-filtered search results.
-  size            AnimalSize?
-  weightKg        Float?              @map(name: "weight_kg")
-  heightCm        Float?              @map(name: "height_cm")
-  city            String?
-  state           String?
-  description     String?
-  listingStatus   AnimalListingStatus @default(DRAFT)
-  microchipNumber String?             @unique
-  archiveReason   OutcomeType? /// Should only be set when listingStatus is ARCHIVED. Explains why the animal is no longer available.
+  size               AnimalSize?
+  /// Last known weight, CACHED from the most recent non-deleted VitalsLog entry with a
+  /// non-null weight. NEVER write this directly — only VitalsLog's recomputeCurrentWeight
+  /// helper (and animal intake, for the seed entry) may set it.
+  currentWeightGrams Int?                @map(name: "current_weight_grams")
+  heightCm           Float?              @map(name: "height_cm")
+  city               String?
+  state              String?
+  description        String?
+  listingStatus      AnimalListingStatus @default(DRAFT)
+  microchipNumber    String?             @unique
+  archiveReason      OutcomeType? /// Should only be set when listingStatus is ARCHIVED. Explains why the animal is no longer available.
 
   // Relations
   // mandatory relationship to Species
@@ -371,6 +375,7 @@ model Animal {
   characteristics      Characteristic[]
   animalImages         AnimalImage[]
   medicalRecords       MedicalRecord[]
+  vitalsLogs           VitalsLog[]
   notes                AnimalNote[]
   tasks                Task[]
   likes                Like[]
@@ -616,6 +621,40 @@ model MedicalRecord {
 
   @@index([animalId])
   @@map(name: "medical_records")
+}
+
+/// A dated set of measurements taken on one occasion. Append-mostly: corrections are
+/// edits by staff, removals are soft deletes. Weight is stored in INTEGER GRAMS —
+/// see the units note on Animal.currentWeightGrams.
+model VitalsLog {
+  id String @id @default(cuid())
+
+  /// When the measurement was TAKEN (backdatable — fosters report late).
+  /// Distinct from createdAt, which is when the row was written.
+  /// Same convention as Intake.intakeDate and MedicalRecord.dateOfRecord.
+  recordedAt DateTime @default(now()) @map(name: "recorded_at")
+
+  /// At least one of the three measurement fields must be present. `notes` does NOT
+  /// count — a notes-only entry is an AnimalNote. Enforced in the Zod schema.
+  weightGrams        Int?   @map(name: "weight_grams")
+  temperatureC       Float? @map(name: "temperature_c")
+  /// Body condition score, 1-9 (5 = ideal). The standard shelter/vet ordinal measure.
+  bodyConditionScore Int?   @map(name: "body_condition_score")
+
+  notes String?
+
+  animalId String @map(name: "animal_id")
+  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+
+  recordedById String @map(name: "recorded_by_id")
+  recordedBy   Person @relation(fields: [recordedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
+
+  @@index([animalId, recordedAt])
+  @@map("vitals_logs")
 }
 
 // Shelters deal with dozens of animals on different medications with varying schedules 
@@ -1169,11 +1208,12 @@ model PartnerNote {
 // ═══════════════════════════════════════════════════
 
 enum AnimalActivityType {
-  FIELD_UPDATE // A direct field on the animal model was changed (e.g., name, weight)
+  FIELD_UPDATE // A direct field on the animal model was changed (e.g., name, description)
   NOTE_ADDED // A note was created for this animal
   PHOTO_UPLOADED // A new photo was added
   MEDICAL_RECORD_ADDED // A medical record was created
   ASSESSMENT_COMPLETED // An assessment was finished
+  VITALS_RECORDED // A vitals entry (weight/temperature/body condition) was recorded
   TASK_CREATED // A task was created
   TASK_STATUS_CHANGED // A task's status was updated
   STATUS_CHANGE // A significant status like listing or health status changed

@@ -23,7 +23,8 @@
 
 # misc
 .DS_Store
-.claude
+.claude/settings.local.json
+.claude/*.local.json
 *.pem
 
 # debug

@@ -33,6 +33,10 @@ export const AppPermissions = {
   ANIMAL_ASSESSMENT_READ: "animal_assessment:read",
   ANIMAL_ASSESSMENT_MANAGE: "animal_assessment:manage",
 
+  // Animal Vitals Permissions
+  ANIMAL_VITALS_READ: "animal_vitals:read",
+  ANIMAL_VITALS_MANAGE: "animal_vitals:manage",
+
   // Animal Note Permissions
   ANIMAL_NOTE_READ: "animal_note:read",
   ANIMAL_NOTE_MANAGE: "animal_note:manage",

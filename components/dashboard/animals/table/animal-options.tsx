@@ -5,6 +5,7 @@ import {
   CircleDot, Circle as SmallCircle, CircleDashed, CircleEllipsis,
 } from "lucide-react"
 import { buildOptions } from "@/app/lib/utils/option-utils"
+import { ANIMAL_SIZE_LABELS } from "@/app/lib/utils/enum-formatter"
 
 const sexMeta: Record<Sex, { label: string; icon: LucideIcon }> = {
   MALE:    { label: "Male",    icon: Mars },
@@ -13,10 +14,10 @@ const sexMeta: Record<Sex, { label: string; icon: LucideIcon }> = {
 }
 
 const sizeMeta: Record<AnimalSize, { label: string; icon: LucideIcon }> = {
-  SMALL:  { label: "Small",       icon: SmallCircle },
-  MEDIUM: { label: "Medium",      icon: CircleDot },
-  LARGE:  { label: "Large",       icon: CircleDashed },
-  XLARGE: { label: "Extra Large", icon: CircleEllipsis },
+  SMALL:  { label: ANIMAL_SIZE_LABELS.SMALL,  icon: SmallCircle },
+  MEDIUM: { label: ANIMAL_SIZE_LABELS.MEDIUM, icon: CircleDot },
+  LARGE:  { label: ANIMAL_SIZE_LABELS.LARGE,  icon: CircleDashed },
+  XLARGE: { label: ANIMAL_SIZE_LABELS.XLARGE, icon: CircleEllipsis },
 }
 
 export const sexOptions = buildOptions(sexMeta)

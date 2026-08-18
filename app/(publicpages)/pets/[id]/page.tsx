@@ -4,6 +4,11 @@ import {
   calculateAgeString,
   formatDateToLongString,
 } from "@/app/lib/utils/date-utils";
+import { formatWeight } from "@/app/lib/utils/weight-format";
+import {
+  formatSingleEnumOption,
+  formatAnimalSize,
+} from "@/app/lib/utils/enum-formatter";
 import PetGallery from "@/components/public-pages/pets/pet-gallery";
 import { auth } from "@/auth";
 import Link from "next/link";
@@ -108,16 +113,23 @@ const Page = async ({ params }: Props) => {
         {/* Key facts as a two-column key/value table */}
         <dl className="bg-muted rounded-lg px-4 sm:grid sm:grid-cols-2 sm:gap-x-8">
           <PetCardDetail label="Species" value={animal.species.name} />
-          <PetCardDetail label="Sex" value={animal.sex} />
+          <PetCardDetail label="Sex" value={formatSingleEnumOption(animal.sex)} />
           <PetCardDetail label="Breed" value={breedString} />
-          <PetCardDetail label="Size" value={animal.size} />
+          <PetCardDetail label="Size" value={formatAnimalSize(animal.size)} />
           <PetCardDetail label="Primary Color" value={primaryColorName} />
           <PetCardDetail label="Other Colors" value={additionalColorString} />
           <PetCardDetail
             label="Spayed/Neutered"
             value={animal.isSpayedNeutered ? "Yes" : "No"}
           />
-          <PetCardDetail label="Weight" value={animal.weightKg} unit="kg" />
+          <PetCardDetail
+            label="Weight"
+            value={
+              animal.currentWeightGrams != null
+                ? formatWeight(animal.currentWeightGrams)
+                : null
+            }
+          />
           <PetCardDetail label="Height" value={animal.heightCm} unit="cm" />
           <PetCardDetail label="Date of Birth" value={formattedBirthDate} />
         </dl>

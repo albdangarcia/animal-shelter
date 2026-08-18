@@ -126,10 +126,14 @@ export const AnimalFormSchema = z
       error: (issue) =>
         issue.input === undefined ? "Listing status is required." : undefined,
     }),
-    weightKg: z.coerce
+    // Weight at intake, in grams (canonical unit — see app/lib/utils/weight-format.ts).
+    weightGrams: z.coerce
       .number({
         error: (issue) =>
           issue.input === undefined ? undefined : "Weight must be a number.",
+      })
+      .int({
+        error: "Weight must be a whole number of grams.",
       })
       .positive({
         error: "Weight must be a positive number.",

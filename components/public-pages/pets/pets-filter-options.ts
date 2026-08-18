@@ -1,4 +1,5 @@
 import { Sex, AnimalSize } from "@/prisma/generated/enums";
+import { ANIMAL_SIZE_LABELS } from "@/app/lib/utils/enum-formatter";
 
 // Plain { label, value } options for the public pets faceted filters.
 //
@@ -15,9 +16,6 @@ export const SexOptions: { label: string; value: string }[] = [
   { label: "Female", value: Sex.FEMALE },
 ];
 
-export const SizeOptions: { label: string; value: string }[] = [
-  { label: "Small", value: AnimalSize.SMALL },
-  { label: "Medium", value: AnimalSize.MEDIUM },
-  { label: "Large", value: AnimalSize.LARGE },
-  { label: "Extra Large", value: AnimalSize.XLARGE },
-];
+export const SizeOptions: { label: string; value: string }[] = (
+  Object.entries(ANIMAL_SIZE_LABELS) as [AnimalSize, string][]
+).map(([value, label]) => ({ label, value }));
