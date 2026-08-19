@@ -108,21 +108,6 @@ export type PersonFormState = {
   } | null;
 };
 
-export interface HouseholdProfileFormState {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    livingSituation?: string[];
-    hasYard?: string[];
-    landlordPermission?: string[];
-    householdSize?: string[];
-    hasChildren?: string[];
-    childrenAges?: string[];
-    otherAnimalsDescription?: string[];
-    animalExperience?: string[];
-  };
-}
-
 export type PartnerFormState = {
   success?: boolean;
   message?: string | null;
