@@ -39,7 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-interface DataTableProps<TData extends RowData, TExtra = {}> {
+interface DataTableProps<TData extends RowData, TExtra = Record<string, never>> {
   columns?: ColumnDef<StockFeatures, TData>[];
   getColumns?: (props: TExtra) => ColumnDef<StockFeatures, TData>[];
   columnProps?: TExtra;
@@ -50,7 +50,7 @@ interface DataTableProps<TData extends RowData, TExtra = {}> {
   toolbarProps?: TExtra;
 }
 
-const DataTable = <TData extends RowData, TExtra = {}>({
+const DataTable = <TData extends RowData, TExtra = Record<string, never>>({
   columns: staticColumns,
   getColumns,
   columnProps,

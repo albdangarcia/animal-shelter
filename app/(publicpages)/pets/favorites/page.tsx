@@ -1,5 +1,4 @@
 import { auth } from "@/auth";
-import LoginPromptModal from "@/components/login-prompt-modal";
 import FavoritesGrid from "@/components/public-pages/pets/favorites/favorites-grid";
 
 const Page = async () => {

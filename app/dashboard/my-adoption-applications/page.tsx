@@ -13,8 +13,6 @@ import MyAppTableToolbar from "@/components/dashboard/my-adoption-applications/t
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { fetchMyAdoptionApplications } from "@/app/lib/data/my-adoption-applications.data";
-import { hasPermission } from "@/app/lib/auth/hasPermission";
-import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
   searchParams: SearchParamsType;

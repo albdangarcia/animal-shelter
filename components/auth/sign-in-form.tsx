@@ -6,7 +6,6 @@ import {
 } from "@/app/lib/actions/auth.actions";
 import { SignInFormSchema } from "@/app/lib/zod-schemas/common.schemas";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
 import { startTransition, useActionState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -25,7 +24,6 @@ interface SignInFormProps {
 }
 
 export const SignInForm = ({ callbackUrl }: SignInFormProps) => {
-  const router = useRouter();
   const [state, formAction, isPending] = useActionState(
     signInWithCredentials,
     INITIAL_FORM_STATE,

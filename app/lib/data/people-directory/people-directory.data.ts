@@ -308,7 +308,7 @@ const _fetchPersonForEdit = async (
 
     // strip "user" before returning since PersonFormPayload doesn't include it
     if (!person) return null;
-    const { user, ...rest } = person;
+    const { user: _user, ...rest } = person;
     return rest;
   } catch (error) {
     console.error("Error fetching person for edit.", error);

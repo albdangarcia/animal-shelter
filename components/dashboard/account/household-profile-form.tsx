@@ -4,7 +4,13 @@ import {
   updateMyHouseholdProfile,
   updateStaffHouseholdProfile,
 } from "@/app/lib/actions/household-profile.actions";
-import { startTransition, useActionState, useEffect, useState } from "react";
+import {
+  startTransition,
+  useActionState,
+  useEffect,
+  useState,
+  useTransition,
+} from "react";
 import {
   INITIAL_FORM_STATE,
   HouseholdProfileFormState,
@@ -389,13 +395,7 @@ const StaffHouseholdCard = ({
   canManage?: boolean;
   editable: boolean;
 }) => {
-  const boundAction = updateStaffHouseholdProfile.bind(null, personId);
-
-  const [state, formAction, isPending] = useActionState<
-    HouseholdProfileFormState,
-    FormData
-  >(boundAction, INITIAL_FORM_STATE);
-
+  const [isPending, startStaffTransition] = useTransition();
   const [isEditing, setIsEditing] = useState(false);
 
   const form = useForm<HouseholdProfileFormValues>({
@@ -416,23 +416,6 @@ const StaffHouseholdCard = ({
     },
   });
 
-  useEffect(() => {
-    if (state.success) {
-      toast.success(state.message ?? "Household profile updated.");
-      setIsEditing(false);
-    } else if (state.message) {
-      toast.error(state.message);
-    }
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof HouseholdProfileFormValues, {
-          type: "server",
-          message: Array.isArray(value) ? value.join(", ") : String(value),
-        });
-      }
-    }
-  }, [state, form]);
-
   const onSubmit = (data: HouseholdProfileFormValues) => {
     const formData = new FormData();
     for (const [key, value] of Object.entries(data)) {
@@ -444,8 +427,26 @@ const StaffHouseholdCard = ({
         formData.append(key, String(value));
       }
     }
-    startTransition(() => {
-      formAction(formData);
+    startStaffTransition(async () => {
+      const result = await updateStaffHouseholdProfile(
+        personId,
+        INITIAL_FORM_STATE,
+        formData,
+      );
+      if (result.success) {
+        toast.success(result.message ?? "Household profile updated.");
+        setIsEditing(false);
+      } else if (result.message) {
+        toast.error(result.message);
+      }
+      if (result.errors) {
+        for (const [key, value] of Object.entries(result.errors)) {
+          form.setError(key as keyof HouseholdProfileFormValues, {
+            type: "server",
+            message: Array.isArray(value) ? value.join(", ") : String(value),
+          });
+        }
+      }
     });
   };
 
