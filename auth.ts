@@ -67,7 +67,7 @@ const getUser = async (email: string): Promise<UserModel | null> => {
 
 const CustomPrismaAdapter = (p: typeof prisma) => {
   return {
-    ...PrismaAdapter(p as any),
+    ...PrismaAdapter(p.$extends({})),
     createUser: async (data: Omit<AdapterUser, "id">) => {
       // Use a transaction to ensure both Person and User are created successfully
       const user = await p.$transaction(async (tx) => {

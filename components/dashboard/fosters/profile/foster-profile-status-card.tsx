@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
@@ -161,12 +161,7 @@ export function FosterProfileStatusCard({
   const [confirmAction, setConfirmAction] = useState<StatusAction | null>(null);
   const [isStatusPending, startStatusTransition] = useTransition();
 
-  const boundCapabilityAction = updateFosterProfileCapabilities.bind(
-    null,
-    profile.id,
-  );
-  const [capabilityState, capabilityFormAction, isCapabilityPending] =
-    useActionState(boundCapabilityAction, INITIAL_FORM_STATE);
+  const [isCapabilityPending, startCapabilityTransition] = useTransition();
 
   const form = useForm<CapabilityFormValues>({
     resolver: standardSchemaResolver(FosterCapabilityFieldsSchema),
@@ -183,26 +178,6 @@ export function FosterProfileStatusCard({
     },
   });
 
-  useEffect(() => {
-    if (capabilityState.success) {
-      toast.success(capabilityState.message ?? "Foster capabilities updated.");
-      setIsEditing(false);
-    } else if (capabilityState.message) {
-      toast.error(capabilityState.message);
-    }
-    if (capabilityState.errors) {
-      for (const [key, value] of Object.entries(capabilityState.errors)) {
-        if (value) {
-          form.setError(key as keyof CapabilityFormValues, {
-            type: "server",
-            message: Array.isArray(value) ? value.join(", ") : String(value),
-          });
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [capabilityState]);
-
   const onSubmit = (data: CapabilityFormValues) => {
     const formData = new FormData();
     for (const [key, value] of Object.entries(data)) {
@@ -214,8 +189,28 @@ export function FosterProfileStatusCard({
         formData.append(key, String(value));
       }
     }
-    startTransition(() => {
-      capabilityFormAction(formData);
+    startCapabilityTransition(async () => {
+      const result = await updateFosterProfileCapabilities(
+        profile.id,
+        INITIAL_FORM_STATE,
+        formData,
+      );
+      if (result.success) {
+        toast.success(result.message ?? "Foster capabilities updated.");
+        setIsEditing(false);
+      } else if (result.message) {
+        toast.error(result.message);
+      }
+      if (result.errors) {
+        for (const [key, value] of Object.entries(result.errors)) {
+          if (value) {
+            form.setError(key as keyof CapabilityFormValues, {
+              type: "server",
+              message: Array.isArray(value) ? value.join(", ") : String(value),
+            });
+          }
+        }
+      }
     });
   };
 

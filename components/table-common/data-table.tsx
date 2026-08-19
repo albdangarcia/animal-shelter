@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/table";
 import { DataTablePagination } from "@/components/table-common/data-table-pagination";
 
-interface DataTableProps<TData extends RowData, TExtra = {}> {
+interface DataTableProps<TData extends RowData, TExtra = Record<string, never>> {
   columns?: ColumnDef<StockFeatures, TData>[];
   getColumns?: (props: TExtra) => ColumnDef<StockFeatures, TData>[];
   columnProps?: TExtra;
@@ -32,7 +32,7 @@ interface DataTableProps<TData extends RowData, TExtra = {}> {
   totalRows: number;
 }
 
-const DataTable = <TData extends RowData, TExtra = {}>({
+const DataTable = <TData extends RowData, TExtra = Record<string, never>>({
   columns: staticColumns,
   getColumns,
   columnProps,
