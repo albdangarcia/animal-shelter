@@ -180,7 +180,8 @@ export const AnimalFormSchema = z
     if (data.additionalColors.includes(data.primaryColor)) {
       ctx.addIssue({
         code: "custom",
-        message: "The primary color shouldn't be repeated in additional colors.",
+        message:
+          "The primary color shouldn't be repeated in additional colors.",
         path: ["additionalColors"],
       });
     }
@@ -224,41 +225,40 @@ export const AnimalFormSchema = z
     }
   });
 
-export const TaskFormSchema = z
-  .object({
-    title: z.string().min(1, {
-      error: "Title is required.",
-    }),
-    details: z.string().optional(),
-    status: z.enum(TaskStatus).optional(),
-    category: z.enum(TaskCategory, {
-      error: (issue) =>
-        issue.input === undefined ? "Category is required." : undefined,
-    }),
-    priority: z.enum(TaskPriority).optional(),
-    dueDate: z.coerce.date().optional(),
-    assigneeId: z
-      .cuid2({
-        error: "Valid assignee ID is required.",
-      })
-      .optional(),
-  })
-  .refine(
-    (data) => {
-      // If a due date is provided, it must not be in the past.
-      if (data.dueDate) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Set to the beginning of today
-        return data.dueDate >= today;
-      }
-      // If no due date is provided, the validation passes.
-      return true;
-    },
-    {
-      path: ["dueDate"],
-      error: "Due date cannot be in the past.",
-    }
-  );
+export const TaskFormSchema = z.object({
+  title: z.string().min(1, {
+    error: "Title is required.",
+  }),
+  details: z.string().optional(),
+  status: z.enum(TaskStatus).optional(),
+  category: z.enum(TaskCategory, {
+    error: (issue) =>
+      issue.input === undefined ? "Category is required." : undefined,
+  }),
+  priority: z.enum(TaskPriority).optional(),
+ 
+  // Was z.coerce.date(). Coercion existed to parse the ISO string produced by
+  // the old hand-built FormData; the client now sends a real Date. Zod 4 types
+  // a coerced field's INPUT as `unknown`, which would make z.input unusable as
+  // the react-hook-form values type — without coerce, input and output match.
+  dueDate: z.date().optional(),
+ 
+  assigneeId: z
+    .cuid2({
+      error: "Valid assignee ID is required.",
+    })
+    .optional(),
+});
+ 
+export const CreateTaskFormSchema = TaskFormSchema.refine(
+  (data) => {
+    if (!data.dueDate) return true;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return data.dueDate >= today;
+  },
+  { path: ["dueDate"], error: "Due date cannot be in the past." },
+);
 
 export const NoteFormSchema = z.object({
   category: z.enum(NoteCategory),
@@ -272,3 +272,5 @@ export const assessmentFieldSchema = z.object({
   fieldValue: z.string().min(1, { error: "Field value cannot be empty." }),
   notes: z.string().optional(),
 });
+
+export type TaskFormInput = z.input<typeof TaskFormSchema>;

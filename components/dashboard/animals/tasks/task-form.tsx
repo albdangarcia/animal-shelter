@@ -1,10 +1,10 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
-import { format } from "date-fns";
+import { format, startOfToday } from "date-fns";
 import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -36,9 +36,11 @@ import {
   TaskPriorityOptions,
   TaskStatusOptions,
 } from "@/app/lib/utils/enum-formatter";
-import { AnimalTaskFormState } from "@/app/lib/form-state-types";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { TaskFormSchema } from "@/app/lib/zod-schemas/animal.schemas";
+import {
+  CreateTaskFormSchema,
+  TaskFormSchema,
+} from "@/app/lib/zod-schemas/animal.schemas";
 import { TaskAssignee } from "@/app/lib/types";
 import { TaskPriority, TaskStatus } from "@/prisma/generated/enums";
 import {
@@ -46,11 +48,10 @@ import {
   updateAnimalTask,
 } from "@/app/lib/actions/animal-task.actions";
 import { FetchAnimalTasksPayload } from "@/app/lib/data/animals/animal-task.data";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { toast } from "sonner";
 
 type TaskFormValues = z.infer<typeof TaskFormSchema>;
-
-const INITIAL_FORM_STATE = { success: false, message: null, errors: {} };
 
 interface TaskFormProps {
   animalId: string;
@@ -65,17 +66,12 @@ export const TaskForm = ({
   assigneeList,
   task,
 }: TaskFormProps) => {
-  const action = task
-    ? updateAnimalTask.bind(null, task.id, animalId)
-    : createAnimalTask.bind(null, animalId);
+  const [isPending, startSubmitTransition] = useTransition();
 
-  const [state, formAction, isPending] = useActionState<
-    AnimalTaskFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
-
-  const form = useForm({
-    resolver: zodResolver(TaskFormSchema),
+  const form = useForm<TaskFormValues>({
+    resolver: standardSchemaResolver(
+      task ? TaskFormSchema : CreateTaskFormSchema,
+    ),
     defaultValues: task
       ? {
           title: task.title,
@@ -97,41 +93,28 @@ export const TaskForm = ({
         },
   });
 
-  useEffect(() => {
-    // If there's no message, do nothing.
-    if (!state.message) {
-      return;
-    }
+  // No FormData: the values are already validated and correctly typed, so they
+  // go to the server as-is. Date survives the RSC boundary, so dueDate no
+  // longer needs toISOString() on the way out and z.coerce on the way in.
+  //
+  // Closing the dialog happens here, in the handler, rather than in an effect
+  // watching action state. That effect was the same cascading-render pattern
+  // react-hooks/set-state-in-effect flags — it just went unreported because
+  // onFormSubmit is a prop, so the rule couldn't see the setter it calls.
+  const onSubmit = (values: TaskFormValues) => {
+    startSubmitTransition(async () => {
+      const result = task
+        ? await updateAnimalTask(task.id, animalId, values)
+        : await createAnimalTask(animalId, values);
 
-    // If the action was successful, show a success toast and close the form.
-    if (state.success) {
-      toast.success(state.message);
-      onFormSubmit(); // Close dialog on success
-    }
-    // If it failed and there are specific field errors, set them on the form.
-    else if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof TaskFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        onFormSubmit(); // Close dialog on success
+        return;
       }
-    } else {
-      toast.error(state.message);
-    }
-  }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: TaskFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (value instanceof Date) {
-        formData.append(key, value.toISOString());
-      } else if (value != null && value !== "") {
-        formData.append(key, String(value));
-      }
-    }
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -145,7 +128,7 @@ export const TaskForm = ({
             name="title"
             render={({ field }) => (
               <FormItem className="col-span-full">
-                <FormLabel>Title</FormLabel>
+                <FormLabel>Title *</FormLabel>
                 <FormControl>
                   <Input placeholder="e.g., Administer medication" {...field} />
                 </FormControl>
@@ -178,11 +161,8 @@ export const TaskForm = ({
             name="category"
             render={({ field }) => (
               <FormItem className="md:col-span-3">
-                <FormLabel>Category</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
+                <FormLabel>Category *</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value ?? ""}>
                   <FormControl>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select a category" />
@@ -241,7 +221,6 @@ export const TaskForm = ({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {/* Assuming you create TaskPriorityOptions */}
                     {TaskPriorityOptions.map((option) => (
                       <SelectItem key={option.value} value={option.value}>
                         {option.label}
@@ -258,45 +237,45 @@ export const TaskForm = ({
           <FormField
             control={form.control}
             name="dueDate"
-            render={({ field }) => {
-              const dateValue = field.value as Date | undefined;
-
-              return (
-                <FormItem className="md:col-span-2 md:col-start-4">
-                  <FormLabel>Due Date</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !dateValue && "text-muted-foreground"
-                          )}
-                        >
-                          {dateValue ? (
-                            format(dateValue, "PPP")
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={dateValue}
-                        onSelect={field.onChange}
-                        disabled={(date) => date < new Date("1900-01-01")}
-                        autoFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
+            render={({ field }) => (
+              <FormItem className="md:col-span-2 md:col-start-4">
+                <FormLabel>Due Date</FormLabel>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full pl-3 text-left font-normal",
+                          !field.value && "text-muted-foreground",
+                        )}
+                      >
+                        {field.value ? (
+                          format(field.value, "PPP")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      disabled={(date) =>
+                        task
+                          ? date < new Date("1900-01-01")
+                          : date < startOfToday()
+                      }
+                      autoFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                <FormMessage />
+              </FormItem>
+            )}
           />
 
           <FormField
@@ -305,10 +284,7 @@ export const TaskForm = ({
             render={({ field }) => (
               <FormItem className="md:col-span-3">
                 <FormLabel>Assign to</FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  defaultValue={field.value}
-                >
+                <Select onValueChange={field.onChange} value={field.value ?? ""}>
                   <FormControl>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select a staff member or volunteer" />

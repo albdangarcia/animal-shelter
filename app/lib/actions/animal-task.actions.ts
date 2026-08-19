@@ -1,9 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import z from "zod";
 import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
-import { AnimalTaskFormState } from "../form-state-types";
 import {
   RequirePermission,
   SessionUser,
@@ -12,137 +12,123 @@ import {
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { TaskFormSchema } from "../zod-schemas/animal.schemas";
 import type { TaskStatus } from "@/prisma/generated/enums";
-import z from "zod";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+
+type TaskFormInput = z.input<typeof TaskFormSchema>;
+type TaskResult = FormResult<TaskFormInput>;
+
+// Shared by create and update. `details` maps "" to null so clearing the
+// textarea actually clears the column — the old FormData builder skipped
+// empty strings entirely, so the key never reached the server, Prisma saw
+// undefined, and the write was silently skipped.
+const toTaskData = (data: z.output<typeof TaskFormSchema>) => ({
+  title: data.title,
+  details: data.details?.trim() ? data.details : null,
+  status: data.status,
+  category: data.category,
+  priority: data.priority,
+  dueDate: data.dueDate ?? null,
+  assigneeId: data.assigneeId,
+});
 
 const _createAnimalTask = async (
   user: SessionUser, // Injected by withAuthenticatedUser
   animalId: string,
-  prevState: AnimalTaskFormState,
-  formData: FormData
-): Promise<AnimalTaskFormState> => {
+  values: TaskFormInput,
+): Promise<TaskResult> => {
   const taskCreatorId = user.personId;
 
   const parsedId = cuidSchema.safeParse(animalId);
   if (!parsedId.success) {
-    return { message: "Invalid animal ID format." };
+    return { ok: false, message: "Invalid animal ID format." };
   }
 
-  const validatedFields = TaskFormSchema.safeParse(
-    Object.fromEntries(formData.entries())
-  );
+  const validatedFields = TaskFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create task.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<TaskFormInput>,
     };
   }
-
-  const { title, details, status, category, priority, dueDate, assigneeId } =
-    validatedFields.data;
 
   try {
     await prisma.task.create({
       data: {
-        title: title,
-        details: details,
-        status: status,
-        category: category,
-        priority: priority,
-        dueDate: dueDate,
+        ...toTaskData(validatedFields.data),
         animalId: parsedId.data,
-        assigneeId: assigneeId,
         createdById: taskCreatorId,
       },
     });
   } catch (error) {
     console.error("Database Error creating task:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to create task.",
-    };
+    return { ok: false, message: "Database Error: Failed to create task." };
   }
 
   revalidatePath(`/dashboard`);
   revalidatePath(`/dashboard/animals/${animalId}/tasks`);
   revalidatePath(`/dashboard/animal-tasks`);
 
-  return {
-    success: true,
-    message: "Task created successfully.",
-  };
+  return { ok: true, message: "Task created successfully." };
 };
 
 const _updateAnimalTask = async (
   taskId: string,
   animalId: string,
-  prevState: AnimalTaskFormState,
-  formData: FormData
-): Promise<AnimalTaskFormState> => {
+  values: TaskFormInput,
+): Promise<TaskResult> => {
   const parsedTaskId = cuidSchema.safeParse(taskId);
   if (!parsedTaskId.success) {
-    return { message: "Invalid task ID format." };
+    return { ok: false, message: "Invalid task ID format." };
   }
 
   const parsedAnimalId = cuidSchema.safeParse(animalId);
   if (!parsedAnimalId.success) {
-    return { message: "Invalid animal ID format." };
+    return { ok: false, message: "Invalid animal ID format." };
   }
 
-  // Validate the form fields
-  const validatedFields = TaskFormSchema.safeParse(
-    Object.fromEntries(formData.entries())
-  );
+  const validatedFields = TaskFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update task.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<TaskFormInput>,
     };
   }
 
-  const { title, details, status, category, priority, dueDate, assigneeId } =
-    validatedFields.data;
-
   try {
-    // Update the task in the database
     await prisma.task.update({
       where: {
         id: parsedTaskId.data,
         animalId: parsedAnimalId.data, // Ensures the task belongs to the correct animal
       },
-      data: {
-        title: title,
-        details: details,
-        status: status,
-        category: category,
-        priority: priority,
-        dueDate: dueDate,
-        assigneeId: assigneeId,
-      },
+      data: toTaskData(validatedFields.data),
     });
   } catch (error) {
     console.error("Database Error updating task:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to update task.",
-    };
+    return { ok: false, message: "Database Error: Failed to update task." };
   }
 
   revalidatePath(`/dashboard/animals/${animalId}/tasks`);
   revalidatePath(`/dashboard/animal-tasks`);
   revalidatePath(`/dashboard`);
 
-  return {
-    success: true,
-    message: "Task updated successfully.",
-  };
+  return { ok: true, message: "Task updated successfully." };
 };
+
+// The two actions below are field-less mutations, not forms: no schema, no
+// react-hook-form, nothing for FormResult to carry field errors about. They
+// keep their existing { success, message } shape and are called from plain
+// async click handlers wrapped in useTransition.
 
 const _updateTaskStatus = async (
   animalId: string,
   taskId: string,
-  status: TaskStatus
+  status: TaskStatus,
 ): Promise<{ success: boolean; message: string }> => {
   const parsedTaskId = cuidSchema.safeParse(taskId);
   if (!parsedTaskId.success) {
@@ -181,7 +167,7 @@ const UpdateAssigneeSchema = z.object({
 
 const _updateAnimalTaskAssignee = async (
   taskId: string,
-  assigneeId: string | null
+  assigneeId: string | null,
 ): Promise<{ success: boolean; message: string }> => {
   try {
     const validatedData = UpdateAssigneeSchema.parse({ taskId, assigneeId });
@@ -209,17 +195,17 @@ const _updateAnimalTaskAssignee = async (
 };
 
 export const updateAnimalTaskAssignee = RequirePermission(
-  AppPermissions.ANIMAL_TASK_MANAGE
+  AppPermissions.ANIMAL_TASK_MANAGE,
 )(_updateAnimalTaskAssignee);
 
 export const updateAnimalTaskStatus = RequirePermission(
-  AppPermissions.ANIMAL_TASK_MANAGE
+  AppPermissions.ANIMAL_TASK_MANAGE,
 )(_updateTaskStatus);
 
 export const updateAnimalTask = RequirePermission(
-  AppPermissions.ANIMAL_TASK_MANAGE
+  AppPermissions.ANIMAL_TASK_MANAGE,
 )(_updateAnimalTask);
 
 export const createAnimalTask = withAuthenticatedUser(
-  RequirePermission(AppPermissions.ANIMAL_TASK_MANAGE)(_createAnimalTask)
+  RequirePermission(AppPermissions.ANIMAL_TASK_MANAGE)(_createAnimalTask),
 );
