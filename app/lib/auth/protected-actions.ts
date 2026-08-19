@@ -29,17 +29,17 @@ export function withAuthenticatedUser<TArgs extends unknown[], TReturn>(
  * @returns A function that takes the target action and returns a new, protected version of it.
  */
 export function RequirePermission(requiredPermission: AppPermission) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return function <T extends (...args: any[]) => Promise<any>>(target: T): T {
-    const protectedAction = async (...args: Parameters<T>): Promise<ReturnType<T>> => {
+  return function <TArgs extends unknown[], TReturn>(
+    target: (...args: TArgs) => Promise<TReturn>,
+  ) {
+    return async (...args: TArgs): Promise<TReturn> => {
       const isAllowed = await hasPermission(requiredPermission);
       if (!isAllowed) {
         throw new Error(
-          "Access Denied. You do not have permission to perform this action."
+          "Access Denied. You do not have permission to perform this action.",
         );
       }
-      return target(...args) as unknown as ReturnType<T>;
+      return target(...args);
     };
-    return protectedAction as T;
   };
 }
