@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { NumberInput } from "@/components/forms/number-input";
 import {
   Popover,
   PopoverContent,
@@ -67,12 +68,9 @@ export function DynamicFormField({ field, control }: DynamicFormFieldProps) {
         );
       case FieldType.NUMBER:
         return (
-          <Input
-            type="number"
+          <NumberInput
             placeholder={field.placeholder || "0"}
             {...controllerField}
-            value={controllerField.value ?? ""}
-            onChange={(e) => controllerField.onChange(e.target.value === '' ? '' : Number(e.target.value))}
           />
         );
       case FieldType.SELECT: {

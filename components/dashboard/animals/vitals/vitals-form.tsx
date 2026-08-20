@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useState, startTransition, useActionState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+import { useState, useTransition } from "react";
+import { useForm, type DefaultValues } from "react-hook-form";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { format } from "date-fns";
 import { CalendarIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -26,14 +24,18 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import {
   createVitalsEntry,
   updateVitalsEntry,
-  VitalsFormState,
 } from "@/app/lib/actions/animal-vitals.actions";
 import { AnimalVitalsFormPayload } from "@/app/lib/data/animals/animal-vitals.data";
-import { VitalsFormSchema } from "@/app/lib/zod-schemas/vitals.schemas";
+import {
+  VitalsFormSchema,
+  type VitalsFormValues,
+} from "@/app/lib/zod-schemas/vitals.schemas";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
+import { NumberInput } from "@/components/forms/number-input";
+import { NumberField } from "@/components/forms/number-field";
 import {
   WEIGHT_UNITS,
   WeightUnit,
@@ -43,14 +45,22 @@ import {
   roundForUnit,
 } from "@/app/lib/utils/weight-format";
 
-type VitalsFormValues = z.infer<typeof VitalsFormSchema>;
-
 interface VitalsFormProps {
   animalId: string;
   vitalsLog?: AnimalVitalsFormPayload; // Optional: if provided, form is in "edit" mode
   previousWeightGrams: number | null;
   onFormSubmit: () => void; // To close the dialog on success
 }
+
+const buildDefaultValues = (
+  vitalsLog?: AnimalVitalsFormPayload,
+): DefaultValues<VitalsFormValues> => ({
+  weightGrams: vitalsLog?.weightGrams ?? null,
+  temperatureC: vitalsLog?.temperatureC ?? null,
+  bodyConditionScore: vitalsLog?.bodyConditionScore ?? null,
+  recordedAt: vitalsLog ? new Date(vitalsLog.recordedAt) : new Date(),
+  notes: vitalsLog?.notes ?? "",
+});
 
 export function VitalsForm({
   animalId,
@@ -60,14 +70,7 @@ export function VitalsForm({
 }: VitalsFormProps) {
   const isEditMode = !!vitalsLog;
 
-  const action = isEditMode
-    ? updateVitalsEntry.bind(null, vitalsLog.id, animalId)
-    : createVitalsEntry.bind(null, animalId);
-
-  const [state, formAction, isPending] = useActionState<
-    VitalsFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
+  const [isPending, startSubmitTransition] = useTransition();
 
   // The toggle defaults to whichever of the two WEIGHT_UNITS fits the most
   // recent known weight (e.g. a 180g kitten defaults to oz, not lb). Once the
@@ -92,60 +95,25 @@ export function VitalsForm({
     }
   }
 
-  const form = useForm({
-    resolver: zodResolver(VitalsFormSchema),
-    defaultValues: vitalsLog
-      ? {
-          weightGrams: vitalsLog.weightGrams ?? "",
-          temperatureC: vitalsLog.temperatureC ?? "",
-          bodyConditionScore: vitalsLog.bodyConditionScore ?? "",
-          recordedAt: new Date(vitalsLog.recordedAt),
-          notes: vitalsLog.notes ?? "",
-        }
-      : {
-          weightGrams: "",
-          temperatureC: "",
-          bodyConditionScore: "",
-          recordedAt: new Date(),
-          notes: "",
-        },
+  const form = useForm<VitalsFormValues>({
+    resolver: standardSchemaResolver(VitalsFormSchema),
+    defaultValues: buildDefaultValues(vitalsLog),
   });
 
-  const { setError } = form;
+  const onSubmit = (values: VitalsFormValues) => {
+    startSubmitTransition(async () => {
+      const result = isEditMode
+        ? await updateVitalsEntry(vitalsLog.id, animalId, values)
+        : await createVitalsEntry(animalId, values);
 
-  useEffect(() => {
-    if (!state.message) return;
-
-    if (state.success) {
-      toast.success(state.message);
-      onFormSubmit(); // Close the dialog
-    } else if (state.errors) {
-      toast.error(state.message);
-      for (const [key, value] of Object.entries(state.errors)) {
-        if (value) {
-          form.setError(key as keyof VitalsFormValues, {
-            type: "server",
-            message: value.join(", "),
-          });
-        }
+      if (result.ok) {
+        toast.success(result.message);
+        onFormSubmit(); // Close the dialog
+        return;
       }
-    } else {
-      toast.error(state.message);
-    }
-  }, [state, form, setError, onFormSubmit]);
 
-  const onSubmit = (data: VitalsFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (value instanceof Date) {
-        formData.append(key, value.toISOString());
-      } else if (value != null && value !== "") {
-        formData.append(key, String(value));
-      }
-    }
-
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -158,32 +126,23 @@ export function VitalsForm({
             control={form.control}
             name="weightGrams"
             render={({ field }) => {
-              const grams =
-                field.value === "" || field.value == null
-                  ? null
-                  : Number(field.value);
+              const grams = field.value;
               const displayValue =
-                grams == null ? "" : String(roundForUnit(fromGrams(grams, unit), unit));
+                grams == null ? null : roundForUnit(fromGrams(grams, unit), unit);
 
               return (
                 <FormItem className="md:col-span-3">
                   <FormLabel>Weight</FormLabel>
                   <div className="flex gap-2">
                     <FormControl>
-                      <Input
-                        type="number"
-                        step="any"
+                      <NumberInput
+                        decimal
                         placeholder="0"
                         value={displayValue}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          if (raw === "") {
-                            field.onChange("");
-                            return;
-                          }
-                          const parsed = parseFloat(raw);
-                          if (Number.isNaN(parsed)) return;
-                          field.onChange(Math.round(toGrams(parsed, unit)));
+                        onChange={(value) => {
+                          field.onChange(
+                            value == null ? null : Math.round(toGrams(value, unit)),
+                          );
                         }}
                       />
                     </FormControl>
@@ -212,112 +171,65 @@ export function VitalsForm({
           />
 
           {/* Temperature */}
-          <FormField
+          <NumberField
             control={form.control}
             name="temperatureC"
-            render={({ field }) => {
-              const value =
-                field.value === undefined || field.value === ""
-                  ? ""
-                  : String(field.value);
-
-              return (
-                <FormItem className="md:col-span-3">
-                  <FormLabel>Temperature (°C)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="any"
-                      placeholder="38.5"
-                      value={value}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        field.onChange(val === "" ? "" : parseFloat(val));
-                      }}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
+            label="Temperature (°C)"
+            className="md:col-span-3"
+            decimal
+            placeholder="38.5"
           />
 
           {/* Body Condition Score */}
-          <FormField
+          <NumberField
             control={form.control}
             name="bodyConditionScore"
-            render={({ field }) => {
-              const value =
-                field.value === undefined || field.value === ""
-                  ? ""
-                  : String(field.value);
-
-              return (
-                <FormItem className="md:col-span-3">
-                  <FormLabel>Body Condition Score (1-9)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={9}
-                      step={1}
-                      placeholder="5"
-                      value={value}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        field.onChange(val === "" ? "" : parseFloat(val));
-                      }}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
+            label="Body Condition Score (1-9)"
+            className="md:col-span-3"
+            min={1}
+            max={9}
+            placeholder="5"
           />
 
           {/* Recorded At */}
           <FormField
             control={form.control}
             name="recordedAt"
-            render={({ field }) => {
-              const dateValue = field.value as Date | undefined;
-
-              return (
-                <FormItem className="md:col-span-3">
-                  <FormLabel>Date Recorded</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !dateValue && "text-muted-foreground",
-                          )}
-                        >
-                          {dateValue ? (
-                            format(dateValue, "PPP")
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={dateValue}
-                        onSelect={field.onChange}
-                        disabled={(date) => date > new Date()}
-                        autoFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
+            render={({ field }) => (
+              <FormItem className="md:col-span-3">
+                <FormLabel>Date Recorded</FormLabel>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <FormControl>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full pl-3 text-left font-normal",
+                          !field.value && "text-muted-foreground",
+                        )}
+                      >
+                        {field.value ? (
+                          format(field.value, "PPP")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                      </Button>
+                    </FormControl>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={field.value}
+                      onSelect={field.onChange}
+                      disabled={(date) => date > new Date()}
+                      autoFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+                <FormMessage />
+              </FormItem>
+            )}
           />
 
           {/* Notes */}

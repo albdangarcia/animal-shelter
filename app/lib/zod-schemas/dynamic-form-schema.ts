@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { FieldType, AssessmentOutcome } from "@/prisma/generated/enums";
 import { TemplateField } from "../types";
+import { requiredNumber } from "./common.schemas";
 
 export function createDynamicSchema(fields: TemplateField[]) {
   const schemaFields: Record<string, z.ZodTypeAny> = {};
@@ -15,11 +16,17 @@ export function createDynamicSchema(fields: TemplateField[]) {
           .string()
           .min(1, { error: `${field.label} is required` });
         break;
-      case FieldType.NUMBER:
-        fieldSchema = z.coerce
-          .number()
-          .min(0, { error: `${field.label} must be a positive number` });
+      case FieldType.NUMBER: {
+        // No z.coerce here: the client sends a real number (or null) via
+        // NumberInput, not a string to parse. Required fields reject null;
+        // optional fields accept it — nullable(), not optional(), since a
+        // cleared NumberInput sends null, never undefined.
+        const numberSchema = requiredNumber(field.label).min(0, {
+          error: `${field.label} must be a positive number`,
+        });
+        fieldSchema = field.isRequired ? numberSchema : numberSchema.nullable();
         break;
+      }
       case FieldType.SELECT:
       case FieldType.RADIO:
         if (field.options && field.options.length > 0) {
@@ -53,8 +60,10 @@ export function createDynamicSchema(fields: TemplateField[]) {
           .min(1, { error: `${field.label} is required` });
     }
 
-    // Apply optional if not required
-    if (!field.isRequired) {
+    // Apply optional if not required. NUMBER already applied its own
+    // nullable() above — wrapping it in .optional().or(z.literal("")) would
+    // reintroduce the empty-string sentinel NumberInput no longer sends.
+    if (!field.isRequired && field.fieldType !== FieldType.NUMBER) {
       fieldSchema = fieldSchema.optional().or(z.literal(""));
     }
 

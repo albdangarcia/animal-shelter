@@ -3,16 +3,16 @@
 import React, {
   useState,
   useEffect,
-  startTransition,
   useMemo,
   useCallback,
+  useTransition,
 } from "react";
 import { useForm, Controller, Control, FieldValues } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { FieldType, AssessmentType } from "@/prisma/generated/enums";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { useActionState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import {
@@ -25,7 +25,7 @@ import {
 } from "@/app/lib/data/animals/animal-assessment.data";
 import { createDynamicSchema } from "@/app/lib/zod-schemas/dynamic-form-schema";
 import { DynamicFormField } from "@/app/lib/dynamic-form-field";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { TemplateField } from "@/app/lib/types";
 import { assessmentOutcomeOptions } from "@/app/lib/utils/enum-formatter";
 import { Button } from "@/components/ui/button";
@@ -59,15 +59,9 @@ export function AssessmentForm({
   assessment,
 }: AssessmentFormProps) {
   const isEditMode = !!assessment;
+  const router = useRouter();
 
-  const action = isEditMode
-    ? updateAnimalAssessment.bind(null, assessment.id, animalId)
-    : createAssessment;
-
-  const [state, formAction, isPending] = useActionState(
-    action,
-    INITIAL_FORM_STATE,
-  );
+  const [isPending, startSubmitTransition] = useTransition();
 
   const [selectedTemplate, setSelectedTemplate] =
     useState<AssessmentTemplateWithFields | null>(() => {
@@ -103,7 +97,7 @@ export function AssessmentForm({
           if (templateField) {
             let value: unknown = savedField.fieldValue;
             if (templateField.fieldType === FieldType.NUMBER) {
-              value = value !== null ? Number(value) : "";
+              value = value !== null ? Number(value) : null;
             } else if (templateField.fieldType === FieldType.CHECKBOX) {
               value = value === "true";
             }
@@ -112,12 +106,18 @@ export function AssessmentForm({
           }
         });
       } else {
-        // Create mode: Set empty defaults
+        // Create mode: Set empty defaults. NUMBER defaults to null, never "" —
+        // NumberInput's cleared value is null, and undefined would make RHF
+        // resolve the field back to a defaultValue that doesn't exist here.
         defaultVals.overallOutcome = "";
         defaultVals.summary = "";
         fields.forEach((field) => {
           defaultVals[field.id] =
-            field.fieldType === FieldType.CHECKBOX ? false : "";
+            field.fieldType === FieldType.CHECKBOX
+              ? false
+              : field.fieldType === FieldType.NUMBER
+                ? null
+                : "";
           defaultVals[`${field.id}_notes`] = "";
         });
       }
@@ -127,11 +127,11 @@ export function AssessmentForm({
   );
 
   const form = useForm<Record<string, unknown>>({
-    resolver: zodResolver(createDynamicSchema(allFields)),
+    resolver: standardSchemaResolver(createDynamicSchema(allFields)),
     defaultValues: generateDefaultValues(allFields, assessment),
   });
 
-  const { control, reset, setError } = form;
+  const { control, reset } = form;
 
   useEffect(() => {
     if (!isEditMode) {
@@ -140,22 +140,6 @@ export function AssessmentForm({
     }
   }, [allFields, reset, isEditMode, generateDefaultValues, assessment]);
 
-  useEffect(() => {
-    if (state.message && state.errors) {
-      toast.error(state.message);
-    }
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        if (value) {
-          setError(key as Parameters<typeof setError>[0], {
-            type: "server",
-            message: value.join(", "),
-          });
-        }
-      }
-    }
-  }, [state, setError]);
-
   const handleTemplateChange = (templateId: string) => {
     if (!isEditMode) {
       const template = templates.find((t) => t.id === templateId);
@@ -163,22 +147,26 @@ export function AssessmentForm({
     }
   };
 
-  const handleFormSubmit = (data: Record<string, unknown>) => {
+  const handleFormSubmit = (values: Record<string, unknown>) => {
     if (!selectedTemplate) return;
 
-    const formData = new FormData();
-    formData.append("animalId", animalId);
-    formData.append("templateId", selectedTemplate.id);
+    startSubmitTransition(async () => {
+      const result =
+        isEditMode && assessment
+          ? await updateAnimalAssessment(assessment.id, animalId, values)
+          : await createAssessment(animalId, selectedTemplate.id, values);
 
-    for (const key in data) {
-      const value = data[key];
-      if (value !== null && value !== undefined) {
-        formData.append(key, String(value));
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
+        }
+        return;
       }
-    }
 
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
