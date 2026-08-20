@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import {
   AnimalActivityType,
@@ -19,7 +18,6 @@ import {
   withAuthenticatedUser,
 } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
-import { FosterPlacementFormState } from "../form-state-types";
 import {
   ConvertFosterToAdoptionSchema,
   CreateFosterPlacementSchema,
@@ -31,28 +29,28 @@ import {
   NotFoundError,
   PreconditionFailedError,
 } from "../utils/errors";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+
+type CreateFosterPlacementInput = z.input<typeof CreateFosterPlacementSchema>;
+type ReturnFromFosterInput = z.input<typeof ReturnFromFosterSchema>;
+type ConvertFosterToAdoptionInput = z.input<
+  typeof ConvertFosterToAdoptionSchema
+>;
 
 const _createFosterPlacement = async (
   user: SessionUser,
-  prevState: FosterPlacementFormState,
-  formData: FormData,
-): Promise<FosterPlacementFormState> => {
+  values: CreateFosterPlacementInput,
+): Promise<FormResult<CreateFosterPlacementInput>> => {
   const staffMemberId = user.personId;
 
-  const validatedFields = CreateFosterPlacementSchema.safeParse({
-    animalId: formData.get("animalId"),
-    fosterProfileId: formData.get("fosterProfileId"),
-    type: formData.get("type"),
-    expectedEndDate: formData.get("expectedEndDate")
-      ? new Date(formData.get("expectedEndDate") as string)
-      : undefined,
-    notes: formData.get("notes") || undefined,
-  });
+  const validatedFields = CreateFosterPlacementSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create foster placement.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<CreateFosterPlacementInput>,
     };
   }
 
@@ -178,9 +176,10 @@ const _createFosterPlacement = async (
       error instanceof ConflictError ||
       error instanceof PreconditionFailedError
     ) {
-      return { message: error.message };
+      return { ok: false, message: error.message };
     }
     return {
+      ok: false,
       message: "Database Error: Failed to create foster placement.",
     };
   }
@@ -188,7 +187,11 @@ const _createFosterPlacement = async (
   revalidatePath(`/dashboard/animals/${animalId}`);
   revalidatePath("/dashboard/fosters");
   revalidatePath("/dashboard/locations");
-  redirect(`/dashboard/animals/${animalId}`);
+  return {
+    ok: true,
+    message: "Placement created.",
+    redirectTo: `/dashboard/animals/${animalId}`,
+  };
 };
 
 export const createFosterPlacement = withAuthenticatedUser(
@@ -197,23 +200,19 @@ export const createFosterPlacement = withAuthenticatedUser(
 
 const _returnFromFoster = async (
   user: SessionUser,
-  prevState: FosterPlacementFormState,
-  formData: FormData,
-): Promise<FosterPlacementFormState> => {
+  values: ReturnFromFosterInput,
+): Promise<FormResult<ReturnFromFosterInput>> => {
   const staffMemberId = user.personId;
 
-  const validatedFields = ReturnFromFosterSchema.safeParse({
-    placementId: formData.get("placementId"),
-    returnReason: formData.get("returnReason"),
-    returnNotes: formData.get("returnNotes") || undefined,
-    unitId: formData.get("unitId"),
-  });
+  const validatedFields = ReturnFromFosterSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message:
         "Missing or invalid fields. Failed to return animal from foster.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<ReturnFromFosterInput>,
     };
   }
 
@@ -259,7 +258,9 @@ const _returnFromFoster = async (
         data: {
           endDate: new Date(),
           returnReason,
-          returnNotes,
+          // Nullable column: a cleared textarea submits "" from the client,
+          // which should read back as "no notes" rather than an empty string.
+          returnNotes: returnNotes?.trim() ? returnNotes : null,
           returnedById: staffMemberId,
         },
       });
@@ -299,9 +300,10 @@ const _returnFromFoster = async (
       error instanceof ConflictError ||
       error instanceof PreconditionFailedError
     ) {
-      return { message: error.message };
+      return { ok: false, message: error.message };
     }
     return {
+      ok: false,
       message: "Database Error: Failed to return animal from foster.",
     };
   }
@@ -309,7 +311,11 @@ const _returnFromFoster = async (
   revalidatePath(`/dashboard/animals/${animalId}`);
   revalidatePath("/dashboard/fosters");
   revalidatePath("/dashboard/locations");
-  redirect(`/dashboard/animals/${animalId}`);
+  return {
+    ok: true,
+    message: "Animal returned from foster.",
+    redirectTo: `/dashboard/animals/${animalId}`,
+  };
 };
 
 export const returnFromFoster = withAuthenticatedUser(
@@ -320,21 +326,19 @@ export const returnFromFoster = withAuthenticatedUser(
 
 const _convertFosterToAdoption = async (
   user: SessionUser,
-  prevState: FosterPlacementFormState,
-  formData: FormData,
-): Promise<FosterPlacementFormState> => {
+  values: ConvertFosterToAdoptionInput,
+): Promise<FormResult<ConvertFosterToAdoptionInput>> => {
   const staffMemberId = user.personId;
 
-  const validatedFields = ConvertFosterToAdoptionSchema.safeParse({
-    placementId: formData.get("placementId"),
-    adoptionApplicationId: formData.get("adoptionApplicationId") || undefined,
-  });
+  const validatedFields = ConvertFosterToAdoptionSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message:
         "Missing or invalid fields. Failed to convert foster placement.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<ConvertFosterToAdoptionInput>,
     };
   }
 
@@ -504,9 +508,10 @@ const _convertFosterToAdoption = async (
       error instanceof ConflictError ||
       error instanceof PreconditionFailedError
     ) {
-      return { message: error.message };
+      return { ok: false, message: error.message };
     }
     return {
+      ok: false,
       message: "Database Error: Failed to convert foster placement.",
     };
   }
@@ -519,7 +524,11 @@ const _convertFosterToAdoption = async (
     revalidatePath("/dashboard/applications");
     revalidatePath(`/dashboard/applications/${adoptionApplicationId}`);
   }
-  redirect(`/dashboard/animals/${animalId}`);
+  return {
+    ok: true,
+    message: "Foster placement converted to adoption.",
+    redirectTo: `/dashboard/animals/${animalId}`,
+  };
 };
 
 export const convertFosterToAdoption = withAuthenticatedUser(

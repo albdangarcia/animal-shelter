@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useActionState, useEffect, useState } from "react";
+import { useTransition, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
@@ -28,8 +29,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { convertFosterToAdoption } from "@/app/lib/actions/foster-placement.actions";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import { ConvertFosterToAdoptionSchema } from "@/app/lib/zod-schemas/foster.schemas";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
 type ConvertFormValues = z.input<typeof ConvertFosterToAdoptionSchema>;
 
@@ -45,27 +46,30 @@ export function ConvertFosterToAdoptionForm({
   placement,
 }: ConvertFosterToAdoptionFormProps) {
   const [open, setOpen] = useState(false);
-  const [state, formAction, isPending] = useActionState(
-    convertFosterToAdoption,
-    INITIAL_FORM_STATE,
-  );
+  const [isPending, startSubmitTransition] = useTransition();
+  const router = useRouter();
 
   const form = useForm<ConvertFormValues>({
     resolver: standardSchemaResolver(ConvertFosterToAdoptionSchema),
     defaultValues: { placementId: placement.id },
   });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
-  }, [state]);
+  const onSubmit = (values: ConvertFormValues) => {
+    startSubmitTransition(async () => {
+      const result = await convertFosterToAdoption(values);
 
-  const onSubmit = (data: ConvertFormValues) => {
-    const formData = new FormData();
-    formData.append("placementId", data.placementId);
-    startTransition(() => {
-      formAction(formData);
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
+        }
+        setOpen(false);
+        return;
+      }
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 

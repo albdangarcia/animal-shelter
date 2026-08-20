@@ -157,25 +157,6 @@ export interface FosterApplicationFormState {
   };
 }
 
-// Covers the placement lifecycle actions: create, return-from-foster, and
-// foster-to-adopt conversion.
-export interface FosterPlacementFormState {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    animalId?: string[];
-    fosterProfileId?: string[];
-    type?: string[];
-    expectedEndDate?: string[];
-    notes?: string[];
-    placementId?: string[];
-    returnReason?: string[];
-    returnNotes?: string[];
-    unitId?: string[];
-    adoptionApplicationId?: string[];
-  };
-}
-
 export interface FosterProfileFormState {
   success?: boolean;
   message?: string | null;

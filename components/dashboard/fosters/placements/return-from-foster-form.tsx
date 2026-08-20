@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useActionState, useEffect, useState } from "react";
+import { useTransition, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
@@ -34,10 +35,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { returnFromFoster } from "@/app/lib/actions/foster-placement.actions";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import { ReturnFromFosterSchema } from "@/app/lib/zod-schemas/foster.schemas";
 import { fosterReturnReasonOptions } from "@/app/lib/utils/enum-formatter";
 import { UnitPickerLocation } from "@/app/lib/data/locations/unit-picker.data";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
 type ReturnFromFosterFormValues = z.input<typeof ReturnFromFosterSchema>;
 
@@ -55,10 +56,8 @@ export function ReturnFromFosterForm({
   placement,
   unitOptions,
 }: ReturnFromFosterFormProps) {
-  const [state, formAction, isPending] = useActionState(
-    returnFromFoster,
-    INITIAL_FORM_STATE,
-  );
+  const [isPending, startSubmitTransition] = useTransition();
+  const router = useRouter();
 
   // Default to the previous unit's location, but only if that unit still
   // exists (it may have been deleted while the animal was fostered).
@@ -79,31 +78,22 @@ export function ReturnFromFosterForm({
     },
   });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        if (value) {
-          form.setError(key as keyof ReturnFromFosterFormValues, {
-            type: "server",
-            message: value.join(", "),
-          });
-        }
-      }
-    }
-  }, [state, form]);
+  const onSubmit = (values: ReturnFromFosterFormValues) => {
+    startSubmitTransition(async () => {
+      const result = await returnFromFoster(values);
 
-  const onSubmit = (data: ReturnFromFosterFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (value != null && value !== "") {
-        formData.append(key, String(value));
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
+        }
+        form.reset(values);
+        return;
       }
-    }
-    startTransition(() => {
-      formAction(formData);
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -132,7 +122,7 @@ export function ReturnFromFosterForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Return Reason *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select onValueChange={field.onChange} value={field.value ?? ""}>
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select a reason" />

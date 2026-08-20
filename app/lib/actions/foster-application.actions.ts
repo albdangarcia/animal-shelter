@@ -29,6 +29,9 @@ import {
   isAllowedTransition,
   illegalTransitionMessage,
 } from "../utils/application-status";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+
+type FosterCapabilityFieldsInput = z.input<typeof FosterCapabilityFieldsSchema>;
 
 // Non-terminal statuses block a new application from being submitted, mirroring
 // the "one active adoption application" convention (ADOPTED is never used here).
@@ -556,7 +559,7 @@ export const createFosterProfileDirect = RequirePermission(
   AppPermissions.FOSTERS_MANAGE,
 )(_createFosterProfileDirect);
 
-// ─── Profile status & capability management (Fostering tab) ────────────────
+// Profile status & capability management (Fostering tab)
 
 const _updateFosterProfileStatus = async (
   fosterProfileId: string,
@@ -625,25 +628,21 @@ export const updateFosterProfileStatus = RequirePermission(
 
 const _updateFosterProfileCapabilities = async (
   fosterProfileId: string,
-  prevState: FosterProfileFormState,
-  formData: FormData,
-): Promise<FosterProfileFormState> => {
+  values: FosterCapabilityFieldsInput,
+): Promise<FormResult<FosterCapabilityFieldsInput>> => {
   const parsedId = cuidSchema.safeParse(fosterProfileId);
   if (!parsedId.success) {
-    return { message: "Invalid foster profile ID format." };
+    return { ok: false, message: "Invalid foster profile ID format." };
   }
 
-  const speciesIds = formData.getAll("speciesIds");
-
-  const validatedFields = FosterCapabilityFieldsSchema.safeParse({
-    ...Object.fromEntries(formData.entries()),
-    speciesIds,
-  });
+  const validatedFields = FosterCapabilityFieldsSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update foster capabilities.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<FosterCapabilityFieldsInput>,
     };
   }
 
@@ -692,13 +691,14 @@ const _updateFosterProfileCapabilities = async (
       error,
     );
     return {
+      ok: false,
       message: "Database Error: Failed to update foster capabilities.",
     };
   }
 
   revalidatePath(`/dashboard/people-directory/${profile.personId}/fostering`);
   revalidatePath("/dashboard/fosters");
-  return { success: true, message: "Foster capabilities updated." };
+  return { ok: true, message: "Foster capabilities updated." };
 };
 
 export const updateFosterProfileCapabilities = RequirePermission(

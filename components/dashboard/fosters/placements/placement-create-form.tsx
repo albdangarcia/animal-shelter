@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
@@ -33,15 +34,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { createFosterPlacement } from "@/app/lib/actions/foster-placement.actions";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import { CreateFosterPlacementSchema } from "@/app/lib/zod-schemas/foster.schemas";
 import { fosterPlacementTypeOptions } from "@/app/lib/utils/enum-formatter";
-import { FosterPickerOption, FosterableAnimalOption } from "@/app/lib/data/fosters/fosters.data";
+import {
+  FosterPickerOption,
+  FosterableAnimalOption,
+} from "@/app/lib/data/fosters/fosters.data";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { AnimalCombobox } from "./animal-combobox";
 
 type PlacementCreateFormValues = z.input<typeof CreateFosterPlacementSchema>;
@@ -61,10 +69,8 @@ export function PlacementCreateForm({
   fosterOptions = [],
   animalOptions = [],
 }: PlacementCreateFormProps) {
-  const [state, formAction, isPending] = useActionState(
-    createFosterPlacement,
-    INITIAL_FORM_STATE,
-  );
+  const [isPending, startSubmitTransition] = useTransition();
+  const router = useRouter();
 
   const cancelHref = fixedAnimal
     ? `/dashboard/animals/${fixedAnimal.id}`
@@ -81,33 +87,22 @@ export function PlacementCreateForm({
     },
   });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        if (value) {
-          form.setError(key as keyof PlacementCreateFormValues, {
-            type: "server",
-            message: value.join(", "),
-          });
-        }
-      }
-    }
-  }, [state, form]);
+  const onSubmit = (values: PlacementCreateFormValues) => {
+    startSubmitTransition(async () => {
+      const result = await createFosterPlacement(values);
 
-  const onSubmit = (data: PlacementCreateFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (value instanceof Date) {
-        formData.append(key, value.toISOString());
-      } else if (value != null && value !== "") {
-        formData.append(key, String(value));
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
+        }
+        form.reset(values);
+        return;
       }
-    }
-    startTransition(() => {
-      formAction(formData);
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -149,8 +144,7 @@ export function PlacementCreateForm({
                     </FormControl>
                     {animalOptions.length === 0 && (
                       <p className="text-muted-foreground text-sm">
-                        No in-care animals are currently eligible for
-                        fostering.
+                        No in-care animals are currently eligible for fostering.
                       </p>
                     )}
                     <FormMessage />
@@ -205,7 +199,10 @@ export function PlacementCreateForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Placement Type *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value ?? ""}
+                  >
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select a placement type" />
@@ -306,7 +303,12 @@ export function PlacementCreateForm({
             />
           </CardContent>
           <CardFooter className="flex justify-end space-x-4">
-            <Button asChild variant="outline" type="button" disabled={isPending}>
+            <Button
+              asChild
+              variant="outline"
+              type="button"
+              disabled={isPending}
+            >
               <Link href={cancelHref}>Cancel</Link>
             </Button>
             <Button type="submit" size="lg" disabled={isPending}>

@@ -33,7 +33,6 @@ import {
   updateFosterProfileCapabilities,
   updateFosterProfileStatus,
 } from "@/app/lib/actions/foster-application.actions";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import {
   FosterApplicationFormSchema,
   FosterCapabilityFieldsSchema,
@@ -41,6 +40,7 @@ import {
 import { FosterCapabilityFormFields } from "@/components/dashboard/my-foster-application/foster-capability-form-fields";
 import { FosterProfileForTab } from "@/app/lib/data/fosters/fosters.data";
 import { boolToSelectValue } from "@/app/lib/utils/form-utils";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { FosterStatuses } from "@/components/dashboard/fosters/table/foster-options";
 
 type CapabilityFormValues = z.input<typeof FosterCapabilityFieldsSchema>;
@@ -178,39 +178,18 @@ export function FosterProfileStatusCard({
     },
   });
 
-  const onSubmit = (data: CapabilityFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (key === "speciesIds") {
-        (value as string[] | undefined)?.forEach((id) =>
-          formData.append("speciesIds", id),
-        );
-      } else if (value != null && value !== "") {
-        formData.append(key, String(value));
-      }
-    }
+  const onSubmit = (values: CapabilityFormValues) => {
     startCapabilityTransition(async () => {
-      const result = await updateFosterProfileCapabilities(
-        profile.id,
-        INITIAL_FORM_STATE,
-        formData,
-      );
-      if (result.success) {
-        toast.success(result.message ?? "Foster capabilities updated.");
+      const result = await updateFosterProfileCapabilities(profile.id, values);
+
+      if (result.ok) {
+        toast.success(result.message);
         setIsEditing(false);
-      } else if (result.message) {
-        toast.error(result.message);
+        return;
       }
-      if (result.errors) {
-        for (const [key, value] of Object.entries(result.errors)) {
-          if (value) {
-            form.setError(key as keyof CapabilityFormValues, {
-              type: "server",
-              message: Array.isArray(value) ? value.join(", ") : String(value),
-            });
-          }
-        }
-      }
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
