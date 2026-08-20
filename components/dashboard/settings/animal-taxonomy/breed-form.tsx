@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
@@ -25,14 +25,10 @@ import {
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import type { BreedModel } from "@/prisma/generated/models/Breed";
 import type { SpeciesModel } from "@/prisma/generated/models/Species";
-import {
-  BreedFormState,
-  createBreed,
-  updateBreed,
-} from "@/app/lib/actions/breeds-catalog.actions";
+import { createBreed, updateBreed } from "@/app/lib/actions/breeds-catalog.actions";
 import { BreedFormSchema } from "@/app/lib/zod-schemas/taxonomy.schemas";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import { sizeOptions } from "@/components/dashboard/animals/table/animal-options";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { toast } from "sonner";
 
 type BreedFormValues = z.infer<typeof BreedFormSchema>;
@@ -48,14 +44,9 @@ interface Props {
 }
 
 export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
-  const action = breed ? updateBreed.bind(null, breed.id) : createBreed;
+  const [isPending, startSubmitTransition] = useTransition();
 
-  const [state, formAction, isPending] = useActionState<
-    BreedFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
-
-  const form = useForm({
+  const form = useForm<BreedFormValues>({
     resolver: standardSchemaResolver(BreedFormSchema),
     defaultValues: breed
       ? {
@@ -66,33 +57,20 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
       : { name: "", speciesId: "", typicalSize: "" },
   });
 
-  useEffect(() => {
-    if (!state.message) return;
+  const onSubmit = (values: BreedFormValues) => {
+    startSubmitTransition(async () => {
+      const result = breed
+        ? await updateBreed(breed.id, values)
+        : await createBreed(values);
 
-    if (state.success) {
-      toast.success(state.message);
-      onFormSubmit();
-    } else if (state.errors) {
-      toast.error(state.message || "Please check the form for errors.");
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof BreedFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        onFormSubmit();
+        return;
       }
-    } else {
-      toast.error(state.message);
-    }
-  }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: BreedFormValues) => {
-    const formData = new FormData();
-    formData.append("name", data.name);
-    formData.append("speciesId", data.speciesId);
-    formData.append("typicalSize", data.typicalSize ?? "");
-
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -109,7 +87,7 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
                 <FormLabel htmlFor="speciesId">Species</FormLabel>
                 <Select
                   onValueChange={field.onChange}
-                  defaultValue={field.value}
+                  value={field.value ?? ""}
                   name={field.name}
                 >
                   <FormControl>

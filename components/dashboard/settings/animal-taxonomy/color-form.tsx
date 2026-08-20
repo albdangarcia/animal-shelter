@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
@@ -18,12 +18,11 @@ import {
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { ColorModel } from "@/prisma/generated/models/Color";
 import {
-  ColorFormState,
   createColor,
   updateColor,
 } from "@/app/lib/actions/colors-catalog.actions";
 import { ColorFormSchema } from "@/app/lib/zod-schemas/color.schemas";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { toast } from "sonner";
 
 type ColorFormValues = z.infer<typeof ColorFormSchema>;
@@ -34,45 +33,27 @@ interface Props {
 }
 
 export const ColorForm = ({ onFormSubmit, color }: Props) => {
-  const action = color ? updateColor.bind(null, color.id) : createColor;
+  const [isPending, startSubmitTransition] = useTransition();
 
-  const [state, formAction, isPending] = useActionState<
-    ColorFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
-
-  const form = useForm({
+  const form = useForm<ColorFormValues>({
     resolver: standardSchemaResolver(ColorFormSchema),
     defaultValues: color ? { name: color.name } : { name: "" },
   });
 
-  useEffect(() => {
-    if (!state.message) {
-      return;
-    }
+  const onSubmit = (values: ColorFormValues) => {
+    startSubmitTransition(async () => {
+      const result = color
+        ? await updateColor(color.id, values)
+        : await createColor(values);
 
-    if (state.success) {
-      toast.success(state.message);
-      onFormSubmit();
-    } else if (state.errors) {
-      toast.error(state.message || "Please check the form for errors.");
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof ColorFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        onFormSubmit();
+        return;
       }
-    } else {
-      toast.error(state.message);
-    }
-  }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: ColorFormValues) => {
-    const formData = new FormData();
-    formData.append("name", data.name);
-
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 

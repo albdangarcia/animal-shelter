@@ -8,14 +8,10 @@ import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { SpeciesFormSchema } from "../zod-schemas/taxonomy.schemas";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
-export interface SpeciesFormState {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    name?: string[];
-  };
-}
+type SpeciesFormInput = z.input<typeof SpeciesFormSchema>;
+type SpeciesResult = FormResult<SpeciesFormInput>;
 
 const findDuplicate = async (name: string, excludeId?: string) => {
   return prisma.species.findFirst({
@@ -29,18 +25,16 @@ const findDuplicate = async (name: string, excludeId?: string) => {
 };
 
 const _createSpecies = async (
-  prevState: SpeciesFormState,
-  formData: FormData,
-): Promise<SpeciesFormState> => {
-  const validatedFields = SpeciesFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  values: SpeciesFormInput,
+): Promise<SpeciesResult> => {
+  const validatedFields = SpeciesFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create species.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<SpeciesFormInput>,
     };
   }
 
@@ -49,10 +43,7 @@ const _createSpecies = async (
   try {
     const existing = await findDuplicate(name);
     if (existing) {
-      return {
-        success: false,
-        message: "A species with that name already exists.",
-      };
+      return { ok: false, message: "A species with that name already exists." };
     }
 
     await prisma.species.create({ data: { name } });
@@ -61,41 +52,33 @@ const _createSpecies = async (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return {
-        success: false,
-        message: "A species with that name already exists.",
-      };
+      return { ok: false, message: "A species with that name already exists." };
     }
     console.error("Database Error creating species:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to create species.",
-    };
+    return { ok: false, message: "Database Error: Failed to create species." };
   }
 
   revalidatePath("/dashboard/settings/animal-taxonomy");
-  return { success: true, message: "Species created successfully." };
+  return { ok: true, message: "Species created successfully." };
 };
 
 const _updateSpecies = async (
   speciesId: string,
-  prevState: SpeciesFormState,
-  formData: FormData,
-): Promise<SpeciesFormState> => {
+  values: SpeciesFormInput,
+): Promise<SpeciesResult> => {
   const parsedId = cuidSchema.safeParse(speciesId);
   if (!parsedId.success) {
-    return { success: false, message: "Invalid species ID format." };
+    return { ok: false, message: "Invalid species ID format." };
   }
 
-  const validatedFields = SpeciesFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = SpeciesFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update species.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<SpeciesFormInput>,
     };
   }
 
@@ -104,10 +87,7 @@ const _updateSpecies = async (
   try {
     const existing = await findDuplicate(name, parsedId.data);
     if (existing) {
-      return {
-        success: false,
-        message: "A species with that name already exists.",
-      };
+      return { ok: false, message: "A species with that name already exists." };
     }
 
     await prisma.species.update({
@@ -119,20 +99,14 @@ const _updateSpecies = async (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return {
-        success: false,
-        message: "A species with that name already exists.",
-      };
+      return { ok: false, message: "A species with that name already exists." };
     }
     console.error("Database Error updating species:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to update species.",
-    };
+    return { ok: false, message: "Database Error: Failed to update species." };
   }
 
   revalidatePath("/dashboard/settings/animal-taxonomy");
-  return { success: true, message: "Species updated successfully." };
+  return { ok: true, message: "Species updated successfully." };
 };
 
 const _deleteSpecies = async (

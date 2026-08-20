@@ -18,6 +18,8 @@ export type ActionSuccess<TData> = {
   message: string;
   /** Optional payload — a new record's id, a redirect target, etc. */
   data?: TData;
+  /** Where to navigate after success. The action must NOT call redirect(). */
+  redirectTo?: string;
 };
 
 export type ActionFailure<TValues> = {

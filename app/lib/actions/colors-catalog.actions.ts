@@ -8,14 +8,10 @@ import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { ColorFormSchema } from "../zod-schemas/color.schemas";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
-export interface ColorFormState {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    name?: string[];
-  };
-}
+type ColorFormInput = z.input<typeof ColorFormSchema>;
+type ColorResult = FormResult<ColorFormInput>;
 
 // Shared duplicate check: case-insensitive, global, ignores the row being
 // edited (so renaming a color to itself doesn't collide).
@@ -30,19 +26,15 @@ const findDuplicate = async (name: string, excludeId?: string) => {
   });
 };
 
-const _createColor = async (
-  prevState: ColorFormState,
-  formData: FormData,
-): Promise<ColorFormState> => {
-  const validatedFields = ColorFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+const _createColor = async (values: ColorFormInput): Promise<ColorResult> => {
+  const validatedFields = ColorFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create color.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<ColorFormInput>,
     };
   }
 
@@ -51,10 +43,7 @@ const _createColor = async (
   try {
     const existing = await findDuplicate(name);
     if (existing) {
-      return {
-        success: false,
-        message: "A color with that name already exists.",
-      };
+      return { ok: false, message: "A color with that name already exists." };
     }
 
     await prisma.color.create({ data: { name } });
@@ -63,41 +52,33 @@ const _createColor = async (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return {
-        success: false,
-        message: "A color with that name already exists.",
-      };
+      return { ok: false, message: "A color with that name already exists." };
     }
     console.error("Database Error creating color:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to create color.",
-    };
+    return { ok: false, message: "Database Error: Failed to create color." };
   }
 
   revalidatePath("/dashboard/settings/animal-taxonomy");
-  return { success: true, message: "Color created successfully." };
+  return { ok: true, message: "Color created successfully." };
 };
 
 const _updateColor = async (
   colorId: string,
-  prevState: ColorFormState,
-  formData: FormData,
-): Promise<ColorFormState> => {
+  values: ColorFormInput,
+): Promise<ColorResult> => {
   const parsedId = cuidSchema.safeParse(colorId);
   if (!parsedId.success) {
-    return { success: false, message: "Invalid color ID format." };
+    return { ok: false, message: "Invalid color ID format." };
   }
 
-  const validatedFields = ColorFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = ColorFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update color.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<ColorFormInput>,
     };
   }
 
@@ -106,10 +87,7 @@ const _updateColor = async (
   try {
     const existing = await findDuplicate(name, parsedId.data);
     if (existing) {
-      return {
-        success: false,
-        message: "A color with that name already exists.",
-      };
+      return { ok: false, message: "A color with that name already exists." };
     }
 
     await prisma.color.update({
@@ -121,20 +99,14 @@ const _updateColor = async (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return {
-        success: false,
-        message: "A color with that name already exists.",
-      };
+      return { ok: false, message: "A color with that name already exists." };
     }
     console.error("Database Error updating color:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to update color.",
-    };
+    return { ok: false, message: "Database Error: Failed to update color." };
   }
 
   revalidatePath("/dashboard/settings/animal-taxonomy");
-  return { success: true, message: "Color updated successfully." };
+  return { ok: true, message: "Color updated successfully." };
 };
 
 const _deleteColor = async (

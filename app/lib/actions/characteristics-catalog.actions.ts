@@ -8,15 +8,10 @@ import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { CharacteristicFormSchema } from "../zod-schemas/characteristic.schemas";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
-export interface CharacteristicFormState {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    name?: string[];
-    category?: string[];
-  };
-}
+type CharacteristicFormInput = z.input<typeof CharacteristicFormSchema>;
+type CharacteristicResult = FormResult<CharacteristicFormInput>;
 
 // Shared duplicate check: case-insensitive, global (name is unique across the
 // whole table regardless of category), ignores the row being edited (so
@@ -33,18 +28,16 @@ const findDuplicate = async (name: string, excludeId?: string) => {
 };
 
 const _createCharacteristic = async (
-  prevState: CharacteristicFormState,
-  formData: FormData,
-): Promise<CharacteristicFormState> => {
-  const validatedFields = CharacteristicFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  values: CharacteristicFormInput,
+): Promise<CharacteristicResult> => {
+  const validatedFields = CharacteristicFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create characteristic.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<CharacteristicFormInput>,
     };
   }
 
@@ -54,7 +47,7 @@ const _createCharacteristic = async (
     const existing = await findDuplicate(name);
     if (existing) {
       return {
-        success: false,
+        ok: false,
         message: "A characteristic with that name already exists.",
       };
     }
@@ -66,40 +59,38 @@ const _createCharacteristic = async (
       error.code === "P2002"
     ) {
       return {
-        success: false,
+        ok: false,
         message: "A characteristic with that name already exists.",
       };
     }
     console.error("Database Error creating characteristic:", error);
     return {
-      success: false,
+      ok: false,
       message: "Database Error: Failed to create characteristic.",
     };
   }
 
   revalidatePath("/dashboard/settings/characteristics");
-  return { success: true, message: "Characteristic created successfully." };
+  return { ok: true, message: "Characteristic created successfully." };
 };
 
 const _updateCharacteristic = async (
   characteristicId: string,
-  prevState: CharacteristicFormState,
-  formData: FormData,
-): Promise<CharacteristicFormState> => {
+  values: CharacteristicFormInput,
+): Promise<CharacteristicResult> => {
   const parsedId = cuidSchema.safeParse(characteristicId);
   if (!parsedId.success) {
-    return { success: false, message: "Invalid characteristic ID format." };
+    return { ok: false, message: "Invalid characteristic ID format." };
   }
 
-  const validatedFields = CharacteristicFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = CharacteristicFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update characteristic.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<CharacteristicFormInput>,
     };
   }
 
@@ -109,7 +100,7 @@ const _updateCharacteristic = async (
     const existing = await findDuplicate(name, parsedId.data);
     if (existing) {
       return {
-        success: false,
+        ok: false,
         message: "A characteristic with that name already exists.",
       };
     }
@@ -124,19 +115,19 @@ const _updateCharacteristic = async (
       error.code === "P2002"
     ) {
       return {
-        success: false,
+        ok: false,
         message: "A characteristic with that name already exists.",
       };
     }
     console.error("Database Error updating characteristic:", error);
     return {
-      success: false,
+      ok: false,
       message: "Database Error: Failed to update characteristic.",
     };
   }
 
   revalidatePath("/dashboard/settings/characteristics");
-  return { success: true, message: "Characteristic updated successfully." };
+  return { ok: true, message: "Characteristic updated successfully." };
 };
 
 const _deleteCharacteristic = async (

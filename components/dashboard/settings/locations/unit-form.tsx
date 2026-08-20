@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
@@ -17,14 +17,11 @@ import {
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import type { UnitModel } from "@/prisma/generated/models/Unit";
-import {
-  UnitFormState,
-  createUnit,
-  updateUnit,
-} from "@/app/lib/actions/locations.actions";
+import { createUnit, updateUnit } from "@/app/lib/actions/locations.actions";
 import { UnitFormSchema } from "@/app/lib/zod-schemas/location.schemas";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { toast } from "sonner";
+import { NumberInput } from "@/components/forms/number-input";
 
 type UnitFormValues = z.infer<typeof UnitFormSchema>;
 
@@ -35,48 +32,31 @@ interface Props {
 }
 
 export const UnitForm = ({ onFormSubmit, locationId, unit }: Props) => {
-  const action = unit ? updateUnit.bind(null, unit.id) : createUnit;
+  const [isPending, startSubmitTransition] = useTransition();
 
-  const [state, formAction, isPending] = useActionState<
-    UnitFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
-
-  const form = useForm({
+  const form = useForm<UnitFormValues>({
     resolver: standardSchemaResolver(UnitFormSchema),
     defaultValues: unit
       ? { name: unit.name, capacity: unit.capacity, locationId }
       : { name: "", capacity: 1, locationId },
   });
 
-  useEffect(() => {
-    if (!state.message) return;
+  // locationId is not a visible field — the unit keeps its parent location,
+  // carried in defaultValues rather than appended at submit time.
+  const onSubmit = (values: UnitFormValues) => {
+    startSubmitTransition(async () => {
+      const result = unit
+        ? await updateUnit(unit.id, values)
+        : await createUnit(values);
 
-    if (state.success) {
-      toast.success(state.message);
-      onFormSubmit();
-    } else if (state.errors) {
-      toast.error(state.message || "Please check the form for errors.");
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof UnitFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        onFormSubmit();
+        return;
       }
-    } else {
-      toast.error(state.message);
-    }
-  }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: UnitFormValues) => {
-    const formData = new FormData();
-    formData.append("name", data.name);
-    formData.append("capacity", String(data.capacity));
-    // locationId is not a visible field — the unit keeps its parent location.
-    formData.append("locationId", locationId);
-
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -103,34 +83,15 @@ export const UnitForm = ({ onFormSubmit, locationId, unit }: Props) => {
           <FormField
             control={form.control}
             name="capacity"
-            render={({ field }) => {
-              // Keep the number input controlled as a string, parsing to an int
-              // on change (mirrors weightKg/heightCm in the animal intake form).
-              const value =
-                field.value === undefined || field.value === ""
-                  ? ""
-                  : String(field.value);
-
-              return (
-                <FormItem>
-                  <FormLabel htmlFor="capacity">Capacity</FormLabel>
-                  <FormControl>
-                    <Input
-                      id="capacity"
-                      type="number"
-                      min="1"
-                      {...field}
-                      value={value}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        field.onChange(val === "" ? "" : parseInt(val, 10));
-                      }}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel htmlFor="capacity">Capacity</FormLabel>
+                <FormControl>
+                  <NumberInput id="capacity" min={1} {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
         </div>
 

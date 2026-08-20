@@ -11,25 +11,13 @@ import {
   LocationFormSchema,
   UnitFormSchema,
 } from "../zod-schemas/location.schemas";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
-export interface LocationFormState {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    name?: string[];
-    type?: string[];
-  };
-}
+type LocationFormInput = z.input<typeof LocationFormSchema>;
+type LocationResult = FormResult<LocationFormInput>;
 
-export interface UnitFormState {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    name?: string[];
-    capacity?: string[];
-    locationId?: string[];
-  };
-}
+type UnitFormInput = z.input<typeof UnitFormSchema>;
+type UnitResult = FormResult<UnitFormInput>;
 
 // case-insensitive, global, ignores the row being
 // edited (so renaming a location to itself doesn't collide). Among non-deleted
@@ -46,18 +34,16 @@ const findDuplicateLocation = async (name: string, excludeId?: string) => {
 };
 
 const _createLocation = async (
-  prevState: LocationFormState,
-  formData: FormData,
-): Promise<LocationFormState> => {
-  const validatedFields = LocationFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  values: LocationFormInput,
+): Promise<LocationResult> => {
+  const validatedFields = LocationFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create location.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<LocationFormInput>,
     };
   }
 
@@ -67,7 +53,7 @@ const _createLocation = async (
     const existing = await findDuplicateLocation(name);
     if (existing) {
       return {
-        success: false,
+        ok: false,
         message: `A location named "${name}" already exists.`,
       };
     }
@@ -79,40 +65,35 @@ const _createLocation = async (
       error.code === "P2002"
     ) {
       return {
-        success: false,
+        ok: false,
         message: `A location named "${name}" already exists — it may be deleted; check the list to restore it.`,
       };
     }
     console.error("Database Error creating location:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to create location.",
-    };
+    return { ok: false, message: "Database Error: Failed to create location." };
   }
 
   revalidatePath("/dashboard/settings/locations");
-  return { success: true, message: "Location created successfully." };
+  return { ok: true, message: "Location created successfully." };
 };
 
 const _updateLocation = async (
   locationId: string,
-  prevState: LocationFormState,
-  formData: FormData,
-): Promise<LocationFormState> => {
+  values: LocationFormInput,
+): Promise<LocationResult> => {
   const parsedId = cuidSchema.safeParse(locationId);
   if (!parsedId.success) {
-    return { success: false, message: "Invalid location ID format." };
+    return { ok: false, message: "Invalid location ID format." };
   }
 
-  const validatedFields = LocationFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = LocationFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update location.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<LocationFormInput>,
     };
   }
 
@@ -122,7 +103,7 @@ const _updateLocation = async (
     const existing = await findDuplicateLocation(name, parsedId.data);
     if (existing) {
       return {
-        success: false,
+        ok: false,
         message: `A location named "${name}" already exists.`,
       };
     }
@@ -137,19 +118,16 @@ const _updateLocation = async (
       error.code === "P2002"
     ) {
       return {
-        success: false,
+        ok: false,
         message: `A location named "${name}" already exists — it may be deleted; check the list to restore it.`,
       };
     }
     console.error("Database Error updating location:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to update location.",
-    };
+    return { ok: false, message: "Database Error: Failed to update location." };
   }
 
   revalidatePath("/dashboard/settings/locations");
-  return { success: true, message: "Location updated successfully." };
+  return { ok: true, message: "Location updated successfully." };
 };
 
 const _deleteLocation = async (
@@ -234,19 +212,15 @@ const findDuplicateUnit = async (
   });
 };
 
-const _createUnit = async (
-  prevState: UnitFormState,
-  formData: FormData,
-): Promise<UnitFormState> => {
-  const validatedFields = UnitFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+const _createUnit = async (values: UnitFormInput): Promise<UnitResult> => {
+  const validatedFields = UnitFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create unit.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<UnitFormInput>,
     };
   }
 
@@ -256,7 +230,7 @@ const _createUnit = async (
     const existing = await findDuplicateUnit(name, locationId);
     if (existing) {
       return {
-        success: false,
+        ok: false,
         message: `A unit named "${name}" already exists in this location.`,
       };
     }
@@ -268,40 +242,35 @@ const _createUnit = async (
       error.code === "P2002"
     ) {
       return {
-        success: false,
+        ok: false,
         message: `A unit named "${name}" already exists in this location — it may be deleted; check the list to restore it.`,
       };
     }
     console.error("Database Error creating unit:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to create unit.",
-    };
+    return { ok: false, message: "Database Error: Failed to create unit." };
   }
 
   revalidatePath("/dashboard/settings/locations");
-  return { success: true, message: "Unit created successfully." };
+  return { ok: true, message: "Unit created successfully." };
 };
 
 const _updateUnit = async (
   unitId: string,
-  prevState: UnitFormState,
-  formData: FormData,
-): Promise<UnitFormState> => {
+  values: UnitFormInput,
+): Promise<UnitResult> => {
   const parsedId = cuidSchema.safeParse(unitId);
   if (!parsedId.success) {
-    return { success: false, message: "Invalid unit ID format." };
+    return { ok: false, message: "Invalid unit ID format." };
   }
 
-  const validatedFields = UnitFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = UnitFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update unit.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<UnitFormInput>,
     };
   }
 
@@ -311,7 +280,7 @@ const _updateUnit = async (
     const existing = await findDuplicateUnit(name, locationId, parsedId.data);
     if (existing) {
       return {
-        success: false,
+        ok: false,
         message: `A unit named "${name}" already exists in this location.`,
       };
     }
@@ -328,19 +297,16 @@ const _updateUnit = async (
       error.code === "P2002"
     ) {
       return {
-        success: false,
+        ok: false,
         message: `A unit named "${name}" already exists in this location — it may be deleted; check the list to restore it.`,
       };
     }
     console.error("Database Error updating unit:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to update unit.",
-    };
+    return { ok: false, message: "Database Error: Failed to update unit." };
   }
 
   revalidatePath("/dashboard/settings/locations");
-  return { success: true, message: "Unit updated successfully." };
+  return { ok: true, message: "Unit updated successfully." };
 };
 
 const _deleteUnit = async (
