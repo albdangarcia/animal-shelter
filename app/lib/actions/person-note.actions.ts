@@ -11,14 +11,10 @@ import {
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { PersonNoteFormSchema } from "../zod-schemas/people-directory.schemas";
 import { z } from "zod";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
-export type PersonNoteFormState = {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    content?: string[];
-  };
-};
+type PersonNoteFormInput = z.input<typeof PersonNoteFormSchema>;
+type PersonNoteResult = FormResult<PersonNoteFormInput>;
 
 const revalidateNotes = (personId: string) => {
   revalidatePath(`/dashboard/people-directory/${personId}`);
@@ -28,23 +24,21 @@ const revalidateNotes = (personId: string) => {
 const _createPersonNote = async (
   user: SessionUser,
   personId: string, // the SUBJECT person (note is about them)
-  prevState: PersonNoteFormState,
-  formData: FormData,
-): Promise<PersonNoteFormState> => {
+  values: PersonNoteFormInput,
+): Promise<PersonNoteResult> => {
   const parsedPersonId = cuidSchema.safeParse(personId);
   if (!parsedPersonId.success) {
-    return { success: false, message: "Invalid person ID format." };
+    return { ok: false, message: "Invalid person ID format." };
   }
 
-  const validatedFields = PersonNoteFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = PersonNoteFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create note.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<PersonNoteFormInput>,
     };
   }
 
@@ -58,37 +52,32 @@ const _createPersonNote = async (
     });
   } catch (error) {
     console.error("Database Error creating person note:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to create note.",
-    };
+    return { ok: false, message: "Database Error: Failed to create note." };
   }
 
   revalidateNotes(parsedPersonId.data);
-  return { success: true, message: "Note created successfully." };
+  return { ok: true, message: "Note created successfully." };
 };
 
 const _updatePersonNote = async (
   noteId: string,
   personId: string,
-  prevState: PersonNoteFormState,
-  formData: FormData,
-): Promise<PersonNoteFormState> => {
+  values: PersonNoteFormInput,
+): Promise<PersonNoteResult> => {
   const parsedNoteId = cuidSchema.safeParse(noteId);
   const parsedPersonId = cuidSchema.safeParse(personId);
   if (!parsedNoteId.success || !parsedPersonId.success) {
-    return { success: false, message: "Invalid ID format." };
+    return { ok: false, message: "Invalid ID format." };
   }
 
-  const validatedFields = PersonNoteFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = PersonNoteFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update note.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<PersonNoteFormInput>,
     };
   }
 
@@ -99,14 +88,11 @@ const _updatePersonNote = async (
     });
   } catch (error) {
     console.error("Database Error updating person note:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to update note.",
-    };
+    return { ok: false, message: "Database Error: Failed to update note." };
   }
 
   revalidateNotes(parsedPersonId.data);
-  return { success: true, message: "Note updated successfully." };
+  return { ok: true, message: "Note updated successfully." };
 };
 
 const _deletePersonNote = async (

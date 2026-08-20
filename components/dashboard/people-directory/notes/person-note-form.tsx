@@ -1,8 +1,8 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,16 +20,10 @@ import { toast } from "sonner";
 import {
   createPersonNote,
   updatePersonNote,
-  type PersonNoteFormState,
 } from "@/app/lib/actions/person-note.actions";
 import { PersonNoteFormSchema } from "@/app/lib/zod-schemas/people-directory.schemas";
 import { PersonNotePayload } from "@/app/lib/types";
-
-const INITIAL_FORM_STATE: PersonNoteFormState = {
-  success: false,
-  message: null,
-  errors: {},
-};
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
 type PersonNoteFormValues = z.infer<typeof PersonNoteFormSchema>;
 
@@ -40,47 +34,27 @@ interface Props {
 }
 
 export const PersonNoteForm = ({ personId, onFormSubmit, note }: Props) => {
-  const action = note
-    ? updatePersonNote.bind(null, note.id, personId)
-    : createPersonNote.bind(null, personId);
-
-  const [state, formAction, isPending] = useActionState<
-    PersonNoteFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
+  const [isPending, startSubmitTransition] = useTransition();
 
   const form = useForm<PersonNoteFormValues>({
-    resolver: zodResolver(PersonNoteFormSchema),
+    resolver: standardSchemaResolver(PersonNoteFormSchema),
     defaultValues: note ? { content: note.content } : { content: "" },
   });
 
-  useEffect(() => {
-    if (!state.message) {
-      return;
-    }
+  const onSubmit = (values: PersonNoteFormValues) => {
+    startSubmitTransition(async () => {
+      const result = note
+        ? await updatePersonNote(note.id, personId, values)
+        : await createPersonNote(personId, values);
 
-    if (state.success) {
-      toast.success(state.message);
-      onFormSubmit();
-    } else if (state.errors && Object.keys(state.errors).length > 0) {
-      toast.error(state.message || "Please check the form for errors.");
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof PersonNoteFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        onFormSubmit();
+        return;
       }
-    } else {
-      toast.error(state.message);
-    }
-  }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: PersonNoteFormValues) => {
-    const formData = new FormData();
-    formData.append("content", data.content);
-
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,16 +20,10 @@ import { toast } from "sonner";
 import {
   createPartnerNote,
   updatePartnerNote,
-  type PartnerNoteFormState,
 } from "@/app/lib/actions/partner-note.actions";
 import { PartnerNoteFormSchema } from "@/app/lib/zod-schemas/partners-directory.schemas";
 import { PartnerNotePayload } from "@/app/lib/types";
-
-const INITIAL_FORM_STATE: PartnerNoteFormState = {
-  success: false,
-  message: null,
-  errors: {},
-};
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
 type PartnerNoteFormValues = z.infer<typeof PartnerNoteFormSchema>;
 
@@ -40,49 +34,27 @@ interface Props {
 }
 
 export const PartnerNoteForm = ({ partnerId, onFormSubmit, note }: Props) => {
-  const action = note
-    ? updatePartnerNote.bind(null, note.id, partnerId)
-    : createPartnerNote.bind(null, partnerId);
-
-  const [state, formAction, isPending] = useActionState<
-    PartnerNoteFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
+  const [isPending, startSubmitTransition] = useTransition();
 
   const form = useForm<PartnerNoteFormValues>({
-    resolver: zodResolver(PartnerNoteFormSchema),
-    defaultValues: note
-      ? { content: note.content }
-      : { content: "" },
+    resolver: standardSchemaResolver(PartnerNoteFormSchema),
+    defaultValues: note ? { content: note.content } : { content: "" },
   });
 
-  useEffect(() => {
-    if (!state.message) {
-      return;
-    }
+  const onSubmit = (values: PartnerNoteFormValues) => {
+    startSubmitTransition(async () => {
+      const result = note
+        ? await updatePartnerNote(note.id, partnerId, values)
+        : await createPartnerNote(partnerId, values);
 
-    if (state.success) {
-      toast.success(state.message);
-      onFormSubmit();
-    } else if (state.errors && Object.keys(state.errors).length > 0) {
-      toast.error(state.message || "Please check the form for errors.");
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof PartnerNoteFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        onFormSubmit();
+        return;
       }
-    } else {
-      toast.error(state.message);
-    }
-  }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: PartnerNoteFormValues) => {
-    const formData = new FormData();
-    formData.append("content", data.content);
-
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
