@@ -1,6 +1,6 @@
 "use client";
 
-import { Control, UseFormWatch } from "react-hook-form";
+import { Control, useWatch } from "react-hook-form";
 import type { LivingSituation } from "@/prisma/generated/enums";
 import {
   FormControl,
@@ -23,6 +23,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Separator } from "@/components/ui/separator";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import { livingSituationOptions } from "@/app/lib/utils/enum-formatter";
+import { NumberInput } from "@/components/forms/number-input";
 
 /**
  * The exact subset of fields this section renders. Both staff adoption forms
@@ -33,9 +34,11 @@ import { livingSituationOptions } from "@/app/lib/utils/enum-formatter";
  * compatible with Control<ApplicantFieldValues>. Each call site passes
  * `control={form.control as Control<ApplicantFieldValues>}` — one explicit cast,
  * the same single-cast pattern used in the intake form. The types below mirror
- * the inferred Zod types exactly (note the "true" | "false" string unions and the
- * required LivingSituation enum) so field names AND value types stay checked
- * inside this component.
+ * the inferred Zod types exactly (note the "true" | "false" string unions, the
+ * required LivingSituation enum, the now-numeric householdSize, and the
+ * optional landlordPermission the shared household refinement only requires
+ * when renting) so field names AND value types stay checked inside this
+ * component.
  */
 export interface ApplicantFieldValues {
   applicantName: string;
@@ -47,9 +50,9 @@ export interface ApplicantFieldValues {
   applicantState: string;
   applicantZipCode: string;
   livingSituation: LivingSituation;
-  householdSize: string;
+  householdSize: number;
   hasYard: "true" | "false";
-  landlordPermission: "true" | "false";
+  landlordPermission?: "true" | "false";
   hasChildren: "true" | "false";
   childrenAges: string;
   otherAnimalsDescription?: string;
@@ -59,7 +62,6 @@ export interface ApplicantFieldValues {
 
 interface ApplicantFieldsSectionProps {
   control: Control<ApplicantFieldValues>;
-  watch: UseFormWatch<ApplicantFieldValues>;
 }
 
 /**
@@ -72,9 +74,11 @@ interface ApplicantFieldsSectionProps {
  */
 export const ApplicantFieldsSection = ({
   control,
-  watch,
 }: ApplicantFieldsSectionProps) => {
-  const hasChildrenValue = watch("hasChildren");
+  // useWatch rather than a passed-in watch(): watch() returns a function the
+  // React Compiler cannot memoize safely, so it skips compiling the whole
+  // component. Taking `control` alone also drops one cast per call site.
+  const hasChildrenValue = useWatch({ control, name: "hasChildren" });
 
   return (
     <>
@@ -179,7 +183,7 @@ export const ApplicantFieldsSection = ({
                   <FormLabel>State *</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value ?? ""}
                   >
                     <FormControl>
                       <SelectTrigger>
@@ -227,7 +231,7 @@ export const ApplicantFieldsSection = ({
                 <FormLabel>Living Situation *</FormLabel>
                 <Select
                   onValueChange={field.onChange}
-                  defaultValue={field.value}
+                  value={field.value ?? ""}
                 >
                   <FormControl>
                     <SelectTrigger>
@@ -246,6 +250,8 @@ export const ApplicantFieldsSection = ({
               </FormItem>
             )}
           />
+          {/* Raw FormField rather than NumberField: this one carries a
+              FormDescription, which the wrapper has no slot for. */}
           <FormField
             control={control}
             name="householdSize"
@@ -253,7 +259,7 @@ export const ApplicantFieldsSection = ({
               <FormItem>
                 <FormLabel>Household Size *</FormLabel>
                 <FormControl>
-                  <Input type="number" min="1" {...field} />
+                  <NumberInput min={1} max={50} {...field} />
                 </FormControl>
                 <FormDescription>
                   Including the applicant, how many people live in the home?
@@ -294,6 +300,10 @@ export const ApplicantFieldsSection = ({
               </FormItem>
             )}
           />
+          {/* TODO: follow HouseholdFormFields and render this only when
+              isRenting(livingSituation). The shared household refinement now
+              requires it only for renters, so the star here overstates it and
+              homeowners answer a question toHouseholdData() stores as null. */}
           <FormField
             control={control}
             name="landlordPermission"
@@ -305,7 +315,7 @@ export const ApplicantFieldsSection = ({
                 <FormControl>
                   <RadioGroup
                     onValueChange={field.onChange}
-                    value={field.value}
+                    value={field.value ?? ""}
                     className="flex items-center space-x-4"
                   >
                     <FormItem className="flex items-center space-x-2">

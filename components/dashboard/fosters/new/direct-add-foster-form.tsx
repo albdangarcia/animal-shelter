@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { startTransition, useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
@@ -27,7 +28,7 @@ import {
 import { PersonPicker } from "@/components/common/person-picker";
 import { FosterCapabilityFormFields } from "@/components/dashboard/my-foster-application/foster-capability-form-fields";
 import { createFosterProfileDirect } from "@/app/lib/actions/foster-application.actions";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import {
   CreateFosterProfileSchema,
   FosterApplicationFormSchema,
@@ -55,17 +56,15 @@ export function DirectAddFosterForm({
   suggestedPersonLabel,
   returnTo,
 }: DirectAddFosterFormProps) {
-  const [state, formAction, isPending] = useActionState(
-    createFosterProfileDirect,
-    INITIAL_FORM_STATE,
-  );
+  const [isPending, startSubmitTransition] = useTransition();
+  const router = useRouter();
 
   const form = useForm<DirectAddFosterFormValues>({
     resolver: standardSchemaResolver(CreateFosterProfileSchema),
     defaultValues: {
       personId: "",
       speciesIds: [],
-      maxAnimals: "1",
+      maxAnimals: 1,
       hasQuarantineSpace: undefined,
       canGiveOralMeds: undefined,
       canBottleFeed: undefined,
@@ -76,35 +75,24 @@ export function DirectAddFosterForm({
     },
   });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        if (value) {
-          form.setError(key as keyof DirectAddFosterFormValues, {
-            type: "server",
-            message: value.join(", "),
-          });
-        }
-      }
-    }
-  }, [state, form]);
+  // speciesIds goes over as a real string[] instead of being appended one
+  // entry at a time to work around FormData's repeated-key handling.
+  const onSubmit = (values: DirectAddFosterFormValues) => {
+    startSubmitTransition(async () => {
+      const result = await createFosterProfileDirect(values);
 
-  const onSubmit = (data: DirectAddFosterFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (key === "speciesIds") {
-        (value as string[] | undefined)?.forEach((id) =>
-          formData.append("speciesIds", id),
-        );
-      } else if (value != null && value !== "") {
-        formData.append(key, String(value));
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
+        }
+        form.reset(values);
+        return;
       }
-    }
-    startTransition(() => {
-      formAction(formData);
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 

@@ -1,16 +1,9 @@
 "use client";
 
-import {
-  startTransition,
-  useActionState,
-  useEffect,
-  useState,
-  useTransition,
-} from "react";
+import { useState, useTransition } from "react";
 import { useDebouncedCallback } from "use-debounce";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, Control, UseFormWatch } from "react-hook-form";
-import { z } from "zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
+import { useForm, Control } from "react-hook-form";
 import { ChevronsUpDown, Loader2, X } from "lucide-react";
 import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -45,21 +38,21 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import Link from "next/link";
-import { StaffAdoptionApplicationFormSchema } from "@/app/lib/zod-schemas/application.schemas";
 import {
-  INITIAL_FORM_STATE,
-  StaffAdoptionApplicationFormState,
-} from "@/app/lib/form-state-types";
+  StaffAdoptionApplicationFormSchema,
+  type StaffAdoptionApplicationFormInput,
+} from "@/app/lib/zod-schemas/application.schemas";
 import { PersonForApplicationFormPayload } from "@/app/lib/types";
 import { AnimalSearchResult } from "@/app/lib/data/animals/animal.data";
-import { toYesNo, buildApplicationFormData } from "@/app/lib/utils/form-utils";
+import { toYesNo } from "@/app/lib/utils/form-utils";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { staffCreateAdoptionApplication } from "@/app/lib/actions/adoption-application.actions";
 import {
   ApplicantFieldsSection,
   ApplicantFieldValues,
 } from "./applicant-fields-section";
 
-type FormValues = z.infer<typeof StaffAdoptionApplicationFormSchema>;
+type FormValues = StaffAdoptionApplicationFormInput;
 
 interface Props {
   person: PersonForApplicationFormPayload;
@@ -76,15 +69,10 @@ const StaffAdoptionApplicationForm = ({
   const router = useRouter();
   const pathname = usePathname();
 
-  const action = staffCreateAdoptionApplication.bind(null, person.id);
-
-  const [state, formAction, isPending] = useActionState<
-    StaffAdoptionApplicationFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
+  const [isPending, startSubmitTransition] = useTransition();
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(StaffAdoptionApplicationFormSchema),
+    resolver: standardSchemaResolver(StaffAdoptionApplicationFormSchema),
     defaultValues: {
       applicantName: person.name,
       applicantEmail: person.email ?? "",
@@ -95,7 +83,7 @@ const StaffAdoptionApplicationForm = ({
       applicantState: person.state ?? "",
       applicantZipCode: person.zipCode ?? "",
       livingSituation: hp?.livingSituation,
-      householdSize: String(hp?.householdSize ?? "1"),
+      householdSize: hp?.householdSize ?? 1,
       hasYard: toYesNo(hp?.hasYard),
       landlordPermission: toYesNo(hp?.landlordPermission),
       hasChildren: toYesNo(hp?.hasChildren),
@@ -126,23 +114,24 @@ const StaffAdoptionApplicationForm = ({
     });
   }, 300);
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof FormValues, {
-          type: "server",
-          message: Array.isArray(value) ? value.join(", ") : String(value),
-        });
-      }
-    }
-  }, [state, form]);
+  // personId is an ordinary leading argument now rather than .bind()-ed onto
+  // the action, and the values go over as an object.
+  const onSubmit = (values: FormValues) => {
+    startSubmitTransition(async () => {
+      const result = await staffCreateAdoptionApplication(person.id, values);
 
-  const onSubmit = (data: FormValues) => {
-    startTransition(() => {
-      formAction(buildApplicationFormData(data));
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
+        }
+        form.reset(values);
+        return;
+      }
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -270,9 +259,6 @@ const StaffAdoptionApplicationForm = ({
             {/* Shared applicant fields */}
             <ApplicantFieldsSection
               control={form.control as unknown as Control<ApplicantFieldValues>}
-              watch={
-                form.watch as unknown as UseFormWatch<ApplicantFieldValues>
-              }
             />
           </CardContent>
 

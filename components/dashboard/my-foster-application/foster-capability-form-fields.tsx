@@ -21,7 +21,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import {
   Popover,
   PopoverContent,
@@ -36,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { FosterApplicationFormSchema } from "@/app/lib/zod-schemas/foster.schemas";
+import { NumberField } from "@/components/forms/number-field";
 
 type FosterApplicationFormValues = z.input<typeof FosterApplicationFormSchema>;
 
@@ -163,18 +163,12 @@ export const FosterCapabilityFormFields = ({
         }}
       />
 
-      <FormField
+      <NumberField
         control={form.control}
         name="maxAnimals"
-        render={({ field }) => (
-          <FormItem className="col-span-3">
-            <FormLabel>Max animals at once</FormLabel>
-            <FormControl>
-              <Input type="number" min={1} {...field} />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
+        label="Max animals at once"
+        className="col-span-3"
+        min={1}
       />
 
       <FormField

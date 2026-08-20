@@ -49,6 +49,7 @@ import {
 import { HouseholdProfilePayload } from "@/app/lib/types";
 import { boolToSelectValue } from "@/app/lib/utils/form-utils";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
+import { NumberField } from "@/components/forms/number-field";
 
 export type HouseholdProfileFormValues = HouseholdFieldsInput;
 
@@ -68,7 +69,7 @@ const buildDefaultValues = (
   hasYard: boolToSelectValue(householdProfile?.hasYard),
   landlordPermission: boolToSelectValue(householdProfile?.landlordPermission),
   hasChildren: boolToSelectValue(householdProfile?.hasChildren),
-  householdSize: String(householdProfile?.householdSize ?? 1),
+  householdSize: householdProfile?.householdSize ?? 1,
   childrenAges: householdProfile?.childrenAges?.join(", ") || "",
   otherAnimalsDescription: householdProfile?.otherAnimalsDescription || "",
   animalExperience: householdProfile?.animalExperience || "",
@@ -180,24 +181,14 @@ export const HouseholdFormFields = ({
           </FormItem>
         )}
       />
-      <FormField
+
+      <NumberField
         control={form.control}
         name="householdSize"
-        render={({ field }) => (
-          <FormItem className="col-span-3">
-            <FormLabel>Household Size *</FormLabel>
-            <FormControl>
-              <Input
-                type="number"
-                min={1}
-                max={50}
-                {...field}
-                onChange={(e) => field.onChange(e.target.value)}
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
+        label="Household Size *"
+        className="col-span-3"
+        min={1}
+        max={50}
       />
 
       <FormField

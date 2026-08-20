@@ -1,9 +1,9 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, Control, UseFormWatch } from "react-hook-form";
-import { z } from "zod";
+import { useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
+import { useForm, Control } from "react-hook-form";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,12 +18,12 @@ import { Form } from "@/components/ui/form";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import Link from "next/link";
-import { MyAdoptionAppFormSchema } from "@/app/lib/zod-schemas/myAdoptionApplication.schema";
 import {
-  INITIAL_FORM_STATE,
-  StaffAdoptionApplicationFormState,
-} from "@/app/lib/form-state-types";
-import { toYesNo, buildApplicationFormData } from "@/app/lib/utils/form-utils";
+  MyAdoptionAppFormSchema,
+  type MyAdoptionAppFormInput,
+} from "@/app/lib/zod-schemas/myAdoptionApplication.schema";
+import { toYesNo } from "@/app/lib/utils/form-utils";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { staffEditPersonApplication } from "@/app/lib/actions/adoption-application.actions";
 import { PersonApplicationForEditPayload } from "@/app/lib/data/people-directory/person-adoption-applications.data";
 import {
@@ -31,7 +31,7 @@ import {
   ApplicantFieldValues,
 } from "./applicant-fields-section";
 
-type FormValues = z.infer<typeof MyAdoptionAppFormSchema>;
+type FormValues = MyAdoptionAppFormInput;
 
 interface Props {
   application: PersonApplicationForEditPayload;
@@ -44,20 +44,11 @@ const StaffAdoptionApplicationEditForm = ({
   personId,
   callbackUrl,
 }: Props) => {
-  const action = staffEditPersonApplication.bind(
-    null,
-    application.id,
-    personId,
-    callbackUrl ?? null,
-  );
-
-  const [state, formAction, isPending] = useActionState<
-    StaffAdoptionApplicationFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
+  const [isPending, startSubmitTransition] = useTransition();
+  const router = useRouter();
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(MyAdoptionAppFormSchema),
+    resolver: standardSchemaResolver(MyAdoptionAppFormSchema),
     defaultValues: {
       applicantName: application.applicantName,
       applicantEmail: application.applicantEmail,
@@ -68,7 +59,7 @@ const StaffAdoptionApplicationEditForm = ({
       applicantState: application.applicantState,
       applicantZipCode: application.applicantZipCode,
       livingSituation: application.livingSituation,
-      householdSize: String(application.householdSize),
+      householdSize: application.householdSize,
       hasYard: toYesNo(application.hasYard),
       landlordPermission: toYesNo(application.landlordPermission),
       hasChildren: toYesNo(application.hasChildren),
@@ -79,23 +70,30 @@ const StaffAdoptionApplicationEditForm = ({
     },
   });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof FormValues, {
-          type: "server",
-          message: Array.isArray(value) ? value.join(", ") : String(value),
-        });
-      }
-    }
-  }, [state, form]);
+  // The three ids are ordinary leading arguments now rather than .bind()-ed
+  // onto the action. callbackUrl is still re-checked server-side before it is
+  // returned as redirectTo — this action is reachable by direct POST.
+  const onSubmit = (values: FormValues) => {
+    startSubmitTransition(async () => {
+      const result = await staffEditPersonApplication(
+        application.id,
+        personId,
+        callbackUrl ?? null,
+        values,
+      );
 
-  const onSubmit = (data: FormValues) => {
-    startTransition(() => {
-      formAction(buildApplicationFormData(data));
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
+        }
+        form.reset(values);
+        return;
+      }
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -120,9 +118,6 @@ const StaffAdoptionApplicationEditForm = ({
             {/* Shared applicant fields */}
             <ApplicantFieldsSection
               control={form.control as unknown as Control<ApplicantFieldValues>}
-              watch={
-                form.watch as unknown as UseFormWatch<ApplicantFieldValues>
-              }
             />
           </CardContent>
 

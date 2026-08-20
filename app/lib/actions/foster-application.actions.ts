@@ -1,22 +1,22 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import { ApplicationStatus, FosterStatus } from "@/prisma/generated/enums";
 import { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
 import {
-  FosterApplicationFormState,
-  FosterProfileFormState,
-  FosterStatusChangeFormState,
-} from "../form-state-types";
-import {
   CreateFosterProfileSchema,
   FosterApplicationFormSchema,
   FosterApplicationStatusChangeSchema,
   FosterCapabilityFieldsSchema,
+  toFosterCapabilityData,
+  type CreateFosterProfileInput,
+  type FosterApplicationFormInput,
+  type FosterApplicationStatusChangeInput,
+  type FosterCapabilityFieldsInput,
 } from "../zod-schemas/foster.schemas";
+import { toHouseholdData } from "../zod-schemas/household-profile.schemas";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   RequirePermission,
@@ -30,8 +30,6 @@ import {
   illegalTransitionMessage,
 } from "../utils/application-status";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
-
-type FosterCapabilityFieldsInput = z.input<typeof FosterCapabilityFieldsSchema>;
 
 // Non-terminal statuses block a new application from being submitted, mirroring
 // the "one active adoption application" convention (ADOPTED is never used here).
@@ -47,24 +45,23 @@ const terminalFosterStatuses: ApplicationStatus[] = [
   ApplicationStatus.REJECTED,
 ];
 
+type FosterApplicationResult = FormResult<FosterApplicationFormInput>;
+
+// Values arrive as a typed object rather than FormData, so speciesIds is
+// already a string[] — no getAll() dance to work around Object.fromEntries
+// keeping only the last value for a repeated key.
 const _createMyFosterApplication = async (
   user: SessionUser,
-  prevState: FosterApplicationFormState,
-  formData: FormData,
-): Promise<FosterApplicationFormState> => {
-  // Array field must be pulled with getAll — Object.fromEntries keeps only
-  // the last value for repeated keys.
-  const speciesIds = formData.getAll("speciesIds");
-
-  const validatedFields = FosterApplicationFormSchema.safeParse({
-    ...Object.fromEntries(formData.entries()),
-    speciesIds,
-  });
+  values: FosterApplicationFormInput,
+): Promise<FosterApplicationResult> => {
+  const validatedFields = FosterApplicationFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to submit foster application.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<FosterApplicationFormInput>,
     };
   }
 
@@ -77,69 +74,25 @@ const _createMyFosterApplication = async (
     applicantCity,
     applicantState,
     applicantZipCode,
-    livingSituation,
-    hasYard,
-    landlordPermission,
-    householdSize,
-    hasChildren,
-    childrenAges,
-    otherAnimalsDescription,
-    animalExperience,
     speciesIds: validatedSpeciesIds,
-    maxAnimals,
-    hasQuarantineSpace,
-    canGiveOralMeds,
-    canBottleFeed,
-    canTransport,
-    acceptsMedical,
-    acceptsHospice,
-    availabilityNotes,
   } = validatedFields.data;
 
-  const householdProfileData = {
-    livingSituation,
-    hasYard: hasYard === undefined ? undefined : hasYard === "true",
-    landlordPermission:
-      landlordPermission === undefined
-        ? undefined
-        : landlordPermission === "true",
-    householdSize: parseInt(householdSize, 10),
-    hasChildren:
-      hasChildren === undefined ? undefined : hasChildren === "true",
-    childrenAges:
-      !childrenAges || childrenAges.trim() === ""
-        ? []
-        : childrenAges.split(",").map((age) => parseInt(age.trim(), 10)),
-    otherAnimalsDescription,
-    animalExperience,
-  };
+  // Shared mappers rather than a hand-rolled copy of the same conversions:
+  // toHouseholdData also gives the foster path the same landlordPermission
+  // semantics as account settings and adoption (null for non-renters).
+  const householdProfileData = toHouseholdData(validatedFields.data);
 
   const dataToCreate = {
     applicantName,
     applicantEmail,
     applicantPhone,
     applicantAddressLine1,
-    applicantAddressLine2,
+    applicantAddressLine2: applicantAddressLine2 || null,
     applicantCity,
     applicantState,
     applicantZipCode,
     ...householdProfileData,
-    maxAnimals: parseInt(maxAnimals, 10),
-    hasQuarantineSpace:
-      hasQuarantineSpace === undefined
-        ? undefined
-        : hasQuarantineSpace === "true",
-    canGiveOralMeds:
-      canGiveOralMeds === undefined ? undefined : canGiveOralMeds === "true",
-    canBottleFeed:
-      canBottleFeed === undefined ? undefined : canBottleFeed === "true",
-    canTransport:
-      canTransport === undefined ? undefined : canTransport === "true",
-    acceptsMedical:
-      acceptsMedical === undefined ? undefined : acceptsMedical === "true",
-    acceptsHospice:
-      acceptsHospice === undefined ? undefined : acceptsHospice === "true",
-    availabilityNotes,
+    ...toFosterCapabilityData(validatedFields.data),
   };
 
   try {
@@ -220,19 +173,21 @@ const _createMyFosterApplication = async (
   } catch (error: unknown) {
     if (error instanceof Error && error.message === "EXISTING_APPLICATION") {
       return {
+        ok: false,
         message:
           "You already have a foster application in progress. Please wait for it to be reviewed, or withdraw it before applying again.",
       };
     }
     console.error("Error submitting foster application:", error);
     return {
+      ok: false,
       message:
         "Database Error: Failed to submit application. Please try again.",
     };
   }
 
   revalidatePath("/dashboard/my-foster-application");
-  return { success: true, message: "Foster application submitted successfully." };
+  return { ok: true, message: "Foster application submitted successfully." };
 };
 
 const _withdrawMyFosterApplication = async (
@@ -320,20 +275,18 @@ export const withdrawMyFosterApplication = withAuthenticatedUser(
 
 const _updateFosterApplicationStatus = async (
   user: SessionUser,
-  prevState: FosterStatusChangeFormState,
-  formData: FormData,
-): Promise<FosterStatusChangeFormState> => {
-  const validatedFields = FosterApplicationStatusChangeSchema.safeParse({
-    applicationId: formData.get("applicationId"),
-    status: formData.get("status"),
-    statusChangeReason: formData.get("statusChangeReason"),
-  });
+  values: FosterApplicationStatusChangeInput,
+): Promise<FormResult<FosterApplicationStatusChangeInput>> => {
+  const validatedFields =
+    FosterApplicationStatusChangeSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message:
         "Missing or invalid fields. Failed to update foster application.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<FosterApplicationStatusChangeInput>,
     };
   }
 
@@ -360,12 +313,13 @@ const _updateFosterApplicationStatus = async (
   } catch (error) {
     console.error("Database error fetching foster application:", error);
     return {
+      ok: false,
       message: "Database Error: Failed to retrieve application details.",
     };
   }
 
   if (!existingApplication) {
-    return { message: "Foster application not found." };
+    return { ok: false, message: "Foster application not found." };
   }
 
   if (
@@ -373,6 +327,7 @@ const _updateFosterApplicationStatus = async (
     !isAllowedTransition(existingApplication.status, status)
   ) {
     return {
+      ok: false,
       message: illegalTransitionMessage(existingApplication.status, status),
     };
   }
@@ -440,6 +395,7 @@ const _updateFosterApplicationStatus = async (
       error,
     );
     return {
+      ok: false,
       message: "Database Error: Failed to update foster application.",
     };
   }
@@ -449,7 +405,7 @@ const _updateFosterApplicationStatus = async (
   revalidatePath("/dashboard/fosters");
 
   return {
-    success: true,
+    ok: true,
     message: "Foster application updated successfully.",
   };
 };
@@ -460,38 +416,23 @@ export const updateFosterApplicationStatus = withAuthenticatedUser(
   ),
 );
 
-// ─── Direct add (pressure valve for walk-ins/emergencies) ──────────────────
+// Direct add (pressure valve for walk-ins/emergencies)
 
 const _createFosterProfileDirect = async (
-  prevState: FosterProfileFormState,
-  formData: FormData,
-): Promise<FosterProfileFormState> => {
-  const speciesIds = formData.getAll("speciesIds");
-
-  const validatedFields = CreateFosterProfileSchema.safeParse({
-    ...Object.fromEntries(formData.entries()),
-    speciesIds,
-  });
+  values: CreateFosterProfileInput,
+): Promise<FormResult<CreateFosterProfileInput>> => {
+  const validatedFields = CreateFosterProfileSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create foster profile.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<CreateFosterProfileInput>,
     };
   }
 
-  const {
-    personId,
-    speciesIds: validatedSpeciesIds,
-    maxAnimals,
-    hasQuarantineSpace,
-    canGiveOralMeds,
-    canBottleFeed,
-    canTransport,
-    acceptsMedical,
-    acceptsHospice,
-    availabilityNotes,
-  } = validatedFields.data;
+  const { personId, speciesIds: validatedSpeciesIds } = validatedFields.data;
 
   let existingProfile;
   try {
@@ -505,12 +446,14 @@ const _createFosterProfileDirect = async (
       error,
     );
     return {
+      ok: false,
       message: "Database Error: Failed to verify existing foster profile.",
     };
   }
 
   if (existingProfile) {
     return {
+      ok: false,
       message:
         "This person already has a foster profile. Manage their status from the existing profile instead.",
     };
@@ -522,24 +465,7 @@ const _createFosterProfileDirect = async (
         personId,
         status: FosterStatus.ACTIVE,
         approvedAt: new Date(),
-        maxAnimals: parseInt(maxAnimals, 10),
-        hasQuarantineSpace:
-          hasQuarantineSpace === undefined
-            ? undefined
-            : hasQuarantineSpace === "true",
-        canGiveOralMeds:
-          canGiveOralMeds === undefined
-            ? undefined
-            : canGiveOralMeds === "true",
-        canBottleFeed:
-          canBottleFeed === undefined ? undefined : canBottleFeed === "true",
-        canTransport:
-          canTransport === undefined ? undefined : canTransport === "true",
-        acceptsMedical:
-          acceptsMedical === undefined ? undefined : acceptsMedical === "true",
-        acceptsHospice:
-          acceptsHospice === undefined ? undefined : acceptsHospice === "true",
-        availabilityNotes,
+        ...toFosterCapabilityData(validatedFields.data),
         speciesCapabilities:
           validatedSpeciesIds.length > 0
             ? { connect: validatedSpeciesIds.map((id) => ({ id })) }
@@ -548,11 +474,20 @@ const _createFosterProfileDirect = async (
     });
   } catch (error) {
     console.error("Database Error creating foster profile:", error);
-    return { message: "Database Error: Failed to create foster profile." };
+    return {
+      ok: false,
+      message: "Database Error: Failed to create foster profile.",
+    };
   }
 
   revalidatePath("/dashboard/fosters");
-  redirect("/dashboard/fosters");
+  // The destination is returned rather than navigated to here: redirect()
+  // never returns, so the form could not show a success toast before leaving.
+  return {
+    ok: true,
+    message: "Foster profile created.",
+    redirectTo: "/dashboard/fosters",
+  };
 };
 
 export const createFosterProfileDirect = RequirePermission(
@@ -646,41 +581,14 @@ const _updateFosterProfileCapabilities = async (
     };
   }
 
-  const {
-    speciesIds: validatedSpeciesIds,
-    maxAnimals,
-    hasQuarantineSpace,
-    canGiveOralMeds,
-    canBottleFeed,
-    canTransport,
-    acceptsMedical,
-    acceptsHospice,
-    availabilityNotes,
-  } = validatedFields.data;
+  const { speciesIds: validatedSpeciesIds } = validatedFields.data;
 
   let profile;
   try {
     profile = await prisma.fosterProfile.update({
       where: { id: parsedId.data },
       data: {
-        maxAnimals: parseInt(maxAnimals, 10),
-        hasQuarantineSpace:
-          hasQuarantineSpace === undefined
-            ? undefined
-            : hasQuarantineSpace === "true",
-        canGiveOralMeds:
-          canGiveOralMeds === undefined
-            ? undefined
-            : canGiveOralMeds === "true",
-        canBottleFeed:
-          canBottleFeed === undefined ? undefined : canBottleFeed === "true",
-        canTransport:
-          canTransport === undefined ? undefined : canTransport === "true",
-        acceptsMedical:
-          acceptsMedical === undefined ? undefined : acceptsMedical === "true",
-        acceptsHospice:
-          acceptsHospice === undefined ? undefined : acceptsHospice === "true",
-        availabilityNotes,
+        ...toFosterCapabilityData(validatedFields.data),
         speciesCapabilities: { set: validatedSpeciesIds.map((id) => ({ id })) },
       },
       select: { personId: true },

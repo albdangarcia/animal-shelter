@@ -1,11 +1,19 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import prisma from "@/app/lib/prisma";
-import { StaffUpdateAppFormState, StaffAdoptionApplicationFormState } from "../form-state-types";
-import { StaffUpdateAdoptionAppFormSchema, StaffAdoptionApplicationFormSchema } from "../zod-schemas/application.schemas";
-import { MyAdoptionAppFormSchema } from "../zod-schemas/myAdoptionApplication.schema";
+import {
+  StaffUpdateAdoptionAppFormSchema,
+  StaffAdoptionApplicationFormSchema,
+  type StaffAdoptionApplicationFormInput,
+  type StaffUpdateAdoptionAppFormInput,
+} from "../zod-schemas/application.schemas";
+import {
+  MyAdoptionAppFormSchema,
+  toAdoptionApplicantData,
+  type MyAdoptionAppFormInput,
+} from "../zod-schemas/myAdoptionApplication.schema";
+import { toHouseholdData } from "../zod-schemas/household-profile.schemas";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -18,15 +26,21 @@ import {
   illegalTransitionMessage,
 } from "../utils/application-status";
 import { z } from "zod";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+
+const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
+
+const personApplicationsPath = (personId: string) =>
+  `/dashboard/people-directory/${personId}/adoption-applications`;
 
 const _staffUpdateAdoptionApp = async (
   adoptionAppId: string,
-  prevState: StaffUpdateAppFormState,
-  formData: FormData
-): Promise<StaffUpdateAppFormState> => {
+  values: StaffUpdateAdoptionAppFormInput
+): Promise<FormResult<StaffUpdateAdoptionAppFormInput>> => {
   const session = await auth();
   if (!session?.user?.personId) {
     return {
+      ok: false,
       message:
         "Unauthorized: You must be logged in with a valid user profile to perform this action.",
     };
@@ -35,7 +49,7 @@ const _staffUpdateAdoptionApp = async (
 
   const parsedAdoptionAppId = cuidSchema.safeParse(adoptionAppId);
   if (!parsedAdoptionAppId.success) {
-    return { message: "Invalid Adoption Application ID format." };
+    return { ok: false, message: "Invalid Adoption Application ID format." };
   }
   const validatedAdoptionAppId = parsedAdoptionAppId.data;
 
@@ -46,20 +60,17 @@ const _staffUpdateAdoptionApp = async (
       select: { status: true, animalId: true },
     });
     if (!existingApplication) {
-      return { message: "Adoption Application not found." };
+      return { ok: false, message: "Adoption Application not found." };
     }
   } catch (error) {
     console.error("Database error fetching existing application:", error);
     return {
+      ok: false,
       message: "Database Error: Failed to retrieve application details.",
     };
   }
 
-  const validatedFields = StaffUpdateAdoptionAppFormSchema.safeParse({
-    status: formData.get("status") || undefined,
-    internalNotes: formData.get("internalNotes") ?? undefined,
-    statusChangeReason: formData.get("statusChangeReason") ?? undefined,
-  });
+  const validatedFields = StaffUpdateAdoptionAppFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     console.error(
@@ -67,9 +78,11 @@ const _staffUpdateAdoptionApp = async (
       validatedFields.error
     );
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message:
         "Missing or Invalid Fields. Failed to Update Adoption Application.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<StaffUpdateAdoptionAppFormInput>,
     };
   }
 
@@ -87,6 +100,7 @@ const _staffUpdateAdoptionApp = async (
     !isAllowedTransition(existingApplication.status, newStatus)
   ) {
     return {
+      ok: false,
       message: illegalTransitionMessage(existingApplication.status, newStatus),
     };
   }
@@ -100,9 +114,10 @@ const _staffUpdateAdoptionApp = async (
       (!statusChangeReason || statusChangeReason.trim() === "")
     ) {
       return {
+        ok: false,
         message:
           "Validation Error: A reason for the status change is required.",
-        errors: {
+        fieldErrors: {
           statusChangeReason: ["A reason for the status change is required."],
         },
       };
@@ -119,7 +134,10 @@ const _staffUpdateAdoptionApp = async (
   }
 
   if (Object.keys(applicationUpdateData).length === 0) {
-    return { message: "No changes provided to update the application." };
+    return {
+      ok: false,
+      message: "No changes provided to update the application.",
+    };
   }
 
   try {
@@ -185,18 +203,23 @@ const _staffUpdateAdoptionApp = async (
   } catch (error) {
     console.error("Database Error during transaction:", error);
     if (error instanceof ConflictError) {
-      return { message: error.message };
+      return { ok: false, message: error.message };
     }
     return {
+      ok: false,
       message:
         "Database Error: Failed to Update Adoption Application and associated records.",
     };
   }
 
-  revalidatePath("/dashboard/adoption-applications");
-  revalidatePath(`/dashboard/adoption-applications/${validatedAdoptionAppId}`);
+  revalidatePath(ADOPTION_APPLICATIONS_PATH);
+  revalidatePath(`${ADOPTION_APPLICATIONS_PATH}/${validatedAdoptionAppId}`);
 
-  redirect(`/dashboard/adoption-applications/`);
+  return {
+    ok: true,
+    message: "Application updated successfully.",
+    redirectTo: ADOPTION_APPLICATIONS_PATH,
+  };
 };
 
 export const staffUpdateAdoptionApp = RequirePermission(
@@ -205,12 +228,12 @@ export const staffUpdateAdoptionApp = RequirePermission(
 
 const _staffCreateAdoptionApplication = async (
   personId: string,
-  prevState: StaffAdoptionApplicationFormState,
-  formData: FormData
-): Promise<StaffAdoptionApplicationFormState> => {
+  values: StaffAdoptionApplicationFormInput
+): Promise<FormResult<StaffAdoptionApplicationFormInput>> => {
   const session = await auth();
   if (!session?.user?.personId) {
     return {
+      ok: false,
       message:
         "Unauthorized: You must be logged in with a valid user profile to perform this action.",
     };
@@ -219,7 +242,7 @@ const _staffCreateAdoptionApplication = async (
 
   const parsedPersonId = cuidSchema.safeParse(personId);
   if (!parsedPersonId.success) {
-    return { message: "Invalid Person ID format." };
+    return { ok: false, message: "Invalid Person ID format." };
   }
   const validatedPersonId = parsedPersonId.data;
 
@@ -232,66 +255,35 @@ const _staffCreateAdoptionApplication = async (
     });
   } catch (error) {
     console.error("Database error fetching person:", error);
-    return { message: "Database Error: Failed to verify person account status." };
+    return {
+      ok: false,
+      message: "Database Error: Failed to verify person account status.",
+    };
   }
   if (!targetPerson) {
-    return { message: "Person not found." };
+    return { ok: false, message: "Person not found." };
   }
   if (targetPerson.user !== null) {
     return {
+      ok: false,
       message:
         "Cannot submit an application on behalf of a registered user. The person should submit their own application.",
     };
   }
 
-  const validatedFields = StaffAdoptionApplicationFormSchema.safeParse({
-    applicantName: formData.get("applicantName"),
-    applicantEmail: formData.get("applicantEmail"),
-    applicantPhone: formData.get("applicantPhone"),
-    applicantAddressLine1: formData.get("applicantAddressLine1"),
-    applicantAddressLine2: formData.get("applicantAddressLine2"),
-    applicantCity: formData.get("applicantCity"),
-    applicantState: formData.get("applicantState"),
-    applicantZipCode: formData.get("applicantZipCode"),
-    livingSituation: formData.get("livingSituation"),
-    householdSize: formData.get("householdSize"),
-    hasYard: formData.get("hasYard"),
-    landlordPermission: formData.get("landlordPermission"),
-    hasChildren: formData.get("hasChildren"),
-    childrenAges: formData.get("childrenAges"),
-    otherAnimalsDescription: formData.get("otherAnimalsDescription"),
-    animalExperience: formData.get("animalExperience"),
-    reasonForAdoption: formData.get("reasonForAdoption"),
-    animalId: formData.get("animalId"),
-  });
+  const validatedFields =
+    StaffAdoptionApplicationFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or Invalid Fields. Failed to Create Adoption Application.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<StaffAdoptionApplicationFormInput>,
     };
   }
 
-  const {
-    animalId,
-    applicantName,
-    applicantEmail,
-    applicantPhone,
-    applicantAddressLine1,
-    applicantAddressLine2,
-    applicantCity,
-    applicantState,
-    applicantZipCode,
-    livingSituation,
-    householdSize,
-    hasYard,
-    landlordPermission,
-    hasChildren,
-    childrenAges,
-    otherAnimalsDescription,
-    animalExperience,
-    reasonForAdoption,
-  } = validatedFields.data;
+  const { animalId } = validatedFields.data;
 
   // Verify the target animal exists and is available for applications.
   let animal;
@@ -302,11 +294,17 @@ const _staffCreateAdoptionApplication = async (
     });
   } catch (error) {
     console.error("Database error fetching animal:", error);
-    return { message: "Database Error: Failed to verify animal availability." };
+    return {
+      ok: false,
+      message: "Database Error: Failed to verify animal availability.",
+    };
   }
 
   if (!animal || animal.listingStatus !== AnimalListingStatus.PUBLISHED) {
-    return { message: "This animal is not available for adoption applications." };
+    return {
+      ok: false,
+      message: "This animal is not available for adoption applications.",
+    };
   }
 
   // Prevent duplicate active applications for the same person + animal.
@@ -322,36 +320,23 @@ const _staffCreateAdoptionApplication = async (
     });
   } catch (error) {
     console.error("Database error checking for duplicate application:", error);
-    return { message: "Database Error: Failed to check for existing applications." };
+    return {
+      ok: false,
+      message: "Database Error: Failed to check for existing applications.",
+    };
   }
 
   if (existingApp) {
     return {
+      ok: false,
       message: "An active application already exists for this person and animal.",
     };
   }
 
-  // Parse childrenAges from comma-separated string to Int[].
-  const parsedChildrenAges =
-    !childrenAges || childrenAges.trim() === ""
-      ? []
-      : childrenAges.split(",").map((age) => parseInt(age.trim(), 10));
-
-  const hasYardBool = hasYard === undefined ? null : hasYard === "true";
-  const landlordPermissionBool = landlordPermission === undefined ? null : landlordPermission === "true";
-  const hasChildrenBool = hasChildren === undefined ? null : hasChildren === "true";
-  const householdSizeInt = parseInt(householdSize, 10);
-
-  const householdProfileData = {
-    livingSituation,
-    hasYard: hasYardBool,
-    landlordPermission: landlordPermissionBool,
-    householdSize: householdSizeInt,
-    hasChildren: hasChildrenBool,
-    childrenAges: parsedChildrenAges,
-    otherAnimalsDescription: otherAnimalsDescription || null,
-    animalExperience: animalExperience || null,
-  };
+  // Same shared mappers the public flow uses, so a staff-entered application
+  // and a self-service one produce identical columns — including
+  // landlordPermission being null rather than false for non-renters.
+  const householdProfileData = toHouseholdData(validatedFields.data);
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -359,23 +344,8 @@ const _staffCreateAdoptionApplication = async (
         data: {
           applicantId: validatedPersonId,
           animalId,
-          applicantName,
-          applicantEmail,
-          applicantPhone,
-          applicantAddressLine1,
-          applicantAddressLine2: applicantAddressLine2 || null,
-          applicantCity,
-          applicantState,
-          applicantZipCode,
-          livingSituation,
-          hasYard: hasYardBool,
-          landlordPermission: landlordPermissionBool,
-          householdSize: householdSizeInt,
-          hasChildren: hasChildrenBool,
-          childrenAges: parsedChildrenAges,
-          otherAnimalsDescription: otherAnimalsDescription || null,
-          animalExperience: animalExperience || null,
-          reasonForAdoption,
+          ...toAdoptionApplicantData(validatedFields.data),
+          ...householdProfileData,
           status: ApplicationStatus.PENDING,
         },
         select: { id: true },
@@ -403,16 +373,18 @@ const _staffCreateAdoptionApplication = async (
   } catch (error) {
     console.error("Database Error during staff create application transaction:", error);
     return {
+      ok: false,
       message: "Database Error: Failed to create adoption application.",
     };
   }
 
-  revalidatePath(
-    `/dashboard/people-directory/${validatedPersonId}/adoption-applications`
-  );
-  redirect(
-    `/dashboard/people-directory/${validatedPersonId}/adoption-applications`
-  );
+  revalidatePath(personApplicationsPath(validatedPersonId));
+
+  return {
+    ok: true,
+    message: "Application submitted successfully.",
+    redirectTo: personApplicationsPath(validatedPersonId),
+  };
 };
 
 export const staffCreateAdoptionApplication = RequirePermission(
@@ -423,12 +395,12 @@ const _staffEditPersonApplication = async (
   applicationId: string,
   personId: string,
   callbackUrl: string | null,
-  prevState: StaffAdoptionApplicationFormState,
-  formData: FormData
-): Promise<StaffAdoptionApplicationFormState> => {
+  values: MyAdoptionAppFormInput
+): Promise<FormResult<MyAdoptionAppFormInput>> => {
   const session = await auth();
   if (!session?.user?.personId) {
     return {
+      ok: false,
       message:
         "Unauthorized: You must be logged in with a valid user profile to perform this action.",
     };
@@ -437,7 +409,7 @@ const _staffEditPersonApplication = async (
   const parsedAppId = cuidSchema.safeParse(applicationId);
   const parsedPersonId = cuidSchema.safeParse(personId);
   if (!parsedAppId.success || !parsedPersonId.success) {
-    return { message: "Invalid ID format." };
+    return { ok: false, message: "Invalid ID format." };
   }
   const validatedAppId = parsedAppId.data;
   const validatedPersonId = parsedPersonId.data;
@@ -451,11 +423,15 @@ const _staffEditPersonApplication = async (
     });
   } catch (error) {
     console.error("Database error fetching person:", error);
-    return { message: "Database Error: Failed to verify person account status." };
+    return {
+      ok: false,
+      message: "Database Error: Failed to verify person account status.",
+    };
   }
-  if (!targetPerson) return { message: "Person not found." };
+  if (!targetPerson) return { ok: false, message: "Person not found." };
   if (targetPerson.user !== null) {
     return {
+      ok: false,
       message:
         "Cannot edit an application belonging to a registered user. The person should manage their own application.",
     };
@@ -470,102 +446,35 @@ const _staffEditPersonApplication = async (
     });
   } catch (error) {
     console.error("Database error fetching application:", error);
-    return { message: "Database Error: Failed to retrieve application." };
+    return {
+      ok: false,
+      message: "Database Error: Failed to retrieve application.",
+    };
   }
   if (!existingApplication) {
-    return { message: "Application not found." };
+    return { ok: false, message: "Application not found." };
   }
 
-  const validatedFields = MyAdoptionAppFormSchema.safeParse({
-    applicantName: formData.get("applicantName"),
-    applicantEmail: formData.get("applicantEmail"),
-    applicantPhone: formData.get("applicantPhone"),
-    applicantAddressLine1: formData.get("applicantAddressLine1"),
-    applicantAddressLine2: formData.get("applicantAddressLine2"),
-    applicantCity: formData.get("applicantCity"),
-    applicantState: formData.get("applicantState"),
-    applicantZipCode: formData.get("applicantZipCode"),
-    livingSituation: formData.get("livingSituation"),
-    householdSize: formData.get("householdSize"),
-    hasYard: formData.get("hasYard"),
-    landlordPermission: formData.get("landlordPermission"),
-    hasChildren: formData.get("hasChildren"),
-    childrenAges: formData.get("childrenAges"),
-    otherAnimalsDescription: formData.get("otherAnimalsDescription"),
-    animalExperience: formData.get("animalExperience"),
-    reasonForAdoption: formData.get("reasonForAdoption"),
-  });
+  const validatedFields = MyAdoptionAppFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or Invalid Fields. Failed to Update Application.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<MyAdoptionAppFormInput>,
     };
   }
 
-  const {
-    applicantName,
-    applicantEmail,
-    applicantPhone,
-    applicantAddressLine1,
-    applicantAddressLine2,
-    applicantCity,
-    applicantState,
-    applicantZipCode,
-    livingSituation,
-    householdSize,
-    hasYard,
-    landlordPermission,
-    hasChildren,
-    childrenAges,
-    otherAnimalsDescription,
-    animalExperience,
-    reasonForAdoption,
-  } = validatedFields.data;
-
-  const parsedChildrenAges =
-    !childrenAges || childrenAges.trim() === ""
-      ? []
-      : childrenAges.split(",").map((age) => parseInt(age.trim(), 10));
-
-  const hasYardBool = hasYard === undefined ? null : hasYard === "true";
-  const landlordPermissionBool = landlordPermission === undefined ? null : landlordPermission === "true";
-  const hasChildrenBool = hasChildren === undefined ? null : hasChildren === "true";
-  const householdSizeInt = parseInt(householdSize, 10);
-
-  const householdProfileData = {
-    livingSituation,
-    hasYard: hasYardBool,
-    landlordPermission: landlordPermissionBool,
-    householdSize: householdSizeInt,
-    hasChildren: hasChildrenBool,
-    childrenAges: parsedChildrenAges,
-    otherAnimalsDescription: otherAnimalsDescription || null,
-    animalExperience: animalExperience || null,
-  };
+  const householdProfileData = toHouseholdData(validatedFields.data);
 
   try {
     await prisma.$transaction(async (tx) => {
       await tx.adoptionApplication.update({
         where: { id: validatedAppId },
         data: {
-          applicantName,
-          applicantEmail,
-          applicantPhone,
-          applicantAddressLine1,
-          applicantAddressLine2: applicantAddressLine2 || null,
-          applicantCity,
-          applicantState,
-          applicantZipCode,
-          livingSituation,
-          hasYard: hasYardBool,
-          landlordPermission: landlordPermissionBool,
-          householdSize: householdSizeInt,
-          hasChildren: hasChildrenBool,
-          childrenAges: parsedChildrenAges,
-          otherAnimalsDescription: otherAnimalsDescription || null,
-          animalExperience: animalExperience || null,
-          reasonForAdoption,
+          ...toAdoptionApplicantData(validatedFields.data),
+          ...householdProfileData,
         },
       });
 
@@ -577,21 +486,25 @@ const _staffEditPersonApplication = async (
     });
   } catch (error) {
     console.error("Database Error during staff edit application transaction:", error);
-    return { message: "Database Error: Failed to update application." };
+    return { ok: false, message: "Database Error: Failed to update application." };
   }
 
-  revalidatePath("/dashboard/adoption-applications");
-  revalidatePath(
-    `/dashboard/people-directory/${validatedPersonId}/adoption-applications`
-  );
+  revalidatePath(ADOPTION_APPLICATIONS_PATH);
+  revalidatePath(personApplicationsPath(validatedPersonId));
 
-  // Redirect to callbackUrl if it's a safe relative path, otherwise fall back.
+  // Navigate to callbackUrl if it's a safe relative path, otherwise fall back.
+  // Still validated here rather than trusted from the client: the form passes
+  // it through, but this action is reachable by direct POST.
   const destination =
     callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
       ? callbackUrl
-      : `/dashboard/people-directory/${validatedPersonId}/adoption-applications`;
+      : personApplicationsPath(validatedPersonId);
 
-  redirect(destination);
+  return {
+    ok: true,
+    message: "Application updated successfully.",
+    redirectTo: destination,
+  };
 };
 
 export const staffEditPersonApplication = RequirePermission(

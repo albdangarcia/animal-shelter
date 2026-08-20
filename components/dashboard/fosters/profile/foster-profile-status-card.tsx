@@ -167,7 +167,7 @@ export function FosterProfileStatusCard({
     resolver: standardSchemaResolver(FosterCapabilityFieldsSchema),
     defaultValues: {
       speciesIds: profile.speciesCapabilities.map((s) => s.id),
-      maxAnimals: String(profile.maxAnimals),
+      maxAnimals: profile.maxAnimals,
       hasQuarantineSpace: boolToSelectValue(profile.hasQuarantineSpace),
       canGiveOralMeds: boolToSelectValue(profile.canGiveOralMeds),
       canBottleFeed: boolToSelectValue(profile.canBottleFeed),

@@ -1,22 +1,25 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { ArrowRight, Info, Loader2, Pencil } from "lucide-react";
 import Link from "next/link";
-import { startTransition, useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
 import { AdoptionApplicationWithOutcome } from "@/app/lib/data/user-adoption-application.data";
 import { staffUpdateAdoptionApp } from "@/app/lib/actions/adoption-application.actions";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { AnimalForAdoptionApplicationPayload } from "@/app/lib/types";
 import { ALLOWED_APPLICATION_TRANSITIONS } from "@/app/lib/utils/application-status";
 import {
   formatSingleEnumOption,
   livingSituationOptions,
 } from "@/app/lib/utils/enum-formatter";
-import { StaffUpdateAdoptionAppFormSchema } from "@/app/lib/zod-schemas/application.schemas";
+import {
+  StaffUpdateAdoptionAppFormSchema,
+  type StaffUpdateAdoptionAppFormInput,
+} from "@/app/lib/zod-schemas/application.schemas";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,7 +51,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { US_STATES } from "@/app/lib/constants/us-states";
 
-type StaffUpdateFormData = z.infer<typeof StaffUpdateAdoptionAppFormSchema>;
+type StaffUpdateFormData = StaffUpdateAdoptionAppFormInput;
 
 interface StaffApplicationUpdateFormProps {
   animal: AnimalForAdoptionApplicationPayload;
@@ -67,14 +70,11 @@ export function StaffApplicationUpdateForm({
   const currentStatus = application.status;
   const allowedNextStatuses = ALLOWED_APPLICATION_TRANSITIONS[currentStatus];
 
-  const action = staffUpdateAdoptionApp.bind(null, application.id);
-  const [state, formAction, isPending] = useActionState(
-    action,
-    INITIAL_FORM_STATE
-  );
+  const [isPending, startSubmitTransition] = useTransition();
+  const router = useRouter();
 
   const form = useForm<StaffUpdateFormData>({
-    resolver: zodResolver(StaffUpdateAdoptionAppFormSchema),
+    resolver: standardSchemaResolver(StaffUpdateAdoptionAppFormSchema),
     defaultValues: {
       status: application.status as StaffUpdateFormData["status"],
       internalNotes: application.internalNotes ?? "",
@@ -85,35 +85,25 @@ export function StaffApplicationUpdateForm({
   const newStatus = useWatch({ control: form.control, name: "status" });
   const isStatusChanging = newStatus && newStatus !== currentStatus;
 
-  useEffect(() => {
-    // If the server returns any message, it's an error. Show a toast.
-    if (state.message) {
-      toast.error(state.message);
-    }
-
-    // If there are specific field errors, update the form fields.
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        if (value) {
-          form.setError(key as keyof StaffUpdateFormData, {
-            type: "server",
-            message: value.join(", "),
-          });
-        }
-      }
-    }
-  }, [state, form]);
-
-  const handleFormSubmit = (data: StaffUpdateFormData) => {
+  // Every message the action returns used to be toasted as an error, because
+  // the effect draining action state had no way to tell success from failure.
+  const handleFormSubmit = (values: StaffUpdateFormData) => {
     if (isAdopted) return;
-    const formData = new FormData();
-    Object.entries(data).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
-        formData.append(key, String(value));
+    startSubmitTransition(async () => {
+      const result = await staffUpdateAdoptionApp(application.id, values);
+
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
+        }
+        form.reset(values);
+        return;
       }
-    });
-    startTransition(() => {
-      formAction(formData);
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -200,7 +190,7 @@ export function StaffApplicationUpdateForm({
                       <FormLabel>Application Status *</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value ?? ""}
                         disabled={isPending || allowedNextStatuses.length === 0}
                       >
                         <FormControl>
