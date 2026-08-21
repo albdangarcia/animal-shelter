@@ -1,28 +1,39 @@
 "use server";
 
-import { MyAdoptionAppFormState } from "../form-state-types";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import prisma from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { AnimalListingStatus, ApplicationStatus } from "@/prisma/generated/enums";
-import { MyAdoptionAppFormSchema } from "../zod-schemas/myAdoptionApplication.schema";
+import {
+  MyAdoptionAppFormSchema,
+  toAdoptionApplicantData,
+  type MyAdoptionAppFormInput,
+} from "../zod-schemas/myAdoptionApplication.schema";
+import { toHouseholdData } from "../zod-schemas/household-profile.schemas";
 import { SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { ActionResult } from "../types";
 import { z } from "zod";
 import { isOwnedByUser } from "../auth/ownership";
 import { Prisma } from "@/prisma/generated/client";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+
+type MyAdoptionAppResult = FormResult<MyAdoptionAppFormInput>;
+
+// Where both actions send the user once the write lands. Returned as
+// redirectTo rather than passed to redirect(): redirect() never returns, so
+// these forms previously showed no success toast at all.
+const MY_APPLICATIONS_PATH = "/dashboard/my-adoption-applications";
 
 const _updateMyAdoptionApp = async (
   user: SessionUser, // Injected by withAuthenticatedUser
   applicationId: string, // Adoption Application ID from the URL parameters
-  prevState: MyAdoptionAppFormState,
-  formData: FormData,
-): Promise<MyAdoptionAppFormState> => {
+  values: MyAdoptionAppFormInput,
+): Promise<MyAdoptionAppResult> => {
   // Validate the applicationId
   const parsedApplicationId = cuidSchema.safeParse(applicationId);
   if (!parsedApplicationId.success) {
     return {
+      ok: false,
       message: "Invalid Adoption Application ID format.",
     };
   }
@@ -41,12 +52,13 @@ const _updateMyAdoptionApp = async (
       error,
     );
     return {
+      ok: false,
       message: "Database Error: Failed to verify application ownership.",
     };
   }
 
   if (!isOwnedByUser(application, user.personId)) {
-    return { message: "Adoption Application not found." };
+    return { ok: false, message: "Adoption Application not found." };
   }
 
   // Check if the application status prevents modification
@@ -60,58 +72,31 @@ const _updateMyAdoptionApp = async (
 
   if (nonEditableStatuses.includes(application.status)) {
     return {
+      ok: false,
       message: `Cannot update application. Its status is currently "${application.status}". Applications cannot be modified if their status is REVIEWING, APPROVED, REJECTED, WITHDRAWN, or ADOPTED.`,
     };
   }
 
-  // Validate form fields using Zod
-  const validatedFields = MyAdoptionAppFormSchema.safeParse({
-    applicantName: formData.get("applicantName"),
-    applicantEmail: formData.get("applicantEmail"),
-    applicantPhone: formData.get("applicantPhone"),
-    applicantAddressLine1: formData.get("applicantAddressLine1"),
-    applicantAddressLine2: formData.get("applicantAddressLine2"),
-    applicantCity: formData.get("applicantCity"),
-    applicantState: formData.get("applicantState"),
-    applicantZipCode: formData.get("applicantZipCode"),
-    livingSituation: formData.get("livingSituation"),
-    hasYard: formData.get("hasYard"),
-    landlordPermission: formData.get("landlordPermission"),
-    householdSize: formData.get("householdSize"),
-    hasChildren: formData.get("hasChildren"),
-    childrenAges: formData.get("childrenAges"),
-    otherAnimalsDescription: formData.get("otherAnimalsDescription"),
-    animalExperience: formData.get("animalExperience"),
-    reasonForAdoption: formData.get("reasonForAdoption"),
-  });
+  // Re-validate on the server: the client's copy of this schema is UX, and
+  // this function is reachable by direct POST.
+  const validatedFields = MyAdoptionAppFormSchema.safeParse(values);
 
   // If form validation fails, return errors early. Otherwise, continue.
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing Fields. Failed to Update Adoption Application.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<MyAdoptionAppFormInput>,
     };
   }
 
-  // Prepare data for insertion into the database
-  const {
-    hasYard,
-    landlordPermission,
-    householdSize,
-    hasChildren,
-    childrenAges,
-  } = validatedFields.data;
-
+  // The two shared mappers cover every column on the row between them, so the
+  // string -> boolean/number/array conversions are no longer written out by
+  // hand here (and identically again in the staff actions).
   const dataToUpdate = {
-    ...validatedFields.data,
-    hasYard: hasYard === "true", // Convert string "true" to boolean true
-    landlordPermission: landlordPermission === "true", // Convert string "true" to boolean true
-    householdSize: parseInt(householdSize, 10), // Convert string to number
-    hasChildren: hasChildren === "true", // Convert string "true" to boolean true
-    childrenAges:
-      childrenAges.trim() === ""
-        ? []
-        : childrenAges.split(",").map((age) => parseInt(age.trim(), 10)), // Convert comma-separated string to number array
+    ...toAdoptionApplicantData(validatedFields.data),
+    ...toHouseholdData(validatedFields.data),
   };
 
   // Update the adoption application
@@ -126,16 +111,20 @@ const _updateMyAdoptionApp = async (
       error,
     );
     return {
+      ok: false,
       message: "Database Error: Failed to Update Adoption Application.",
     };
   }
 
   // Revalidate relevant paths
-  revalidatePath("/dashboard/my-adoption-applications");
-  revalidatePath(`/dashboard/my-adoption-applications/${validatedApplicationId}`);
+  revalidatePath(MY_APPLICATIONS_PATH);
+  revalidatePath(`${MY_APPLICATIONS_PATH}/${validatedApplicationId}`);
 
-  // Redirect to the updated application's page
-  redirect(`/dashboard/my-adoption-applications`);
+  return {
+    ok: true,
+    message: "Application updated successfully.",
+    redirectTo: MY_APPLICATIONS_PATH,
+  };
 };
 
 const _withdrawMyAdoptionApplication = async (
@@ -327,51 +316,29 @@ const _reactivateMyAdoptionApplication = async (
 const _createMyAdoptionApp = async (
   user: SessionUser, // Injected by withAuthenticatedUser
   animalId: string,
-  prevState: MyAdoptionAppFormState,
-  formData: FormData,
-): Promise<MyAdoptionAppFormState> => {
+  values: MyAdoptionAppFormInput,
+): Promise<MyAdoptionAppResult> => {
   const parsedAnimalId = cuidSchema.safeParse(animalId);
   if (!parsedAnimalId.success) {
     return {
+      ok: false,
       message: "Invalid Animal ID format.",
     };
   }
   const validatedAnimalId = parsedAnimalId.data;
 
-  // Validate form fields using Zod
-  const validatedFields = MyAdoptionAppFormSchema.safeParse({
-    applicantName: formData.get("applicantName"),
-    applicantEmail: formData.get("applicantEmail"),
-    applicantPhone: formData.get("applicantPhone"),
-    applicantAddressLine1: formData.get("applicantAddressLine1"),
-    applicantAddressLine2: formData.get("applicantAddressLine2"),
-    applicantCity: formData.get("applicantCity"),
-    applicantState: formData.get("applicantState"),
-    applicantZipCode: formData.get("applicantZipCode"),
-    livingSituation: formData.get("livingSituation"),
-    hasYard: formData.get("hasYard"),
-    landlordPermission: formData.get("landlordPermission"),
-    householdSize: formData.get("householdSize"),
-    hasChildren: formData.get("hasChildren"),
-    childrenAges: formData.get("childrenAges"),
-    otherAnimalsDescription: formData.get("otherAnimalsDescription"),
-    animalExperience: formData.get("animalExperience"),
-    reasonForAdoption: formData.get("reasonForAdoption"),
-  });
+  const validatedFields = MyAdoptionAppFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing Fields. Failed to Submit Application.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<MyAdoptionAppFormInput>,
     };
   }
 
   const {
-    hasYard,
-    landlordPermission,
-    householdSize,
-    hasChildren,
-    childrenAges,
     applicantName,
     applicantEmail,
     applicantPhone,
@@ -380,34 +347,18 @@ const _createMyAdoptionApp = async (
     applicantCity,
     applicantState,
     applicantZipCode,
-    livingSituation,
-    otherAnimalsDescription,
-    animalExperience,
   } = validatedFields.data;
 
+  // The application row and the reusable HouseholdProfile take the same
+  // household columns, so they share one mapper rather than the profile being
+  // rebuilt field by field from the application's already-converted values.
+  const householdProfileData = toHouseholdData(validatedFields.data);
+
   const dataToCreate = {
-    ...validatedFields.data,
+    ...toAdoptionApplicantData(validatedFields.data),
+    ...householdProfileData,
     applicantId: user.personId,
     animalId: validatedAnimalId,
-    hasYard: hasYard === "true",
-    landlordPermission: landlordPermission === "true",
-    householdSize: parseInt(householdSize, 10),
-    hasChildren: hasChildren === "true",
-    childrenAges:
-      childrenAges.trim() === ""
-        ? []
-        : childrenAges.split(",").map((age) => parseInt(age.trim(), 10)),
-  };
-
-  const householdProfileData = {
-    livingSituation,
-    hasYard: dataToCreate.hasYard,
-    landlordPermission: dataToCreate.landlordPermission,
-    householdSize: dataToCreate.householdSize,
-    hasChildren: dataToCreate.hasChildren,
-    childrenAges: dataToCreate.childrenAges,
-    otherAnimalsDescription,
-    animalExperience,
   };
 
   try {
@@ -482,13 +433,19 @@ const _createMyAdoptionApp = async (
   } catch (error: unknown) {
     console.error("Error submitting adoption application:", error);
     return {
+      ok: false,
       message:
         "Database Error: Failed to submit application. Please try again.",
     };
   }
   revalidatePath(`/pets/${validatedAnimalId}`);
-  revalidatePath("/dashboard/my-adoption-applications");
-  redirect("/dashboard/my-adoption-applications");
+  revalidatePath(MY_APPLICATIONS_PATH);
+
+  return {
+    ok: true,
+    message: "Application submitted successfully.",
+    redirectTo: MY_APPLICATIONS_PATH,
+  };
 };
 
 export const updateMyAdoptionApp = withAuthenticatedUser(_updateMyAdoptionApp);

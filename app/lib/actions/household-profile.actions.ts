@@ -1,63 +1,49 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import prisma from "@/app/lib/prisma";
-import { HouseholdProfileFormState } from "../form-state-types";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import {
   RequirePermission,
   SessionUser,
   withAuthenticatedUser,
 } from "../auth/protected-actions";
-import { AppPermissions } from "@/app/lib/auth/permissions";
-import { HouseholdFieldsSchema } from "../zod-schemas/household-profile.schemas";
 import { cuidSchema } from "../zod-schemas/common.schemas";
-import { z } from "zod";
+import {
+  HouseholdFieldsInput,
+  HouseholdFieldsSchema,
+  toHouseholdData,
+} from "../zod-schemas/household-profile.schemas";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
+type HouseholdResult = FormResult<HouseholdFieldsInput>;
+
+// Values arrive as a typed object rather than FormData. The client already
+// holds validated values; hand-serializing them to FormData only to run
+// Object.fromEntries on the other side was two lossy string conversions for
+// no benefit, since none of these forms use native <form action> submission.
+//
+// Server-side validation is unchanged and non-negotiable: server actions are
+// reachable by direct POST, so this must never trust its input.
 const _updateMyHouseholdProfile = async (
   user: SessionUser,
-  prevState: HouseholdProfileFormState,
-  formData: FormData,
-): Promise<HouseholdProfileFormState> => {
+  values: HouseholdFieldsInput,
+): Promise<HouseholdResult> => {
   const personId = user.personId;
 
-  const validatedFields = HouseholdFieldsSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = HouseholdFieldsSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update household profile.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<HouseholdFieldsInput>,
     };
   }
 
-  const {
-    livingSituation,
-    hasYard,
-    landlordPermission,
-    householdSize,
-    hasChildren,
-    childrenAges,
-    otherAnimalsDescription,
-    animalExperience,
-  } = validatedFields.data;
-
-  const dataToSave = {
-    livingSituation,
-    hasYard: hasYard === undefined ? undefined : hasYard === "true",
-    landlordPermission:
-      landlordPermission === undefined
-        ? undefined
-        : landlordPermission === "true",
-    householdSize: parseInt(householdSize, 10),
-    hasChildren: hasChildren === undefined ? undefined : hasChildren === "true",
-    childrenAges:
-      !childrenAges || childrenAges.trim() === ""
-        ? []
-        : childrenAges.split(",").map((age) => parseInt(age.trim(), 10)),
-    otherAnimalsDescription,
-    animalExperience,
-  };
+  const dataToSave = toHouseholdData(validatedFields.data);
 
   try {
     await prisma.householdProfile.upsert({
@@ -68,16 +54,13 @@ const _updateMyHouseholdProfile = async (
   } catch (error) {
     console.error("Database Error updating household profile:", error);
     return {
-      success: false,
+      ok: false,
       message: "Database Error: Failed to update household profile.",
     };
   }
 
   revalidatePath("/dashboard/account");
-  return {
-    success: true,
-    message: "Household information updated successfully.",
-  };
+  return { ok: true, message: "Household information updated successfully." };
 };
 
 export const updateMyHouseholdProfile = withAuthenticatedUser(
@@ -86,12 +69,11 @@ export const updateMyHouseholdProfile = withAuthenticatedUser(
 
 const _updateStaffHouseholdProfile = async (
   personId: string,
-  prevState: HouseholdProfileFormState,
-  formData: FormData,
-): Promise<HouseholdProfileFormState> => {
+  values: HouseholdFieldsInput,
+): Promise<HouseholdResult> => {
   const parsedId = cuidSchema.safeParse(personId);
   if (!parsedId.success) {
-    return { message: "Invalid person ID format." };
+    return { ok: false, message: "Invalid person ID format." };
   }
 
   const person = await prisma.person.findUnique({
@@ -100,54 +82,29 @@ const _updateStaffHouseholdProfile = async (
   });
 
   if (!person) {
-    return { message: "Person not found." };
+    return { ok: false, message: "Person not found." };
   }
 
   if (person.user !== null) {
     return {
+      ok: false,
       message:
         "Unauthorized: Cannot edit household profile for a registered user account.",
     };
   }
 
-  const validatedFields = HouseholdFieldsSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = HouseholdFieldsSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update household profile.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<HouseholdFieldsInput>,
     };
   }
 
-  const {
-    livingSituation,
-    hasYard,
-    landlordPermission,
-    householdSize,
-    hasChildren,
-    childrenAges,
-    otherAnimalsDescription,
-    animalExperience,
-  } = validatedFields.data;
-
-  const dataToSave = {
-    livingSituation,
-    hasYard: hasYard === undefined ? undefined : hasYard === "true",
-    landlordPermission:
-      landlordPermission === undefined
-        ? undefined
-        : landlordPermission === "true",
-    householdSize: parseInt(householdSize, 10),
-    hasChildren: hasChildren === undefined ? undefined : hasChildren === "true",
-    childrenAges:
-      !childrenAges || childrenAges.trim() === ""
-        ? []
-        : childrenAges.split(",").map((age) => parseInt(age.trim(), 10)),
-    otherAnimalsDescription,
-    animalExperience,
-  };
+  const dataToSave = toHouseholdData(validatedFields.data);
 
   try {
     await prisma.householdProfile.upsert({
@@ -158,13 +115,13 @@ const _updateStaffHouseholdProfile = async (
   } catch (error) {
     console.error("Database Error updating staff household profile:", error);
     return {
-      success: false,
+      ok: false,
       message: "Database Error: Failed to update household profile.",
     };
   }
 
   revalidatePath(`/dashboard/people-directory/${parsedId.data}/profile`);
-  return { success: true, message: "Household profile updated." };
+  return { ok: true, message: "Household profile updated." };
 };
 
 export const updateStaffHouseholdProfile = RequirePermission(

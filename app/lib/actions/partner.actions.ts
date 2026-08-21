@@ -1,66 +1,61 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
-import { PartnerFormState } from "../form-state-types";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { PartnerFormSchema } from "../zod-schemas/partners-directory.schemas";
+import {
+  PartnerFormSchema,
+  type PartnerFormInput,
+} from "../zod-schemas/partners-directory.schemas";
+import { safeInternalPath } from "../utils/safe-redirect";
 import { z } from "zod";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+
+const PARTNERS_DIRECTORY_PATH = "/dashboard/partners-directory";
+
+const partnerPath = (partnerId: string) =>
+  `${PARTNERS_DIRECTORY_PATH}/${partnerId}`;
+
+// Single mapper for both actions. `isActive` arrives as a real boolean now
+// rather than the checkbox's "on"/absent, but it is still optional in the
+// schema, so a payload that omits it defaults to active.
+const toPartnerData = (values: PartnerFormInput) => ({
+  name: values.name,
+  type: values.type,
+  email: values.email || null,
+  phone: values.phone || null,
+  website: values.website || null,
+  address: values.address || null,
+  city: values.city || null,
+  state: values.state || null,
+  zipCode: values.zipCode || null,
+  isActive: values.isActive ?? true,
+  notes: values.notes || null,
+});
 
 const _createPartner = async (
-  prevState: PartnerFormState,
-  formData: FormData,
-): Promise<PartnerFormState> => {
-  const raw = Object.fromEntries(formData.entries());
-  
-  const validatedFields = PartnerFormSchema.safeParse({
-    ...raw,
-    // Checkboxes submit "on" or are absent; normalize to boolean.
-    isActive: formData.get("isActive") !== null,
-  });
+  returnTo: string | null,
+  values: PartnerFormInput,
+): Promise<FormResult<PartnerFormInput>> => {
+  const validatedFields = PartnerFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create partner.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<PartnerFormInput>,
     };
   }
-
-  const {
-    name,
-    type,
-    email,
-    phone,
-    website,
-    address,
-    city,
-    state,
-    zipCode,
-    isActive,
-    notes,
-  } = validatedFields.data;
 
   let newPartnerId: string;
 
   try {
     const partner = await prisma.partner.create({
-      data: {
-        name,
-        type,
-        email: email || null,
-        phone: phone || null,
-        website: website || null,
-        address: address || null,
-        city: city || null,
-        state: state || null,
-        zipCode: zipCode || null,
-        isActive: isActive ?? true,
-        notes: notes || null,
-      },
+      data: toPartnerData(validatedFields.data),
     });
     newPartnerId = partner.id;
   } catch (error) {
@@ -69,103 +64,84 @@ const _createPartner = async (
       error.code === "P2002"
     ) {
       return {
-        errors: { name: ["A partner with this name already exists."] },
+        ok: false,
         message: "Failed to create partner.",
+        fieldErrors: { name: ["A partner with this name already exists."] },
       };
     }
     console.error("Database Error creating partner:", error);
     return {
-      success: false,
+      ok: false,
       message: "Database Error: Failed to create partner.",
     };
   }
 
-  revalidatePath("/dashboard/partners-directory");
-  redirect(`/dashboard/partners-directory/${newPartnerId}`);
+  revalidatePath(PARTNERS_DIRECTORY_PATH);
+
+  // Behavior change, intended: create used to ignore returnTo and always land
+  // on the new partner, even though the form has been sending it. Now it
+  // honors it, matching update and matching createPerson.
+  return {
+    ok: true,
+    message: "Partner created successfully.",
+    redirectTo: safeInternalPath(returnTo, partnerPath(newPartnerId)),
+  };
 };
 
 const _updatePartner = async (
   partnerId: string,
-  prevState: PartnerFormState,
-  formData: FormData,
-): Promise<PartnerFormState> => {
+  returnTo: string | null,
+  values: PartnerFormInput,
+): Promise<FormResult<PartnerFormInput>> => {
   const parsedId = cuidSchema.safeParse(partnerId);
   if (!parsedId.success) {
-    return { message: "Invalid partner ID format." };
+    return { ok: false, message: "Invalid partner ID format." };
   }
 
-  const raw = Object.fromEntries(formData.entries());
-  const validatedFields = PartnerFormSchema.safeParse({
-    ...raw,
-    isActive: formData.get("isActive") !== null,
-  });
+  const validatedFields = PartnerFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update partner.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<PartnerFormInput>,
     };
   }
-
-  const {
-    name,
-    type,
-    email,
-    phone,
-    website,
-    address,
-    city,
-    state,
-    zipCode,
-    isActive,
-    notes,
-  } = validatedFields.data;
 
   try {
     await prisma.partner.update({
       where: { id: parsedId.data },
-      data: {
-        name,
-        type,
-        email: email || null,
-        phone: phone || null,
-        website: website || null,
-        address: address || null,
-        city: city || null,
-        state: state || null,
-        zipCode: zipCode || null,
-        isActive: isActive ?? true,
-        notes: notes || null,
-      },
+      data: toPartnerData(validatedFields.data),
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
         return {
-          errors: { name: ["A partner with this name already exists."] },
+          ok: false,
           message: "Failed to update partner.",
+          fieldErrors: { name: ["A partner with this name already exists."] },
         };
       }
       if (error.code === "P2025") {
-        return { message: "Partner not found." };
+        return { ok: false, message: "Partner not found." };
       }
     }
     console.error("Database Error updating partner:", error);
     return {
-      success: false,
+      ok: false,
       message: "Database Error: Failed to update partner.",
     };
   }
 
-  revalidatePath("/dashboard/partners-directory");
-  revalidatePath(`/dashboard/partners-directory/${parsedId.data}`);
+  revalidatePath(PARTNERS_DIRECTORY_PATH);
+  revalidatePath(partnerPath(parsedId.data));
 
-  const returnTo = formData.get("returnTo");
-  redirect(
-    typeof returnTo === "string" && returnTo
-      ? returnTo
-      : `/dashboard/partners-directory/${parsedId.data}`,
-  );
+  return {
+    ok: true,
+    message: "Partner updated successfully.",
+    redirectTo: safeInternalPath(returnTo, partnerPath(parsedId.data)),
+  };
 };
 
 export const createPartner = RequirePermission(AppPermissions.PARTNERS_MANAGE)(

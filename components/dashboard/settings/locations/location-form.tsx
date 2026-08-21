@@ -1,7 +1,7 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useTransition } from "react";
+import { useForm, type DefaultValues } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
@@ -26,13 +26,12 @@ import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import type { LocationModel } from "@/prisma/generated/models/Location";
 import type { LocationType } from "@/prisma/generated/enums";
 import {
-  LocationFormState,
   createLocation,
   updateLocation,
 } from "@/app/lib/actions/locations.actions";
 import { LocationFormSchema } from "@/app/lib/zod-schemas/location.schemas";
 import { locationTypeOptions } from "@/app/lib/utils/enum-formatter";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { toast } from "sonner";
 
 type LocationFormValues = z.infer<typeof LocationFormSchema>;
@@ -43,48 +42,29 @@ interface Props {
 }
 
 export const LocationForm = ({ onFormSubmit, location }: Props) => {
-  const action = location
-    ? updateLocation.bind(null, location.id)
-    : createLocation;
+  const [isPending, startSubmitTransition] = useTransition();
 
-  const [state, formAction, isPending] = useActionState<
-    LocationFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
-
-  const form = useForm({
+  const form = useForm<LocationFormValues>({
     resolver: standardSchemaResolver(LocationFormSchema),
     defaultValues: location
       ? { name: location.name, type: location.type }
-      : { name: "", type: "" as LocationType },
+      : ({ name: "", type: "" as LocationType } as DefaultValues<LocationFormValues>),
   });
 
-  useEffect(() => {
-    if (!state.message) return;
+  const onSubmit = (values: LocationFormValues) => {
+    startSubmitTransition(async () => {
+      const result = location
+        ? await updateLocation(location.id, values)
+        : await createLocation(values);
 
-    if (state.success) {
-      toast.success(state.message);
-      onFormSubmit();
-    } else if (state.errors) {
-      toast.error(state.message || "Please check the form for errors.");
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof LocationFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        onFormSubmit();
+        return;
       }
-    } else {
-      toast.error(state.message);
-    }
-  }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: LocationFormValues) => {
-    const formData = new FormData();
-    formData.append("name", data.name);
-    formData.append("type", data.type);
-
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -116,7 +96,7 @@ export const LocationForm = ({ onFormSubmit, location }: Props) => {
                 <FormLabel htmlFor="type">Type</FormLabel>
                 <Select
                   onValueChange={field.onChange}
-                  defaultValue={field.value}
+                  value={field.value ?? ""}
                   name={field.name}
                 >
                   <FormControl>

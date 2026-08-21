@@ -1,8 +1,8 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,19 +26,13 @@ import { noteCategoryOptions } from "@/app/lib/utils/enum-formatter";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { NoteCategory } from "@/prisma/generated/enums";
 import {
-  AnimalNoteFormState,
   createAnimalNote,
   updateAnimalNote,
 } from "@/app/lib/actions/animal-note.actions";
 import { FetchAnimalNotePayload } from "@/app/lib/data/animals/animal-note.data";
 import { NoteFormSchema } from "@/app/lib/zod-schemas/animal.schemas";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { toast } from "sonner";
-
-const INITIAL_FORM_STATE: AnimalNoteFormState = {
-  success: false,
-  message: null,
-  errors: {},
-};
 
 type NoteFormValues = z.infer<typeof NoteFormSchema>;
 
@@ -49,17 +43,10 @@ interface Props {
 }
 
 export const NoteForm = ({ animalId, onFormSubmit, note }: Props) => {
-  const action = note
-    ? updateAnimalNote.bind(null, note.id, animalId)
-    : createAnimalNote.bind(null, animalId);
-
-  const [state, formAction, isPending] = useActionState<
-    AnimalNoteFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
+  const [isPending, startSubmitTransition] = useTransition();
 
   const form = useForm<NoteFormValues>({
-    resolver: zodResolver(NoteFormSchema),
+    resolver: standardSchemaResolver(NoteFormSchema),
     defaultValues: note
       ? {
           category: note.category,
@@ -71,40 +58,20 @@ export const NoteForm = ({ animalId, onFormSubmit, note }: Props) => {
         },
   });
 
-  useEffect(() => {
-    if (!state.message) {
-      return;
-    }
+  const onSubmit = (values: NoteFormValues) => {
+    startSubmitTransition(async () => {
+      const result = note
+        ? await updateAnimalNote(note.id, animalId, values)
+        : await createAnimalNote(animalId, values);
 
-    // If the action was successful, show a success toast and close the form.
-    if (state.success) {
-      toast.success(state.message);
-      onFormSubmit(); // Close the dialog
-    }
-    // If it failed and there are specific field errors, set them on the form.
-    else if (state.errors) {
-      toast.error(state.message || "Please check the form for errors.");
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof NoteFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        onFormSubmit(); // Close the dialog
+        return;
       }
-    }
-    // Handle other general errors (e.g., database, invalid ID)
-    else {
-      toast.error(state.message);
-    }
-  }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: NoteFormValues) => {
-    const formData = new FormData();
-
-    formData.append("category", data.category);
-    formData.append("content", data.content);
-
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -121,7 +88,7 @@ export const NoteForm = ({ animalId, onFormSubmit, note }: Props) => {
                 <FormLabel htmlFor="category">Category</FormLabel>
                 <Select
                   onValueChange={field.onChange}
-                  defaultValue={field.value}
+                  value={field.value ?? ""}
                   name={field.name}
                 >
                   <FormControl>

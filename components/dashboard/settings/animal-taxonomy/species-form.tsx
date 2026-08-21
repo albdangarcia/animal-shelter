@@ -1,8 +1,8 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -18,18 +18,12 @@ import {
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import type { SpeciesModel } from "@/prisma/generated/models/Species";
 import {
-  SpeciesFormState,
   createSpecies,
   updateSpecies,
 } from "@/app/lib/actions/species-catalog.actions";
 import { SpeciesFormSchema } from "@/app/lib/zod-schemas/taxonomy.schemas";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { toast } from "sonner";
-
-const INITIAL_FORM_STATE: SpeciesFormState = {
-  success: false,
-  message: null,
-  errors: {},
-};
 
 type SpeciesFormValues = z.infer<typeof SpeciesFormSchema>;
 
@@ -39,43 +33,27 @@ interface Props {
 }
 
 export const SpeciesForm = ({ onFormSubmit, species }: Props) => {
-  const action = species ? updateSpecies.bind(null, species.id) : createSpecies;
-
-  const [state, formAction, isPending] = useActionState<
-    SpeciesFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
+  const [isPending, startSubmitTransition] = useTransition();
 
   const form = useForm<SpeciesFormValues>({
-    resolver: zodResolver(SpeciesFormSchema),
+    resolver: standardSchemaResolver(SpeciesFormSchema),
     defaultValues: species ? { name: species.name } : { name: "" },
   });
 
-  useEffect(() => {
-    if (!state.message) return;
+  const onSubmit = (values: SpeciesFormValues) => {
+    startSubmitTransition(async () => {
+      const result = species
+        ? await updateSpecies(species.id, values)
+        : await createSpecies(values);
 
-    if (state.success) {
-      toast.success(state.message);
-      onFormSubmit();
-    } else if (state.errors) {
-      toast.error(state.message || "Please check the form for errors.");
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof SpeciesFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        onFormSubmit();
+        return;
       }
-    } else {
-      toast.error(state.message);
-    }
-  }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: SpeciesFormValues) => {
-    const formData = new FormData();
-    formData.append("name", data.name);
-
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 

@@ -19,7 +19,7 @@ const eslintConfig = defineConfig([
         "argsIgnorePattern": "^_",
         "varsIgnorePattern": "^_",
       }],
-      "react-hooks/incompatible-library": "off",
+      "react-hooks/incompatible-library": "warn",
     },
   },
 ]);

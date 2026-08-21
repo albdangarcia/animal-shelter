@@ -1,7 +1,7 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useTransition } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -32,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { updateFosterApplicationStatus } from "@/app/lib/actions/foster-application.actions";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { ALLOWED_APPLICATION_TRANSITIONS } from "@/app/lib/utils/application-status";
 import { FosterApplicationStatusChangeSchema } from "@/app/lib/zod-schemas/foster.schemas";
 import { MyFosterApplicationPayload } from "@/app/lib/types";
@@ -94,10 +94,7 @@ export function FosterApplicationReview({
 
   const allowedNextStatuses = ALLOWED_APPLICATION_TRANSITIONS[application.status];
 
-  const [state, formAction, isPending] = useActionState(
-    updateFosterApplicationStatus,
-    INITIAL_FORM_STATE,
-  );
+  const [isPending, startSubmitTransition] = useTransition();
 
   const form = useForm<StatusChangeFormValues>({
     resolver: standardSchemaResolver(FosterApplicationStatusChangeSchema),
@@ -108,36 +105,26 @@ export function FosterApplicationReview({
     },
   });
 
-  useEffect(() => {
-    if (state.success) {
-      toast.success(state.message ?? "Foster application updated.");
-      form.setValue("statusChangeReason", "");
-    } else if (state.message) {
-      toast.error(state.message);
-    }
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        if (value) {
-          form.setError(key as keyof StatusChangeFormValues, {
-            type: "server",
-            message: value.join(", "),
-          });
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state]);
-
-  const newStatus = form.watch("status");
+  // useWatch rather than form.watch(): watch() returns a function the React
+  // Compiler cannot memoize safely, so it skips compiling the whole component.
+  const newStatus = useWatch({ control: form.control, name: "status" });
   const isStatusChanging = newStatus && newStatus !== application.status;
 
-  const onSubmit = (data: StatusChangeFormValues) => {
-    const formData = new FormData();
-    formData.append("applicationId", data.applicationId);
-    formData.append("status", data.status);
-    formData.append("statusChangeReason", data.statusChangeReason);
-    startTransition(() => {
-      formAction(formData);
+  // The reason box is cleared here rather than in an effect draining action
+  // state — which is also where the success toast used to be lost: the effect
+  // read `state.message` for both outcomes and had to infer which it was.
+  const onSubmit = (values: StatusChangeFormValues) => {
+    startSubmitTransition(async () => {
+      const result = await updateFosterApplicationStatus(values);
+
+      if (result.ok) {
+        toast.success(result.message);
+        form.reset({ ...values, statusChangeReason: "" });
+        return;
+      }
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -175,7 +162,7 @@ export function FosterApplicationReview({
                       <FormLabel>Application Status *</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value ?? ""}
                         disabled={isPending || allowedNextStatuses.length === 0}
                       >
                         <FormControl>

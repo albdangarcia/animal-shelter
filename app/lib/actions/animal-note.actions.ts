@@ -11,38 +11,31 @@ import {
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { NoteFormSchema } from "../zod-schemas/animal.schemas";
 import { z } from "zod";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
-export interface AnimalNoteFormState {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    category?: string[];
-    content?: string[];
-  };
-}
+type NoteFormInput = z.input<typeof NoteFormSchema>;
+type NoteResult = FormResult<NoteFormInput>;
 
 const _createAnimalNote = async (
   user: SessionUser, // Injected by withAuthenticatedUser
   animalId: string,
-  prevState: AnimalNoteFormState,
-  formData: FormData
-): Promise<AnimalNoteFormState> => {
+  values: NoteFormInput,
+): Promise<NoteResult> => {
   const NoteAuthorId = user.personId;
 
   const parsedAnimalId = cuidSchema.safeParse(animalId);
   if (!parsedAnimalId.success) {
-    return { success: false, message: "Invalid animal ID format." };
+    return { ok: false, message: "Invalid animal ID format." };
   }
 
-  const validatedFields = NoteFormSchema.safeParse(
-    Object.fromEntries(formData.entries())
-  );
+  const validatedFields = NoteFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create animal.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<NoteFormInput>,
     };
   }
 
@@ -59,52 +52,37 @@ const _createAnimalNote = async (
     });
   } catch (error) {
     console.error("Database Error creating notes:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to create notes.",
-    };
+    return { ok: false, message: "Database Error: Failed to create notes." };
   }
 
   revalidatePath(`/dashboard/animals/${animalId}/notes`);
 
-  return {
-    success: true,
-    message: "Note created successfully.",
-  };
+  return { ok: true, message: "Note created successfully." };
 };
 
 const _updateAnimalNote = async (
   noteId: string,
   animalId: string,
-  prevState: AnimalNoteFormState,
-  formData: FormData
-): Promise<AnimalNoteFormState> => {
+  values: NoteFormInput,
+): Promise<NoteResult> => {
   const parsedNoteId = cuidSchema.safeParse(noteId);
   if (!parsedNoteId.success) {
-    return {
-      success: false,
-      message: "Invalid note ID format.",
-    };
+    return { ok: false, message: "Invalid note ID format." };
   }
 
   const parsedAnimalId = cuidSchema.safeParse(animalId);
   if (!parsedAnimalId.success) {
-    return {
-      success: false,
-      message: "Invalid animal ID format.",
-    };
+    return { ok: false, message: "Invalid animal ID format." };
   }
 
-  // Validate the form fields
-  const validatedFields = NoteFormSchema.safeParse(
-    Object.fromEntries(formData.entries())
-  );
+  const validatedFields = NoteFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update note.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<NoteFormInput>,
     };
   }
 
@@ -123,17 +101,11 @@ const _updateAnimalNote = async (
     });
   } catch (error) {
     console.error("Database Error updating note:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to update note.",
-    };
+    return { ok: false, message: "Database Error: Failed to update note." };
   }
 
   revalidatePath(`/dashboard/animals/${animalId}/notes`);
-  return {
-    success: true,
-    message: "Note updated successfully.",
-  };
+  return { ok: true, message: "Note updated successfully." };
 };
 
 const _deleteAnimalNote = async (

@@ -4,39 +4,80 @@ import {
   FosterPlacementType,
   FosterReturnReason,
 } from "@/prisma/generated/enums";
-import { cuidSchema, usStateSchema } from "./common.schemas";
-import { HouseholdFieldsSchema } from "./household-profile.schemas";
+import { cuidSchema, requiredNumber, usStateSchema } from "./common.schemas";
+import {
+  householdFieldsShape,
+  householdSuperRefine,
+} from "./household-profile.schemas";
 
-// Just the capability fields, reused by the foster application form and the
-// staff "direct add" foster profile form.
-export const FosterCapabilityFieldsSchema = z.object({
-  // Array field — pulled with getAll in the action, same convention as
-  // additionalColors on the animal form. Required: a foster who can't take
-  // any species is not an actionable roster entry.
+// Just the capability fields, reused by the foster application form, the
+// staff "direct add" foster profile form, and the foster profile's
+// capabilities card. Exported as a raw shape as well as a schema: the
+// composite schemas below spread it rather than extending a refined object.
+export const fosterCapabilityFieldsShape = {
+  // Array field — required: a foster who can't take any species is not an
+  // actionable roster entry.
   speciesIds: z
     .array(cuidSchema)
     .min(1, { error: "Select at least one species you can foster." }),
-  maxAnimals: z
-    .string()
-    .min(1, { error: "Max animals is required." })
-    .regex(/^[1-9]\d*$/, {
-      error: "Max animals must be a positive whole number.",
-    }),
+  maxAnimals: requiredNumber("Max animals")
+    .int({ error: "Max animals must be a positive whole number." })
+    .min(1, { error: "Max animals must be a positive whole number." }),
   hasQuarantineSpace: z.enum(["true", "false"]).optional(),
   canGiveOralMeds: z.enum(["true", "false"]).optional(),
   canBottleFeed: z.enum(["true", "false"]).optional(),
   canTransport: z.enum(["true", "false"]).optional(),
   acceptsMedical: z.enum(["true", "false"]).optional(),
   acceptsHospice: z.enum(["true", "false"]).optional(),
-  availabilityNotes: z.string().max(1000, {
-    error: "Availability notes cannot exceed 1000 characters.",
-  }).optional(),
-});
+  availabilityNotes: z
+    .string()
+    .max(1000, {
+      error: "Availability notes cannot exceed 1000 characters.",
+    })
+    .optional(),
+};
 
-// Applicant contact fields, same shape as MyAdoptionAppFormSchema's — kept
-// separate so it can be merged onto the reused household schema without
+export const FosterCapabilityFieldsSchema = z.object(
+  fosterCapabilityFieldsShape,
+);
+
+export type FosterCapabilityFieldsInput = z.input<
+  typeof FosterCapabilityFieldsSchema
+>;
+export type FosterCapabilityFieldsOutput = z.output<
+  typeof FosterCapabilityFieldsSchema
+>;
+
+/**
+ * Converts validated capability values into the shape Prisma writes.
+ *
+ * The "true"/"false" -> boolean mapping was previously written out by hand in
+ * all three actions that touch these columns. undefined stays undefined so an
+ * unanswered select leaves the column alone on update; availabilityNotes maps
+ * "" to null because the column is nullable.
+ */
+export const toFosterCapabilityData = (data: FosterCapabilityFieldsOutput) => {
+  const toBool = (value: "true" | "false" | undefined) =>
+    value === undefined ? undefined : value === "true";
+
+  return {
+    maxAnimals: data.maxAnimals,
+    hasQuarantineSpace: toBool(data.hasQuarantineSpace),
+    canGiveOralMeds: toBool(data.canGiveOralMeds),
+    canBottleFeed: toBool(data.canBottleFeed),
+    canTransport: toBool(data.canTransport),
+    acceptsMedical: toBool(data.acceptsMedical),
+    acceptsHospice: toBool(data.acceptsHospice),
+    availabilityNotes: data.availabilityNotes?.trim()
+      ? data.availabilityNotes
+      : null,
+  };
+};
+
+// Applicant contact fields, same shape as the adoption application's — kept
+// separate so it can be spread alongside the reused household shape without
 // copying the household fields themselves.
-const FosterApplicantFieldsSchema = z.object({
+const fosterApplicantFieldsShape = {
   applicantName: z.string().min(1, { error: "Applicant name is required." }),
   applicantEmail: z.email({ error: "Invalid email address." }),
   applicantPhone: z.string().min(1, { error: "Applicant phone is required." }),
@@ -46,18 +87,24 @@ const FosterApplicantFieldsSchema = z.object({
   applicantAddressLine2: z.string().optional(),
   applicantCity: z.string().min(1, { error: "City is required." }),
   applicantState: usStateSchema,
-  applicantZipCode: z
-    .string()
-    .regex(/^\d{5}$/, { error: "Invalid ZIP code." }),
-});
+  applicantZipCode: z.string().regex(/^\d{5}$/, { error: "Invalid ZIP code." }),
+};
 
-// Household section reuses the shared HouseholdFieldsSchema (required —
-// prefilled from the person's HouseholdProfile, upserted on submit, same
-// mechanism as createMyAdoptionApp) plus applicant contact fields and the
-// foster capability section.
-export const FosterApplicationFormSchema = HouseholdFieldsSchema.extend(
-  FosterApplicantFieldsSchema.shape,
-).extend(FosterCapabilityFieldsSchema.shape);
+// Household section reuses the shared household shape (required — prefilled
+// from the person's HouseholdProfile, upserted on submit, same mechanism as
+// createMyAdoptionApp) plus applicant contact fields and the foster
+// capability section, with the household refinement applied once at the end.
+export const FosterApplicationFormSchema = z
+  .object({
+    ...householdFieldsShape,
+    ...fosterApplicantFieldsShape,
+    ...fosterCapabilityFieldsShape,
+  })
+  .superRefine(householdSuperRefine);
+
+export type FosterApplicationFormInput = z.input<
+  typeof FosterApplicationFormSchema
+>;
 
 // Reuses the existing ApplicationStatus enum; ADOPTED is never used for
 // foster applications.
@@ -79,6 +126,10 @@ export const FosterApplicationStatusChangeSchema = z.object({
     error: "A reason for the status change is required.",
   }),
 });
+
+export type FosterApplicationStatusChangeInput = z.input<
+  typeof FosterApplicationStatusChangeSchema
+>;
 
 export const CreateFosterPlacementSchema = z.object({
   animalId: cuidSchema,
@@ -108,8 +159,11 @@ export const ConvertFosterToAdoptionSchema = z.object({
 
 // Staff "direct add" pressure valve — person picker + capability form, born
 // ACTIVE.
-export const CreateFosterProfileSchema = z
-  .object({
-    personId: cuidSchema,
-  })
-  .extend(FosterCapabilityFieldsSchema.shape);
+export const CreateFosterProfileSchema = z.object({
+  personId: cuidSchema,
+  ...fosterCapabilityFieldsShape,
+});
+
+export type CreateFosterProfileInput = z.input<
+  typeof CreateFosterProfileSchema
+>;

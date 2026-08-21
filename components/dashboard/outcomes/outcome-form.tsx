@@ -1,15 +1,12 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { startTransition, useActionState, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useTransition } from "react";
+import { useForm, useWatch, type DefaultValues } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
-import type { OutcomeType } from "@/prisma/generated/enums";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
 import {
   AdoptionApplicationPayload,
   OutcomePayload,
@@ -54,9 +51,13 @@ import {
   updateOutcome,
 } from "@/app/lib/actions/outcome.actions";
 import { cn } from "@/lib/utils";
-import { OutcomeFormSchema } from "@/app/lib/zod-schemas/outcome.schema";
+import {
+  OutcomeFormSchema,
+  type OutcomeFormInput,
+} from "@/app/lib/zod-schemas/outcome.schema";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
-type OutcomeFormData = z.infer<typeof OutcomeFormSchema>;
+export type OutcomeFormValues = OutcomeFormInput;
 
 interface AnimalForOutcome {
   id: string;
@@ -72,6 +73,20 @@ interface OutcomeFormProps {
   suggestedOwnerLabel?: string;
 }
 
+const buildDefaultValues = (
+  outcome?: OutcomePayload,
+  application?: AdoptionApplicationPayload,
+): DefaultValues<OutcomeFormValues> => ({
+  outcomeDate: outcome?.outcomeDate ?? new Date(),
+  // Undefined rather than `"" as OutcomeType` when there is nothing to
+  // preselect: the field is legitimately unset until the user picks, and the
+  // cast claimed an empty string was a valid enum member.
+  outcomeType: outcome?.type ?? (application ? "ADOPTION" : undefined),
+  destinationPartnerId: outcome?.destinationPartnerId ?? "",
+  ownerId: outcome?.ownerId ?? "",
+  notes: outcome?.notes ?? "",
+});
+
 export function OutcomeForm({
   animal,
   application,
@@ -81,7 +96,12 @@ export function OutcomeForm({
   suggestedOwnerLabel,
 }: OutcomeFormProps) {
   const isEditMode = !!outcome;
+  const router = useRouter();
+  const [isPending, startSubmitTransition] = useTransition();
 
+  // Client-side only: this is where PersonPicker's "Add a new person" link
+  // should come back to. It is never sent to the action, so it needs no
+  // server-side open-redirect check.
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const query = searchParams.toString();
@@ -93,63 +113,45 @@ export function OutcomeForm({
     ? outcomeTypeOptions.filter((option) => option.value === "ADOPTION")
     : outcomeTypeOptions.filter((option) => option.value !== "ADOPTION");
 
-  // Bind the appropriate action and IDs
-  const action = isEditMode
-    ? updateOutcome.bind(null, outcome.id)
-    : createOutcome.bind(null, {
-        animalId: animal.id,
-        adoptionApplicationId: application?.id,
-      });
-
-  const [state, formAction, isPending] = useActionState(
-    action,
-    INITIAL_FORM_STATE,
-  );
-
-  const form = useForm<OutcomeFormData>({
-    resolver: zodResolver(OutcomeFormSchema),
-    defaultValues: {
-      outcomeDate: outcome?.outcomeDate ?? new Date(),
-      outcomeType:
-        outcome?.type ?? (application ? "ADOPTION" : ("" as OutcomeType)),
-      destinationPartnerId: outcome?.destinationPartnerId ?? "",
-      ownerId: outcome?.ownerId ?? "",
-      notes: outcome?.notes ?? "",
-    },
+  const form = useForm<OutcomeFormValues>({
+    resolver: standardSchemaResolver(OutcomeFormSchema),
+    defaultValues: buildDefaultValues(outcome, application),
   });
 
-  const outcomeTypeValue = form.watch("outcomeType");
+  // useWatch rather than form.watch(): watch() returns a function the React
+  // Compiler cannot memoize safely, so it skips compiling the whole component.
+  const outcomeTypeValue = useWatch({
+    control: form.control,
+    name: "outcomeType",
+  });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
+  const handleFormSubmit = (values: OutcomeFormValues) => {
+    startSubmitTransition(async () => {
+      // outcomeDate travels as a real Date — server actions serialize it, so
+      // the toISOString() round-trip and the `new Date(... as string)` cast on
+      // the other end are both gone.
+      const result = isEditMode
+        ? await updateOutcome(outcome.id, values)
+        : await createOutcome(
+            {
+              animalId: animal.id,
+              adoptionApplicationId: application?.id,
+            },
+            values,
+          );
 
-    // If there are specific field errors, update the form fields.
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof OutcomeFormData, {
-          type: "server",
-          message: value?.join(", "),
-        });
-      }
-    }
-  }, [state, form]);
-
-  const handleFormSubmit = (data: OutcomeFormData) => {
-    const formData = new FormData();
-    Object.entries(data).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
-        // Handle Date object specifically
-        if (value instanceof Date) {
-          formData.append(key, value.toISOString());
-        } else {
-          formData.append(key, String(value));
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
         }
+        form.reset(values);
+        return;
       }
-    });
-    startTransition(() => {
-      formAction(formData);
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -179,10 +181,11 @@ export function OutcomeForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Outcome Type *</FormLabel>
+                    {/* Was both defaultValue and value, which makes the Select
+                        uncontrolled on first render and ignores form.reset(). */}
                     <Select
                       onValueChange={field.onChange}
-                      defaultValue={field.value}
-                      value={field.value}
+                      value={field.value ?? ""}
                       disabled={isAdoptionOutcome || isEditMode}
                     >
                       <FormControl>
@@ -260,7 +263,7 @@ export function OutcomeForm({
                     <FormLabel>Destination Partner *</FormLabel>
                     <Select
                       onValueChange={field.onChange}
-                      defaultValue={field.value}
+                      value={field.value ?? ""}
                     >
                       <FormControl>
                         <SelectTrigger>

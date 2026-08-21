@@ -8,16 +8,10 @@ import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { BreedFormSchema } from "../zod-schemas/taxonomy.schemas";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
-export interface BreedFormState {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    name?: string[];
-    speciesId?: string[];
-    typicalSize?: string[];
-  };
-}
+type BreedFormInput = z.input<typeof BreedFormSchema>;
+type BreedResult = FormResult<BreedFormInput>;
 
 // Duplicate check scoped per species (matches @@unique([name, speciesId])).
 const findDuplicate = async (
@@ -45,19 +39,15 @@ const isActiveSpecies = async (speciesId: string) => {
   return Boolean(species);
 };
 
-const _createBreed = async (
-  prevState: BreedFormState,
-  formData: FormData,
-): Promise<BreedFormState> => {
-  const validatedFields = BreedFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+const _createBreed = async (values: BreedFormInput): Promise<BreedResult> => {
+  const validatedFields = BreedFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create breed.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<BreedFormInput>,
     };
   }
 
@@ -65,16 +55,13 @@ const _createBreed = async (
 
   try {
     if (!(await isActiveSpecies(speciesId))) {
-      return {
-        success: false,
-        message: "The selected species no longer exists.",
-      };
+      return { ok: false, message: "The selected species no longer exists." };
     }
 
     const existing = await findDuplicate(name, speciesId);
     if (existing) {
       return {
-        success: false,
+        ok: false,
         message: "A breed with that name already exists for this species.",
       };
     }
@@ -88,40 +75,35 @@ const _createBreed = async (
       error.code === "P2002"
     ) {
       return {
-        success: false,
+        ok: false,
         message: "A breed with that name already exists for this species.",
       };
     }
     console.error("Database Error creating breed:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to create breed.",
-    };
+    return { ok: false, message: "Database Error: Failed to create breed." };
   }
 
   revalidatePath("/dashboard/settings/animal-taxonomy");
-  return { success: true, message: "Breed created successfully." };
+  return { ok: true, message: "Breed created successfully." };
 };
 
 const _updateBreed = async (
   breedId: string,
-  prevState: BreedFormState,
-  formData: FormData,
-): Promise<BreedFormState> => {
+  values: BreedFormInput,
+): Promise<BreedResult> => {
   const parsedId = cuidSchema.safeParse(breedId);
   if (!parsedId.success) {
-    return { success: false, message: "Invalid breed ID format." };
+    return { ok: false, message: "Invalid breed ID format." };
   }
 
-  const validatedFields = BreedFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = BreedFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      success: false,
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update breed.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<BreedFormInput>,
     };
   }
 
@@ -129,16 +111,13 @@ const _updateBreed = async (
 
   try {
     if (!(await isActiveSpecies(speciesId))) {
-      return {
-        success: false,
-        message: "The selected species no longer exists.",
-      };
+      return { ok: false, message: "The selected species no longer exists." };
     }
 
     const existing = await findDuplicate(name, speciesId, parsedId.data);
     if (existing) {
       return {
-        success: false,
+        ok: false,
         message: "A breed with that name already exists for this species.",
       };
     }
@@ -153,19 +132,16 @@ const _updateBreed = async (
       error.code === "P2002"
     ) {
       return {
-        success: false,
+        ok: false,
         message: "A breed with that name already exists for this species.",
       };
     }
     console.error("Database Error updating breed:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to update breed.",
-    };
+    return { ok: false, message: "Database Error: Failed to update breed." };
   }
 
   revalidatePath("/dashboard/settings/animal-taxonomy");
-  return { success: true, message: "Breed updated successfully." };
+  return { ok: true, message: "Breed updated successfully." };
 };
 
 const _deleteBreed = async (

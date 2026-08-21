@@ -44,7 +44,6 @@ const PageContent = async ({ searchParams }: Props) => {
       />
       <HouseholdProfileForm
         householdProfile={householdProfile}
-        returnTo={resolvedReturnTo}
       />
     </main>
   );

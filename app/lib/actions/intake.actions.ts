@@ -8,120 +8,94 @@ import {
   AnimalListingStatus,
   IntakeType,
 } from "@/prisma/generated/enums";
-import { redirect } from "next/navigation";
 import {
   RequirePermission,
   SessionUser,
   withAuthenticatedUser,
 } from "../auth/protected-actions";
 import { cuidSchema } from "../zod-schemas/common.schemas";
-import { ReIntakeFormSchema } from "../zod-schemas/intake.schema";
+import {
+  ReIntakeFormSchema,
+  type ReIntakeFormInput,
+} from "../zod-schemas/intake.schema";
+import { ConflictError } from "../utils/errors";
 import { z } from "zod";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
-export type IntakeFormState = {
-  message?: string | null;
-  errors?: {
-    intakeType?: string[];
-    intakeDate?: string[];
-    healthStatus?: string[];
-    sourcePartnerId?: string[];
-    foundAddress?: string[];
-    foundCity?: string[];
-    foundState?: string[];
-    surrenderingPersonId?: string[];
-    notes?: string[];
-  };
-};
+// "" -> null for the nullable columns Intake.create writes. Under rule 3 an
+// untouched optional field arrives as "" rather than being omitted (the old
+// FormData submit loop dropped it instead), so it must not be written into a
+// nullable column as an empty string.
+const toReIntakeData = (data: {
+  notes?: string;
+  sourcePartnerId?: string;
+  foundAddress?: string;
+  foundCity?: string;
+  foundState?: string;
+  surrenderingPersonId?: string;
+}) => ({
+  notes: data.notes || null,
+  sourcePartnerId: data.sourcePartnerId || null,
+  foundAddress: data.foundAddress || null,
+  foundCity: data.foundCity || null,
+  foundState: data.foundState || null,
+  surrenderingPersonId: data.surrenderingPersonId || null,
+});
 
 const _createReIntake = async (
   user: SessionUser,
   animalId: string,
-  prevState: IntakeFormState,
-  formData: FormData
-): Promise<IntakeFormState> => {
+  values: ReIntakeFormInput,
+): Promise<FormResult<ReIntakeFormInput>> => {
   const staffMemberId = user.personId;
 
   if (!staffMemberId) {
     return {
+      ok: false,
       message:
         "Authentication Error: Your user account is not associated with a person record.",
     };
   }
 
-  // Validate Animal ID
   const parsedAnimalId = cuidSchema.safeParse(animalId);
   if (!parsedAnimalId.success) {
-    return { message: "Invalid Animal ID." };
+    return { ok: false, message: "Invalid Animal ID." };
   }
   const validatedAnimalId = parsedAnimalId.data;
 
-  // Parse and validate form data
-  const rawData = {
-    intakeDate: formData.get("intakeDate") as string,
-    intakeType: formData.get("intakeType") as string,
-    healthStatus: formData.get("healthStatus") as string,
-    notes: formData.get("notes") as string | undefined,
-    sourcePartnerId: formData.get("sourcePartnerId") as string | undefined,
-    foundAddress: formData.get("foundAddress") as string | undefined,
-    foundCity: formData.get("foundCity") as string | undefined,
-    foundState: formData.get("foundState") as string | undefined,
-    surrenderingPersonId: formData.get("surrenderingPersonId") as
-      | string
-      | undefined,
-  };
-
-  const validatedFields = ReIntakeFormSchema.safeParse(rawData);
+  const validatedFields = ReIntakeFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to process re-intake.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<ReIntakeFormInput>,
     };
   }
 
-  const {
-    intakeDate,
-    intakeType,
-    healthStatus,
-    notes,
-    sourcePartnerId,
-    foundAddress,
-    foundCity,
-    foundState,
-    surrenderingPersonId,
-  } = validatedFields.data;
-
-  if (intakeType === IntakeType.OWNER_SURRENDER) {
-    const parsedPersonId = cuidSchema.safeParse(surrenderingPersonId);
-    if (!parsedPersonId.success) {
-      return {
-        errors: {
-          surrenderingPersonId: ["A surrendering person is required."],
-        },
-        message: "Missing or invalid fields. Failed to process re-intake.",
-      };
-    }
-  }
+  const { intakeDate, intakeType, healthStatus } = validatedFields.data;
+  const mapped = toReIntakeData(validatedFields.data);
 
   try {
     await prisma.$transaction(async (tx) => {
-      // 1. Atomically "reactivate" the animal in a SINGLE step
+      // Atomically "reactivate" the animal in a single step — the update
+      // only succeeds if the animal is currently archived.
       const updateResult = await tx.animal.updateMany({
         where: {
           id: validatedAnimalId,
-          listingStatus: AnimalListingStatus.ARCHIVED, // Check is part of the update
+          listingStatus: AnimalListingStatus.ARCHIVED,
         },
         data: {
-          listingStatus: AnimalListingStatus.DRAFT, // Always reset to Draft
-          archiveReason: null, // Clear the old archive reason
-          healthStatus: healthStatus, // Set the new health status from the form HERE
+          listingStatus: AnimalListingStatus.DRAFT,
+          archiveReason: null,
+          healthStatus: healthStatus,
         },
       });
 
-      // 2. Check if the update actually happened
       if (updateResult.count === 0) {
-        throw new Error(
-          "Cannot process re-intake: This animal is not currently archived or was just re-intaked."
+        throw new ConflictError(
+          "Cannot process re-intake: This animal is not currently archived or was just re-intaked.",
         );
       }
 
@@ -130,19 +104,23 @@ const _createReIntake = async (
         data: {
           intakeDate,
           type: intakeType,
-          notes,
+          notes: mapped.notes,
           animalId: validatedAnimalId,
           staffMemberId: staffMemberId,
           sourcePartnerId:
-            intakeType === IntakeType.TRANSFER_IN ? sourcePartnerId : undefined,
+            intakeType === IntakeType.TRANSFER_IN
+              ? mapped.sourcePartnerId
+              : undefined,
           surrenderingPersonId:
             intakeType === IntakeType.OWNER_SURRENDER
-              ? surrenderingPersonId
+              ? mapped.surrenderingPersonId
               : undefined,
           foundAddress:
-            intakeType === IntakeType.STRAY ? foundAddress : undefined,
-          foundCity: intakeType === IntakeType.STRAY ? foundCity : undefined,
-          foundState: intakeType === IntakeType.STRAY ? foundState : undefined,
+            intakeType === IntakeType.STRAY ? mapped.foundAddress : undefined,
+          foundCity:
+            intakeType === IntakeType.STRAY ? mapped.foundCity : undefined,
+          foundState:
+            intakeType === IntakeType.STRAY ? mapped.foundState : undefined,
         },
       });
 
@@ -160,17 +138,23 @@ const _createReIntake = async (
     });
   } catch (error) {
     console.error("Database error during re-intake:", error);
-    if (error instanceof Error) {
-      return { message: error.message };
+    if (error instanceof ConflictError) {
+      return { ok: false, message: error.message };
     }
     return {
+      ok: false,
       message: "Database Error: Failed to process re-intake.",
     };
   }
 
   revalidatePath("/dashboard/animals");
   revalidatePath(`/dashboard/animals/${validatedAnimalId}`);
-  redirect(`/dashboard/animals/${validatedAnimalId}`);
+
+  return {
+    ok: true,
+    message: "Animal re-intake processed successfully.",
+    redirectTo: `/dashboard/animals/${validatedAnimalId}`,
+  };
 };
 
 export const createReIntake = withAuthenticatedUser(

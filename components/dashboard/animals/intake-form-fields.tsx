@@ -28,15 +28,13 @@ import { IntakeType } from "@/prisma/generated/enums";
 import { intakeTypeOptions } from "@/app/lib/utils/enum-formatter";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import { PartnerPayload } from "@/app/lib/types";
-import { FieldValues, Control, UseFormWatch, Path } from "react-hook-form";
+import { FieldValues, Control, Path, useWatch } from "react-hook-form";
 import { IntakeFieldsValues } from "@/app/lib/zod-schemas/intake.schema";
 import { PersonPicker } from "@/components/common/person-picker";
 
 interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
   control: Control<T>;
-  watch: UseFormWatch<T>;
   partners: PartnerPayload[];
-  isEditMode?: boolean;
   returnTo: string;
   suggestedSurrenderingPersonId?: string;
   suggestedSurrenderingPersonLabel?: string;
@@ -47,15 +45,20 @@ interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
 
 export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
   control,
-  watch,
   partners,
-  isEditMode = false,
   returnTo,
   suggestedSurrenderingPersonId,
   suggestedSurrenderingPersonLabel,
   allowCreatePerson = true,
 }: IntakeFormFieldsProps<T>) => {
-  const intakeType = watch("intakeType" as Path<T>);
+  // useWatch rather than a passed-in watch(): watch() subscribes the component
+  // that called useForm, so the React Compiler memoizes this child and the
+  // conditional blocks below never update. Taking `control` alone also drops
+  // one cast per call site.
+  const intakeType = useWatch({
+    control,
+    name: "intakeType" as Path<T>,
+  }) as IntakeType | undefined;
 
   return (
     <div className="space-y-6">
@@ -68,11 +71,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
           render={({ field }) => (
             <FormItem className="col-span-3">
               <FormLabel>Intake Type</FormLabel>
-              <Select
-                onValueChange={field.onChange}
-                value={field.value}
-                disabled={isEditMode}
-              >
+              <Select onValueChange={field.onChange} value={field.value ?? ""}>
                 <FormControl>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a type" />
@@ -106,7 +105,6 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                         "w-full pl-3 text-left font-normal",
                         !field.value && "text-muted-foreground",
                       )}
-                      disabled={isEditMode}
                     >
                       {field.value ? (
                         format(field.value, "PPP")
@@ -144,7 +142,6 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                 <Textarea
                   placeholder="Any notes about the intake event..."
                   {...field}
-                  disabled={isEditMode}
                 />
               </FormControl>
               <FormMessage />
@@ -155,7 +152,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
 
       {/* Conditional Source Fields */}
       <div className="pt-6">
-        {!isEditMode && !intakeType && (
+        {!intakeType && (
           <p className="text-sm text-center text-muted-foreground p-4 border border-dashed rounded-md">
             Please select an Intake Type above to enter source details.
           </p>
@@ -170,11 +167,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
               render={({ field }) => (
                 <FormItem className="col-span-full">
                   <FormLabel>Source Partner</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    disabled={isEditMode}
-                  >
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select a partner shelter/rescue" />
@@ -205,11 +198,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                 <FormItem className="col-span-3">
                   <FormLabel>City</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="Anytown"
-                      {...field}
-                      disabled={isEditMode}
-                    />
+                    <Input placeholder="Anytown" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -223,8 +212,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                   <FormLabel>State</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
-                    disabled={isEditMode}
+                    value={field.value ?? ""}
                   >
                     <FormControl>
                       <SelectTrigger className="w-full">
@@ -253,7 +241,6 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                     <Input
                       placeholder="e.g., Corner of Main St & Park Ave"
                       {...field}
-                      disabled={isEditMode}
                     />
                   </FormControl>
                   <FormMessage />

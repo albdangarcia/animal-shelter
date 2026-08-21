@@ -11,14 +11,10 @@ import {
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { PartnerNoteFormSchema } from "../zod-schemas/partners-directory.schemas";
 import { z } from "zod";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
-export type PartnerNoteFormState = {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    content?: string[];
-  };
-};
+type PartnerNoteFormInput = z.input<typeof PartnerNoteFormSchema>;
+type PartnerNoteResult = FormResult<PartnerNoteFormInput>;
 
 const revalidateNotes = (partnerId: string) => {
   revalidatePath(`/dashboard/partners-directory/${partnerId}`);
@@ -28,23 +24,22 @@ const revalidateNotes = (partnerId: string) => {
 const _createPartnerNote = async (
   user: SessionUser,
   partnerId: string,
-  prevState: PartnerNoteFormState,
-  formData: FormData,
-): Promise<PartnerNoteFormState> => {
+  values: PartnerNoteFormInput,
+): Promise<PartnerNoteResult> => {
   const parsedPartnerId = cuidSchema.safeParse(partnerId);
 
   if (!parsedPartnerId.success) {
-    return { message: "Invalid partner ID format." };
+    return { ok: false, message: "Invalid partner ID format." };
   }
 
-  const validatedFields = PartnerNoteFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = PartnerNoteFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create note.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<PartnerNoteFormInput>,
     };
   }
 
@@ -58,36 +53,32 @@ const _createPartnerNote = async (
     });
   } catch (error) {
     console.error("Database Error creating partner note:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to create note.",
-    };
+    return { ok: false, message: "Database Error: Failed to create note." };
   }
 
   revalidateNotes(parsedPartnerId.data);
-  return { success: true, message: "Note created successfully." };
+  return { ok: true, message: "Note created successfully." };
 };
 
 const _updatePartnerNote = async (
   noteId: string,
   partnerId: string,
-  prevState: PartnerNoteFormState,
-  formData: FormData,
-): Promise<PartnerNoteFormState> => {
+  values: PartnerNoteFormInput,
+): Promise<PartnerNoteResult> => {
   const parsedNoteId = cuidSchema.safeParse(noteId);
   const parsedPartnerId = cuidSchema.safeParse(partnerId);
   if (!parsedNoteId.success || !parsedPartnerId.success) {
-    return { message: "Invalid ID format." };
+    return { ok: false, message: "Invalid ID format." };
   }
 
-  const validatedFields = PartnerNoteFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = PartnerNoteFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update note.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<PartnerNoteFormInput>,
     };
   }
 
@@ -98,14 +89,11 @@ const _updatePartnerNote = async (
     });
   } catch (error) {
     console.error("Database Error updating partner note:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to update note.",
-    };
+    return { ok: false, message: "Database Error: Failed to update note." };
   }
 
   revalidateNotes(parsedPartnerId.data);
-  return { success: true, message: "Note updated successfully." };
+  return { ok: true, message: "Note updated successfully." };
 };
 
 const _deletePartnerNote = async (

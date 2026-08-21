@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { z } from "zod";
 import prisma from "@/app/lib/prisma";
 import { createDynamicSchema } from "../zod-schemas/dynamic-form-schema";
@@ -15,12 +14,13 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { AnimalActivityType, AssessmentOutcome } from "@/prisma/generated/enums";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
-// Define a state for the form action
-export interface AssessmentFormState {
-  message?: string | null;
-  errors?: Record<string, string[] | undefined>;
-}
+// The dynamic form's field set is generated per-template, so its values type
+// can't be a named interface the way every other converted form's can — it's
+// keyed by template field id (a cuid), decided at runtime.
+type AssessmentFormInput = Record<string, unknown>;
+type AssessmentResult = FormResult<AssessmentFormInput>;
 
 const AssessmentOutputSchema = z.looseObject({
   overallOutcome: z.enum(AssessmentOutcome).optional(),
@@ -30,18 +30,14 @@ const AssessmentOutputSchema = z.looseObject({
 // Internal action wrapped for authentication
 const _createAssessment = async (
   user: SessionUser, // Injected by withAuthenticatedUser
-  prevState: AssessmentFormState,
-  formData: FormData
-): Promise<AssessmentFormState> => {
+  animalId: string,
+  templateId: string,
+  values: AssessmentFormInput,
+): Promise<AssessmentResult> => {
   const assessorId = user.personId;
-  const data = Object.fromEntries(formData.entries());
-
-  // Basic fields needed to find the template and create the schema
-  const animalId = data.animalId as string;
-  const templateId = data.templateId as string;
 
   if (!animalId || !templateId) {
-    return { message: "Missing animal or template ID." };
+    return { ok: false, message: "Missing animal or template ID." };
   }
 
   try {
@@ -51,25 +47,29 @@ const _createAssessment = async (
       include: { templateFields: true },
     });
     if (!template) {
-      return { message: "Assessment template not found" };
+      return { ok: false, message: "Assessment template not found" };
     }
 
     const allFields: TemplateField[] =
       template.templateFields as TemplateField[];
     const schema = createDynamicSchema(allFields);
-    // Validate the form data against the dynamic schema
-    const validatedFields = schema.safeParse(data);
+    // Always re-validate on the server: client validation is UX, not
+    // enforcement, and this schema is rebuilt from the template fetched above
+    // rather than trusted from the client.
+    const validatedFields = schema.safeParse(values);
     if (!validatedFields.success) {
       return {
-        errors: z.flattenError(validatedFields.error).fieldErrors,
+        ok: false,
         message: "Missing or invalid fields. Failed to create assessment.",
+        fieldErrors: z.flattenError(validatedFields.error)
+          .fieldErrors as FieldErrors<AssessmentFormInput>,
       };
     }
 
     const parsedOutput = AssessmentOutputSchema.safeParse(validatedFields.data);
 
     if (!parsedOutput.success) {
-      return { message: "Validated data has an unexpected structure." };
+      return { ok: false, message: "Validated data has an unexpected structure." };
     }
 
     const { overallOutcome, summary } = parsedOutput.data;
@@ -116,29 +116,31 @@ const _createAssessment = async (
     });
   } catch (error) {
     console.error("Error creating assessment:", error);
-    return { message: "Database Error: Failed to create assessment." };
+    return { ok: false, message: "Database Error: Failed to create assessment." };
   }
 
-  // Revalidate paths and redirect on success
   revalidatePath(`/dashboard/animals/${animalId}/assessments`);
   revalidatePath(`/dashboard/animals/${animalId}`);
-  redirect(`/dashboard/animals/${animalId}/assessments`);
+  return {
+    ok: true,
+    message: "Assessment created successfully.",
+    redirectTo: `/dashboard/animals/${animalId}/assessments`,
+  };
 };
 
 const _updateAnimalAssessment = async (
   user: SessionUser, // Injected by withAuthenticatedUser
   assessmentId: string,
   animalId: string,
-  prevState: AssessmentFormState,
-  formData: FormData
-): Promise<AssessmentFormState> => {
+  values: AssessmentFormInput,
+): Promise<AssessmentResult> => {
   const parsedAssessmentId = cuidSchema.safeParse(assessmentId);
   if (!parsedAssessmentId.success) {
-    return { message: "Invalid assessment ID format." };
+    return { ok: false, message: "Invalid assessment ID format." };
   }
   const parsedAnimalId = cuidSchema.safeParse(animalId);
   if (!parsedAnimalId.success) {
-    return { message: "Invalid animal ID format." };
+    return { ok: false, message: "Invalid animal ID format." };
   }
 
   const assessment = await prisma.assessment.findUnique({
@@ -146,7 +148,7 @@ const _updateAnimalAssessment = async (
     select: { templateId: true },
   });
   if (!assessment || !assessment.templateId) {
-    return { message: "Original assessment or its template not found." };
+    return { ok: false, message: "Original assessment or its template not found." };
   }
 
   const template = await prisma.assessmentTemplate.findUnique({
@@ -154,25 +156,26 @@ const _updateAnimalAssessment = async (
     include: { templateFields: true },
   });
   if (!template) {
-    return { message: "Assessment template not found" };
+    return { ok: false, message: "Assessment template not found" };
   }
 
   const allFields: TemplateField[] = template.templateFields as TemplateField[];
   const schema = createDynamicSchema(allFields);
-  const data = Object.fromEntries(formData.entries());
-  const validatedFields = schema.safeParse(data);
+  const validatedFields = schema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update assessment.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<AssessmentFormInput>,
     };
   }
 
   const parsedOutput = AssessmentOutputSchema.safeParse(validatedFields.data);
 
   if (!parsedOutput.success) {
-    return { message: "Validated data has an unexpected structure." };
+    return { ok: false, message: "Validated data has an unexpected structure." };
   }
 
   const { overallOutcome, summary } = parsedOutput.data;
@@ -221,11 +224,18 @@ const _updateAnimalAssessment = async (
     });
   } catch (error) {
     console.error("Database Error updating assessment:", error);
-    return { message: "Database Error: Failed to update assessment." };
+    return { ok: false, message: "Database Error: Failed to update assessment." };
   }
 
-  revalidatePath(`/dashboard/animals/${parsedAnimalId}/assessments`);
-  redirect(`/dashboard/animals/${parsedAnimalId}/assessments`);
+  // parsedAnimalId.data, not parsedAnimalId — the template literal was
+  // stringifying the whole SafeParseSuccess object, so the redirect (and now
+  // the revalidated path) targeted "/dashboard/animals/[object Object]/...".
+  revalidatePath(`/dashboard/animals/${parsedAnimalId.data}/assessments`);
+  return {
+    ok: true,
+    message: "Assessment updated successfully.",
+    redirectTo: `/dashboard/animals/${parsedAnimalId.data}/assessments`,
+  };
 };
 
 const _deleteAnimalAssessment = async (

@@ -1,22 +1,25 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
-import { startTransition, useActionState, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useRouter } from "next/navigation";
+import { useTransition } from "react";
+import { useForm, useWatch } from "react-hook-form";
 import { toast } from "sonner";
-import { z } from "zod";
 import {
   createMyAdoptionApp,
   updateMyAdoptionApp,
 } from "@/app/lib/actions/my-adoption-application.actions";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import {
   AdoptionApplicationPayload,
   AnimalForAdoptionApplicationPayload,
 } from "@/app/lib/types";
-import { MyAdoptionAppFormSchema } from "@/app/lib/zod-schemas/myAdoptionApplication.schema";
+import {
+  MyAdoptionAppFormSchema,
+  type MyAdoptionAppFormInput,
+} from "@/app/lib/zod-schemas/myAdoptionApplication.schema";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -48,9 +51,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import { livingSituationOptions } from "@/app/lib/utils/enum-formatter";
 import { AdoptionApplicantDefaultsPayload } from "@/app/lib/data/my-adoption-applications.data";
-import { toYesNo } from "@/app/lib/utils/form-utils";
+import { toYesNo, boolToSelectValue } from "@/app/lib/utils/form-utils";
+import { NumberInput } from "@/components/forms/number-input";
+import { isRenting } from "@/app/lib/zod-schemas/household-profile.schemas";
 
-type MyApplicationFormData = z.infer<typeof MyAdoptionAppFormSchema>;
+type MyApplicationFormData = MyAdoptionAppFormInput;
 
 interface MyApplicationFormProps {
   animal: AnimalForAdoptionApplicationPayload;
@@ -69,18 +74,15 @@ export function MyApplicationForm({
     ? "/dashboard/my-adoption-applications"
     : `/pets/${animal.id}`;
 
-  const action = isEditMode
-    ? updateMyAdoptionApp.bind(null, application.id)
-    : createMyAdoptionApp.bind(null, animal.id);
-  const [state, formAction, isPending] = useActionState(
-    action,
-    INITIAL_FORM_STATE,
-  );
+  const [isPending, startSubmitTransition] = useTransition();
+  const router = useRouter();
 
   const household = applicantDefaults?.householdProfile;
 
   const form = useForm<MyApplicationFormData>({
-    resolver: zodResolver(MyAdoptionAppFormSchema),
+    resolver: standardSchemaResolver(MyAdoptionAppFormSchema),
+    // Contextually a DefaultValues<T>, so livingSituation is allowed to be
+    // undefined here — it legitimately has no value until one is picked.
     defaultValues: {
       applicantName:
         application?.applicantName ?? applicantDefaults?.name ?? "",
@@ -100,13 +102,12 @@ export function MyApplicationForm({
       livingSituation:
         application?.livingSituation ?? household?.livingSituation,
       hasYard: toYesNo(application?.hasYard ?? household?.hasYard),
-      landlordPermission: toYesNo(
+      landlordPermission: boolToSelectValue(
         application?.landlordPermission ?? household?.landlordPermission,
       ),
       hasChildren: toYesNo(application?.hasChildren ?? household?.hasChildren),
-      householdSize: String(
-        application?.householdSize ?? household?.householdSize ?? "1",
-      ),
+      householdSize:
+        application?.householdSize ?? household?.householdSize ?? 1,
       childrenAges:
         application?.childrenAges?.join(", ") ??
         household?.childrenAges?.join(", ") ??
@@ -121,35 +122,38 @@ export function MyApplicationForm({
     },
   });
 
-  const hasChildrenValue = form.watch("hasChildren");
+  // useWatch rather than form.watch(): watch() returns a function the React
+  // Compiler cannot memoize safely, so it skips compiling the whole component.
+  const hasChildrenValue = useWatch({
+    control: form.control,
+    name: "hasChildren",
+  });
+  const livingSituation = useWatch({
+    control: form.control,
+    name: "livingSituation",
+  });
+  const renting = isRenting(livingSituation);
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
+  // Ids are ordinary leading arguments now instead of .bind()-ed onto the
+  // action, so the create/edit choice is made at the call site.
+  const handleFormSubmit = (values: MyApplicationFormData) => {
+    startSubmitTransition(async () => {
+      const result = isEditMode
+        ? await updateMyAdoptionApp(application.id, values)
+        : await createMyAdoptionApp(animal.id, values);
 
-    // If there are specific field errors, update the form fields.
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        if (value) {
-          form.setError(key as keyof MyApplicationFormData, {
-            type: "server",
-            message: value.join(", "),
-          });
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
         }
+        form.reset(values);
+        return;
       }
-    }
-  }, [state, form]);
 
-  const handleFormSubmit = (data: MyApplicationFormData) => {
-    const formData = new FormData();
-    Object.entries(data).forEach(([key, value]) => {
-      if (value !== null && value !== undefined) {
-        formData.append(key, value);
-      }
-    });
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -280,7 +284,7 @@ export function MyApplicationForm({
                         <FormLabel>State *</FormLabel>
                         <Select
                           onValueChange={field.onChange}
-                          defaultValue={field.value}
+                          value={field.value ?? ""}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -332,7 +336,7 @@ export function MyApplicationForm({
                       <FormLabel>Living Situation *</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value ?? ""}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -351,6 +355,8 @@ export function MyApplicationForm({
                     </FormItem>
                   )}
                 />
+                {/* Raw FormField rather than NumberField: this one carries a
+                    FormDescription, which the wrapper has no slot for. */}
                 <FormField
                   control={form.control}
                   name="householdSize"
@@ -358,7 +364,7 @@ export function MyApplicationForm({
                     <FormItem>
                       <FormLabel>Household Size *</FormLabel>
                       <FormControl>
-                        <Input type="number" min="1" {...field} />
+                        <NumberInput min={1} max={50} {...field} />
                       </FormControl>
                       <FormDescription>
                         Including yourself, how many people live in your home?
@@ -378,7 +384,7 @@ export function MyApplicationForm({
                       <FormControl>
                         <RadioGroup
                           onValueChange={field.onChange}
-                          value={field.value}
+                          value={field.value ?? ""}
                           className="flex items-center space-x-4"
                         >
                           <FormItem className="flex items-center space-x-2">
@@ -399,38 +405,42 @@ export function MyApplicationForm({
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="landlordPermission"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <div className="text-sm font-medium">
-                        If you rent, do you have landlord permission? *
-                      </div>
-                      <FormControl>
-                        <RadioGroup
-                          onValueChange={field.onChange}
-                          value={field.value}
-                          className="flex items-center space-x-4"
-                        >
-                          <FormItem className="flex items-center space-x-2">
-                            <FormControl>
-                              <RadioGroupItem value="true" />
-                            </FormControl>
-                            <FormLabel className="font-normal">Yes</FormLabel>
-                          </FormItem>
-                          <FormItem className="flex items-center space-x-2">
-                            <FormControl>
-                              <RadioGroupItem value="false" />
-                            </FormControl>
-                            <FormLabel className="font-normal">No</FormLabel>
-                          </FormItem>
-                        </RadioGroup>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {renting && (
+                  <FormField
+                    control={form.control}
+                    name="landlordPermission"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <div className="text-sm font-medium">
+                          Do you have landlord permission? *
+                        </div>
+                        <FormControl>
+                          <RadioGroup
+                            onValueChange={field.onChange}
+                            value={field.value ?? ""}
+                            className="flex items-center space-x-4"
+                          >
+                            <FormItem className="flex items-center space-x-2">
+                              <FormControl>
+                                <RadioGroupItem value="true" />
+                              </FormControl>
+                              <FormLabel className="font-normal">
+                                Yes
+                              </FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-2">
+                              <FormControl>
+                                <RadioGroupItem value="false" />
+                              </FormControl>
+                              <FormLabel className="font-normal">No</FormLabel>
+                            </FormItem>
+                          </RadioGroup>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <FormField
                   control={form.control}
                   name="hasChildren"
@@ -442,7 +452,7 @@ export function MyApplicationForm({
                       <FormControl>
                         <RadioGroup
                           onValueChange={field.onChange}
-                          value={field.value}
+                          value={field.value ?? ""}
                           className="flex items-center space-x-4"
                         >
                           <FormItem className="flex items-center space-x-2">

@@ -38,3 +38,13 @@ export const SignInFormSchema = z.object({
   email: z.email(),
   password: z.string().min(6),
 });
+
+export type SignInFormInput = z.input<typeof SignInFormSchema>;
+
+export const requiredNumber = (label: string) =>
+  z.number({
+    error: (issue) =>
+      issue.input === undefined || issue.input === null
+        ? `${label} is required.`
+        : `${label} must be a number.`,
+  });

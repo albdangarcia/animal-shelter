@@ -4,14 +4,10 @@ import {
   createPartner,
   updatePartner,
 } from "@/app/lib/actions/partner.actions";
-import { startTransition, useActionState, useEffect } from "react";
-import {
-  INITIAL_FORM_STATE,
-  PartnerFormState,
-} from "@/app/lib/form-state-types";
+import { useTransition } from "react";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { useForm, type DefaultValues } from "react-hook-form";
+import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -42,14 +38,17 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { PartnerFormSchema } from "@/app/lib/zod-schemas/partners-directory.schemas";
+import {
+  PartnerFormSchema,
+  type PartnerFormInput,
+} from "@/app/lib/zod-schemas/partners-directory.schemas";
 import { PartnerTypesOptions } from "@/components/dashboard/partners-directory/table/partners-directory-options";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import Link from "next/link";
 import { PartnerFormPayload } from "@/app/lib/types";
-import type { PartnerType } from "@/prisma/generated/enums";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
-type PartnerFormValues = z.infer<typeof PartnerFormSchema>;
+export type PartnerFormValues = PartnerFormInput;
 
 interface PartnerFormProps {
   partner?: PartnerFormPayload;
@@ -57,8 +56,29 @@ interface PartnerFormProps {
   returnTo?: string;
 }
 
+const buildDefaultValues = (
+  partner?: PartnerFormPayload,
+): DefaultValues<PartnerFormValues> => ({
+  name: partner?.name ?? "",
+  // Undefined rather than `"" as PartnerType` on create: the field is
+  // legitimately unset before first entry, and the cast claimed an empty
+  // string was a valid enum member. The Select stays controlled via `?? ""`.
+  type: partner?.type,
+  email: partner?.email || "",
+  phone: partner?.phone || "",
+  website: partner?.website || "",
+  address: partner?.address || "",
+  city: partner?.city || "",
+  state: partner?.state || "",
+  zipCode: partner?.zipCode || "",
+  isActive: partner?.isActive ?? true,
+  notes: partner?.notes || "",
+});
+
 const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
   const isEditMode = !!partner;
+  const router = useRouter();
+  const [isPending, startSubmitTransition] = useTransition();
 
   const resolvedCancelHref =
     cancelHref ??
@@ -67,77 +87,32 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
       ? `/dashboard/partners-directory/${partner.id}`
       : "/dashboard/partners-directory");
 
-  const action = isEditMode
-    ? updatePartner.bind(null, partner.id)
-    : createPartner;
-
-  const [state, formAction, isPending] = useActionState<
-    PartnerFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
-
-  const form = useForm({
+  const form = useForm<PartnerFormValues>({
     resolver: standardSchemaResolver(PartnerFormSchema),
-    defaultValues: isEditMode
-      ? {
-          name: partner.name,
-          type: partner.type,
-          email: partner.email || "",
-          phone: partner.phone || "",
-          website: partner.website || "",
-          address: partner.address || "",
-          city: partner.city || "",
-          state: partner.state || "",
-          zipCode: partner.zipCode || "",
-          isActive: partner.isActive,
-          notes: partner.notes || "",
-        }
-      : {
-          name: "",
-          type: "" as PartnerType,
-          email: "",
-          phone: "",
-          website: "",
-          address: "",
-          city: "",
-          state: "",
-          zipCode: "",
-          isActive: true,
-          notes: "",
-        },
+    defaultValues: buildDefaultValues(partner),
   });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
+  const onSubmit = (values: PartnerFormValues) => {
+    startSubmitTransition(async () => {
+      // isActive travels as a boolean. The old path had to strip it from the
+      // loop, re-append it as "on", and read it back with a `!== null` check,
+      // because FormData has no way to carry an unchecked checkbox.
+      const result = isEditMode
+        ? await updatePartner(partner.id, returnTo ?? null, values)
+        : await createPartner(returnTo ?? null, values);
 
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof PartnerFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
+        }
+        form.reset(values);
+        return;
       }
-    }
-  }, [state, form]);
 
-  const onSubmit = (data: PartnerFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (key === "isActive") continue;
-      if (value != null && value !== "") {
-        formData.append(key, String(value));
-      }
-    }
-    if (data.isActive) {
-      formData.append("isActive", "on");
-    }
-    if (returnTo) {
-      formData.append("returnTo", returnTo);
-    }
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -186,7 +161,7 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
                       <FormLabel>Type</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        value={field.value}
+                        value={field.value ?? ""}
                       >
                         <FormControl>
                           <SelectTrigger className="w-full">
@@ -285,7 +260,7 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
                       <FormLabel>State</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        value={field.value}
+                        value={field.value ?? ""}
                       >
                         <FormControl>
                           <SelectTrigger className="w-full">
@@ -330,7 +305,7 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
                     <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                       <FormControl>
                         <Checkbox
-                          checked={field.value}
+                          checked={field.value ?? true}
                           onCheckedChange={field.onChange}
                         />
                       </FormControl>

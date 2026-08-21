@@ -41,3 +41,5 @@ export const OutcomeFormSchema = z
       error: "An owner is required for return-to-owner outcomes.",
     }
   );
+
+export type OutcomeFormInput = z.input<typeof OutcomeFormSchema>;

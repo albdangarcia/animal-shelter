@@ -1,56 +1,42 @@
 "use client";
 
-import {
-  signInWithCredentials,
-  type SignInFormState,
-} from "@/app/lib/actions/auth.actions";
-import { SignInFormSchema } from "@/app/lib/zod-schemas/common.schemas";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
-import { z } from "zod";
-
-type SignInFormValues = z.infer<typeof SignInFormSchema>;
-
-const INITIAL_FORM_STATE: SignInFormState = {
-  success: false,
-  message: null,
-  errors: {},
-};
+import { signInWithCredentials } from "@/app/lib/actions/auth.actions";
+import {
+  SignInFormSchema,
+  type SignInFormInput,
+} from "@/app/lib/zod-schemas/common.schemas";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
 interface SignInFormProps {
   callbackUrl: string;
 }
 
 export const SignInForm = ({ callbackUrl }: SignInFormProps) => {
-  const [state, formAction, isPending] = useActionState(
-    signInWithCredentials,
-    INITIAL_FORM_STATE,
-  );
-  const form = useForm<SignInFormValues>({
-    resolver: zodResolver(SignInFormSchema),
+  const [isPending, startSubmitTransition] = useTransition();
+
+  const form = useForm<SignInFormInput>({
+    resolver: standardSchemaResolver(SignInFormSchema),
     defaultValues: { email: "", password: "" },
   });
 
-  useEffect(() => {
-    if (state.message) toast.error(state.message);
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof SignInFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
-      }
-    }
-  }, [state, form]);
+  const onSubmit = (values: SignInFormInput) => {
+    startSubmitTransition(async () => {
+      const result = await signInWithCredentials(callbackUrl, values);
 
-  const onSubmit = (data: SignInFormValues) => {
-    const formData = new FormData();
-    formData.append("email", data.email);
-    formData.append("password", data.password);
-    formData.append("redirectTo", callbackUrl);
-    startTransition(() => formAction(formData));
+      if (result.ok) {
+        // Unreachable in practice: next-auth's signIn() redirects internally
+        // by throwing before this line, on any successful sign-in.
+        toast.success(result.message);
+        return;
+      }
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
+    });
   };
 
   return (

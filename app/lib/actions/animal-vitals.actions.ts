@@ -11,19 +11,23 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { cuidSchema } from "../zod-schemas/common.schemas";
-import { VitalsFormSchema } from "../zod-schemas/vitals.schemas";
+import { VitalsFormInput, VitalsFormSchema } from "../zod-schemas/vitals.schemas";
 import { AnimalActivityType } from "@/prisma/generated/enums";
 import { formatWeight } from "../utils/weight-format";
 import { LATEST_ENTRY_ORDER } from "../utils/vitals-order";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
-export interface VitalsFormState {
-  success?: boolean;
-  message?: string | null;
-  errors?: Record<string, string[] | undefined>;
-}
+type VitalsResult = FormResult<VitalsFormInput>;
 
-const toNullableNumber = (value: number | "" | undefined): number | null =>
-  typeof value === "number" ? value : null;
+// String -> DB conversion for the vitals form. Values arrive already typed
+// (no FormData), so this is only shaping, not parsing.
+const toVitalsData = (data: z.output<typeof VitalsFormSchema>) => ({
+  recordedAt: data.recordedAt,
+  weightGrams: data.weightGrams,
+  temperatureC: data.temperatureC,
+  bodyConditionScore: data.bodyConditionScore,
+  notes: data.notes || null,
+});
 
 /**
  * The ONLY function allowed to write Animal.currentWeightGrams. Recomputes it as the
@@ -53,27 +57,24 @@ const recomputeCurrentWeight = async (
 const _createVitalsEntry = async (
   user: SessionUser, // Injected by withAuthenticatedUser
   animalId: string,
-  prevState: VitalsFormState,
-  formData: FormData
-): Promise<VitalsFormState> => {
+  values: VitalsFormInput,
+): Promise<VitalsResult> => {
   const parsedAnimalId = cuidSchema.safeParse(animalId);
   if (!parsedAnimalId.success) {
-    return { message: "Invalid animal ID format." };
+    return { ok: false, message: "Invalid animal ID format." };
   }
 
-  const validatedFields = VitalsFormSchema.safeParse(
-    Object.fromEntries(formData.entries())
-  );
+  const validatedFields = VitalsFormSchema.safeParse(values);
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to record vitals.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<VitalsFormInput>,
     };
   }
 
-  const { weightGrams, temperatureC, bodyConditionScore, recordedAt, notes } =
-    validatedFields.data;
-  const weight = toNullableNumber(weightGrams);
+  const { weightGrams, recordedAt } = validatedFields.data;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -98,21 +99,17 @@ const _createVitalsEntry = async (
         data: {
           animalId,
           recordedById: user.personId,
-          recordedAt,
-          weightGrams: weight,
-          temperatureC: toNullableNumber(temperatureC),
-          bodyConditionScore: toNullableNumber(bodyConditionScore),
-          notes: notes || null,
+          ...toVitalsData(validatedFields.data),
         },
       });
 
       await recomputeCurrentWeight(tx, animalId);
 
       let changeSummary = "Vitals recorded.";
-      if (weight != null) {
-        changeSummary = `Weight recorded: ${formatWeight(weight)}`;
+      if (weightGrams != null) {
+        changeSummary = `Weight recorded: ${formatWeight(weightGrams)}`;
         if (previousWeighIn?.weightGrams != null) {
-          const delta = weight - previousWeighIn.weightGrams;
+          const delta = weightGrams - previousWeighIn.weightGrams;
           if (delta !== 0) {
             changeSummary += ` (${delta > 0 ? "up" : "down"} ${formatWeight(
               Math.abs(delta)
@@ -132,42 +129,38 @@ const _createVitalsEntry = async (
     });
   } catch (error) {
     console.error("Database Error creating vitals log:", error);
-    return { message: "Database Error: Failed to record vitals." };
+    return { ok: false, message: "Database Error: Failed to record vitals." };
   }
 
   revalidatePath(`/dashboard/animals/${animalId}/vitals`);
   revalidatePath(`/dashboard/animals/${animalId}`);
-  return { success: true, message: "Vitals entry recorded successfully." };
+  return { ok: true, message: "Vitals entry recorded successfully." };
 };
 
 const _updateVitalsEntry = async (
   user: SessionUser, // Injected by withAuthenticatedUser
   vitalsLogId: string,
   animalId: string,
-  prevState: VitalsFormState,
-  formData: FormData
-): Promise<VitalsFormState> => {
+  values: VitalsFormInput,
+): Promise<VitalsResult> => {
   const parsedVitalsLogId = cuidSchema.safeParse(vitalsLogId);
   if (!parsedVitalsLogId.success) {
-    return { message: "Invalid vitals log ID format." };
+    return { ok: false, message: "Invalid vitals log ID format." };
   }
   const parsedAnimalId = cuidSchema.safeParse(animalId);
   if (!parsedAnimalId.success) {
-    return { message: "Invalid animal ID format." };
+    return { ok: false, message: "Invalid animal ID format." };
   }
 
-  const validatedFields = VitalsFormSchema.safeParse(
-    Object.fromEntries(formData.entries())
-  );
+  const validatedFields = VitalsFormSchema.safeParse(values);
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update vitals entry.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<VitalsFormInput>,
     };
   }
-
-  const { weightGrams, temperatureC, bodyConditionScore, recordedAt, notes } =
-    validatedFields.data;
 
   try {
     await prisma.$transaction(async (tx) => {
@@ -175,13 +168,7 @@ const _updateVitalsEntry = async (
       // edited, not silently rewritten while it's hidden from the default view.
       await tx.vitalsLog.update({
         where: { id: vitalsLogId, animalId, deletedAt: null },
-        data: {
-          recordedAt,
-          weightGrams: toNullableNumber(weightGrams),
-          temperatureC: toNullableNumber(temperatureC),
-          bodyConditionScore: toNullableNumber(bodyConditionScore),
-          notes: notes || null,
-        },
+        data: toVitalsData(validatedFields.data),
       });
 
       await recomputeCurrentWeight(tx, animalId);
@@ -197,12 +184,12 @@ const _updateVitalsEntry = async (
     });
   } catch (error) {
     console.error("Database Error updating vitals log:", error);
-    return { message: "Database Error: Failed to update vitals entry." };
+    return { ok: false, message: "Database Error: Failed to update vitals entry." };
   }
 
   revalidatePath(`/dashboard/animals/${animalId}/vitals`);
   revalidatePath(`/dashboard/animals/${animalId}`);
-  return { success: true, message: "Vitals entry updated successfully." };
+  return { ok: true, message: "Vitals entry updated successfully." };
 };
 
 const _deleteVitalsEntry = async (

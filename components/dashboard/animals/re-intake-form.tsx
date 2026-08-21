@@ -1,12 +1,10 @@
 "use client";
 
 import { createReIntake } from "@/app/lib/actions/intake.actions";
-import { startTransition, useActionState, useEffect } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -34,12 +32,15 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { animalHealthStatusOptions } from "@/app/lib/utils/enum-formatter";
+import { AnimalHealthStatus } from "@/prisma/generated/enums";
 import { AnimalReIntakeFormPayload, PartnerPayload } from "@/app/lib/types";
 import Link from "next/link";
 import { IntakeFormFields } from "./intake-form-fields";
-import { ReIntakeFormSchema } from "@/app/lib/zod-schemas/intake.schema";
-
-type ReIntakeFormValues = z.infer<typeof ReIntakeFormSchema>;
+import {
+  ReIntakeFormSchema,
+  type ReIntakeFormInput,
+} from "@/app/lib/zod-schemas/intake.schema";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
 interface ReIntakeFormProps {
   animal: AnimalReIntakeFormPayload;
@@ -47,24 +48,20 @@ interface ReIntakeFormProps {
 }
 
 const ReIntakeForm = ({ animal, partners }: ReIntakeFormProps) => {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const query = searchParams.toString();
   const returnTo = query ? `${pathname}?${query}` : pathname;
 
-  const action = createReIntake.bind(null, animal.id);
+  const [isPending, startSubmitTransition] = useTransition();
 
-  const [state, formAction, isPending] = useActionState(
-    action,
-    INITIAL_FORM_STATE,
-  );
-
-  const form = useForm({
-    resolver: zodResolver(ReIntakeFormSchema),
+  const form = useForm<ReIntakeFormInput>({
+    resolver: standardSchemaResolver(ReIntakeFormSchema),
     defaultValues: {
       intakeDate: new Date(),
       intakeType: undefined,
-      healthStatus: animalHealthStatusOptions[0].value,
+      healthStatus: AnimalHealthStatus.HEALTHY,
       notes: "",
       sourcePartnerId: "",
       foundAddress: "",
@@ -74,32 +71,20 @@ const ReIntakeForm = ({ animal, partners }: ReIntakeFormProps) => {
     },
   });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
+  const onSubmit = (values: ReIntakeFormInput) => {
+    startSubmitTransition(async () => {
+      const result = await createReIntake(animal.id, values);
 
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof ReIntakeFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+        }
+        return;
       }
-    }
-  }, [state, form]);
 
-  const onSubmit = (data: ReIntakeFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (value instanceof Date) {
-        formData.append(key, value.toISOString());
-      } else if (value != null && value !== "") {
-        formData.append(key, String(value));
-      }
-    }
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -155,10 +140,9 @@ const ReIntakeForm = ({ animal, partners }: ReIntakeFormProps) => {
             {/* Intake Fields Component */}
             <IntakeFormFields
               control={form.control}
-              watch={form.watch}
               partners={partners}
-              isEditMode={false}
               returnTo={returnTo}
+              allowCreatePerson={false}
             />
           </CardContent>
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,19 +26,13 @@ import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { CharacteristicCategory } from "@/prisma/generated/enums";
 import type { CharacteristicModel } from "@/prisma/generated/models/Characteristic";
 import {
-  CharacteristicFormState,
   createCharacteristic,
   updateCharacteristic,
 } from "@/app/lib/actions/characteristics-catalog.actions";
 import { CharacteristicFormSchema } from "@/app/lib/zod-schemas/characteristic.schemas";
 import { CATEGORIES, CATEGORY_KEYS } from "@/app/lib/constants/characteristic-categories";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { toast } from "sonner";
-
-const INITIAL_FORM_STATE: CharacteristicFormState = {
-  success: false,
-  message: null,
-  errors: {},
-};
 
 type CharacteristicFormValues = z.infer<typeof CharacteristicFormSchema>;
 
@@ -48,17 +42,10 @@ interface Props {
 }
 
 export const CharacteristicForm = ({ onFormSubmit, characteristic }: Props) => {
-  const action = characteristic
-    ? updateCharacteristic.bind(null, characteristic.id)
-    : createCharacteristic;
-
-  const [state, formAction, isPending] = useActionState<
-    CharacteristicFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
+  const [isPending, startSubmitTransition] = useTransition();
 
   const form = useForm<CharacteristicFormValues>({
-    resolver: zodResolver(CharacteristicFormSchema),
+    resolver: standardSchemaResolver(CharacteristicFormSchema),
     defaultValues: characteristic
       ? {
         name: characteristic.name,
@@ -70,34 +57,20 @@ export const CharacteristicForm = ({ onFormSubmit, characteristic }: Props) => {
       },
   });
 
-  useEffect(() => {
-    if (!state.message) {
-      return;
-    }
+  const onSubmit = (values: CharacteristicFormValues) => {
+    startSubmitTransition(async () => {
+      const result = characteristic
+        ? await updateCharacteristic(characteristic.id, values)
+        : await createCharacteristic(values);
 
-    if (state.success) {
-      toast.success(state.message);
-      onFormSubmit();
-    } else if (state.errors) {
-      toast.error(state.message || "Please check the form for errors.");
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof CharacteristicFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        onFormSubmit();
+        return;
       }
-    } else {
-      toast.error(state.message);
-    }
-  }, [state, form, onFormSubmit]);
 
-  const onSubmit = (data: CharacteristicFormValues) => {
-    const formData = new FormData();
-    formData.append("name", data.name);
-    formData.append("category", data.category);
-
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -133,7 +106,7 @@ export const CharacteristicForm = ({ onFormSubmit, characteristic }: Props) => {
                 <FormLabel htmlFor="category">Category</FormLabel>
                 <Select
                   onValueChange={field.onChange}
-                  defaultValue={field.value}
+                  value={field.value ?? ""}
                   name={field.name}
                 >
                   <FormControl>

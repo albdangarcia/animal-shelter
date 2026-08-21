@@ -4,20 +4,9 @@ import {
   updateMyHouseholdProfile,
   updateStaffHouseholdProfile,
 } from "@/app/lib/actions/household-profile.actions";
-import {
-  startTransition,
-  useActionState,
-  useEffect,
-  useState,
-  useTransition,
-} from "react";
-import {
-  INITIAL_FORM_STATE,
-  HouseholdProfileFormState,
-} from "@/app/lib/form-state-types";
+import { useState, useTransition } from "react";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { useForm, useWatch, type DefaultValues, type UseFormReturn } from "react-hook-form";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -48,23 +37,43 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { HouseholdFieldsSchema } from "@/app/lib/zod-schemas/household-profile.schemas";
+import {
+  HouseholdFieldsSchema,
+  isRenting,
+  type HouseholdFieldsInput,
+} from "@/app/lib/zod-schemas/household-profile.schemas";
 import {
   formatSingleEnumOption,
   livingSituationOptions,
 } from "@/app/lib/utils/enum-formatter";
 import { HouseholdProfilePayload } from "@/app/lib/types";
 import { boolToSelectValue } from "@/app/lib/utils/form-utils";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
+import { NumberField } from "@/components/forms/number-field";
 
-export type HouseholdProfileFormValues = z.input<typeof HouseholdFieldsSchema>;
+export type HouseholdProfileFormValues = HouseholdFieldsInput;
 
 interface HouseholdProfileFormProps {
   householdProfile?: HouseholdProfilePayload | null;
   mode?: "self" | "staff-edit" | "staff-view";
   personId?: string;
   canManage?: boolean;
-  returnTo?: string;
 }
+
+// Both variants prefill identically
+const buildDefaultValues = (
+  householdProfile?: HouseholdProfilePayload | null,
+): DefaultValues<HouseholdProfileFormValues> => ({
+  livingSituation:
+    householdProfile?.livingSituation || livingSituationOptions[0].value,
+  hasYard: boolToSelectValue(householdProfile?.hasYard),
+  landlordPermission: boolToSelectValue(householdProfile?.landlordPermission),
+  hasChildren: boolToSelectValue(householdProfile?.hasChildren),
+  householdSize: householdProfile?.householdSize ?? 1,
+  childrenAges: householdProfile?.childrenAges?.join(", ") || "",
+  otherAnimalsDescription: householdProfile?.otherAnimalsDescription || "",
+  animalExperience: householdProfile?.animalExperience || "",
+});
 
 // Shared read-only rows
 
@@ -99,10 +108,14 @@ export const HouseholdReadOnlyRows = ({
         <span className="text-muted-foreground">Has Yard</span>
         <span>{boolDisplay(hp.hasYard)}</span>
       </div>
-      <div className="flex items-center justify-between border-b pb-2 text-sm">
-        <span className="text-muted-foreground">Landlord Permission</span>
-        <span>{boolDisplay(hp.landlordPermission)}</span>
-      </div>
+      {/* Null here now means "not renting", not "unanswered" — the row is
+          hidden rather than showing a meaningless N/A. */}
+      {isRenting(hp.livingSituation) && (
+        <div className="flex items-center justify-between border-b pb-2 text-sm">
+          <span className="text-muted-foreground">Landlord Permission</span>
+          <span>{boolDisplay(hp.landlordPermission)}</span>
+        </div>
+      )}
       <div className="flex items-center justify-between border-b pb-2 text-sm">
         <span className="text-muted-foreground">Has Children</span>
         <span>{boolDisplay(hp.hasChildren)}</span>
@@ -128,9 +141,19 @@ export const HouseholdReadOnlyRows = ({
 export const HouseholdFormFields = ({
   form,
 }: {
-  form: ReturnType<typeof useForm<HouseholdProfileFormValues>>;
+  form: UseFormReturn<HouseholdProfileFormValues>;
 }) => {
-  const hasChildren = form.watch("hasChildren");
+  // useWatch rather than form.watch(): watch() returns a function the React
+  // Compiler cannot memoize safely, so it skips compiling the whole component.
+  // This call site was never flagged by react-hooks/incompatible-library only
+  // because `form` arrives as a prop and the rule can't trace its origin.
+  const hasChildren = useWatch({ control: form.control, name: "hasChildren" });
+  const livingSituation = useWatch({
+    control: form.control,
+    name: "livingSituation",
+  });
+
+  const renting = isRenting(livingSituation);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-6 gap-x-4 gap-y-8">
@@ -139,7 +162,7 @@ export const HouseholdFormFields = ({
         name="livingSituation"
         render={({ field }) => (
           <FormItem className="col-span-3">
-            <FormLabel>Living Situation</FormLabel>
+            <FormLabel>Living Situation *</FormLabel>
             <Select onValueChange={field.onChange} value={field.value}>
               <FormControl>
                 <SelectTrigger className="w-full">
@@ -158,23 +181,14 @@ export const HouseholdFormFields = ({
           </FormItem>
         )}
       />
-      <FormField
+
+      <NumberField
         control={form.control}
         name="householdSize"
-        render={({ field }) => (
-          <FormItem className="col-span-3">
-            <FormLabel>Household Size</FormLabel>
-            <FormControl>
-              <Input
-                type="number"
-                min={1}
-                {...field}
-                onChange={(e) => field.onChange(e.target.value)}
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
+        label="Household Size *"
+        className="col-span-3"
+        min={1}
+        max={50}
       />
 
       <FormField
@@ -182,14 +196,16 @@ export const HouseholdFormFields = ({
         name="hasYard"
         render={({ field }) => (
           <FormItem className="col-span-2">
-            <FormLabel>Do you have a yard?</FormLabel>
+            <FormLabel>Do you have a yard? *</FormLabel>
             {/* value coerced to "" so Select stays controlled from the first
                 render — undefined->defined later trips React's
                 "uncontrolled to controlled" warning. */}
             <Select onValueChange={field.onChange} value={field.value ?? ""}>
               <FormControl>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Not specified" />
+                  {/* Was "Not specified", which implied a resting state the
+                      schema has never accepted. */}
+                  <SelectValue placeholder="Select Yes or No" />
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
@@ -201,37 +217,43 @@ export const HouseholdFormFields = ({
           </FormItem>
         )}
       />
-      <FormField
-        control={form.control}
-        name="landlordPermission"
-        render={({ field }) => (
-          <FormItem className="col-span-2">
-            <FormLabel>Landlord permission (if renting)</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value ?? ""}>
-              <FormControl>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Not specified" />
-                </SelectTrigger>
-              </FormControl>
-              <SelectContent>
-                <SelectItem value="true">Yes</SelectItem>
-                <SelectItem value="false">No</SelectItem>
-              </SelectContent>
-            </Select>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
+
+      {/* Only meaningful for renters. Homeowners previously had to answer it
+          anyway, and their answer was stored as a real boolean. */}
+      {renting && (
+        <FormField
+          control={form.control}
+          name="landlordPermission"
+          render={({ field }) => (
+            <FormItem className="col-span-2">
+              <FormLabel>Do you have landlord permission? *</FormLabel>
+              <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                <FormControl>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select Yes or No" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value="true">Yes</SelectItem>
+                  <SelectItem value="false">No</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+      )}
+
       <FormField
         control={form.control}
         name="hasChildren"
         render={({ field }) => (
           <FormItem className="col-span-2">
-            <FormLabel>Do you have children at home?</FormLabel>
+            <FormLabel>Do you have children at home? *</FormLabel>
             <Select onValueChange={field.onChange} value={field.value ?? ""}>
               <FormControl>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Not specified" />
+                  <SelectValue placeholder="Select Yes or No" />
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
@@ -283,7 +305,7 @@ export const HouseholdFormFields = ({
         name="animalExperience"
         render={({ field }) => (
           <FormItem className="col-span-full">
-            <FormLabel>Experience with Animals</FormLabel>
+            <FormLabel>Experience with Animals *</FormLabel>
             <FormControl>
               <Textarea
                 placeholder="Tell us about your experience caring for pets."
@@ -300,61 +322,34 @@ export const HouseholdFormFields = ({
 
 const SelfHouseholdForm = ({
   householdProfile,
-  returnTo,
 }: {
   householdProfile?: HouseholdProfilePayload | null;
-  returnTo?: string;
 }) => {
-  const [state, formAction, isPending] = useActionState<
-    HouseholdProfileFormState,
-    FormData
-  >(updateMyHouseholdProfile, INITIAL_FORM_STATE);
+  const [isPending, startSubmitTransition] = useTransition();
 
   const form = useForm<HouseholdProfileFormValues>({
     resolver: standardSchemaResolver(HouseholdFieldsSchema),
-    defaultValues: {
-      livingSituation:
-        householdProfile?.livingSituation || livingSituationOptions[0].value,
-      hasYard: boolToSelectValue(householdProfile?.hasYard),
-      landlordPermission: boolToSelectValue(householdProfile?.landlordPermission),
-      hasChildren: boolToSelectValue(householdProfile?.hasChildren),
-      householdSize: String(householdProfile?.householdSize ?? 1),
-      childrenAges: householdProfile?.childrenAges?.join(", ") || "",
-      otherAnimalsDescription: householdProfile?.otherAnimalsDescription || "",
-      animalExperience: householdProfile?.animalExperience || "",
-    },
+    defaultValues: buildDefaultValues(householdProfile),
   });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof HouseholdProfileFormValues, {
-          type: "server",
-          message: Array.isArray(value) ? value.join(", ") : String(value),
-        });
-      }
-    }
-  }, [state, form]);
+  // The result is the return value of a function called right here, so it is
+  // handled right here. No useActionState, no state to hold it, and no effect
+  // to drain that state — which is what previously fired toast.error() on a
+  // successful save, because the effect could only see `state.message` and had
+  // no way to know it described a success.
+  const onSubmit = (values: HouseholdProfileFormValues) => {
+    startSubmitTransition(async () => {
+      const result = await updateMyHouseholdProfile(values);
 
-  const onSubmit = (data: HouseholdProfileFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (value != null) {
-        // Empty string is a meaningful value here (e.g. childrenAges when
-        // hasChildren is "false") — omitting it would drop a key the server
-        // schema requires to be present, failing validation invisibly since
-        // the corresponding field isn't always rendered.
-        formData.append(key, String(value));
+      if (result.ok) {
+        toast.success(result.message);
+        // Re-baseline so isDirty is accurate after a successful save.
+        form.reset(values);
+        return;
       }
-    }
-    if (returnTo) {
-      formData.append("returnTo", returnTo);
-    }
-    startTransition(() => {
-      formAction(formData);
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -395,58 +390,27 @@ const StaffHouseholdCard = ({
   canManage?: boolean;
   editable: boolean;
 }) => {
-  const [isPending, startStaffTransition] = useTransition();
+  const [isPending, startSubmitTransition] = useTransition();
   const [isEditing, setIsEditing] = useState(false);
 
   const form = useForm<HouseholdProfileFormValues>({
     resolver: standardSchemaResolver(HouseholdFieldsSchema),
-    defaultValues: {
-      livingSituation:
-        householdProfile?.livingSituation || livingSituationOptions[0].value,
-      hasYard: boolToSelectValue(householdProfile?.hasYard),
-      landlordPermission: boolToSelectValue(
-        householdProfile?.landlordPermission,
-      ),
-      hasChildren: boolToSelectValue(householdProfile?.hasChildren),
-      householdSize: String(householdProfile?.householdSize ?? 1),
-      childrenAges: householdProfile?.childrenAges?.join(", ") || "",
-      otherAnimalsDescription:
-        householdProfile?.otherAnimalsDescription || "",
-      animalExperience: householdProfile?.animalExperience || "",
-    },
+    defaultValues: buildDefaultValues(householdProfile),
   });
 
-  const onSubmit = (data: HouseholdProfileFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (value != null) {
-        // Empty string is a meaningful value here (e.g. childrenAges when
-        // hasChildren is "false") — omitting it would drop a key the server
-        // schema requires to be present, failing validation invisibly since
-        // the corresponding field isn't always rendered.
-        formData.append(key, String(value));
-      }
-    }
-    startStaffTransition(async () => {
-      const result = await updateStaffHouseholdProfile(
-        personId,
-        INITIAL_FORM_STATE,
-        formData,
-      );
-      if (result.success) {
-        toast.success(result.message ?? "Household profile updated.");
+  const onSubmit = (values: HouseholdProfileFormValues) => {
+    startSubmitTransition(async () => {
+      const result = await updateStaffHouseholdProfile(personId, values);
+
+      if (result.ok) {
+        toast.success(result.message);
+        form.reset(values);
         setIsEditing(false);
-      } else if (result.message) {
-        toast.error(result.message);
+        return;
       }
-      if (result.errors) {
-        for (const [key, value] of Object.entries(result.errors)) {
-          form.setError(key as keyof HouseholdProfileFormValues, {
-            type: "server",
-            message: Array.isArray(value) ? value.join(", ") : String(value),
-          });
-        }
-      }
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -479,9 +443,7 @@ const StaffHouseholdCard = ({
                 Cancel
               </Button>
               <Button type="submit" disabled={isPending}>
-                {isPending && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
+                {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 {isPending ? "Saving..." : "Save"}
               </Button>
             </CardFooter>
@@ -495,7 +457,9 @@ const StaffHouseholdCard = ({
     <Card>
       <CardHeader>
         <CardTitle>Household & Lifestyle</CardTitle>
-        <CardDescription>Home environment and animal experience.</CardDescription>
+        <CardDescription>
+          Home environment and animal experience.
+        </CardDescription>
         {editable && canManage && (
           <CardAction>
             <Button
@@ -522,15 +486,9 @@ const HouseholdProfileForm = ({
   mode = "self",
   personId,
   canManage,
-  returnTo,
 }: HouseholdProfileFormProps) => {
   if (mode === "self") {
-    return (
-      <SelfHouseholdForm
-        householdProfile={householdProfile}
-        returnTo={returnTo}
-      />
-    );
+    return <SelfHouseholdForm householdProfile={householdProfile} />;
   }
 
   return (

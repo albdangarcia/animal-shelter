@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useActionState, useEffect } from "react";
+import { useTransition } from "react";
 import { useForm, type UseFormReturn } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
@@ -35,7 +35,7 @@ import { US_STATES } from "@/app/lib/constants/us-states";
 import { livingSituationOptions } from "@/app/lib/utils/enum-formatter";
 import { boolToSelectValue } from "@/app/lib/utils/form-utils";
 import { createMyFosterApplication } from "@/app/lib/actions/foster-application.actions";
-import { INITIAL_FORM_STATE } from "@/app/lib/form-state-types";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { FosterApplicationFormSchema } from "@/app/lib/zod-schemas/foster.schemas";
 import {
   HouseholdFormFields,
@@ -55,10 +55,7 @@ export function MyFosterApplicationForm({
   applicantDefaults,
   species,
 }: MyFosterApplicationFormProps) {
-  const [state, formAction, isPending] = useActionState(
-    createMyFosterApplication,
-    INITIAL_FORM_STATE,
-  );
+  const [isPending, startSubmitTransition] = useTransition();
 
   const household = applicantDefaults?.householdProfile;
 
@@ -77,12 +74,12 @@ export function MyFosterApplicationForm({
       hasYard: boolToSelectValue(household?.hasYard),
       landlordPermission: boolToSelectValue(household?.landlordPermission),
       hasChildren: boolToSelectValue(household?.hasChildren),
-      householdSize: String(household?.householdSize ?? 1),
+      householdSize: household?.householdSize ?? 1,
       childrenAges: household?.childrenAges?.join(", ") || "",
       otherAnimalsDescription: household?.otherAnimalsDescription || "",
       animalExperience: household?.animalExperience || "",
       speciesIds: [],
-      maxAnimals: "1",
+      maxAnimals: 1,
       hasQuarantineSpace: undefined,
       canGiveOralMeds: undefined,
       canBottleFeed: undefined,
@@ -93,37 +90,28 @@ export function MyFosterApplicationForm({
     },
   });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof FosterApplicationFormValues, {
-          type: "server",
-          message: Array.isArray(value) ? value.join(", ") : String(value),
-        });
-      }
-    }
-  }, [state, form]);
+  // The whole values object goes over as-is. The old FormData builder had to
+  // reason about which empty strings were meaningful (childrenAges when
+  // hasChildren is "false" is a real value, not an absent one) and append
+  // speciesIds entry by entry; neither problem exists once the payload is
+  // just the validated object.
+  //
+  // This action returns success without redirecting — revalidatePath swaps
+  // the page over to the status view — so there is no router here. It also
+  // used to toast its success message as an error, because the effect that
+  // drained the action state could only see `state.message`.
+  const onSubmit = (values: FosterApplicationFormValues) => {
+    startSubmitTransition(async () => {
+      const result = await createMyFosterApplication(values);
 
-  const onSubmit = (data: FosterApplicationFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (key === "speciesIds") {
-        (value as string[] | undefined)?.forEach((id) =>
-          formData.append("speciesIds", id),
-        );
-      } else if (value != null) {
-        // Empty string is a meaningful value here (e.g. childrenAges when
-        // hasChildren is "false") — omitting it would drop a key the server
-        // schema requires to be present, failing validation invisibly since
-        // the corresponding field isn't always rendered.
-        formData.append(key, String(value));
+      if (result.ok) {
+        toast.success(result.message);
+        form.reset(values);
+        return;
       }
-    }
-    startTransition(() => {
-      formAction(formData);
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -233,7 +221,7 @@ export function MyFosterApplicationForm({
                       <FormLabel>State *</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value ?? ""}
                       >
                         <FormControl>
                           <SelectTrigger className="w-full">
