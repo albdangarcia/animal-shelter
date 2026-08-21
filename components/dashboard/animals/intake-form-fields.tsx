@@ -28,13 +28,12 @@ import { IntakeType } from "@/prisma/generated/enums";
 import { intakeTypeOptions } from "@/app/lib/utils/enum-formatter";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import { PartnerPayload } from "@/app/lib/types";
-import { FieldValues, Control, UseFormWatch, Path } from "react-hook-form";
+import { FieldValues, Control, Path, useWatch } from "react-hook-form";
 import { IntakeFieldsValues } from "@/app/lib/zod-schemas/intake.schema";
 import { PersonPicker } from "@/components/common/person-picker";
 
 interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
   control: Control<T>;
-  watch: UseFormWatch<T>;
   partners: PartnerPayload[];
   isEditMode?: boolean;
   returnTo: string;
@@ -47,7 +46,6 @@ interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
 
 export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
   control,
-  watch,
   partners,
   isEditMode = false,
   returnTo,
@@ -55,7 +53,14 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
   suggestedSurrenderingPersonLabel,
   allowCreatePerson = true,
 }: IntakeFormFieldsProps<T>) => {
-  const intakeType = watch("intakeType" as Path<T>);
+  // useWatch rather than a passed-in watch(): watch() subscribes the component
+  // that called useForm, so the React Compiler memoizes this child and the
+  // conditional blocks below never update. Taking `control` alone also drops
+  // one cast per call site.
+  const intakeType = useWatch({
+    control,
+    name: "intakeType" as Path<T>,
+  }) as IntakeType | undefined;
 
   return (
     <div className="space-y-6">
@@ -70,7 +75,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
               <FormLabel>Intake Type</FormLabel>
               <Select
                 onValueChange={field.onChange}
-                value={field.value}
+                value={field.value ?? ""}
                 disabled={isEditMode}
               >
                 <FormControl>
@@ -223,7 +228,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                   <FormLabel>State</FormLabel>
                   <Select
                     onValueChange={field.onChange}
-                    defaultValue={field.value}
+                    value={field.value ?? ""}
                     disabled={isEditMode}
                   >
                     <FormControl>

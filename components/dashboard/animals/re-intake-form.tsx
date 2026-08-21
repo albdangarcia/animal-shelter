@@ -155,7 +155,6 @@ const ReIntakeForm = ({ animal, partners }: ReIntakeFormProps) => {
             {/* Intake Fields Component */}
             <IntakeFormFields
               control={form.control}
-              watch={form.watch}
               partners={partners}
               isEditMode={false}
               returnTo={returnTo}

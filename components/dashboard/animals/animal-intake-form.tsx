@@ -14,7 +14,7 @@ import {
   AnimalFormState,
 } from "@/app/lib/form-state-types";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { Control, FieldValues, useForm, UseFormWatch } from "react-hook-form";
+import { Control, FieldValues, useForm } from "react-hook-form";
 import { z } from "zod";
 import { format } from "date-fns";
 import {
@@ -939,11 +939,6 @@ const AnimalForm = ({
               <IntakeFormFields
                 control={
                   form.control as unknown as Control<
-                    FieldValues & IntakeFieldsValues
-                  >
-                }
-                watch={
-                  form.watch as unknown as UseFormWatch<
                     FieldValues & IntakeFieldsValues
                   >
                 }
