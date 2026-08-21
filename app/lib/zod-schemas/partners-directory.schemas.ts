@@ -7,14 +7,6 @@ import {
   searchQuerySchema,
 } from "./common.schemas";
 
-export const PeopleDirectoryParamsSchema = z.object({
-  query: searchQuerySchema,
-  currentPage: currentPageSchema,
-  sort: z.string().optional(),
-  pageSize: pageSizeSchema,
-  account: z.string().optional(),
-});
-
 export const PartnersDirectoryParamsSchema = z.object({
   query: searchQuerySchema,
   currentPage: currentPageSchema,
@@ -22,21 +14,6 @@ export const PartnersDirectoryParamsSchema = z.object({
   pageSize: pageSizeSchema,
   type: z.string().optional(),
   status: z.string().optional(),
-});
-
-export const PersonFormSchema = z.object({
-  name: z.string().min(1, {
-    error: "Name is required.",
-  }),
-  email: z
-    .email({ error: "Please enter a valid email address." })
-    .optional()
-    .or(z.literal("")),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-  city: z.string().optional(),
-  state: optionalUsStateSchema,
-  zipCode: z.string().optional(),
 });
 
 export const PartnerFormSchema = z.object({
@@ -61,6 +38,8 @@ export const PartnerFormSchema = z.object({
   isActive: z.boolean().optional(),
   notes: z.string().optional(),
 });
+
+export type PartnerFormInput = z.input<typeof PartnerFormSchema>;
 
 export const PartnerContactFormSchema = z.object({
   personId: z.cuid2({ error: "Please select a person." }),

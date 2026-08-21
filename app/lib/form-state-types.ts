@@ -25,16 +25,6 @@ export type AnimalFormState = {
   };
 };
 
-export type OutcomeFormState = {
-  message?: string | null;
-  errors?: {
-    outcomeDate?: string[];
-    outcomeType?: string[];
-    destinationPartnerId?: string[];
-    ownerId?: string[];
-    notes?: string[];
-  };
-};
 
 export interface AnimalTaskFormState {
   success?: boolean;
@@ -50,29 +40,6 @@ export interface AnimalTaskFormState {
     assigneeId?: string[];
   };
 }
-
-export type PersonFormState = {
-  success?: boolean;
-  message?: string | null;
-  errors?: {
-    name?: string[];
-    type?: string[];
-    email?: string[];
-    phone?: string[];
-    address?: string[];
-    city?: string[];
-    state?: string[];
-    zipCode?: string[];
-  };
-  // Soft duplicate warning from _createPerson: a possible match was found by
-  // email/phone, but the record was NOT created — the user must resubmit
-  // with confirmDuplicate to proceed anyway.
-  duplicate?: {
-    id: string;
-    name: string;
-    matchedOn: "email" | "phone";
-  } | null;
-};
 
 export type PartnerFormState = {
   success?: boolean;

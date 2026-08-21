@@ -29,6 +29,8 @@ export const PersonFormSchema = z.object({
   zipCode: z.string().optional(),
 });
 
+export type PersonFormInput = z.input<typeof PersonFormSchema>;
+
 // Staff-managed person records (walk-in create + staff edit) must carry a way
 // to reach the person, or they end up as thin, unidentifiable, duplicate-prone
 // rows. This is intentionally NOT used for _updateMyProfile (registered users

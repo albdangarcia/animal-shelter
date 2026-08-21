@@ -4,15 +4,12 @@ import {
   createPerson,
   updateMyProfile,
   updatePerson,
+  type DuplicateCandidate,
 } from "@/app/lib/actions/person.actions";
-import { startTransition, useActionState, useEffect, useState } from "react";
-import {
-  INITIAL_FORM_STATE,
-  PersonFormState,
-} from "@/app/lib/form-state-types";
+import { useState, useTransition } from "react";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { useForm, type DefaultValues } from "react-hook-form";
+import { useRouter } from "next/navigation";
 import { Loader2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,12 +41,14 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   PersonFormSchema,
   StaffPersonFormSchema,
+  type PersonFormInput,
 } from "@/app/lib/zod-schemas/people-directory.schemas";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import Link from "next/link";
 import { PersonFormPayload } from "@/app/lib/types";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
-type PersonFormValues = z.infer<typeof PersonFormSchema>;
+export type PersonFormValues = PersonFormInput;
 
 interface PersonFormProps {
   person?: PersonFormPayload;
@@ -58,6 +57,18 @@ interface PersonFormProps {
   returnTo?: string;
 }
 
+const buildDefaultValues = (
+  person?: PersonFormPayload,
+): DefaultValues<PersonFormValues> => ({
+  name: person?.name ?? "",
+  email: person?.email || "",
+  phone: person?.phone || "",
+  address: person?.address || "",
+  city: person?.city || "",
+  state: person?.state || "",
+  zipCode: person?.zipCode || "",
+});
+
 const PersonForm = ({
   person,
   mode = "staff",
@@ -65,6 +76,8 @@ const PersonForm = ({
   returnTo,
 }: PersonFormProps) => {
   const isEditMode = !!person;
+  const router = useRouter();
+  const [isPending, startSubmitTransition] = useTransition();
 
   const resolvedCancelHref =
     cancelHref ??
@@ -73,86 +86,69 @@ const PersonForm = ({
       ? `/dashboard/people-directory/${person.id}`
       : "/dashboard/people-directory");
 
-  const action = isEditMode
-    ? mode === "self"
-      ? updateMyProfile
-      : updatePerson.bind(null, person.id)
-    : createPerson;
-
-  const [state, formAction, isPending] = useActionState<
-    PersonFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
-
   // Staff-managed records (create + staff edit) require a contact method;
   // self-profile updates don't (see StaffPersonFormSchema's doc comment).
-  const validationSchema = mode === "self" ? PersonFormSchema : StaffPersonFormSchema;
+  const validationSchema =
+    mode === "self" ? PersonFormSchema : StaffPersonFormSchema;
 
-  const form = useForm({
+  const form = useForm<PersonFormValues>({
     resolver: standardSchemaResolver(validationSchema),
-    defaultValues: isEditMode
-      ? {
-          name: person.name,
-          email: person.email || "",
-          phone: person.phone || "",
-          address: person.address || "",
-          city: person.city || "",
-          state: person.state || "",
-          zipCode: person.zipCode || "",
-        }
-      : {
-          name: "",
-          email: "",
-          phone: "",
-          address: "",
-          city: "",
-          state: "",
-          zipCode: "",
-        },
+    defaultValues: buildDefaultValues(person),
   });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
+  // The duplicate warning is now local UI state rather than a field on an
+  // action-state snapshot, and `lastValues` holds the exact values that
+  // produced it — "Continue anyway" must resubmit those, not whatever is in
+  // the inputs by the time the button is clicked.
+  const [duplicate, setDuplicate] = useState<DuplicateCandidate | null>(null);
+  const [lastValues, setLastValues] = useState<PersonFormValues | null>(null);
 
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof PersonFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+  const submit = (values: PersonFormValues, confirmDuplicate: boolean) => {
+    // Cleared up front, or a corrected email leaves the stale warning on screen.
+    setDuplicate(null);
+    setLastValues(values);
+
+    startSubmitTransition(async () => {
+      const result =
+        mode === "self" && isEditMode
+          ? await updateMyProfile(values)
+          : isEditMode
+            ? await updatePerson(
+                person.id,
+                returnTo ?? null,
+                confirmDuplicate,
+                values,
+              )
+            : await createPerson(returnTo ?? null, confirmDuplicate, values);
+
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+          return;
+        }
+        // Self-profile is a page form that stays mounted: re-baseline isDirty.
+        form.reset(values);
+        return;
       }
-    }
-  }, [state, form]);
 
-  // Holds the most recently submitted FormData so "Continue anyway" can
-  // resubmit the exact same values with confirmDuplicate set, without
-  // re-serializing from (possibly since-changed) form state.
-  const [lastFormData, setLastFormData] = useState<FormData | null>(null);
-
-  const onSubmit = (data: PersonFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (value != null && value !== "") {
-        formData.append(key, String(value));
+      // Not a failure of the input — the record wasn't written, but nothing is
+      // wrong with what was typed. Rendered as an Alert, not a toast.
+      if ("reason" in result) {
+        setDuplicate(result.duplicate);
+        return;
       }
-    }
-    if (returnTo) {
-      formData.append("returnTo", returnTo);
-    }
-    setLastFormData(formData);
-    startTransition(() => {
-      formAction(formData);
+
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
+  const onSubmit = (values: PersonFormValues) => submit(values, false);
+
   const handleConfirmDuplicate = () => {
-    if (!lastFormData) return;
-    lastFormData.set("confirmDuplicate", "true");
-    startTransition(() => {
-      formAction(lastFormData);
-    });
+    if (!lastValues) return;
+    submit(lastValues, true);
   };
 
   return (
@@ -176,7 +172,7 @@ const PersonForm = ({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-10">
-            {state.duplicate && (
+            {duplicate && (
               <Alert className="border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950">
                 <TriangleAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
                 <AlertTitle className="text-amber-800 dark:text-amber-300">
@@ -184,10 +180,10 @@ const PersonForm = ({
                 </AlertTitle>
                 <AlertDescription className="text-amber-800 dark:text-amber-400">
                   <span>
-                    A person with this {state.duplicate.matchedOn} already
-                    exists: {state.duplicate.name}.
+                    A person with this {duplicate.matchedOn} already exists:{" "}
+                    {duplicate.name}.
                   </span>
-                  {state.duplicate.matchedOn === "email" && (
+                  {duplicate.matchedOn === "email" && (
                     <span>
                       This email is already in use by another person — it
                       can&apos;t be saved here too.
@@ -195,12 +191,14 @@ const PersonForm = ({
                   )}
                   <div className="mt-2 flex items-center gap-3">
                     <Link
-                      href={`/dashboard/people-directory/${state.duplicate.id}`}
+                      href={`/dashboard/people-directory/${duplicate.id}`}
                       className="font-semibold underline"
                     >
                       Use them instead
                     </Link>
-                    {state.duplicate.matchedOn === "phone" && (
+                    {/* Phone only: an email match is a hard unique constraint,
+                        so there is nothing to continue past. */}
+                    {duplicate.matchedOn === "phone" && (
                       <Button
                         type="button"
                         size="sm"
@@ -323,7 +321,7 @@ const PersonForm = ({
                       <FormLabel>State</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        value={field.value}
+                        value={field.value ?? ""}
                       >
                         <FormControl>
                           <SelectTrigger className="w-full">

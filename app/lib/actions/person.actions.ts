@@ -1,11 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
-import { PersonFormState } from "../form-state-types";
 import {
   RequirePermission,
   SessionUser,
@@ -15,64 +13,109 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import {
   PersonFormSchema,
   StaffPersonFormSchema,
+  type PersonFormInput,
 } from "../zod-schemas/people-directory.schemas";
 import { fetchDuplicatePersonCandidate } from "../data/people-directory/people-directory.data";
 import { z } from "zod";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+import { safeInternalPath } from "../utils/safe-redirect";
+
+const PEOPLE_DIRECTORY_PATH = "/dashboard/people-directory";
+
+const personPath = (personId: string) => `${PEOPLE_DIRECTORY_PATH}/${personId}`;
+
+// A duplicate candidate is neither variant of FormResult: nothing was written,
+// so it isn't a success, and the input may be perfectly valid, so it isn't a
+// field error either. Rather than widen the shared union for one form, this
+// file adds a third member tagged by `reason`. `ok` stays strictly boolean, so
+// the canonical `if (result.ok)` handler can never mistake a duplicate for a
+// success — and a caller that forgets the branch falls through to
+// "toast the message", not to a silent no-op.
+export type DuplicateCandidate = {
+  id: string;
+  name: string;
+  matchedOn: "email" | "phone";
+};
+
+export type PersonDuplicateWarning = {
+  ok: false;
+  reason: "duplicate";
+  message: string;
+  duplicate: DuplicateCandidate;
+};
+
+export type PersonActionResult =
+  | FormResult<PersonFormInput>
+  | PersonDuplicateWarning;
+
+// Single mapper for all three actions: the nullable Person columns must be
+// written as NULL rather than "" when an input is cleared.
+const toPersonData = (values: PersonFormInput) => ({
+  name: values.name,
+  email: values.email || null,
+  phone: values.phone || null,
+  address: values.address || null,
+  city: values.city || null,
+  state: values.state || null,
+  zipCode: values.zipCode || null,
+});
+
+// Soft duplicate warning: keyed on the contact method alone, never on name.
+// `excludePersonId` is critical on update — without it a person always
+// "matches" themselves on their own unchanged email/phone.
+const findDuplicate = async (
+  values: PersonFormInput,
+  excludePersonId?: string,
+): Promise<PersonDuplicateWarning | null> => {
+  const duplicate = await fetchDuplicatePersonCandidate(
+    values.email || null,
+    values.phone || null,
+    excludePersonId,
+  );
+
+  if (!duplicate) return null;
+
+  const matchedOn: "email" | "phone" =
+    values.email && duplicate.email?.toLowerCase() === values.email.toLowerCase()
+      ? "email"
+      : "phone";
+
+  return {
+    ok: false,
+    reason: "duplicate",
+    // The form renders this as an inline Alert with its own copy, so this
+    // message is only reached by a caller that hasn't handled the branch.
+    message: `A person with this ${matchedOn} already exists.`,
+    duplicate: { id: duplicate.id, name: duplicate.name, matchedOn },
+  };
+};
 
 const _createPerson = async (
-  prevState: PersonFormState,
-  formData: FormData,
-): Promise<PersonFormState> => {
-  const validatedFields = StaffPersonFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  returnTo: string | null,
+  confirmDuplicate: boolean,
+  values: PersonFormInput,
+): Promise<PersonActionResult> => {
+  const validatedFields = StaffPersonFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create person.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<PersonFormInput>,
     };
   }
 
-  const { name, email, phone, address, city, state, zipCode } =
-    validatedFields.data;
-
-  const returnTo = formData.get("returnTo");
-  const resolvedReturnTo =
-    typeof returnTo === "string" && returnTo ? returnTo : null;
-
-  // Soft duplicate warning: keyed on the contact method alone, never on
-  // name. Skipped when the user has already confirmed they want to proceed.
-  const confirmDuplicate = formData.get("confirmDuplicate") === "true";
   if (!confirmDuplicate) {
-    const duplicate = await fetchDuplicatePersonCandidate(
-      email || null,
-      phone || null,
-    );
-    if (duplicate) {
-      const matchedOn: "email" | "phone" =
-        email && duplicate.email?.toLowerCase() === email.toLowerCase()
-          ? "email"
-          : "phone";
-      return {
-        duplicate: { id: duplicate.id, name: duplicate.name, matchedOn },
-      };
-    }
+    const duplicate = await findDuplicate(validatedFields.data);
+    if (duplicate) return duplicate;
   }
 
   let newPersonId: string;
 
   try {
     const person = await prisma.person.create({
-      data: {
-        name,
-        email: email || null,
-        phone: phone || null,
-        address: address || null,
-        city: city || null,
-        state: state || null,
-        zipCode: zipCode || null,
-      },
+      data: toPersonData(validatedFields.data),
     });
     newPersonId = person.id;
   } catch (error) {
@@ -81,78 +124,60 @@ const _createPerson = async (
       error.code === "P2002"
     ) {
       return {
-        errors: { email: ["A person with this email already exists."] },
+        ok: false,
         message: "Failed to create person.",
+        fieldErrors: { email: ["A person with this email already exists."] },
       };
     }
     console.error("Database Error creating person:", error);
     return {
-      success: false,
+      ok: false,
       message: "Database Error: Failed to create person.",
     };
   }
 
-  revalidatePath("/dashboard/people-directory");
-  redirect(resolvedReturnTo ?? `/dashboard/people-directory/${newPersonId}`);
+  revalidatePath(PEOPLE_DIRECTORY_PATH);
+
+  return {
+    ok: true,
+    message: "Person created successfully.",
+    // returnTo originates in the URL and is re-checked here rather than
+    // trusted from the client: this action is reachable by direct POST.
+    redirectTo: safeInternalPath(returnTo, personPath(newPersonId)),
+  };
 };
 
 const _updatePerson = async (
   personId: string,
-  prevState: PersonFormState,
-  formData: FormData,
-): Promise<PersonFormState> => {
+  returnTo: string | null,
+  confirmDuplicate: boolean,
+  values: PersonFormInput,
+): Promise<PersonActionResult> => {
   const parsedId = cuidSchema.safeParse(personId);
   if (!parsedId.success) {
-    return { message: "Invalid person ID format." };
+    return { ok: false, message: "Invalid person ID format." };
   }
 
-  const validatedFields = StaffPersonFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = StaffPersonFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update person.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<PersonFormInput>,
     };
   }
 
-  const { name, email, phone, address, city, state, zipCode } =
-    validatedFields.data;
-
-  // Soft duplicate warning, same as create: keyed on email/phone, never
-  // name. excludePersonId is critical here — without it, this person would
-  // always "match" themselves on their own unchanged email/phone.
-  const confirmDuplicate = formData.get("confirmDuplicate") === "true";
   if (!confirmDuplicate) {
-    const duplicate = await fetchDuplicatePersonCandidate(
-      email || null,
-      phone || null,
-      parsedId.data,
-    );
-    if (duplicate) {
-      const matchedOn: "email" | "phone" =
-        email && duplicate.email?.toLowerCase() === email.toLowerCase()
-          ? "email"
-          : "phone";
-      return {
-        duplicate: { id: duplicate.id, name: duplicate.name, matchedOn },
-      };
-    }
+    const duplicate = await findDuplicate(validatedFields.data, parsedId.data);
+    if (duplicate) return duplicate;
   }
 
   try {
     await prisma.person.update({
       where: { id: parsedId.data },
-      data: {
-        name,
-        email: email || null,
-        phone: phone || null,
-        address: address || null,
-        city: city || null,
-        state: state || null,
-        zipCode: zipCode || null,
-      },
+      data: toPersonData(validatedFields.data),
     });
   } catch (error) {
     if (
@@ -160,83 +185,72 @@ const _updatePerson = async (
       error.code === "P2002"
     ) {
       return {
-        errors: { email: ["A person with this email already exists."] },
+        ok: false,
         message: "Failed to update person.",
+        fieldErrors: { email: ["A person with this email already exists."] },
       };
     }
     console.error("Database Error updating person:", error);
     return {
-      success: false,
+      ok: false,
       message: "Database Error: Failed to update person.",
     };
   }
 
-  revalidatePath("/dashboard/people-directory");
-  revalidatePath(`/dashboard/people-directory/${parsedId.data}`);
+  revalidatePath(PEOPLE_DIRECTORY_PATH);
+  revalidatePath(personPath(parsedId.data));
 
-  const returnTo = formData.get("returnTo");
-  redirect(
-    typeof returnTo === "string" && returnTo
-      ? returnTo
-      : `/dashboard/people-directory/${parsedId.data}`,
-  );
+  return {
+    ok: true,
+    message: "Person updated successfully.",
+    redirectTo: safeInternalPath(returnTo, personPath(parsedId.data)),
+  };
 };
 
 const _updateMyProfile = async (
   user: SessionUser,
-  prevState: PersonFormState,
-  formData: FormData,
-): Promise<PersonFormState> => {
+  values: PersonFormInput,
+): Promise<FormResult<PersonFormInput>> => {
   const personId = user.personId;
 
-  const validatedFields = PersonFormSchema.safeParse(
-    Object.fromEntries(formData.entries()),
-  );
+  const validatedFields = PersonFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update profile.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<PersonFormInput>,
     };
   }
-
-  const { name, email, phone, address, city, state, zipCode } =
-    validatedFields.data;
 
   try {
     await prisma.person.update({
       where: { id: personId },
-      data: {
-        name,
-        email: email || null,
-        phone: phone || null,
-        address: address || null,
-        city: city || null,
-        state: state || null,
-        zipCode: zipCode || null,
-      },
+      data: toPersonData(validatedFields.data),
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
         return {
-          errors: { email: ["A person with this email already exists."] },
+          ok: false,
           message: "Failed to update profile.",
+          fieldErrors: { email: ["A person with this email already exists."] },
         };
       }
       if (error.code === "P2025") {
-        return { message: "Profile not found." };
+        return { ok: false, message: "Profile not found." };
       }
     }
     console.error("Database Error updating profile:", error);
     return {
-      success: false,
+      ok: false,
       message: "Database Error: Failed to update profile.",
     };
   }
 
   revalidatePath("/dashboard/account");
-  return { success: true, message: "Profile updated successfully." };
+  return { ok: true, message: "Profile updated successfully." };
 };
 
 export const updateMyProfile = withAuthenticatedUser(

@@ -3,14 +3,19 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 
-const Page = async () => {
+const Page = async ({
+  searchParams,
+}: {
+  searchParams: Promise<{ returnTo?: string }>;
+}) => {
+  const { returnTo } = await searchParams;
   return (
     <Authorize
       permission={AppPermissions.PARTNERS_MANAGE}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
       <main>
-        <PartnerForm />
+        <PartnerForm returnTo={returnTo} />
       </main>
     </Authorize>
   );

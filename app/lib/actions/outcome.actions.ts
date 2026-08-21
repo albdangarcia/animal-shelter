@@ -8,21 +8,26 @@ import {
   withAuthenticatedUser,
 } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
-import { OutcomeFormSchema } from "../zod-schemas/outcome.schema";
+import {
+  OutcomeFormSchema,
+  type OutcomeFormInput,
+} from "../zod-schemas/outcome.schema";
+import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   AnimalActivityType,
   AnimalListingStatus,
   ApplicationStatus,
   OutcomeType,
 } from "@/prisma/generated/enums";
-import { OutcomeFormState } from "../form-state-types";
-import { redirect } from "next/navigation";
 import {
   ConflictError,
   NotFoundError,
   PreconditionFailedError,
 } from "../utils/errors";
 import { z } from "zod";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+
+const OUTCOMES_PATH = "/dashboard/outcomes";
 
 interface CreateOutcomeIds {
   animalId: string;
@@ -32,26 +37,32 @@ interface CreateOutcomeIds {
 const _createOutcome = async (
   user: SessionUser,
   ids: CreateOutcomeIds,
-  prevState: OutcomeFormState,
-  formData: FormData,
-): Promise<OutcomeFormState> => {
+  values: OutcomeFormInput,
+): Promise<FormResult<OutcomeFormInput>> => {
   const staffMemberId = user.personId;
 
   const { animalId, adoptionApplicationId } = ids;
 
-  // Validate form fields
-  const validatedFields = OutcomeFormSchema.safeParse({
-    outcomeDate: new Date(formData.get("outcomeDate") as string),
-    outcomeType: formData.get("outcomeType"),
-    destinationPartnerId: formData.get("destinationPartnerId") || undefined,
-    ownerId: formData.get("ownerId") || undefined,
-    notes: formData.get("notes") || undefined,
-  });
+  // The ids arrive as ordinary arguments now rather than through .bind(), so
+  // they are checked like any other caller-supplied input.
+  if (!cuidSchema.safeParse(animalId).success) {
+    return { ok: false, message: "Invalid animal ID format." };
+  }
+  if (
+    adoptionApplicationId &&
+    !cuidSchema.safeParse(adoptionApplicationId).success
+  ) {
+    return { ok: false, message: "Invalid adoption application ID format." };
+  }
+
+  const validatedFields = OutcomeFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or Invalid Fields. Failed to Process Outcome.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<OutcomeFormInput>,
     };
   }
 
@@ -106,7 +117,9 @@ const _createOutcome = async (
         data: {
           outcomeDate,
           type: outcomeType,
-          notes,
+          // `notes` now arrives as "" from a cleared textarea rather than
+          // undefined, so it has to be mapped to null for the nullable column.
+          notes: notes || null,
           animal: { connect: { id: animalId } },
           staffMember: { connect: { id: staffMemberId } },
           // Conditionally connect relationships
@@ -199,9 +212,10 @@ const _createOutcome = async (
       error instanceof ConflictError ||
       error instanceof PreconditionFailedError
     ) {
-      return { message: error.message };
+      return { ok: false, message: error.message };
     }
     return {
+      ok: false,
       message: "Database Error: Failed to process outcome.",
     };
   }
@@ -214,36 +228,42 @@ const _createOutcome = async (
     revalidatePath(`/dashboard/applications/${adoptionApplicationId}`);
   }
 
-  redirect("/dashboard/outcomes");
+  return {
+    ok: true,
+    message: "Outcome processed successfully.",
+    redirectTo: OUTCOMES_PATH,
+  };
 };
 
 const _updateOutcome = async (
   outcomeId: string,
-  prevState: OutcomeFormState,
-  formData: FormData,
-): Promise<OutcomeFormState> => {
-  // Validate form fields
-  const validatedFields = OutcomeFormSchema.safeParse({
-    outcomeDate: new Date(formData.get("outcomeDate") as string),
-    outcomeType: formData.get("outcomeType"),
-    destinationPartnerId: formData.get("destinationPartnerId") || undefined,
-    ownerId: formData.get("ownerId") || undefined,
-    notes: formData.get("notes") || undefined,
-  });
+  values: OutcomeFormInput,
+): Promise<FormResult<OutcomeFormInput>> => {
+  const parsedId = cuidSchema.safeParse(outcomeId);
+  if (!parsedId.success) {
+    return { ok: false, message: "Invalid outcome ID format." };
+  }
+
+  const validatedFields = OutcomeFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or Invalid Fields. Failed to Update Outcome.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<OutcomeFormInput>,
     };
   }
 
   const { outcomeDate, outcomeType, destinationPartnerId, ownerId, notes } =
     validatedFields.data;
 
+  // Declared outside the try so the revalidate calls below can use it.
+  let animalId: string;
+
   try {
     const existingOutcome = await prisma.outcome.findUnique({
-      where: { id: outcomeId },
+      where: { id: parsedId.data },
       select: { animalId: true },
     });
 
@@ -251,18 +271,20 @@ const _updateOutcome = async (
       throw new NotFoundError("Error: Outcome record not found.");
     }
 
-    const animalId = existingOutcome.animalId;
+    animalId = existingOutcome.animalId;
 
     await prisma.$transaction(async (tx) => {
       await tx.outcome.update({
-        where: { id: outcomeId },
+        where: { id: parsedId.data },
         data: {
           outcomeDate,
           type: outcomeType,
-          notes,
+          notes: notes || null,
           destinationPartnerId:
-            outcomeType === "TRANSFER_OUT" ? destinationPartnerId : null,
-          ownerId: outcomeType === "RETURN_TO_OWNER" ? ownerId : null,
+            outcomeType === "TRANSFER_OUT"
+              ? destinationPartnerId || null
+              : null,
+          ownerId: outcomeType === "RETURN_TO_OWNER" ? ownerId || null : null,
           // Adoption outcomes are not editable to/from via this form, so only
           // clear the application link when the type isn't (and can't become) ADOPTION.
           ...(outcomeType !== "ADOPTION" && { adoptionApplicationId: null }),
@@ -275,18 +297,22 @@ const _updateOutcome = async (
         data: { archiveReason: outcomeType },
       });
     });
-
-    revalidatePath("/dashboard/outcomes");
-    revalidatePath(`/dashboard/animals/${animalId}`);
   } catch (error) {
     console.error("Database error updating outcome:", error);
     if (error instanceof NotFoundError) {
-      return { message: error.message };
+      return { ok: false, message: error.message };
     }
-    return { message: "Database Error: Failed to update outcome." };
+    return { ok: false, message: "Database Error: Failed to update outcome." };
   }
 
-  redirect("/dashboard/outcomes");
+  revalidatePath(OUTCOMES_PATH);
+  revalidatePath(`/dashboard/animals/${animalId}`);
+
+  return {
+    ok: true,
+    message: "Outcome updated successfully.",
+    redirectTo: OUTCOMES_PATH,
+  };
 };
 
 export const createOutcome = withAuthenticatedUser(
