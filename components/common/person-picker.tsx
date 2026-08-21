@@ -26,10 +26,11 @@ interface PersonPickerProps {
   suggestedPersonId?: string;
   suggestedPersonLabel?: string;
   returnTo: string;
-  // Hides the "Add a new person" round-trip link. Used where an in-progress
-  // form holds unsaved data that a round-trip to the person-create page
-  // would lose (e.g. the initial-intake animal form).
-  allowCreate?: boolean;
+  // Shows the "Add a new person" round-trip link. Defaults to false: creation
+  // needs PERSONS_MANAGE, which only a server component can check, so the host
+  // must opt in explicitly. Fails closed — a host that omits it hides a button
+  // rather than offering one that errors on submit.
+  canCreatePerson?: boolean;
 }
 
 export const PersonPicker = ({
@@ -38,7 +39,7 @@ export const PersonPicker = ({
   suggestedPersonId,
   suggestedPersonLabel,
   returnTo,
-  allowCreate = true,
+  canCreatePerson = false,
 }: PersonPickerProps) => {
   const [selected, setSelected] = useState<PersonPickerOption | null>(() => {
     if (value == null && suggestedPersonId) {
@@ -56,11 +57,7 @@ export const PersonPicker = ({
   // afterward without being reapplied every time value clears.
   const suggestionAppliedRef = useRef(false);
   useEffect(() => {
-    if (
-      !suggestionAppliedRef.current &&
-      value == null &&
-      suggestedPersonId
-    ) {
+    if (!suggestionAppliedRef.current && value == null && suggestedPersonId) {
       suggestionAppliedRef.current = true;
       onChange(suggestedPersonId);
     }
@@ -198,7 +195,7 @@ export const PersonPicker = ({
             {isSearching ? (
               <CommandEmpty>Searching...</CommandEmpty>
             ) : results.length === 0 ? (
-              allowCreate ? (
+              canCreatePerson ? (
                 <CommandGroup>
                   <CommandItem asChild value="add-new-person">
                     <Link

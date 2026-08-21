@@ -48,6 +48,7 @@ interface DirectAddFosterFormProps {
   suggestedPersonId?: string;
   suggestedPersonLabel?: string;
   returnTo?: string;
+  canCreatePerson?: boolean;
 }
 
 export function DirectAddFosterForm({
@@ -55,6 +56,7 @@ export function DirectAddFosterForm({
   suggestedPersonId,
   suggestedPersonLabel,
   returnTo,
+  canCreatePerson,
 }: DirectAddFosterFormProps) {
   const [isPending, startSubmitTransition] = useTransition();
   const router = useRouter();
@@ -131,6 +133,7 @@ export function DirectAddFosterForm({
                       suggestedPersonId={suggestedPersonId}
                       suggestedPersonLabel={suggestedPersonLabel}
                       returnTo={pickerReturnTo}
+                      canCreatePerson={canCreatePerson}
                     />
                   </FormControl>
                   <FormMessage />
@@ -148,7 +151,12 @@ export function DirectAddFosterForm({
             />
           </CardContent>
           <CardFooter className="flex justify-end space-x-4">
-            <Button asChild variant="outline" type="button" disabled={isPending}>
+            <Button
+              asChild
+              variant="outline"
+              type="button"
+              disabled={isPending}
+            >
               <Link href={returnTo || "/dashboard/fosters"}>Cancel</Link>
             </Button>
             <Button type="submit" size="lg" disabled={isPending}>

@@ -142,7 +142,6 @@ const ReIntakeForm = ({ animal, partners }: ReIntakeFormProps) => {
               control={form.control}
               partners={partners}
               returnTo={returnTo}
-              allowCreatePerson={false}
             />
           </CardContent>
 
