@@ -156,7 +156,6 @@ const ReIntakeForm = ({ animal, partners }: ReIntakeFormProps) => {
             <IntakeFormFields
               control={form.control}
               partners={partners}
-              isEditMode={false}
               returnTo={returnTo}
             />
           </CardContent>

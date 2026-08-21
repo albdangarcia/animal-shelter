@@ -3,7 +3,6 @@ import {
   Sex,
   AnimalSize,
   AnimalHealthStatus,
-  IntakeType,
   TaskStatus,
   TaskCategory,
   TaskPriority,
@@ -15,8 +14,8 @@ import {
   currentPageSchema,
   pageSizeSchema,
   searchQuerySchema,
-  usStateSchema,
 } from "./common.schemas";
+import { intakeFieldsShape, intakeSuperRefine } from "./intake.schema";
 
 const speciesNameSchema = z
   .string()
@@ -87,143 +86,113 @@ export const AnimalTasksSchema = z.object({
   animalId: cuidSchema,
 });
 
-export const AnimalFormSchema = z
-  .object({
-    // Core Animal Details
-    animalName: z.string().min(1, {
-      error: "Animal name is required.",
-    }),
-    species: z.cuid2({
-      error: "A valid species ID is required.",
-    }),
-    breed: z.cuid2({
-      error: "A valid primary breed ID is required.",
-    }),
-    primaryColor: z.cuid2({
-      error: "A valid primary color ID is required.",
-    }),
-    additionalColors: z
-      .array(z.cuid2({ error: "A valid color ID is required." }))
-      .optional()
-      .default([]),
-    sex: z.enum(Sex, {
-      error: (issue) =>
-        issue.input === undefined ? "Sex is required." : undefined,
-    }),
-    // Expected adult size, staff-selected. Empty string = not specified (stored as null).
-    size: z.enum(AnimalSize).optional().or(z.literal("")),
-    estimatedBirthDate: z.coerce.date({
-      error: (issue) =>
-        issue.input === undefined
-          ? "Estimated birth date is required."
-          : undefined,
-    }),
-    healthStatus: z.enum(AnimalHealthStatus, {
-      error: (issue) =>
-        issue.input === undefined ? "Health status is required." : undefined,
-    }),
-    listingStatus: z.enum(AnimalListingStatus, {
-      error: (issue) =>
-        issue.input === undefined ? "Listing status is required." : undefined,
-    }),
-    // Weight at intake, in grams (canonical unit — see app/lib/utils/weight-format.ts).
-    weightGrams: z.coerce
-      .number({
-        error: (issue) =>
-          issue.input === undefined ? undefined : "Weight must be a number.",
-      })
-      .int({
-        error: "Weight must be a whole number of grams.",
-      })
-      .positive({
-        error: "Weight must be a positive number.",
-      })
-      .optional()
-      .or(z.literal("")),
-    heightCm: z.coerce
-      .number({
-        error: (issue) =>
-          issue.input === undefined ? undefined : "Height must be a number.",
-      })
-      .positive({
-        error: "Height must be a positive number.",
-      })
-      .optional()
-      .or(z.literal("")),
-    microchipNumber: z.string().optional(),
-    description: z.string().optional(),
-    city: z.string().optional(),
-    state: z.string().optional(),
-    // Optional kennel placement. Empty = Unplaced (null). Location is only a UI
-    // cascade helper and is NOT persisted — the unit implies its location.
-    currentUnitId: z.cuid2().optional().or(z.literal("")),
+// The animal record's own fields — the intake block (eight fields shared with
+// re-intake) lives in intakeFieldsShape and is spread in separately below, so
+// this shape can be reused by both the create schema (intake required) and
+// the edit schema (intake omitted entirely).
+const animalFieldsShape = {
+  animalName: z.string().min(1, {
+    error: "Animal name is required.",
+  }),
+  species: z.cuid2({
+    error: "A valid species ID is required.",
+  }),
+  breed: z.cuid2({
+    error: "A valid primary breed ID is required.",
+  }),
+  primaryColor: z.cuid2({
+    error: "A valid primary color ID is required.",
+  }),
+  additionalColors: z
+    .array(z.cuid2({ error: "A valid color ID is required." }))
+    .optional()
+    .default([]),
+  sex: z.enum(Sex, {
+    error: (issue) =>
+      issue.input === undefined ? "Sex is required." : undefined,
+  }),
+  // Expected adult size, staff-selected. Empty string = not specified (stored
+  // as null). A Radix Select cannot hold null cleanly, so "" is kept at the
+  // schema boundary and mapped to null in toAnimalData().
+  size: z.enum(AnimalSize).optional().or(z.literal("")),
+  estimatedBirthDate: z.date({
+    error: (issue) =>
+      issue.input === undefined
+        ? "Estimated birth date is required."
+        : undefined,
+  }),
+  healthStatus: z.enum(AnimalHealthStatus, {
+    error: (issue) =>
+      issue.input === undefined ? "Health status is required." : undefined,
+  }),
+  listingStatus: z.enum(AnimalListingStatus, {
+    error: (issue) =>
+      issue.input === undefined ? "Listing status is required." : undefined,
+  }),
+  heightCm: z
+    .number()
+    .positive({ error: "Height must be a positive number." })
+    .nullable(),
+  microchipNumber: z.string().optional(),
+  description: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  // Optional kennel placement. Empty = Unplaced (null). Location is only a UI
+  // cascade helper and is NOT persisted — the unit implies its location.
+  currentUnitId: z.cuid2().optional().or(z.literal("")),
+};
 
-    // Intake-Only Details
-    intakeType: z.enum(IntakeType).optional(),
-    intakeDate: z.coerce.date().optional(),
-    notes: z.string().optional(),
-    sourcePartnerId: z.cuid2().optional().or(z.literal("")),
-    foundAddress: z.string().optional(),
-    foundCity: z.string().optional(),
-    foundState: z.string().optional(),
-    surrenderingPersonId: z.cuid2().optional().or(z.literal("")),
+// Typed against only the fields it reads, so it accepts either derived
+// schema's output — matching intakeSuperRefine / householdSuperRefine.
+const animalColorSuperRefine = (
+  data: { primaryColor: string; additionalColors: string[] },
+  ctx: z.RefinementCtx,
+) => {
+  if (data.additionalColors.includes(data.primaryColor)) {
+    ctx.addIssue({
+      code: "custom",
+      message:
+        "The primary color shouldn't be repeated in additional colors.",
+      path: ["additionalColors"],
+    });
+  }
+};
+
+// weightGrams is intake-only: edit mode shows a read-only, dated weight
+// observation instead of a field (see animal-intake-form.tsx), and never
+// renders or populates a defaultValue for it. Kept out of animalFieldsShape
+// (rather than nullable-and-required there) so AnimalEditFormSchema doesn't
+// require a key its form can never supply — that gap silently blocked every
+// edit save with no visible error, since no field exists to show one on.
+const weightGramsShape = {
+  // Weight at intake, in grams (canonical unit — see app/lib/utils/weight-format.ts).
+  weightGrams: z
+    .number()
+    .int({ error: "Weight must be a whole number of grams." })
+    .positive({ error: "Weight must be a positive number." })
+    .nullable(),
+};
+
+// Spread into a fresh z.object() rather than built via AnimalEditFormSchema
+// .extend(), per the migration's rule against extending an already-refined
+// schema.
+export const CreateAnimalFormSchema = z
+  .object({
+    ...animalFieldsShape,
+    ...weightGramsShape,
+    ...intakeFieldsShape,
   })
   .superRefine((data, ctx) => {
-    if (data.intakeType === "TRANSFER_IN" && !data.sourcePartnerId) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Source partner is required for transfers.",
-        path: ["sourcePartnerId"],
-      });
-    }
-
-    if (data.additionalColors.includes(data.primaryColor)) {
-      ctx.addIssue({
-        code: "custom",
-        message:
-          "The primary color shouldn't be repeated in additional colors.",
-        path: ["additionalColors"],
-      });
-    }
-
-    if (data.intakeType === "OWNER_SURRENDER" && !data.surrenderingPersonId) {
-      ctx.addIssue({
-        code: "custom",
-        message: "A surrendering person is required.",
-        path: ["surrenderingPersonId"],
-      });
-    }
-
-    if (data.intakeType === "STRAY") {
-      if (!data.foundAddress) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Address is required for strays.",
-          path: ["foundAddress"],
-        });
-      }
-      if (!data.foundCity) {
-        ctx.addIssue({
-          code: "custom",
-          message: "City is required for strays.",
-          path: ["foundCity"],
-        });
-      }
-      if (!data.foundState) {
-        ctx.addIssue({
-          code: "custom",
-          message: "State is required for strays.",
-          path: ["foundState"],
-        });
-      } else if (!usStateSchema.options.includes(data.foundState)) {
-        ctx.addIssue({
-          code: "custom",
-          message: "Please select a valid US state.",
-          path: ["foundState"],
-        });
-      }
-    }
+    animalColorSuperRefine(data, ctx);
+    intakeSuperRefine(data, ctx);
   });
+
+export const AnimalEditFormSchema = z
+  .object({ ...animalFieldsShape })
+  .superRefine(animalColorSuperRefine);
+
+export type CreateAnimalFormInput = z.input<typeof CreateAnimalFormSchema>;
+export type AnimalEditFormInput = z.input<typeof AnimalEditFormSchema>;
 
 export const TaskFormSchema = z.object({
   title: z.string().min(1, {

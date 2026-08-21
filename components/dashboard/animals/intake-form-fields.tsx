@@ -35,7 +35,6 @@ import { PersonPicker } from "@/components/common/person-picker";
 interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
   control: Control<T>;
   partners: PartnerPayload[];
-  isEditMode?: boolean;
   returnTo: string;
   suggestedSurrenderingPersonId?: string;
   suggestedSurrenderingPersonLabel?: string;
@@ -47,7 +46,6 @@ interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
 export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
   control,
   partners,
-  isEditMode = false,
   returnTo,
   suggestedSurrenderingPersonId,
   suggestedSurrenderingPersonLabel,
@@ -73,11 +71,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
           render={({ field }) => (
             <FormItem className="col-span-3">
               <FormLabel>Intake Type</FormLabel>
-              <Select
-                onValueChange={field.onChange}
-                value={field.value ?? ""}
-                disabled={isEditMode}
-              >
+              <Select onValueChange={field.onChange} value={field.value ?? ""}>
                 <FormControl>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a type" />
@@ -111,7 +105,6 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                         "w-full pl-3 text-left font-normal",
                         !field.value && "text-muted-foreground",
                       )}
-                      disabled={isEditMode}
                     >
                       {field.value ? (
                         format(field.value, "PPP")
@@ -149,7 +142,6 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                 <Textarea
                   placeholder="Any notes about the intake event..."
                   {...field}
-                  disabled={isEditMode}
                 />
               </FormControl>
               <FormMessage />
@@ -160,7 +152,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
 
       {/* Conditional Source Fields */}
       <div className="pt-6">
-        {!isEditMode && !intakeType && (
+        {!intakeType && (
           <p className="text-sm text-center text-muted-foreground p-4 border border-dashed rounded-md">
             Please select an Intake Type above to enter source details.
           </p>
@@ -175,11 +167,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
               render={({ field }) => (
                 <FormItem className="col-span-full">
                   <FormLabel>Source Partner</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    value={field.value}
-                    disabled={isEditMode}
-                  >
+                  <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select a partner shelter/rescue" />
@@ -210,11 +198,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                 <FormItem className="col-span-3">
                   <FormLabel>City</FormLabel>
                   <FormControl>
-                    <Input
-                      placeholder="Anytown"
-                      {...field}
-                      disabled={isEditMode}
-                    />
+                    <Input placeholder="Anytown" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -229,7 +213,6 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                   <Select
                     onValueChange={field.onChange}
                     value={field.value ?? ""}
-                    disabled={isEditMode}
                   >
                     <FormControl>
                       <SelectTrigger className="w-full">
@@ -258,7 +241,6 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                     <Input
                       placeholder="e.g., Corner of Main St & Park Ave"
                       {...field}
-                      disabled={isEditMode}
                     />
                   </FormControl>
                   <FormMessage />

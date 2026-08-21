@@ -1,12 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import prisma from "@/app/lib/prisma";
 import { z } from "zod";
 import { cuidSchema } from "../zod-schemas/common.schemas";
-import { AnimalFormSchema } from "../zod-schemas/animal.schemas";
-import { AnimalFormState } from "../form-state-types";
+import {
+  CreateAnimalFormSchema,
+  AnimalEditFormSchema,
+  type CreateAnimalFormInput,
+  type AnimalEditFormInput,
+} from "../zod-schemas/animal.schemas";
 import {
   RequirePermission,
   SessionUser,
@@ -16,6 +19,7 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import {
   AnimalActivityType,
   AnimalListingStatus,
+  AnimalSize,
   ApplicationStatus,
   IntakeType,
 } from "@/prisma/generated/enums";
@@ -23,41 +27,63 @@ import { buildLocationChangeSummary } from "../utils/location-activity";
 import { ConflictError, NotFoundError } from "../utils/errors";
 import { del } from "@vercel/blob";
 import { isDemo } from "@/lib/flags";
+import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+
+// Shared by create and update — the "" -> null conversion for every nullable
+// column either action writes. Not every field applies to both actions
+// (sourcePartnerId/surrenderingPersonId only exist on AnimalEditFormInput's
+// counterpart, CreateAnimalFormInput); unused fields just come through as
+// undefined -> null, which is harmless since the caller never reads them.
+const toAnimalData = (data: {
+  size?: AnimalSize | "";
+  currentUnitId?: string;
+  sourcePartnerId?: string;
+  surrenderingPersonId?: string;
+  foundAddress?: string;
+  foundCity?: string;
+  foundState?: string;
+  notes?: string;
+  microchipNumber?: string;
+  description?: string;
+  city?: string;
+  state?: string;
+}) => ({
+  size: data.size || null,
+  currentUnitId: data.currentUnitId || null,
+  sourcePartnerId: data.sourcePartnerId || null,
+  surrenderingPersonId: data.surrenderingPersonId || null,
+  foundAddress: data.foundAddress || null,
+  foundCity: data.foundCity || null,
+  foundState: data.foundState || null,
+  notes: data.notes || null,
+  microchipNumber: data.microchipNumber || null,
+  description: data.description || null,
+  city: data.city || null,
+  state: data.state || null,
+});
 
 const _createAnimal = async (
   user: SessionUser,
-  prevState: AnimalFormState,
-  formData: FormData
-): Promise<AnimalFormState> => {
+  values: CreateAnimalFormInput,
+): Promise<FormResult<CreateAnimalFormInput>> => {
   const staffMemberId = user.personId;
 
   if (!staffMemberId) {
     return {
+      ok: false,
       message:
         "Authentication Error: Your user account is not associated with a person record.",
     };
   }
 
-  // Array fields must be pulled with getAll — Object.fromEntries keeps only
-  // the last value for repeated keys.
-  const additionalColors = formData.getAll("additionalColors");
-
-  const validatedFields = AnimalFormSchema.safeParse({
-    ...Object.fromEntries(formData.entries()),
-    additionalColors,
-  });
+  const validatedFields = CreateAnimalFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to create intake record.",
-    };
-  }
-
-  if (!validatedFields.data.intakeType || !validatedFields.data.intakeDate) {
-    return {
-      message:
-        "Intake type and date are required to create a new animal record.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<CreateAnimalFormInput>,
     };
   }
 
@@ -65,39 +91,33 @@ const _createAnimal = async (
     animalName,
     estimatedBirthDate,
     sex,
-    size,
     healthStatus,
     listingStatus,
-    microchipNumber,
-    description,
     species: speciesId,
     breed: breedId,
     primaryColor: primaryColorId,
     additionalColors: additionalColorIds,
     intakeType,
     intakeDate,
-    notes,
-    sourcePartnerId,
-    foundAddress,
-    foundCity,
-    foundState,
-    surrenderingPersonId,
     weightGrams,
     heightCm,
-    currentUnitId,
+    surrenderingPersonId,
   } = validatedFields.data;
 
   if (intakeType === IntakeType.OWNER_SURRENDER) {
     const parsedPersonId = cuidSchema.safeParse(surrenderingPersonId);
     if (!parsedPersonId.success) {
       return {
-        errors: {
-          surrenderingPersonId: ["A surrendering person is required."],
-        },
+        ok: false,
         message: "Missing or invalid fields. Failed to create intake record.",
+        fieldErrors: {
+          surrenderingPersonId: ["A surrendering person is required."],
+        } as FieldErrors<CreateAnimalFormInput>,
       };
     }
   }
+
+  const mapped = toAnimalData(validatedFields.data);
 
   // Full color set = primary + additionals, de-duped in case the primary
   // also appears in the additional list.
@@ -132,9 +152,9 @@ const _createAnimal = async (
         name: string;
         location: { name: string };
       } | null = null;
-      if (currentUnitId) {
+      if (mapped.currentUnitId) {
         const unit = await tx.unit.findFirst({
-          where: { id: currentUnitId, deletedAt: null },
+          where: { id: mapped.currentUnitId, deletedAt: null },
           select: {
             id: true,
             name: true,
@@ -156,16 +176,19 @@ const _createAnimal = async (
           name: animalName,
           birthDate: estimatedBirthDate,
           sex: sex,
-          size: size || null,
-          description: description,
-          currentWeightGrams: weightGrams ? Number(weightGrams) : undefined,
-          heightCm: heightCm ? Number(heightCm) : undefined,
+          size: mapped.size,
+          description: mapped.description,
+          // A fresh row has nothing to preserve, so null and undefined are
+          // equivalent here — written directly now that these are real
+          // nullable numbers rather than strings needing a truthy guard.
+          currentWeightGrams: weightGrams,
+          heightCm,
           healthStatus: healthStatus,
           listingStatus: listingStatus,
           publishedAt: publishedAt,
-          microchipNumber: microchipNumber,
-          city: validatedFields.data.foundCity || null,
-          state: validatedFields.data.foundState || null,
+          microchipNumber: mapped.microchipNumber,
+          city: mapped.city,
+          state: mapped.state,
           currentUnit: resolvedUnitId
             ? { connect: { id: resolvedUnitId } }
             : undefined,
@@ -180,19 +203,23 @@ const _createAnimal = async (
         data: {
           type: intakeType,
           intakeDate: intakeDate,
-          notes: notes,
+          notes: mapped.notes,
           animalId: newAnimal.id,
           staffMemberId: staffMemberId,
           sourcePartnerId:
-            intakeType === IntakeType.TRANSFER_IN ? sourcePartnerId : undefined,
+            intakeType === IntakeType.TRANSFER_IN
+              ? mapped.sourcePartnerId
+              : undefined,
           surrenderingPersonId:
             intakeType === IntakeType.OWNER_SURRENDER
-              ? surrenderingPersonId
+              ? mapped.surrenderingPersonId
               : undefined,
           foundAddress:
-            intakeType === IntakeType.STRAY ? foundAddress : undefined,
-          foundCity: intakeType === IntakeType.STRAY ? foundCity : undefined,
-          foundState: intakeType === IntakeType.STRAY ? foundState : undefined,
+            intakeType === IntakeType.STRAY ? mapped.foundAddress : undefined,
+          foundCity:
+            intakeType === IntakeType.STRAY ? mapped.foundCity : undefined,
+          foundState:
+            intakeType === IntakeType.STRAY ? mapped.foundState : undefined,
         },
       });
 
@@ -207,7 +234,7 @@ const _createAnimal = async (
             animalId: newAnimal.id,
             recordedById: staffMemberId,
             recordedAt: intakeDate,
-            weightGrams: Number(weightGrams),
+            weightGrams,
           },
         });
       }
@@ -246,40 +273,40 @@ const _createAnimal = async (
   } catch (error) {
     console.error("Database Error creating intake record:", error);
     return {
+      ok: false,
       message: "Database Error: Failed to create intake record.",
     };
   }
 
   revalidatePath("/dashboard/animals");
-  redirect("/dashboard/animals");
+
+  return {
+    ok: true,
+    message: "Animal intake created successfully.",
+    redirectTo: "/dashboard/animals",
+  };
 };
 
 const _updateAnimal = async (
   user: SessionUser,
   animalId: string,
-  prevState: AnimalFormState,
-  formData: FormData
-): Promise<AnimalFormState> => {
+  values: AnimalEditFormInput,
+): Promise<FormResult<AnimalEditFormInput>> => {
   const parsedId = cuidSchema.safeParse(animalId);
   if (!parsedId.success) {
-    return { message: "Invalid Animal ID." };
+    return { ok: false, message: "Invalid Animal ID." };
   }
   const validatedAnimalId = parsedId.data;
   const staffMemberId = user.personId;
 
-  // Array fields must be pulled with getAll — Object.fromEntries keeps only
-  // the last value for repeated keys.
-  const additionalColors = formData.getAll("additionalColors");
-
-  const validatedFields = AnimalFormSchema.safeParse({
-    ...Object.fromEntries(formData.entries()),
-    additionalColors,
-  });
+  const validatedFields = AnimalEditFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
-      errors: z.flattenError(validatedFields.error).fieldErrors,
+      ok: false,
       message: "Missing or invalid fields. Failed to update animal.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<AnimalEditFormInput>,
     };
   }
 
@@ -287,19 +314,13 @@ const _updateAnimal = async (
     animalName,
     estimatedBirthDate,
     sex,
-    size,
     healthStatus,
     listingStatus,
-    microchipNumber,
-    description,
     species: speciesId,
     breed: breedId,
     primaryColor: primaryColorId,
     additionalColors: additionalColorIds,
     heightCm,
-    city,
-    state,
-    currentUnitId,
   } = validatedFields.data;
 
   // This guard prevents archiving from the intake form.
@@ -308,12 +329,13 @@ const _updateAnimal = async (
     listingStatus === AnimalListingStatus.PENDING_ADOPTION
   ) {
     return {
+      ok: false,
       message:
         "Invalid Action: This status can only be set via the outcome or application approval process.",
     };
   }
 
-  const numericHeight = heightCm === "" ? undefined : heightCm;
+  const mapped = toAnimalData(validatedFields.data);
 
   // Full color set = primary + additionals, de-duped in case the primary
   // also appears in the additional list.
@@ -394,9 +416,9 @@ const _updateAnimal = async (
         name: string;
         location: { name: string };
       } | null = null;
-      if (currentUnitId) {
+      if (mapped.currentUnitId) {
         const unit = await tx.unit.findFirst({
-          where: { id: currentUnitId, deletedAt: null },
+          where: { id: mapped.currentUnitId, deletedAt: null },
           select: {
             id: true,
             name: true,
@@ -423,15 +445,18 @@ const _updateAnimal = async (
           name: animalName,
           birthDate: estimatedBirthDate,
           sex: sex,
-          size: size || null,
-          description: description,
-          heightCm: numericHeight,
+          size: mapped.size,
+          description: mapped.description,
+          // null genuinely clears the column now — a cleared field arrives
+          // as null (never ""), so no more "" ? undefined : heightCm guard
+          // that silently left a stale value in place.
+          heightCm,
           healthStatus: healthStatus,
           listingStatus: listingStatus,
           publishedAt: publishedAt,
-          microchipNumber: microchipNumber,
-          city: city,
-          state: state,
+          microchipNumber: mapped.microchipNumber,
+          city: mapped.city,
+          state: mapped.state,
           currentUnit: resolvedUnitId
             ? { connect: { id: resolvedUnitId } }
             : { disconnect: true },
@@ -472,16 +497,22 @@ const _updateAnimal = async (
   } catch (error) {
     console.error("Database Error updating animal:", error);
     if (error instanceof ConflictError || error instanceof NotFoundError) {
-      return { message: error.message };
+      return { ok: false, message: error.message };
     }
     return {
+      ok: false,
       message: "Database Error: Failed to update animal record.",
     };
   }
 
   revalidatePath("/dashboard/animals");
   revalidatePath(`/dashboard/animals/${validatedAnimalId}`);
-  redirect(`/dashboard/animals/${validatedAnimalId}`);
+
+  return {
+    ok: true,
+    message: "Animal updated successfully.",
+    redirectTo: `/dashboard/animals/${validatedAnimalId}`,
+  };
 };
 
 const _togglePetLike = async (

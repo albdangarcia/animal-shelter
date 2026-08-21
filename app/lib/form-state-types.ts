@@ -1,31 +1,5 @@
 export const INITIAL_FORM_STATE = { message: null, errors: {} };
 
-// Error messages for animal form
-export type AnimalFormState = {
-  message?: string | null;
-  errors?: {
-    animalName?: string[];
-    species?: string[];
-    breed?: string[];
-    primaryColor?: string[];
-    additionalColors?: string[];
-    sex?: string[];
-    size?: string[];
-    estimatedBirthDate?: string[];
-    healthStatus?: string[];
-    microchipNumber?: string[];
-    intakeType?: string[];
-    intakeDate?: string[];
-    sourcePartnerId?: string[];
-    foundAddress?: string[];
-    foundCity?: string[];
-    foundState?: string[];
-    surrenderingPersonId?: string[];
-    notes?: string[];
-  };
-};
-
-
 export interface AnimalTaskFormState {
   success?: boolean;
   message?: string | null;

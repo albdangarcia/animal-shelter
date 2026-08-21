@@ -1,21 +1,10 @@
 "use client";
 
 import { createAnimal, updateAnimal } from "@/app/lib/actions/animal.actions";
-import {
-  startTransition,
-  useActionState,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-import { usePathname, useSearchParams } from "next/navigation";
-import {
-  INITIAL_FORM_STATE,
-  AnimalFormState,
-} from "@/app/lib/form-state-types";
+import { useEffect, useMemo, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { Control, FieldValues, useForm } from "react-hook-form";
-import { z } from "zod";
+import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { format } from "date-fns";
 import {
   Calendar as CalendarIcon,
@@ -75,7 +64,11 @@ import {
   animalSexOptions,
   intakeTypeOptions,
 } from "@/app/lib/utils/enum-formatter";
-import { AnimalFormSchema } from "@/app/lib/zod-schemas/animal.schemas";
+import {
+  CreateAnimalFormSchema,
+  AnimalEditFormSchema,
+  type CreateAnimalFormInput,
+} from "@/app/lib/zod-schemas/animal.schemas";
 import { sizeOptions } from "@/components/dashboard/animals/table/animal-options";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import {
@@ -87,17 +80,12 @@ import {
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { IntakeFormFields } from "./intake-form-fields";
-import { IntakeFieldsValues } from "@/app/lib/zod-schemas/intake.schema";
 import { UnitPickerLocation } from "@/app/lib/data/locations/unit-picker.data";
 import { formatDateToLongString } from "@/app/lib/utils/date-utils";
-import {
-  WEIGHT_UNITS,
-  WeightUnit,
-  toGrams,
-  fromGrams,
-  roundForUnit,
-  formatWeight,
-} from "@/app/lib/utils/weight-format";
+import { formatWeight } from "@/app/lib/utils/weight-format";
+import { WeightInput } from "@/components/forms/weight-input";
+import { NumberField } from "@/components/forms/number-field";
+import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
 // Sentinel for the "Unplaced" option — Radix Select forbids empty-string item
 // values, so we map this back to "" (currentUnitId = null) on change.
@@ -107,7 +95,7 @@ const UNPLACED_VALUE = "__unplaced__";
 // back to "" (size = null) on change.
 const SIZE_NOT_SPECIFIED_VALUE = "__not_specified__";
 
-type AnimalFormValues = z.infer<typeof AnimalFormSchema>;
+type AnimalFormValues = CreateAnimalFormInput;
 
 interface AnimalFormProps {
   speciesList: SpeciesPayload[];
@@ -124,6 +112,7 @@ const AnimalForm = ({
   unitOptions,
   animal,
 }: AnimalFormProps) => {
+  const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const query = searchParams.toString();
@@ -155,20 +144,10 @@ const AnimalForm = ({
     );
   }, [isEditMode, isStatusLocked, animal]);
 
-  const action = isEditMode ? updateAnimal.bind(null, animal.id) : createAnimal;
-
-  const [state, formAction, isPending] = useActionState<
-    AnimalFormState,
-    FormData
-  >(action, INITIAL_FORM_STATE);
+  const [isPending, startSubmitTransition] = useTransition();
   const [currentSpeciesId, setCurrentSpeciesId] = useState(
     animal?.speciesId || "",
   );
-
-  // Which of the two WEIGHT_UNITS (g/kg or oz/lb) the weight input is
-  // currently expressed in. Only relevant at intake — there's no prior entry
-  // to infer a starting magnitude from, so this just starts on the large unit.
-  const [weightUnit, setWeightUnit] = useState<WeightUnit>(WEIGHT_UNITS[1]);
 
   // Location is only a UI cascade helper (not persisted). In edit mode, derive
   // the initial location from the animal's placed unit so both selects pre-fill.
@@ -180,8 +159,19 @@ const AnimalForm = ({
       : "",
   );
 
-  const form = useForm({
-    resolver: standardSchemaResolver(AnimalFormSchema),
+  const form = useForm<AnimalFormValues>({
+    // AnimalEditFormSchema validates a strict subset of AnimalFormValues (no
+    // intake fields), so its resolver's ResolverOptions type isn't assignable
+    // to one built for the full CreateAnimalFormInput shape even though every
+    // value it will ever receive from this form satisfies it. Both branches
+    // are cast to the shape this form's single useForm<> generic commits to.
+    resolver: (isEditMode
+      ? standardSchemaResolver(AnimalEditFormSchema)
+      : standardSchemaResolver(CreateAnimalFormSchema)) as Resolver<
+      AnimalFormValues,
+      unknown,
+      AnimalFormValues
+    >,
     defaultValues: isEditMode
       ? {
           animalName: animal.name,
@@ -194,7 +184,7 @@ const AnimalForm = ({
           sex: animal.sex,
           size: animal.size ?? "",
           estimatedBirthDate: new Date(animal.birthDate),
-          heightCm: animal.heightCm ?? "",
+          heightCm: animal.heightCm ?? null,
           healthStatus:
             animal.healthStatus || animalHealthStatusOptions[0].value,
           microchipNumber: animal.microchipNumber || "",
@@ -217,8 +207,8 @@ const AnimalForm = ({
           breed: "",
           primaryColor: "",
           additionalColors: [],
-          weightGrams: "",
-          heightCm: "",
+          weightGrams: null,
+          heightCm: null,
           microchipNumber: "",
           listingStatus: AnimalListingStatus.DRAFT,
           currentUnitId: "",
@@ -232,37 +222,22 @@ const AnimalForm = ({
         },
   });
 
-  useEffect(() => {
-    if (state.message) {
-      toast.error(state.message);
-    }
+  const onSubmit = (values: AnimalFormValues) => {
+    startSubmitTransition(async () => {
+      const result = isEditMode
+        ? await updateAnimal(animal.id, values)
+        : await createAnimal(values);
 
-    if (state.errors) {
-      for (const [key, value] of Object.entries(state.errors)) {
-        form.setError(key as keyof AnimalFormValues, {
-          type: "server",
-          message: value?.join(", "),
-        });
+      if (result.ok) {
+        toast.success(result.message);
+        if (result.redirectTo) {
+          router.push(result.redirectTo);
+        }
+        return;
       }
-    }
-  }, [state, form]);
 
-  const onSubmit = (data: AnimalFormValues) => {
-    const formData = new FormData();
-    for (const [key, value] of Object.entries(data)) {
-      if (key === "additionalColors") {
-        // Append each id separately so formData.getAll() works server-side.
-        (value as string[] | undefined)?.forEach((id) =>
-          formData.append("additionalColors", id),
-        );
-      } else if (value instanceof Date) {
-        formData.append(key, value.toISOString());
-      } else if (value != null && value !== "") {
-        formData.append(key, String(value));
-      }
-    }
-    startTransition(() => {
-      formAction(formData);
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
     });
   };
 
@@ -274,7 +249,7 @@ const AnimalForm = ({
   // breed change. RHF's dirtyFields compares against defaultValues, so in
   // create mode (default ""), clearing the field back to "" would read as
   // NOT dirty — an explicit touched flag is needed to catch that case.
-  const selectedBreedId = form.watch("breed");
+  const selectedBreedId = useWatch({ control: form.control, name: "breed" });
   const [isSizeTouched, setIsSizeTouched] = useState(false);
 
   useEffect(() => {
@@ -287,6 +262,11 @@ const AnimalForm = ({
   }, [selectedBreedId, isSizeTouched, form, selectedSpecies]);
 
   const selectedLocation = unitOptions.find((l) => l.id === currentLocationId);
+
+  // Hoisted for the additionalColors render prop below — a hook cannot be
+  // called inside render, and the compiler bails on the whole file if any
+  // watch() call is left in place.
+  const primaryColorId = useWatch({ control: form.control, name: "primaryColor" });
 
   // Advisory occupancy hint, e.g. "A-3 · 2/2" or "A-3 · 2/2 (full)". Never blocks.
   const formatUnitOption = (unit: UnitPickerLocation["units"][number]) => {
@@ -344,7 +324,7 @@ const AnimalForm = ({
                           setCurrentSpeciesId(value);
                           form.setValue("breed", "");
                         }}
-                        defaultValue={field.value}
+                        value={field.value ?? ""}
                       >
                         <FormControl>
                           <SelectTrigger className="w-full">
@@ -422,7 +402,6 @@ const AnimalForm = ({
                   control={form.control}
                   name="additionalColors"
                   render={({ field }) => {
-                    const primaryColorId = form.watch("primaryColor");
                     const selectedIds: string[] = field.value || [];
                     // Options exclude the currently-selected primary color.
                     const available = colors.filter(
@@ -655,90 +634,29 @@ const AnimalForm = ({
                   <FormField
                     control={form.control}
                     name="weightGrams"
-                    render={({ field }) => {
-                      const grams =
-                        field.value === undefined || field.value === ""
-                          ? null
-                          : Number(field.value);
-                      const displayValue =
-                        grams == null
-                          ? ""
-                          : String(roundForUnit(fromGrams(grams, weightUnit), weightUnit));
-
-                      return (
-                        <FormItem className="col-span-1">
-                          <FormLabel>Weight</FormLabel>
-                          <div className="flex gap-2">
-                            <FormControl>
-                              <Input
-                                type="number"
-                                step="any"
-                                placeholder="e.g., 15.5"
-                                value={displayValue}
-                                onChange={(e) => {
-                                  const val = e.target.value;
-                                  if (val === "") {
-                                    field.onChange("");
-                                    return;
-                                  }
-                                  const parsed = parseFloat(val);
-                                  if (Number.isNaN(parsed)) return;
-                                  field.onChange(
-                                    Math.round(toGrams(parsed, weightUnit)),
-                                  );
-                                }}
-                              />
-                            </FormControl>
-                            <div className="flex rounded-md border overflow-hidden shrink-0">
-                              {WEIGHT_UNITS.map((u) => (
-                                <Button
-                                  key={u}
-                                  type="button"
-                                  size="sm"
-                                  variant={u === weightUnit ? "default" : "ghost"}
-                                  className="rounded-none px-2"
-                                  onClick={() => setWeightUnit(u)}
-                                >
-                                  {u}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }}
-                  />
-                )}
-
-                <FormField
-                  control={form.control}
-                  name="heightCm"
-                  render={({ field }) => {
-                    const value =
-                      field.value === undefined || field.value === ""
-                        ? ""
-                        : String(field.value);
-
-                    return (
+                    render={({ field }) => (
                       <FormItem className="col-span-1">
-                        <FormLabel>Height (cm)</FormLabel>
+                        <FormLabel>Weight</FormLabel>
                         <FormControl>
-                          <Input
-                            type="number"
-                            placeholder="e.g., 55"
-                            {...field}
-                            value={value}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              field.onChange(val === "" ? "" : parseFloat(val));
-                            }}
+                          <WeightInput
+                            placeholder="e.g., 15.5"
+                            value={field.value}
+                            onChange={field.onChange}
                           />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
-                    );
-                  }}
+                    )}
+                  />
+                )}
+
+                <NumberField
+                  control={form.control}
+                  name="heightCm"
+                  label="Height (cm)"
+                  className="col-span-1"
+                  decimal
+                  placeholder="e.g., 55"
                 />
                 <FormField
                   control={form.control}
@@ -835,7 +753,7 @@ const AnimalForm = ({
                       <FormLabel>State</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value ?? ""}
                       >
                         <FormControl>
                           <SelectTrigger className="w-full">
@@ -937,13 +855,8 @@ const AnimalForm = ({
             {/* Intake Section - Only show on CREATE mode */}
             {!isEditMode && (
               <IntakeFormFields
-                control={
-                  form.control as unknown as Control<
-                    FieldValues & IntakeFieldsValues
-                  >
-                }
+                control={form.control}
                 partners={partners}
-                isEditMode={false}
                 returnTo={returnTo}
                 allowCreatePerson={false}
               />
