@@ -21,6 +21,7 @@ import { ApplicationStatus, AnimalListingStatus } from "@/prisma/generated/enums
 import type { Prisma } from "@/prisma/generated/client";
 import { auth } from "@/auth";
 import { ConflictError } from "../utils/errors";
+import { safeInternalPath } from "../utils/safe-redirect";
 import {
   isAllowedTransition,
   illegalTransitionMessage,
@@ -495,10 +496,10 @@ const _staffEditPersonApplication = async (
   // Navigate to callbackUrl if it's a safe relative path, otherwise fall back.
   // Still validated here rather than trusted from the client: the form passes
   // it through, but this action is reachable by direct POST.
-  const destination =
-    callbackUrl && callbackUrl.startsWith("/") && !callbackUrl.startsWith("//")
-      ? callbackUrl
-      : personApplicationsPath(validatedPersonId);
+  const destination = safeInternalPath(
+    callbackUrl,
+    personApplicationsPath(validatedPersonId)
+  );
 
   return {
     ok: true,
