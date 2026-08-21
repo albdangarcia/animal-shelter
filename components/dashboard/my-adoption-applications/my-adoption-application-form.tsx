@@ -51,8 +51,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import { livingSituationOptions } from "@/app/lib/utils/enum-formatter";
 import { AdoptionApplicantDefaultsPayload } from "@/app/lib/data/my-adoption-applications.data";
-import { toYesNo } from "@/app/lib/utils/form-utils";
+import { toYesNo, boolToSelectValue } from "@/app/lib/utils/form-utils";
 import { NumberInput } from "@/components/forms/number-input";
+import { isRenting } from "@/app/lib/zod-schemas/household-profile.schemas";
 
 type MyApplicationFormData = MyAdoptionAppFormInput;
 
@@ -101,7 +102,7 @@ export function MyApplicationForm({
       livingSituation:
         application?.livingSituation ?? household?.livingSituation,
       hasYard: toYesNo(application?.hasYard ?? household?.hasYard),
-      landlordPermission: toYesNo(
+      landlordPermission: boolToSelectValue(
         application?.landlordPermission ?? household?.landlordPermission,
       ),
       hasChildren: toYesNo(application?.hasChildren ?? household?.hasChildren),
@@ -127,6 +128,11 @@ export function MyApplicationForm({
     control: form.control,
     name: "hasChildren",
   });
+  const livingSituation = useWatch({
+    control: form.control,
+    name: "livingSituation",
+  });
+  const renting = isRenting(livingSituation);
 
   // Ids are ordinary leading arguments now instead of .bind()-ed onto the
   // action, so the create/edit choice is made at the call site.
@@ -399,43 +405,42 @@ export function MyApplicationForm({
                     </FormItem>
                   )}
                 />
-                {/* TODO: follow HouseholdFormFields and render this only when
-                    isRenting(livingSituation). The shared household refinement
-                    now requires it only for renters, so the star here
-                    overstates it and homeowners answer a question
-                    toHouseholdData() stores as null. */}
-                <FormField
-                  control={form.control}
-                  name="landlordPermission"
-                  render={({ field }) => (
-                    <FormItem className="space-y-3">
-                      <div className="text-sm font-medium">
-                        If you rent, do you have landlord permission? *
-                      </div>
-                      <FormControl>
-                        <RadioGroup
-                          onValueChange={field.onChange}
-                          value={field.value ?? ""}
-                          className="flex items-center space-x-4"
-                        >
-                          <FormItem className="flex items-center space-x-2">
-                            <FormControl>
-                              <RadioGroupItem value="true" />
-                            </FormControl>
-                            <FormLabel className="font-normal">Yes</FormLabel>
-                          </FormItem>
-                          <FormItem className="flex items-center space-x-2">
-                            <FormControl>
-                              <RadioGroupItem value="false" />
-                            </FormControl>
-                            <FormLabel className="font-normal">No</FormLabel>
-                          </FormItem>
-                        </RadioGroup>
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {renting && (
+                  <FormField
+                    control={form.control}
+                    name="landlordPermission"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <div className="text-sm font-medium">
+                          Do you have landlord permission? *
+                        </div>
+                        <FormControl>
+                          <RadioGroup
+                            onValueChange={field.onChange}
+                            value={field.value ?? ""}
+                            className="flex items-center space-x-4"
+                          >
+                            <FormItem className="flex items-center space-x-2">
+                              <FormControl>
+                                <RadioGroupItem value="true" />
+                              </FormControl>
+                              <FormLabel className="font-normal">
+                                Yes
+                              </FormLabel>
+                            </FormItem>
+                            <FormItem className="flex items-center space-x-2">
+                              <FormControl>
+                                <RadioGroupItem value="false" />
+                              </FormControl>
+                              <FormLabel className="font-normal">No</FormLabel>
+                            </FormItem>
+                          </RadioGroup>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <FormField
                   control={form.control}
                   name="hasChildren"

@@ -22,7 +22,7 @@ import {
   MyAdoptionAppFormSchema,
   type MyAdoptionAppFormInput,
 } from "@/app/lib/zod-schemas/myAdoptionApplication.schema";
-import { toYesNo } from "@/app/lib/utils/form-utils";
+import { toYesNo, boolToSelectValue } from "@/app/lib/utils/form-utils";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { staffEditPersonApplication } from "@/app/lib/actions/adoption-application.actions";
 import { PersonApplicationForEditPayload } from "@/app/lib/data/people-directory/person-adoption-applications.data";
@@ -61,7 +61,7 @@ const StaffAdoptionApplicationEditForm = ({
       livingSituation: application.livingSituation,
       householdSize: application.householdSize,
       hasYard: toYesNo(application.hasYard),
-      landlordPermission: toYesNo(application.landlordPermission),
+      landlordPermission: boolToSelectValue(application.landlordPermission),
       hasChildren: toYesNo(application.hasChildren),
       childrenAges: (application.childrenAges ?? []).join(", "),
       otherAnimalsDescription: application.otherAnimalsDescription ?? "",

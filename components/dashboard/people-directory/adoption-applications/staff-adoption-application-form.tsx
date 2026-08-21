@@ -44,7 +44,7 @@ import {
 } from "@/app/lib/zod-schemas/application.schemas";
 import { PersonForApplicationFormPayload } from "@/app/lib/types";
 import { AnimalSearchResult } from "@/app/lib/data/animals/animal.data";
-import { toYesNo } from "@/app/lib/utils/form-utils";
+import { toYesNo, boolToSelectValue } from "@/app/lib/utils/form-utils";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { staffCreateAdoptionApplication } from "@/app/lib/actions/adoption-application.actions";
 import {
@@ -85,7 +85,7 @@ const StaffAdoptionApplicationForm = ({
       livingSituation: hp?.livingSituation,
       householdSize: hp?.householdSize ?? 1,
       hasYard: toYesNo(hp?.hasYard),
-      landlordPermission: toYesNo(hp?.landlordPermission),
+      landlordPermission: boolToSelectValue(hp?.landlordPermission),
       hasChildren: toYesNo(hp?.hasChildren),
       childrenAges: hp?.childrenAges?.join(", ") ?? "",
       otherAnimalsDescription: hp?.otherAnimalsDescription ?? "",

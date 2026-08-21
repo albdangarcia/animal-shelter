@@ -24,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { US_STATES } from "@/app/lib/constants/us-states";
 import { livingSituationOptions } from "@/app/lib/utils/enum-formatter";
 import { NumberInput } from "@/components/forms/number-input";
+import { isRenting } from "@/app/lib/zod-schemas/household-profile.schemas";
 
 /**
  * The exact subset of fields this section renders. Both staff adoption forms
@@ -79,6 +80,8 @@ export const ApplicantFieldsSection = ({
   // React Compiler cannot memoize safely, so it skips compiling the whole
   // component. Taking `control` alone also drops one cast per call site.
   const hasChildrenValue = useWatch({ control, name: "hasChildren" });
+  const livingSituation = useWatch({ control, name: "livingSituation" });
+  const renting = isRenting(livingSituation);
 
   return (
     <>
@@ -300,42 +303,40 @@ export const ApplicantFieldsSection = ({
               </FormItem>
             )}
           />
-          {/* TODO: follow HouseholdFormFields and render this only when
-              isRenting(livingSituation). The shared household refinement now
-              requires it only for renters, so the star here overstates it and
-              homeowners answer a question toHouseholdData() stores as null. */}
-          <FormField
-            control={control}
-            name="landlordPermission"
-            render={({ field }) => (
-              <FormItem className="space-y-3">
-                <div className="text-sm font-medium">
-                  If they rent, do they have landlord permission? *
-                </div>
-                <FormControl>
-                  <RadioGroup
-                    onValueChange={field.onChange}
-                    value={field.value ?? ""}
-                    className="flex items-center space-x-4"
-                  >
-                    <FormItem className="flex items-center space-x-2">
-                      <FormControl>
-                        <RadioGroupItem value="true" />
-                      </FormControl>
-                      <FormLabel className="font-normal">Yes</FormLabel>
-                    </FormItem>
-                    <FormItem className="flex items-center space-x-2">
-                      <FormControl>
-                        <RadioGroupItem value="false" />
-                      </FormControl>
-                      <FormLabel className="font-normal">No</FormLabel>
-                    </FormItem>
-                  </RadioGroup>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {renting && (
+            <FormField
+              control={control}
+              name="landlordPermission"
+              render={({ field }) => (
+                <FormItem className="space-y-3">
+                  <div className="text-sm font-medium">
+                    Do they have landlord permission? *
+                  </div>
+                  <FormControl>
+                    <RadioGroup
+                      onValueChange={field.onChange}
+                      value={field.value ?? ""}
+                      className="flex items-center space-x-4"
+                    >
+                      <FormItem className="flex items-center space-x-2">
+                        <FormControl>
+                          <RadioGroupItem value="true" />
+                        </FormControl>
+                        <FormLabel className="font-normal">Yes</FormLabel>
+                      </FormItem>
+                      <FormItem className="flex items-center space-x-2">
+                        <FormControl>
+                          <RadioGroupItem value="false" />
+                        </FormControl>
+                        <FormLabel className="font-normal">No</FormLabel>
+                      </FormItem>
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
           <FormField
             control={control}
             name="hasChildren"
