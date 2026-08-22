@@ -22,7 +22,8 @@
     "postinstall": "npm run prisma:generate",
     "prisma:push": "dotenv -e .env.local -e .env.development -- prisma db push",
     "prisma:generate": "dotenv -e .env.local -e .env.development -- prisma generate",
-    "prisma:studio": "dotenv -e .env.local -e .env.development -- prisma studio"
+    "prisma:studio": "dotenv -e .env.local -e .env.development -- prisma studio",
+    "prisma:backfill-phone": "dotenv -e .env.local -e .env.development -e .env -- tsx prisma/backfill-phone-normalized.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.0",
