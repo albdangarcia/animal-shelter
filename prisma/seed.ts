@@ -32,6 +32,7 @@ import {
   randomInt,
 } from "@/app/lib/utils/seeding-utils";
 import { computeStays } from "@/app/lib/utils/stay-utils";
+import { normalizePhone } from "@/app/lib/utils/phone";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { resolveDatabaseUrl } from "@/app/lib/db-url";
 
@@ -1034,6 +1035,7 @@ interface GeneratedWalkInPerson {
   name: string;
   email: string;
   phone: string;
+  phoneNormalized: string | null;
   address: string;
   city: string;
   state: string;
@@ -1050,10 +1052,12 @@ function generateWalkInPersons(count: number): GeneratedWalkInPerson[] {
     const last = getRandomItem(walkInLastNames);
     const location = getRandomItem(walkInLocations);
     const street = getRandomItem(walkInStreetNames);
+    const phone = `212-555-${String(1000 + i).padStart(4, "0")}`;
     persons.push({
       name: `${first} ${last}`,
       email: `${first.toLowerCase()}.${last.toLowerCase()}.${i}@example.com`,
-      phone: `212-555-${String(1000 + i).padStart(4, "0")}`,
+      phone,
+      phoneNormalized: normalizePhone(phone),
       address: `${100 + i * 3} ${street} St`,
       city: location.city,
       state: location.state,
@@ -1796,6 +1800,7 @@ async function seedPersonsAndUsers() {
         name: pData.name,
         email: pData.email,
         phone: pData.phone,
+        phoneNormalized: normalizePhone(pData.phone),
         address: pData.address,
         city: pData.city,
         state: pData.state,

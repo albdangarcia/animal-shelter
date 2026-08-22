@@ -20,6 +20,7 @@ import { fetchDuplicatePersonCandidate } from "../data/people-directory/people-d
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import { safeInternalPath } from "../utils/safe-redirect";
+import { normalizePhone } from "../utils/phone";
 
 const PEOPLE_DIRECTORY_PATH = "/dashboard/people-directory";
 
@@ -65,6 +66,7 @@ const toPersonData = (values: PersonFormInput) => ({
   name: values.name,
   email: values.email || null,
   phone: values.phone || null,
+  phoneNormalized: normalizePhone(values.phone),
   address: values.address || null,
   city: values.city || null,
   state: values.state || null,
