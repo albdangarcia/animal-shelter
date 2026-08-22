@@ -37,6 +37,8 @@ export type DuplicateCandidate = {
   id: string;
   name: string;
   matchedOn: "email" | "phone";
+  phone: string | null;
+  email: string | null;
 };
 
 export type PersonDuplicateWarning = {
@@ -107,7 +109,13 @@ const findDuplicate = async (
     // The form renders this as an inline Alert with its own copy, so this
     // message is only reached by a caller that hasn't handled the branch.
     message: `A person with this ${matchedOn} already exists.`,
-    duplicate: { id: duplicate.id, name: duplicate.name, matchedOn },
+    duplicate: {
+      id: duplicate.id,
+      name: duplicate.name,
+      matchedOn,
+      phone: duplicate.phone,
+      email: duplicate.email,
+    },
   };
 };
 
