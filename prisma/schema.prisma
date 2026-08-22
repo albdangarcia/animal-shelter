@@ -27,6 +27,7 @@ model Person {
   name    String
   email   String? @unique
   phone   String?
+  phoneNormalized String?
   address String?
   city    String?
   state   String?
@@ -70,6 +71,7 @@ model Person {
   AnimalActivityLog AnimalActivityLog[]
   vitalsLogs        VitalsLog[]
 
+  @@index([phoneNormalized])
   @@map("persons")
 }
 
