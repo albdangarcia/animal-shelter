@@ -38,9 +38,6 @@ interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
   returnTo: string;
   suggestedSurrenderingPersonId?: string;
   suggestedSurrenderingPersonLabel?: string;
-  // See PersonPicker's allowCreate — disabled where the host form holds
-  // unsaved data that a round-trip to the person-create page would lose.
-  allowCreatePerson?: boolean;
 }
 
 export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
@@ -49,7 +46,6 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
   returnTo,
   suggestedSurrenderingPersonId,
   suggestedSurrenderingPersonLabel,
-  allowCreatePerson = true,
 }: IntakeFormFieldsProps<T>) => {
   // useWatch rather than a passed-in watch(): watch() subscribes the component
   // that called useForm, so the React Compiler memoizes this child and the
@@ -268,7 +264,6 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                       suggestedPersonId={suggestedSurrenderingPersonId}
                       suggestedPersonLabel={suggestedSurrenderingPersonLabel}
                       returnTo={returnTo}
-                      allowCreate={allowCreatePerson}
                     />
                   </FormControl>
                   <FormMessage />

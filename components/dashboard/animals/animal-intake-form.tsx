@@ -858,7 +858,6 @@ const AnimalForm = ({
                 control={form.control}
                 partners={partners}
                 returnTo={returnTo}
-                allowCreatePerson={false}
               />
             )}
           </CardContent>
