@@ -18,7 +18,7 @@ import {
   PersonSectionCardPayload,
 } from "../../types";
 import { cuidSchema, searchQuerySchema } from "../../zod-schemas/common.schemas";
-import { normalizePhone } from "../../utils/phone";
+import { normalizePhone, normalizePhoneQuery } from "../../utils/phone";
 
 const PICKER_RESULT_LIMIT = 10;
 
@@ -31,18 +31,25 @@ const nonAdminPersonFilter: Prisma.PersonWhereInput = {
 };
 
 // Shared with _fetchPeopleForPicker. Matched against name/email/phone.
-const personSearchWhereClause = (query: string): Prisma.PersonWhereInput => ({
-  AND: [
-    nonAdminPersonFilter,
-    {
-      OR: [
-        { name: { contains: query, mode: "insensitive" } },
-        { email: { contains: query, mode: "insensitive" } },
-        { phone: { contains: query, mode: "insensitive" } },
-      ],
-    },
-  ],
-});
+const personSearchWhereClause = (query: string): Prisma.PersonWhereInput => {
+  const digitsQuery = normalizePhoneQuery(query);
+
+  return {
+    AND: [
+      nonAdminPersonFilter,
+      {
+        OR: [
+          { name: { contains: query, mode: "insensitive" } },
+          { email: { contains: query, mode: "insensitive" } },
+          { phone: { contains: query, mode: "insensitive" } },
+          ...(digitsQuery
+            ? [{ phoneNormalized: { contains: digitsQuery } }]
+            : []),
+        ],
+      },
+    ],
+  };
+};
 
 const _fetchPeople = async (
   queryInput: string,
