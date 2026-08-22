@@ -2,7 +2,7 @@
 
 import { createReIntake } from "@/app/lib/actions/intake.actions";
 import { useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useForm } from "react-hook-form";
 import { Loader2 } from "lucide-react";
@@ -45,15 +45,15 @@ import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 interface ReIntakeFormProps {
   animal: AnimalReIntakeFormPayload;
   partners: PartnerPayload[];
+  canCreatePerson?: boolean;
 }
 
-const ReIntakeForm = ({ animal, partners }: ReIntakeFormProps) => {
+const ReIntakeForm = ({
+  animal,
+  partners,
+  canCreatePerson,
+}: ReIntakeFormProps) => {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const query = searchParams.toString();
-  const returnTo = query ? `${pathname}?${query}` : pathname;
-
   const [isPending, startSubmitTransition] = useTransition();
 
   const form = useForm<ReIntakeFormInput>({
@@ -141,7 +141,7 @@ const ReIntakeForm = ({ animal, partners }: ReIntakeFormProps) => {
             <IntakeFormFields
               control={form.control}
               partners={partners}
-              returnTo={returnTo}
+              canCreatePerson={canCreatePerson}
             />
           </CardContent>
 

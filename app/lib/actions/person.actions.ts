@@ -15,6 +15,7 @@ import {
   StaffPersonFormSchema,
   type PersonFormInput,
 } from "../zod-schemas/people-directory.schemas";
+import type { PersonPickerOption } from "../types";
 import { fetchDuplicatePersonCandidate } from "../data/people-directory/people-directory.data";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
@@ -46,6 +47,16 @@ export type PersonDuplicateWarning = {
 
 export type PersonActionResult =
   | FormResult<PersonFormInput>
+  | PersonDuplicateWarning;
+
+// The create dialog needs the newly created row, but the shared FormResult
+// cannot be widened because other actions use it. Keep this success payload
+// local to the create action instead.
+type CreatePersonResult =
+  | Extract<FormResult<PersonFormInput>, { ok: false }>
+  | (Extract<FormResult<PersonFormInput>, { ok: true }> & {
+      person: PersonPickerOption;
+    })
   | PersonDuplicateWarning;
 
 // Single mapper for all three actions: the nullable Person columns must be
@@ -94,7 +105,7 @@ const _createPerson = async (
   returnTo: string | null,
   confirmDuplicate: boolean,
   values: PersonFormInput,
-): Promise<PersonActionResult> => {
+): Promise<CreatePersonResult> => {
   const validatedFields = StaffPersonFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
@@ -111,13 +122,18 @@ const _createPerson = async (
     if (duplicate) return duplicate;
   }
 
-  let newPersonId: string;
+  let person: PersonPickerOption;
 
   try {
-    const person = await prisma.person.create({
+    person = await prisma.person.create({
       data: toPersonData(validatedFields.data),
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+      },
     });
-    newPersonId = person.id;
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -141,9 +157,10 @@ const _createPerson = async (
   return {
     ok: true,
     message: "Person created successfully.",
+    person,
     // returnTo originates in the URL and is re-checked here rather than
     // trusted from the client: this action is reachable by direct POST.
-    redirectTo: safeInternalPath(returnTo, personPath(newPersonId)),
+    redirectTo: safeInternalPath(returnTo, personPath(person.id)),
   };
 };
 

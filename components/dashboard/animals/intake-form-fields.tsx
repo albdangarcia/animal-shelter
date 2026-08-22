@@ -35,17 +35,17 @@ import { PersonPicker } from "@/components/common/person-picker";
 interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
   control: Control<T>;
   partners: PartnerPayload[];
-  returnTo: string;
   suggestedSurrenderingPersonId?: string;
   suggestedSurrenderingPersonLabel?: string;
+  canCreatePerson?: boolean;
 }
 
 export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
   control,
   partners,
-  returnTo,
   suggestedSurrenderingPersonId,
   suggestedSurrenderingPersonLabel,
+  canCreatePerson,
 }: IntakeFormFieldsProps<T>) => {
   // useWatch rather than a passed-in watch(): watch() subscribes the component
   // that called useForm, so the React Compiler memoizes this child and the
@@ -263,7 +263,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                       onChange={(id) => field.onChange(id ?? "")}
                       suggestedPersonId={suggestedSurrenderingPersonId}
                       suggestedPersonLabel={suggestedSurrenderingPersonLabel}
-                      returnTo={returnTo}
+                      canCreatePerson={canCreatePerson}
                     />
                   </FormControl>
                   <FormMessage />

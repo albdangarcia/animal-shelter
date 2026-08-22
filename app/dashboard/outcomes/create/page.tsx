@@ -11,6 +11,8 @@ import Link from "next/link";
 import { ArrowLeft, Archive } from "lucide-react";
 import { AnimalListingStatus } from "@/prisma/generated/enums";
 import ActionBlockedMessage from "@/components/action-blocked-message";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -36,7 +38,10 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
     return notFound();
   }
 
-  const partners = await fetchPartners();
+  const [partners, canCreatePerson] = await Promise.all([
+    fetchPartners(),
+    hasPermission(AppPermissions.PERSONS_MANAGE),
+  ]);
   if (!partners) {
     return notFound();
   }
@@ -70,6 +75,7 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
           partners={partners}
           suggestedOwnerId={suggestedOwner?.id}
           suggestedOwnerLabel={suggestedOwner?.name}
+          canCreatePerson={canCreatePerson}
         />
       )}
     </main>

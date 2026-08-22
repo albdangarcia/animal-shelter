@@ -2,7 +2,7 @@
 
 import { createAnimal, updateAnimal } from "@/app/lib/actions/animal.actions";
 import { useEffect, useMemo, useState, useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { format } from "date-fns";
@@ -103,6 +103,7 @@ interface AnimalFormProps {
   colors: ColorPayload[];
   unitOptions: UnitPickerLocation[];
   animal?: AnimalIntakeFormPayload;
+  canCreatePerson?: boolean;
 }
 
 const AnimalForm = ({
@@ -111,13 +112,9 @@ const AnimalForm = ({
   colors,
   unitOptions,
   animal,
+  canCreatePerson,
 }: AnimalFormProps) => {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const query = searchParams.toString();
-  const returnTo = query ? `${pathname}?${query}` : pathname;
-
   const isEditMode = !!animal;
 
   const isStatusLocked =
@@ -857,7 +854,7 @@ const AnimalForm = ({
               <IntakeFormFields
                 control={form.control}
                 partners={partners}
-                returnTo={returnTo}
+                canCreatePerson={canCreatePerson}
               />
             )}
           </CardContent>

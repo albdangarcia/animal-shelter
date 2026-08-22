@@ -7,7 +7,7 @@ import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -60,16 +60,6 @@ export function DirectAddFosterForm({
 }: DirectAddFosterFormProps) {
   const [isPending, startSubmitTransition] = useTransition();
   const router = useRouter();
-
-  // Where PersonPicker's "Add a new person" round-trip lands. Must be the live
-  // URL, not a bare path: this page reads `personId` (the "Add as Foster"
-  // prefill) and `returnTo` (Cancel target) off the query string, and a
-  // hardcoded path drops both. Distinct from the `returnTo` prop above, which
-  // is this form's own Cancel destination.
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const query = searchParams.toString();
-  const pickerReturnTo = query ? `${pathname}?${query}` : pathname;
 
   const form = useForm<DirectAddFosterFormValues>({
     resolver: standardSchemaResolver(CreateFosterProfileSchema),
@@ -132,7 +122,6 @@ export function DirectAddFosterForm({
                       onChange={(id) => field.onChange(id ?? "")}
                       suggestedPersonId={suggestedPersonId}
                       suggestedPersonLabel={suggestedPersonLabel}
-                      returnTo={pickerReturnTo}
                       canCreatePerson={canCreatePerson}
                     />
                   </FormControl>
