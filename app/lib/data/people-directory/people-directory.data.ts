@@ -18,6 +18,7 @@ import {
   PersonSectionCardPayload,
 } from "../../types";
 import { cuidSchema, searchQuerySchema } from "../../zod-schemas/common.schemas";
+import { normalizePhone } from "../../utils/phone";
 
 const PICKER_RESULT_LIMIT = 10;
 
@@ -187,7 +188,9 @@ const _fetchDuplicatePersonCandidate = async (
   phone: string | null,
   excludePersonId?: string,
 ): Promise<PersonPickerOption | null> => {
-  if (!email && !phone) {
+  const normalizedPhone = normalizePhone(phone);
+
+  if (!email && !normalizedPhone) {
     return null;
   }
 
@@ -199,7 +202,7 @@ const _fetchDuplicatePersonCandidate = async (
           {
             OR: [
               ...(email ? [{ email: { equals: email, mode: "insensitive" as const } }] : []),
-              ...(phone ? [{ phone }] : []),
+              ...(normalizedPhone ? [{ phoneNormalized: normalizedPhone }] : []),
             ],
           },
           ...(excludePersonId ? [{ NOT: { id: excludePersonId } }] : []),

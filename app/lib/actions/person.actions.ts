@@ -88,9 +88,17 @@ const findDuplicate = async (
 
   if (!duplicate) return null;
 
-  const matchedOn: "email" | "phone" =
-    values.email && duplicate.email?.toLowerCase() === values.email.toLowerCase()
-      ? "email"
+  const emailMatches =
+    Boolean(values.email && duplicate.email?.toLowerCase() === values.email.toLowerCase());
+  const normalizedInputPhone = normalizePhone(values.phone);
+  const normalizedDuplicatePhone = normalizePhone(duplicate.phone);
+  const phoneMatches =
+    Boolean(normalizedInputPhone && normalizedInputPhone === normalizedDuplicatePhone);
+
+  const matchedOn: "email" | "phone" = emailMatches
+    ? "email"
+    : phoneMatches
+      ? "phone"
       : "phone";
 
   return {
