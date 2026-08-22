@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useDebouncedCallback } from "use-debounce";
 import { ChevronsUpDown, UserPlus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,14 +18,14 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { PersonPickerOption } from "@/app/lib/types";
+import PersonCreateDialog from "@/components/dashboard/people-directory/person-create-dialog";
 
 interface PersonPickerProps {
   value: string | null;
   onChange: (id: string | null) => void;
   suggestedPersonId?: string;
   suggestedPersonLabel?: string;
-  returnTo: string;
-  // Shows the "Add a new person" round-trip link. Defaults to false: creation
+  // Shows the "Add a new person" action. Defaults to false: creation
   // needs PERSONS_MANAGE, which only a server component can check, so the host
   // must opt in explicitly. Fails closed — a host that omits it hides a button
   // rather than offering one that errors on submit.
@@ -38,7 +37,6 @@ export const PersonPicker = ({
   onChange,
   suggestedPersonId,
   suggestedPersonLabel,
-  returnTo,
   canCreatePerson = false,
 }: PersonPickerProps) => {
   const [selected, setSelected] = useState<PersonPickerOption | null>(() => {
@@ -64,6 +62,7 @@ export const PersonPicker = ({
   }, [value, suggestedPersonId, onChange]);
 
   const [open, setOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PersonPickerOption[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -150,92 +149,105 @@ export const PersonPicker = ({
   }
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (!next) {
-          resetSearch();
-        }
-      }}
-    >
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="w-full justify-between font-normal text-muted-foreground"
-        >
-          Search for a person...
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0"
-        align="start"
+    <>
+      <Popover
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          if (!next) {
+            resetSearch();
+          }
+        }}
       >
-        <Command shouldFilter={false}>
-          <CommandInput
-            placeholder="Type a name, email, or phone..."
-            value={query}
-            onValueChange={(newQuery) => {
-              setQuery(newQuery);
-              if (!newQuery.trim()) {
-                debouncedSearch.cancel();
-                abortControllerRef.current?.abort();
-                setResults([]);
-                setIsSearching(false);
-              } else {
-                debouncedSearch(newQuery);
-              }
-            }}
-          />
-          <CommandList>
-            {isSearching ? (
-              <CommandEmpty>Searching...</CommandEmpty>
-            ) : results.length === 0 ? (
-              canCreatePerson ? (
-                <CommandGroup>
-                  <CommandItem asChild value="add-new-person">
-                    <Link
-                      href={`/dashboard/people-directory/new?returnTo=${encodeURIComponent(returnTo)}`}
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            className="w-full justify-between font-normal text-muted-foreground"
+          >
+            Search for a person...
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="w-[--radix-popover-trigger-width] p-0"
+          align="start"
+        >
+          <Command shouldFilter={false}>
+            <CommandInput
+              placeholder="Type a name, email, or phone..."
+              value={query}
+              onValueChange={(newQuery) => {
+                setQuery(newQuery);
+                if (!newQuery.trim()) {
+                  debouncedSearch.cancel();
+                  abortControllerRef.current?.abort();
+                  setResults([]);
+                  setIsSearching(false);
+                } else {
+                  debouncedSearch(newQuery);
+                }
+              }}
+            />
+            <CommandList>
+              {isSearching ? (
+                <CommandEmpty>Searching...</CommandEmpty>
+              ) : results.length === 0 ? (
+                canCreatePerson ? (
+                  <CommandGroup>
+                    <CommandItem
+                      value="add-new-person"
+                      onSelect={() => {
+                        setOpen(false);
+                        resetSearch();
+                        setCreateOpen(true);
+                      }}
                     >
                       <UserPlus className="h-4 w-4" />
                       Add a new person
-                    </Link>
-                  </CommandItem>
-                </CommandGroup>
+                    </CommandItem>
+                  </CommandGroup>
+                ) : (
+                  <CommandEmpty>
+                    {query.trim()
+                      ? "No matching person found. Add them to the directory first, then start this intake."
+                      : "Type a name, email, or phone number to search."}
+                  </CommandEmpty>
+                )
               ) : (
-                <CommandEmpty>
-                  {query.trim()
-                    ? "No matching person found. Add them to the directory first, then start this intake."
-                    : "Type a name, email, or phone number to search."}
-                </CommandEmpty>
-              )
-            ) : (
-              <CommandGroup>
-                {results.map((person) => (
-                  <CommandItem
-                    key={person.id}
-                    value={person.id}
-                    onSelect={() => handleSelect(person)}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate">{person.name}</p>
-                      {(person.email || person.phone) && (
-                        <p className="truncate text-xs text-muted-foreground">
-                          {person.email ?? person.phone}
-                        </p>
-                      )}
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
+                <CommandGroup>
+                  {results.map((person) => (
+                    <CommandItem
+                      key={person.id}
+                      value={person.id}
+                      onSelect={() => handleSelect(person)}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate">{person.name}</p>
+                        {(person.email || person.phone) && (
+                          <p className="truncate text-xs text-muted-foreground">
+                            {person.email ?? person.phone}
+                          </p>
+                        )}
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+      <PersonCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={(person) => {
+          handleSelect(person);
+          setCreateOpen(false);
+        }}
+      />
+    </>
   );
 };

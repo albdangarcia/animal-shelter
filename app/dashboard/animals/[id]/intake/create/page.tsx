@@ -14,6 +14,7 @@ import ReIntakeForm from "@/components/dashboard/animals/re-intake-form";
 import { notFound } from "next/navigation";
 import ActionBlockedMessage from "@/components/action-blocked-message";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
 
 interface Props {
   params: IDParamType;
@@ -33,8 +34,11 @@ const Page = async ({ params }: Props) => {
 };
 
 const PageContent = async ({ animalId }: { animalId: string }) => {
-  const animal = await fetchAnimalForReIntake(animalId);
-  const partners = await fetchPartners();
+  const [animal, partners, canCreatePerson] = await Promise.all([
+    fetchAnimalForReIntake(animalId),
+    fetchPartners(),
+    hasPermission(AppPermissions.PERSONS_MANAGE),
+  ]);
 
   if (!animal) {
     return notFound();
@@ -81,7 +85,11 @@ const PageContent = async ({ animalId }: { animalId: string }) => {
         </Link>
       </Button>
 
-      <ReIntakeForm animal={animal} partners={partners} />
+      <ReIntakeForm
+        animal={animal}
+        partners={partners}
+        canCreatePerson={canCreatePerson}
+      />
     </main>
   );
 };

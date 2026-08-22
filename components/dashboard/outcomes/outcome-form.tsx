@@ -3,7 +3,7 @@
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useTransition } from "react";
 import { useForm, useWatch, type DefaultValues } from "react-hook-form";
 import { toast } from "sonner";
@@ -71,6 +71,7 @@ interface OutcomeFormProps {
   partners: PartnerPayload[]; // For the 'Transfer' option
   suggestedOwnerId?: string; // For the 'Return to Owner' option
   suggestedOwnerLabel?: string;
+  canCreatePerson?: boolean;
 }
 
 const buildDefaultValues = (
@@ -94,18 +95,11 @@ export function OutcomeForm({
   partners,
   suggestedOwnerId,
   suggestedOwnerLabel,
+  canCreatePerson,
 }: OutcomeFormProps) {
   const isEditMode = !!outcome;
   const router = useRouter();
   const [isPending, startSubmitTransition] = useTransition();
-
-  // Client-side only: this is where PersonPicker's "Add a new person" link
-  // should come back to. It is never sent to the action, so it needs no
-  // server-side open-redirect check.
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-  const query = searchParams.toString();
-  const returnTo = query ? `${pathname}?${query}` : pathname;
 
   const isAdoptionOutcome = !!application;
 
@@ -297,7 +291,7 @@ export function OutcomeForm({
                         onChange={(id) => field.onChange(id ?? "")}
                         suggestedPersonId={suggestedOwnerId}
                         suggestedPersonLabel={suggestedOwnerLabel}
-                        returnTo={returnTo}
+                        canCreatePerson={canCreatePerson}
                       />
                     </FormControl>
                     <FormMessage />

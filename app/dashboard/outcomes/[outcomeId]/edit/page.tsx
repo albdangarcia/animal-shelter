@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
 
 interface Props {
   params: Promise<{ outcomeId: string }>;
@@ -13,9 +15,10 @@ interface Props {
 const EditOutcomePage = async ({ params }: Props) => {
   const { outcomeId } = await params;
 
-  const [outcome, partners] = await Promise.all([
+  const [outcome, partners, canCreatePerson] = await Promise.all([
     fetchOutcomeById(outcomeId),
     fetchPartners(),
+    hasPermission(AppPermissions.PERSONS_MANAGE),
   ]);
 
   if (!outcome || !outcome.animal) {
@@ -42,6 +45,7 @@ const EditOutcomePage = async ({ params }: Props) => {
         animal={{ id: animal.id, name: animal.name }}
         application={application || undefined}
         partners={partners}
+        canCreatePerson={canCreatePerson}
       />
     </main>
   );
