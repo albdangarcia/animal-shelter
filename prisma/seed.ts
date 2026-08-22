@@ -96,6 +96,33 @@ const personData = [
     state: "NY",
     zipCode: "11201",
   },
+  {
+    name: "Alex Duplicate",
+    email: "alex.duplicate@example.com",
+    phone: "(212) 555-0188",
+    address: "100 Broadway",
+    city: "New York",
+    state: "NY",
+    zipCode: "10005",
+  },
+  {
+    name: "Sam Duplicate",
+    email: "sam.duplicate@example.com",
+    phone: "212.555.0188",
+    address: "200 Broadway",
+    city: "New York",
+    state: "NY",
+    zipCode: "10005",
+  },
+  {
+    name: "Unparseable Phone Contact",
+    email: "unparseable.phone@example.com",
+    phone: "call the front desk",
+    address: "300 Madison Ave",
+    city: "New York",
+    state: "NY",
+    zipCode: "10017",
+  },
 ];
 
 const allColors = {
@@ -1052,7 +1079,15 @@ function generateWalkInPersons(count: number): GeneratedWalkInPerson[] {
     const last = getRandomItem(walkInLastNames);
     const location = getRandomItem(walkInLocations);
     const street = getRandomItem(walkInStreetNames);
-    const phone = `212-555-${String(1000 + i).padStart(4, "0")}`;
+    const num = String(1000 + i).padStart(4, "0");
+    const phoneFormats = [
+      `212-555-${num}`,
+      `(212) 555-${num}`,
+      `212.555.${num}`,
+      `+1 212-555-${num}`,
+      `212555${num}`,
+    ];
+    const phone = phoneFormats[i % phoneFormats.length];
     persons.push({
       name: `${first} ${last}`,
       email: `${first.toLowerCase()}.${last.toLowerCase()}.${i}@example.com`,
