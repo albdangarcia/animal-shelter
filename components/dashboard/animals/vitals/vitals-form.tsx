@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { format } from "date-fns";
@@ -34,16 +34,8 @@ import {
   type VitalsFormValues,
 } from "@/app/lib/zod-schemas/vitals.schemas";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
-import { NumberInput } from "@/components/forms/number-input";
 import { NumberField } from "@/components/forms/number-field";
-import {
-  WEIGHT_UNITS,
-  WeightUnit,
-  inferWeightUnit,
-  toGrams,
-  fromGrams,
-  roundForUnit,
-} from "@/app/lib/utils/weight-format";
+import { WeightInput } from "@/components/forms/weight-input";
 
 interface VitalsFormProps {
   animalId: string;
@@ -71,29 +63,6 @@ export function VitalsForm({
   const isEditMode = !!vitalsLog;
 
   const [isPending, startSubmitTransition] = useTransition();
-
-  // The toggle defaults to whichever of the two WEIGHT_UNITS fits the most
-  // recent known weight (e.g. a 180g kitten defaults to oz, not lb). Once the
-  // person changes it, unitTouched locks it for the rest of the session — it
-  // must never re-infer on re-render or because some other field changed.
-  // Re-inference only runs when inferenceSource itself changes (e.g. the
-  // Next.js router reuses this component across a client-side navigation to
-  // a different animal's create-vitals page). Adjusted during render, per
-  // React's guidance for syncing state from a changed prop, rather than in a
-  // useEffect — a setState call in an effect body causes an extra render.
-  const inferenceSource = vitalsLog?.weightGrams ?? previousWeightGrams;
-  const [unit, setUnit] = useState<WeightUnit>(() =>
-    inferWeightUnit(inferenceSource),
-  );
-  const [unitTouched, setUnitTouched] = useState(false);
-  const [lastInferenceSource, setLastInferenceSource] = useState(inferenceSource);
-
-  if (inferenceSource !== lastInferenceSource) {
-    setLastInferenceSource(inferenceSource);
-    if (!unitTouched) {
-      setUnit(inferWeightUnit(inferenceSource));
-    }
-  }
 
   const form = useForm<VitalsFormValues>({
     resolver: standardSchemaResolver(VitalsFormSchema),
@@ -125,49 +94,20 @@ export function VitalsForm({
           <FormField
             control={form.control}
             name="weightGrams"
-            render={({ field }) => {
-              const grams = field.value;
-              const displayValue =
-                grams == null ? null : roundForUnit(fromGrams(grams, unit), unit);
-
-              return (
-                <FormItem className="md:col-span-3">
-                  <FormLabel>Weight</FormLabel>
-                  <div className="flex gap-2">
-                    <FormControl>
-                      <NumberInput
-                        decimal
-                        placeholder="0"
-                        value={displayValue}
-                        onChange={(value) => {
-                          field.onChange(
-                            value == null ? null : Math.round(toGrams(value, unit)),
-                          );
-                        }}
-                      />
-                    </FormControl>
-                    <div className="flex rounded-md border overflow-hidden shrink-0">
-                      {WEIGHT_UNITS.map((u) => (
-                        <Button
-                          key={u}
-                          type="button"
-                          size="sm"
-                          variant={u === unit ? "default" : "ghost"}
-                          className="rounded-none"
-                          onClick={() => {
-                            setUnit(u);
-                            setUnitTouched(true);
-                          }}
-                        >
-                          {u}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
+            render={({ field }) => (
+              <FormItem className="md:col-span-3">
+                <FormLabel>Weight</FormLabel>
+                <FormControl>
+                  <WeightInput
+                    placeholder="0"
+                    value={field.value}
+                    onChange={field.onChange}
+                    inferFrom={previousWeightGrams}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
 
           {/* Temperature */}
