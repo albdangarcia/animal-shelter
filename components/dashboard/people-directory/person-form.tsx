@@ -164,10 +164,16 @@ const PersonForm = ({
                   Possible duplicate person
                 </AlertTitle>
                 <AlertDescription className="text-amber-800 dark:text-amber-400">
-                  <span>
-                    A person with this {duplicate.matchedOn} already exists:{" "}
-                    {duplicate.name}.
-                  </span>
+                  {duplicate.matchedOn === "phone" ? (
+                    <span>
+                      This phone matches an existing contact: {duplicate.name}
+                      {duplicate.phone ? ` (${duplicate.phone})` : ""}.
+                    </span>
+                  ) : (
+                    <span>
+                      A person with this email already exists: {duplicate.name}.
+                    </span>
+                  )}
                   {duplicate.matchedOn === "email" && (
                     <span>
                       This email is already in use by another person — it

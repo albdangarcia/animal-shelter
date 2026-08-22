@@ -18,6 +18,7 @@ import {
   PersonSectionCardPayload,
 } from "../../types";
 import { cuidSchema, searchQuerySchema } from "../../zod-schemas/common.schemas";
+import { normalizePhone, normalizePhoneQuery } from "../../utils/phone";
 
 const PICKER_RESULT_LIMIT = 10;
 
@@ -30,18 +31,25 @@ const nonAdminPersonFilter: Prisma.PersonWhereInput = {
 };
 
 // Shared with _fetchPeopleForPicker. Matched against name/email/phone.
-const personSearchWhereClause = (query: string): Prisma.PersonWhereInput => ({
-  AND: [
-    nonAdminPersonFilter,
-    {
-      OR: [
-        { name: { contains: query, mode: "insensitive" } },
-        { email: { contains: query, mode: "insensitive" } },
-        { phone: { contains: query, mode: "insensitive" } },
-      ],
-    },
-  ],
-});
+const personSearchWhereClause = (query: string): Prisma.PersonWhereInput => {
+  const digitsQuery = normalizePhoneQuery(query);
+
+  return {
+    AND: [
+      nonAdminPersonFilter,
+      {
+        OR: [
+          { name: { contains: query, mode: "insensitive" } },
+          { email: { contains: query, mode: "insensitive" } },
+          { phone: { contains: query, mode: "insensitive" } },
+          ...(digitsQuery
+            ? [{ phoneNormalized: { contains: digitsQuery } }]
+            : []),
+        ],
+      },
+    ],
+  };
+};
 
 const _fetchPeople = async (
   queryInput: string,
@@ -187,7 +195,9 @@ const _fetchDuplicatePersonCandidate = async (
   phone: string | null,
   excludePersonId?: string,
 ): Promise<PersonPickerOption | null> => {
-  if (!email && !phone) {
+  const normalizedPhone = normalizePhone(phone);
+
+  if (!email && !normalizedPhone) {
     return null;
   }
 
@@ -199,7 +209,7 @@ const _fetchDuplicatePersonCandidate = async (
           {
             OR: [
               ...(email ? [{ email: { equals: email, mode: "insensitive" as const } }] : []),
-              ...(phone ? [{ phone }] : []),
+              ...(normalizedPhone ? [{ phoneNormalized: normalizedPhone }] : []),
             ],
           },
           ...(excludePersonId ? [{ NOT: { id: excludePersonId } }] : []),

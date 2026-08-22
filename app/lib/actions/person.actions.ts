@@ -20,6 +20,7 @@ import { fetchDuplicatePersonCandidate } from "../data/people-directory/people-d
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import { safeInternalPath } from "../utils/safe-redirect";
+import { normalizePhone } from "../utils/phone";
 
 const PEOPLE_DIRECTORY_PATH = "/dashboard/people-directory";
 
@@ -36,6 +37,8 @@ export type DuplicateCandidate = {
   id: string;
   name: string;
   matchedOn: "email" | "phone";
+  phone: string | null;
+  email: string | null;
 };
 
 export type PersonDuplicateWarning = {
@@ -65,6 +68,7 @@ const toPersonData = (values: PersonFormInput) => ({
   name: values.name,
   email: values.email || null,
   phone: values.phone || null,
+  phoneNormalized: normalizePhone(values.phone),
   address: values.address || null,
   city: values.city || null,
   state: values.state || null,
@@ -86,9 +90,17 @@ const findDuplicate = async (
 
   if (!duplicate) return null;
 
-  const matchedOn: "email" | "phone" =
-    values.email && duplicate.email?.toLowerCase() === values.email.toLowerCase()
-      ? "email"
+  const emailMatches =
+    Boolean(values.email && duplicate.email?.toLowerCase() === values.email.toLowerCase());
+  const normalizedInputPhone = normalizePhone(values.phone);
+  const normalizedDuplicatePhone = normalizePhone(duplicate.phone);
+  const phoneMatches =
+    Boolean(normalizedInputPhone && normalizedInputPhone === normalizedDuplicatePhone);
+
+  const matchedOn: "email" | "phone" = emailMatches
+    ? "email"
+    : phoneMatches
+      ? "phone"
       : "phone";
 
   return {
@@ -97,7 +109,13 @@ const findDuplicate = async (
     // The form renders this as an inline Alert with its own copy, so this
     // message is only reached by a caller that hasn't handled the branch.
     message: `A person with this ${matchedOn} already exists.`,
-    duplicate: { id: duplicate.id, name: duplicate.name, matchedOn },
+    duplicate: {
+      id: duplicate.id,
+      name: duplicate.name,
+      matchedOn,
+      phone: duplicate.phone,
+      email: duplicate.email,
+    },
   };
 };
 

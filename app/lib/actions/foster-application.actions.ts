@@ -25,6 +25,7 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
 import { ActionResult } from "../types";
+import { normalizePhone } from "../utils/phone";
 import {
   isAllowedTransition,
   illegalTransitionMessage,
@@ -146,6 +147,7 @@ const _createMyFosterApplication = async (
               name: applicantName,
               email: applicantEmail || null,
               phone: applicantPhone,
+              phoneNormalized: normalizePhone(applicantPhone),
               address: applicantAddressLine2
                 ? `${applicantAddressLine1}, ${applicantAddressLine2}`
                 : applicantAddressLine1,
