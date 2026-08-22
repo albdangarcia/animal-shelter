@@ -57,12 +57,15 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { AnimalListingStatus } from "@/prisma/generated/enums";
+import {
+  AnimalHealthStatus,
+  AnimalListingStatus,
+  Sex,
+} from "@/prisma/generated/enums";
 import {
   animalHealthStatusOptions,
   animalListingStatusOptions,
   animalSexOptions,
-  intakeTypeOptions,
 } from "@/app/lib/utils/enum-formatter";
 import {
   CreateAnimalFormSchema,
@@ -183,8 +186,7 @@ const AnimalForm = ({
           size: animal.size ?? "",
           estimatedBirthDate: new Date(animal.birthDate),
           heightCm: animal.heightCm ?? null,
-          healthStatus:
-            animal.healthStatus || animalHealthStatusOptions[0].value,
+          healthStatus: animal.healthStatus ?? AnimalHealthStatus.HEALTHY,
           microchipNumber: animal.microchipNumber || "",
           listingStatus: animal.listingStatus,
           city: animal.city || "",
@@ -198,9 +200,9 @@ const AnimalForm = ({
           city: "",
           state: "",
           description: "",
-          intakeType: intakeTypeOptions[0].value,
+          intakeType: undefined,
           species: "",
-          sex: animalSexOptions[0].value,
+          sex: Sex.UNKNOWN,
           size: "",
           breed: "",
           primaryColor: "",
@@ -211,7 +213,7 @@ const AnimalForm = ({
           listingStatus: AnimalListingStatus.DRAFT,
           currentUnitId: "",
           notes: "",
-          healthStatus: animalHealthStatusOptions[0].value,
+          healthStatus: AnimalHealthStatus.HEALTHY,
           sourcePartnerId: "",
           foundAddress: "",
           foundCity: "",
