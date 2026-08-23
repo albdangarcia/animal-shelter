@@ -83,7 +83,14 @@ export function FieldInfo({ children, label, className }: FieldInfoProps) {
           onClick={(event) => {
             if (canHover && event.detail !== 0) event.preventDefault();
           }}
-          onFocus={() => setOpen(true)}
+          // Touch (and mouse-click) focus is not :focus-visible in modern
+          // browsers, only keyboard-originated focus is — so this only opens
+          // for Tab navigation. Without the guard, a tap synthesizes a focus
+          // event that opens the popover just before the click event's own
+          // Radix toggle closes it again, so the first tap does nothing.
+          onFocus={(event) => {
+            if (event.target.matches(":focus-visible")) setOpen(true);
+          }}
           onBlur={() => setOpen(false)}
           {...hoverProps}
           className={cn(
@@ -100,10 +107,6 @@ export function FieldInfo({ children, label, className }: FieldInfoProps) {
         sideOffset={6}
         // Stops the popover stealing focus from the field the user is filling.
         onOpenAutoFocus={(event) => event.preventDefault()}
-        // Without this, closing on mouseleave triggers Radix's default
-        // return-focus-to-trigger, which fires the trigger's onFocus and
-        // reopens the popover — hover would get stuck open.
-        onCloseAutoFocus={(event) => event.preventDefault()}
         className="text-muted-foreground w-64 p-3 text-sm leading-snug font-normal"
       >
         {children}
