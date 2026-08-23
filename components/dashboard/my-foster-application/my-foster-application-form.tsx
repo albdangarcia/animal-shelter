@@ -32,7 +32,6 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { US_STATES } from "@/app/lib/constants/us-states";
-import { livingSituationOptions } from "@/app/lib/utils/enum-formatter";
 import { boolToSelectValue } from "@/app/lib/utils/form-utils";
 import { createMyFosterApplication } from "@/app/lib/actions/foster-application.actions";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
@@ -70,7 +69,7 @@ export function MyFosterApplicationForm({
       applicantCity: applicantDefaults?.city ?? "",
       applicantState: applicantDefaults?.state ?? "",
       applicantZipCode: applicantDefaults?.zipCode ?? "",
-      livingSituation: household?.livingSituation || livingSituationOptions[0].value,
+      livingSituation: household?.livingSituation ?? undefined,
       hasYard: boolToSelectValue(household?.hasYard),
       landlordPermission: boolToSelectValue(household?.landlordPermission),
       hasChildren: boolToSelectValue(household?.hasChildren),

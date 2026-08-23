@@ -64,8 +64,7 @@ interface HouseholdProfileFormProps {
 const buildDefaultValues = (
   householdProfile?: HouseholdProfilePayload | null,
 ): DefaultValues<HouseholdProfileFormValues> => ({
-  livingSituation:
-    householdProfile?.livingSituation || livingSituationOptions[0].value,
+  livingSituation: householdProfile?.livingSituation ?? undefined,
   hasYard: boolToSelectValue(householdProfile?.hasYard),
   landlordPermission: boolToSelectValue(householdProfile?.landlordPermission),
   hasChildren: boolToSelectValue(householdProfile?.hasChildren),
@@ -163,7 +162,10 @@ export const HouseholdFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-3">
             <FormLabel>Living Situation *</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value}>
+            {/* value coerced to "" so Select stays controlled from the first
+                render — undefined->defined later trips React's
+                "uncontrolled to controlled" warning. */}
+            <Select onValueChange={field.onChange} value={field.value ?? ""}>
               <FormControl>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select living situation" />
