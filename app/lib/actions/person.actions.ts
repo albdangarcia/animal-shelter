@@ -68,7 +68,6 @@ const toPersonData = (values: PersonFormInput) => ({
   name: values.name,
   email: values.email || null,
   phone: values.phone || null,
-  phoneNormalized: normalizePhone(values.phone),
   address: values.address || null,
   city: values.city || null,
   state: values.state || null,

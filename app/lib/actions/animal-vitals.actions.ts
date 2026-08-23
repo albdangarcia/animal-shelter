@@ -2,8 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import prisma from "@/app/lib/prisma";
-import type { Prisma } from "@/prisma/generated/client";
+import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import {
   withAuthenticatedUser,
   SessionUser,
@@ -37,7 +36,7 @@ const toVitalsData = (data: z.output<typeof VitalsFormSchema>) => ({
  * after every vitals create/update/delete/restore.
  */
 const recomputeCurrentWeight = async (
-  tx: Prisma.TransactionClient,
+  tx: TransactionClient,
   animalId: string
 ): Promise<number | null> => {
   const latestWeighIn = await tx.vitalsLog.findFirst({
