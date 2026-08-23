@@ -16,7 +16,6 @@ import { z } from "zod";
 import { isOwnedByUser } from "../auth/ownership";
 import { Prisma } from "@/prisma/generated/client";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
-import { normalizePhone } from "../utils/phone";
 
 type MyAdoptionAppResult = FormResult<MyAdoptionAppFormInput>;
 
@@ -405,7 +404,6 @@ const _createMyAdoptionApp = async (
               name: applicantName,
               email: applicantEmail || null,
               phone: applicantPhone,
-              phoneNormalized: normalizePhone(applicantPhone),
               address: applicantAddressLine2
                 ? `${applicantAddressLine1}, ${applicantAddressLine2}`
                 : applicantAddressLine1,

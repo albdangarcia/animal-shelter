@@ -13,6 +13,7 @@
     "lint": "eslint",
     "e2e": "playwright test",
     "test": "tsx --test \"app/**/*.test.ts\"",
+    "test:db": "dotenv -e .env.local -e .env.development -e .env -- tsx --test \"prisma/**/*.test.ts\"",
     "e2e:headed": "playwright test --headed",
     "e2e:ui": "playwright test --ui",
     "e2e:install": "playwright install chromium",

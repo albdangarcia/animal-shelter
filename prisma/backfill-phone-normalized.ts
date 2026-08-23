@@ -14,6 +14,7 @@ import { PrismaClient, Prisma } from "@/prisma/generated/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { resolveDatabaseUrl } from "@/app/lib/db-url";
 import { normalizePhone } from "@/app/lib/utils/phone";
+import { phoneNormalizationExtension } from "@/app/lib/prisma-extensions/phone-normalization";
 
 interface BackfillOptions {
   dryRun: boolean;
@@ -68,7 +69,7 @@ async function main() {
   const { dryRun, force, batchSize } = options;
 
   const adapter = new PrismaPg({ connectionString: resolveDatabaseUrl("direct") });
-  const prisma = new PrismaClient({ adapter });
+  const prisma = new PrismaClient({ adapter }).$extends(phoneNormalizationExtension);
 
   try {
     console.log("Starting phone normalization backfill...");
