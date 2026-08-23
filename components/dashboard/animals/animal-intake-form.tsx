@@ -57,12 +57,15 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { AnimalListingStatus } from "@/prisma/generated/enums";
+import {
+  AnimalHealthStatus,
+  AnimalListingStatus,
+  Sex,
+} from "@/prisma/generated/enums";
 import {
   animalHealthStatusOptions,
   animalListingStatusOptions,
   animalSexOptions,
-  intakeTypeOptions,
 } from "@/app/lib/utils/enum-formatter";
 import {
   CreateAnimalFormSchema,
@@ -85,6 +88,7 @@ import { formatDateToLongString } from "@/app/lib/utils/date-utils";
 import { formatWeight } from "@/app/lib/utils/weight-format";
 import { WeightInput } from "@/components/forms/weight-input";
 import { NumberField } from "@/components/forms/number-field";
+import { FieldInfo } from "@/components/forms/field-info";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
 // Sentinel for the "Unplaced" option — Radix Select forbids empty-string item
@@ -182,8 +186,7 @@ const AnimalForm = ({
           size: animal.size ?? "",
           estimatedBirthDate: new Date(animal.birthDate),
           heightCm: animal.heightCm ?? null,
-          healthStatus:
-            animal.healthStatus || animalHealthStatusOptions[0].value,
+          healthStatus: animal.healthStatus ?? AnimalHealthStatus.HEALTHY,
           microchipNumber: animal.microchipNumber || "",
           listingStatus: animal.listingStatus,
           city: animal.city || "",
@@ -197,9 +200,9 @@ const AnimalForm = ({
           city: "",
           state: "",
           description: "",
-          intakeType: intakeTypeOptions[0].value,
+          intakeType: undefined,
           species: "",
-          sex: animalSexOptions[0].value,
+          sex: Sex.UNKNOWN,
           size: "",
           breed: "",
           primaryColor: "",
@@ -210,7 +213,7 @@ const AnimalForm = ({
           listingStatus: AnimalListingStatus.DRAFT,
           currentUnitId: "",
           notes: "",
-          healthStatus: animalHealthStatusOptions[0].value,
+          healthStatus: AnimalHealthStatus.HEALTHY,
           sourcePartnerId: "",
           foundAddress: "",
           foundCity: "",
@@ -567,7 +570,13 @@ const AnimalForm = ({
                   name="size"
                   render={({ field }) => (
                     <FormItem className="col-span-2">
-                      <FormLabel>Expected Adult Size</FormLabel>
+                      <div className="flex items-center gap-1.5">
+                        <FormLabel>Expected Adult Size</FormLabel>
+                        <FieldInfo label="About expected adult size">
+                          How big this animal is expected to be when fully
+                          grown. Not its current size.
+                        </FieldInfo>
+                      </div>
                       <Select
                         onValueChange={(value) => {
                           setIsSizeTouched(true);
@@ -593,10 +602,41 @@ const AnimalForm = ({
                           ))}
                         </SelectContent>
                       </Select>
-                      <FormDescription>
+                      {/* Visually replaced by the FieldInfo popover above, but
+                          kept mounted: FormDescription is what wires this text
+                          into the select's aria-describedby, and popover
+                          content is unmounted while closed. */}
+                      <FormDescription className="sr-only">
                         How big this animal is expected to be when fully
                         grown. Not its current size.
                       </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="healthStatus"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Health Status</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select health status" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {animalHealthStatusOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -607,7 +647,7 @@ const AnimalForm = ({
                   // this measured" field on this form) would stamp today's
                   // date on an unknown observation — the Vitals tab is the
                   // only honest place to record a new weight.
-                  <div className="col-span-1">
+                  <div className="col-span-2">
                     <FormLabel className="mb-2 block">Weight</FormLabel>
                     <p className="text-sm">
                       {animal.currentWeightGrams != null
@@ -632,7 +672,7 @@ const AnimalForm = ({
                     control={form.control}
                     name="weightGrams"
                     render={({ field }) => (
-                      <FormItem className="col-span-1">
+                      <FormItem className="col-span-2">
                         <FormLabel>Weight</FormLabel>
                         <FormControl>
                           <WeightInput
@@ -651,42 +691,15 @@ const AnimalForm = ({
                   control={form.control}
                   name="heightCm"
                   label="Height (cm)"
-                  className="col-span-1"
+                  className="col-span-2"
                   decimal
                   placeholder="e.g., 55"
                 />
                 <FormField
                   control={form.control}
-                  name="healthStatus"
-                  render={({ field }) => (
-                    <FormItem className="col-span-3">
-                      <FormLabel>Health Status</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select health status" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {animalHealthStatusOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
                   name="microchipNumber"
                   render={({ field }) => (
-                    <FormItem className="col-span-3">
+                    <FormItem className="col-span-2">
                       <FormLabel>Microchip Number</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g., 900123000456789" {...field} />
@@ -733,7 +746,7 @@ const AnimalForm = ({
                   control={form.control}
                   name="city"
                   render={({ field }) => (
-                    <FormItem className="col-span-3">
+                    <FormItem className="col-span-2">
                       <FormLabel>City</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g., Anytown" {...field} />
@@ -746,7 +759,7 @@ const AnimalForm = ({
                   control={form.control}
                   name="state"
                   render={({ field }) => (
-                    <FormItem className="col-span-3">
+                    <FormItem className="col-span-2">
                       <FormLabel>State</FormLabel>
                       <Select
                         onValueChange={field.onChange}
@@ -773,7 +786,13 @@ const AnimalForm = ({
                     "Unplaced" leaves currentUnitId null. Location is a UI-only
                     helper; only the chosen unit is persisted. */}
                 <FormItem className="col-span-3">
-                  <Label>Location</Label>
+                  <div className="flex items-center gap-1.5">
+                    <Label>Location</Label>
+                    <FieldInfo label="About location">
+                      Where the animal is physically housed. Leave as Unplaced
+                      if unknown.
+                    </FieldInfo>
+                  </div>
                   <Select
                     value={currentLocationId || UNPLACED_VALUE}
                     onValueChange={(value) => {
@@ -785,7 +804,10 @@ const AnimalForm = ({
                       form.setValue("currentUnitId", "");
                     }}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger
+                      className="w-full"
+                      aria-describedby="location-hint"
+                    >
                       <SelectValue placeholder="Select a location" />
                     </SelectTrigger>
                     <SelectContent>
@@ -797,7 +819,10 @@ const AnimalForm = ({
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-muted-foreground text-sm">
+                  {/* Not a FormField, so there's no FormDescription to wire
+                      this up — the id is referenced by the trigger's
+                      aria-describedby above. */}
+                  <p id="location-hint" className="sr-only">
                     Where the animal is physically housed. Leave as Unplaced if
                     unknown.
                   </p>
