@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { Info } from "lucide-react";
 import {
   Popover,
@@ -16,6 +16,17 @@ interface FieldInfoProps {
   label: string;
   className?: string;
 }
+
+const HOVER_QUERY = "(hover: hover) and (pointer: fine)";
+
+function subscribeToHover(onStoreChange: () => void) {
+  const mql = window.matchMedia(HOVER_QUERY);
+  mql.addEventListener("change", onStoreChange);
+  return () => mql.removeEventListener("change", onStoreChange);
+}
+
+const getHoverSnapshot = () => window.matchMedia(HOVER_QUERY).matches;
+const getHoverServerSnapshot = () => false;
 
 /**
  * Small info affordance for a form label. Renders as an icon button that opens
@@ -39,18 +50,13 @@ interface FieldInfoProps {
  */
 export function FieldInfo({ children, label, className }: FieldInfoProps) {
   const [open, setOpen] = useState(false);
-  const [canHover, setCanHover] = useState(false);
-
   // Touch devices synthesize a mouseenter on tap, which would race the click
   // and flip the popover open-then-shut. Only bind hover where it's real.
-  useEffect(() => {
-    const query = window.matchMedia("(hover: hover) and (pointer: fine)");
-    setCanHover(query.matches);
-
-    const onChange = (event: MediaQueryListEvent) => setCanHover(event.matches);
-    query.addEventListener("change", onChange);
-    return () => query.removeEventListener("change", onChange);
-  }, []);
+  const canHover = useSyncExternalStore(
+    subscribeToHover,
+    getHoverSnapshot,
+    getHoverServerSnapshot,
+  );
 
   const hoverProps = canHover
     ? {
@@ -79,6 +85,7 @@ export function FieldInfo({ children, label, className }: FieldInfoProps) {
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}
+          {...hoverProps}
           className={cn(
             "text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-4 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none",
             className,
@@ -93,6 +100,10 @@ export function FieldInfo({ children, label, className }: FieldInfoProps) {
         sideOffset={6}
         // Stops the popover stealing focus from the field the user is filling.
         onOpenAutoFocus={(event) => event.preventDefault()}
+        // Without this, closing on mouseleave triggers Radix's default
+        // return-focus-to-trigger, which fires the trigger's onFocus and
+        // reopens the popover — hover would get stuck open.
+        onCloseAutoFocus={(event) => event.preventDefault()}
         className="text-muted-foreground w-64 p-3 text-sm leading-snug font-normal"
       >
         {children}
