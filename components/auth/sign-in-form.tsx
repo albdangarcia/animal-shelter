@@ -28,8 +28,6 @@ export const SignInForm = ({ callbackUrl }: SignInFormProps) => {
       const result = await signInWithCredentials(callbackUrl, values);
 
       if (result.ok) {
-        // Unreachable in practice: next-auth's signIn() redirects internally
-        // by throwing before this line, on any successful sign-in.
         toast.success(result.message);
         return;
       }

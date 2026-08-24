@@ -1,9 +1,9 @@
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import TopNav from "./top-nav";
 import { Role } from "@/prisma/generated/enums";
 
 const TopNavWrapper = async () => {
-  const session = await auth();
+  const session = await getCachedSession();
   const showUserProfile = session ? true : false;
 
   let dashboardHref = "/dashboard";

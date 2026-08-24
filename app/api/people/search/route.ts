@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { fetchPeopleForPicker } from "@/app/lib/data/people-directory/people-directory.data";
 
 export async function GET(request: Request) {
-  const session = await auth();
+  const session = await getCachedSession();
   if (!session?.user) {
     return NextResponse.json(
       { error: "Unauthorized: You must be logged in." },

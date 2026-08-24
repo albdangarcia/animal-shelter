@@ -1,8 +1,10 @@
 "use server";
 
-import { AuthError } from "next-auth";
+import { redirect } from "next/navigation";
+import { APIError } from "better-auth/api";
 import { z } from "zod";
-import { signIn } from "@/auth";
+import { auth } from "@/auth";
+import { safeInternalPath } from "../utils/safe-redirect";
 import {
   SignInFormSchema,
   type SignInFormInput,
@@ -29,17 +31,16 @@ export const signInWithCredentials = async (
   const { email, password } = validatedFields.data;
 
   try {
-    // On success this throws internally — next-auth's signIn() redirects by
-    // itself when `redirect` isn't disabled — so the line after the try block
-    // only ever runs on failure paths that don't throw AuthError, which don't
-    // exist today but keep the function's return type honest.
-    await signIn("credentials", { email, password, redirectTo: callbackUrl });
+    await auth.api.signInEmail({ body: { email, password } });
   } catch (error) {
-    if (error instanceof AuthError && error.type === "CredentialsSignin") {
+    if (
+      error instanceof APIError &&
+      error.body?.code === "INVALID_EMAIL_OR_PASSWORD"
+    ) {
       return { ok: false, message: "Invalid email or password." };
     }
     throw error;
   }
 
-  return { ok: true, message: "Signed in successfully." };
+  redirect(safeInternalPath(callbackUrl, "/dashboard"));
 };

@@ -1,9 +1,9 @@
 import { fetchFavoritePets } from "@/app/lib/data/public.data";
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import PetCard from "../pet-card";
 
 const FavoritesGrid = async () => {
-  const session = await auth();
+  const session = await getCachedSession();
   const currentUserPersonId = session?.user?.personId;
 
   const { pets } = await fetchFavoritePets();

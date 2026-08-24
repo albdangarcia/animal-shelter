@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import { redirect } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/dashboard/nav/sidebar-links";
@@ -11,7 +11,7 @@ interface LayoutProps {
 }
 
 const Layout = async ({ children }: LayoutProps) => {
-  const session = await auth();
+  const session = await getCachedSession();
   if (!session || !session.user) {
     redirect(`/sign-in?callbackUrl=${encodeURIComponent("/dashboard")}`);
   }

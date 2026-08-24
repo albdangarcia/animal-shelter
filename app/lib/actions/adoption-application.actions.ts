@@ -19,7 +19,7 @@ import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { ApplicationStatus, AnimalListingStatus } from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import { ConflictError } from "../utils/errors";
 import { safeInternalPath } from "../utils/safe-redirect";
 import {
@@ -38,7 +38,7 @@ const _staffUpdateAdoptionApp = async (
   adoptionAppId: string,
   values: StaffUpdateAdoptionAppFormInput
 ): Promise<FormResult<StaffUpdateAdoptionAppFormInput>> => {
-  const session = await auth();
+  const session = await getCachedSession();
   if (!session?.user?.personId) {
     return {
       ok: false,
@@ -231,7 +231,7 @@ const _staffCreateAdoptionApplication = async (
   personId: string,
   values: StaffAdoptionApplicationFormInput
 ): Promise<FormResult<StaffAdoptionApplicationFormInput>> => {
-  const session = await auth();
+  const session = await getCachedSession();
   if (!session?.user?.personId) {
     return {
       ok: false,
@@ -398,7 +398,7 @@ const _staffEditPersonApplication = async (
   callbackUrl: string | null,
   values: MyAdoptionAppFormInput
 ): Promise<FormResult<MyAdoptionAppFormInput>> => {
-  const session = await auth();
+  const session = await getCachedSession();
   if (!session?.user?.personId) {
     return {
       ok: false,

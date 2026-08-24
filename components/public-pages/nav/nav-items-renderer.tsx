@@ -2,7 +2,7 @@
 
 import clsx from "clsx";
 import Link from "next/link";
-import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 interface NavLinkItem {
   name: string;
@@ -26,6 +26,8 @@ const NavItemsRenderer = ({
   itemClassName,
   signInButtonClassName,
 }: NavItemsRendererProps) => {
+  const router = useRouter();
+
   return (
     <>
       {links.map((link) =>
@@ -56,7 +58,7 @@ const NavItemsRenderer = ({
             !!onLinkClick && "hover:cursor-pointer"
           )}
           onClick={() => {
-            signIn();
+            router.push("/sign-in");
             if (onLinkClick) {
               // If mobile, also close the panel
               onLinkClick();

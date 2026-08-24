@@ -1,7 +1,8 @@
 "use client";
 
-import type { Session } from "next-auth";
-import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { authClient } from "@/app/lib/auth/auth-client";
+import type { SessionUser } from "@/app/lib/auth/session.types";
 import {
   IconDotsVertical,
   IconLogout,
@@ -27,8 +28,9 @@ import {
 } from "@/components/ui/sidebar";
 import Link from "next/link";
 
-export function NavUser({ user }: { user: Session["user"] }) {
+export function NavUser({ user }: { user: SessionUser }) {
   const { isMobile } = useSidebar();
+  const router = useRouter();
   const userName = user.name ?? "";
   const userInitials = userName
     ? userName
@@ -101,7 +103,13 @@ export function NavUser({ user }: { user: Session["user"] }) {
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => signOut({ callbackUrl: "/" })}>
+            <DropdownMenuItem
+              onClick={() =>
+                authClient.signOut({
+                  fetchOptions: { onSuccess: () => router.push("/") },
+                })
+              }
+            >
               <IconLogout />
               Log out
             </DropdownMenuItem>

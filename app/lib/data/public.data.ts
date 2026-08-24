@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import { AnimalListingStatus, AnimalSize, Sex } from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
@@ -104,7 +104,7 @@ export const fetchPublishedPets = async ({
 
   const orderBy = (sort && SORT_MAP[sort]) || DEFAULT_SORT;
 
-  const session = await auth();
+  const session = await getCachedSession();
   const personId = session?.user?.personId;
 
   const whereClause: Prisma.AnimalWhereInput = {
@@ -249,7 +249,7 @@ const AVAILABLE_STATUSES: AnimalListingStatus[] = [
 export const fetchFavoritePets = async (): Promise<{
   pets: FavoritePet[];
 }> => {
-  const session = await auth();
+  const session = await getCachedSession();
   const personId = session?.user?.personId;
 
   if (!personId) {
@@ -304,7 +304,7 @@ export const fetchPublicPagePetById = async (id: string) => {
   // Pet ID is valid, extract the data
   const validatedId = parsedId.data;
 
-  const session = await auth();
+  const session = await getCachedSession();
   const personId = session?.user?.personId;
 
   try {
@@ -399,7 +399,7 @@ export const fetchPublicPagePetById = async (id: string) => {
 };
 
 export const fetchLatestPublicAnimals = async () => {
-  const session = await auth();
+  const session = await getCachedSession();
   const personId = session?.user?.personId;
 
   // use prisma to get the latest pets
