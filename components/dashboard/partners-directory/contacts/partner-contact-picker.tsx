@@ -33,7 +33,7 @@ interface Props {
   disabled?: boolean;
 }
 
-export const PersonPicker = ({ people, value, onChange, disabled }: Props) => {
+export const PartnerContactPicker = ({ people, value, onChange, disabled }: Props) => {
   const [open, setOpen] = useState(false);
 
   const handleSelect = (person: LinkablePersonPayload) => {
