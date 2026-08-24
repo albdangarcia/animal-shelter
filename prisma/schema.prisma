@@ -23,15 +23,15 @@ enum Role {
 }
 
 model Person {
-  id      String  @id @default(cuid())
-  name    String
-  email   String? @unique
-  phone   String?
+  id              String  @id @default(cuid())
+  name            String
+  email           String? @unique
+  phone           String?
   phoneNormalized String?
-  address String?
-  city    String?
-  state   String?
-  zipCode String?
+  address         String?
+  city            String?
+  state           String?
+  zipCode         String?
 
   // A Person MIGHT have a user account for logging in.
   user User?
@@ -76,18 +76,22 @@ model Person {
 }
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique // Kept here for Auth.js/NextAuth compatibility
-  emailVerified DateTime? @map(name: "email_verified")
-  password      String?
+  id            String  @id @default(cuid())
+  /// Denormalized copy of Person.name — Better Auth requires `name` on the
+  /// user table, but the name of record lives on Person. NEVER write this
+  /// directly — kept in sync by a single writer in the person-update action.
+  name          String
+  email         String  @unique
+  emailVerified Boolean @default(false) @map(name: "email_verified")
   image         String?
-  role          Role      @default(USER)
+  role          Role    @default(USER)
 
   // The one-to-one link to the master Person record
   personId String @unique
   // Restrict to prevent accidental deletion of a Person with history
   person   Person @relation(fields: [personId], references: [id], onDelete: Restrict)
 
+  sessions Session[]
   accounts Account[]
 
   createdAt DateTime @default(now()) @map(name: "created_at")
@@ -98,22 +102,65 @@ model User {
   @@map(name: "users")
 }
 
-model Account {
-  userId            String  @map(name: "user_id")
-  type              String
-  provider          String
-  providerAccountId String  @map(name: "provider_account_id")
-  access_token      String?
-  token_type        String?
-  scope             String?
+/// Better Auth session row — first time this app has session rows; the prior
+/// strategy was JWT-only (D5).
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  expiresAt DateTime @map(name: "expires_at")
+  ipAddress String?  @map(name: "ip_address")
+  userAgent String?  @map(name: "user_agent")
+
+  userId String @map(name: "user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now()) @map(name: "created_at")
   updatedAt DateTime @updatedAt @map(name: "updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map(name: "sessions")
+}
 
-  @@id([provider, providerAccountId])
+/// Better Auth's shape, not Auth.js's — no composite PK, has `password` for
+/// credential accounts (Settled #9). `issuer` + `providerId` are distinct
+/// fields: e.g. `providerId: "credential"`, `issuer: "local:credential"`.
+model Account {
+  id         String @id @default(cuid())
+  issuer     String
+  accountId  String @map(name: "account_id")
+  providerId String @map(name: "provider_id")
+
+  userId String @map(name: "user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accessToken           String?   @map(name: "access_token")
+  refreshToken          String?   @map(name: "refresh_token")
+  idToken               String?   @map(name: "id_token")
+  accessTokenExpiresAt  DateTime? @map(name: "access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map(name: "refresh_token_expires_at")
+  scope                 String?
+  // Credential sign-in only (Settled #9). Never set for OAuth accounts.
+  password              String?
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@unique([issuer, accountId])
+  @@index([userId])
   @@map(name: "accounts")
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime @map(name: "expires_at")
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@index([identifier])
+  @@map(name: "verifications")
 }
 
 // ═══════════════════════════════════════════════════

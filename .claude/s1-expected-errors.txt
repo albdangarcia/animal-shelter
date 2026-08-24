@@ -1,0 +1,257 @@
+app/(publicpages)/page.tsx(128,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/(publicpages)/page.tsx(134,14): error TS2322: Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to type 'Key | null | undefined'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'Key | null | undefined'.
+app/(publicpages)/page.tsx(135,20): error TS2739: Type '{ [x: string]: { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]; [x: number]: never; [x: symbol]: neve...' is missing the following properties from type 'PetCardData': id, name, city, birthDate, animalImages
+app/(publicpages)/pets/[id]/adopt/page.tsx(17,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/(publicpages)/pets/[id]/page.tsx(24,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/(publicpages)/pets/[id]/page.tsx(34,5): error TS2322: Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to type 'Date'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is missing the following properties from type 'Date': toDateString, toTimeString, toLocaleDateString, toLocaleTimeString, and 37 more.
+app/(publicpages)/pets/[id]/page.tsx(39,53): error TS2345: Argument of type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to parameter of type 'Date'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is missing the following properties from type 'Date': toDateString, toTimeString, toLocaleDateString, toLocaleTimeString, and 37 more.
+app/(publicpages)/pets/[id]/page.tsx(44,20): error TS2339: Property 'applicantId' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; } | ... 32 more ... | { ...; }'.
+  Property 'applicantId' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; }'.
+app/(publicpages)/pets/[id]/page.tsx(51,33): error TS2339: Property 'name' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; } | ... 32 more ... | { ...; }'.
+  Property 'name' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; }'.
+app/(publicpages)/pets/[id]/page.tsx(54,49): error TS2339: Property 'name' does not exist on type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]'.
+  Property 'name' does not exist on type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]'.
+app/(publicpages)/pets/[id]/page.tsx(57,25): error TS2339: Property 'name' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; } | ... 32 more ... | { ...; }'.
+  Property 'name' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; }'.
+app/(publicpages)/pets/[id]/page.tsx(57,55): error TS2339: Property 'name' does not exist on type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]'.
+  Property 'name' does not exist on type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]'.
+app/(publicpages)/pets/[id]/page.tsx(58,21): error TS2339: Property 'name' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; } | ... 32 more ... | { ...; }'.
+  Property 'name' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; }'.
+app/(publicpages)/pets/[id]/page.tsx(62,5): error TS2367: This comparison appears to be unintentional because the types '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' and 'string' have no overlap.
+app/(publicpages)/pets/[id]/page.tsx(78,15): error TS2322: Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to type 'ReactNode'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'ReactNode'.
+    Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'Iterable<ReactNode>'.
+      The types returned by '[Symbol.iterator]().next(...)' are incompatible between these types.
+        Type 'IteratorResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }, undefined>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+          Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+            Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorYieldResult<ReactNode>'.
+              Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }' is not assignable to type 'ReactNode'.
+app/(publicpages)/pets/[id]/page.tsx(85,9): error TS2322: Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to type '{ id: string; createdAt: Date; updatedAt: Date; url: string; animalId: string; }[]'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type '{ id: string; createdAt: Date; updatedAt: Date; url: string; animalId: string; }[]'.
+    Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }' is missing the following properties from type '{ id: string; createdAt: Date; updatedAt: Date; url: string; animalId: string; }': url, animalId
+app/(publicpages)/pets/[id]/page.tsx(87,9): error TS2322: Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to type 'string'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'string'.
+app/(publicpages)/pets/[id]/page.tsx(96,15): error TS2322: Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to type 'ReactNode'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'ReactNode'.
+    Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'Iterable<ReactNode>'.
+      The types returned by '[Symbol.iterator]().next(...)' are incompatible between these types.
+        Type 'IteratorResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }, undefined>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+          Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+            Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorYieldResult<ReactNode>'.
+              Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }' is not assignable to type 'ReactNode'.
+app/(publicpages)/pets/[id]/page.tsx(100,15): error TS2322: Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to type 'ReactNode'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'ReactNode'.
+    Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'Iterable<ReactNode>'.
+      The types returned by '[Symbol.iterator]().next(...)' are incompatible between these types.
+        Type 'IteratorResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }, undefined>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+          Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+            Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorYieldResult<ReactNode>'.
+              Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }' is not assignable to type 'ReactNode'.
+app/(publicpages)/pets/[id]/page.tsx(100,30): error TS2322: Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to type 'ReactNode'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'ReactNode'.
+    Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'Iterable<ReactNode>'.
+      The types returned by '[Symbol.iterator]().next(...)' are incompatible between these types.
+        Type 'IteratorResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }, undefined>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+          Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+            Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorYieldResult<ReactNode>'.
+              Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }' is not assignable to type 'ReactNode'.
+app/(publicpages)/pets/[id]/page.tsx(115,64): error TS2339: Property 'name' does not exist on type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]'.
+  Property 'name' does not exist on type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]'.
+app/(publicpages)/pets/[id]/page.tsx(116,68): error TS2345: Argument of type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to parameter of type 'string | null | undefined'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'string'.
+app/(publicpages)/pets/[id]/page.tsx(118,63): error TS2345: Argument of type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to parameter of type 'AnimalSize | null | undefined'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'AnimalSize | null | undefined'.
+app/(publicpages)/pets/[id]/page.tsx(129,32): error TS2345: Argument of type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to parameter of type 'number | null | undefined'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'number'.
+app/(publicpages)/pets/[id]/page.tsx(133,41): error TS2322: Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to type 'string | number | null | undefined'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'string | number | null | undefined'.
+app/(publicpages)/pets/[id]/page.tsx(140,21): error TS2322: Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to type 'ReactNode'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'ReactNode'.
+    Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'Iterable<ReactNode>'.
+      The types returned by '[Symbol.iterator]().next(...)' are incompatible between these types.
+        Type 'IteratorResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }, undefined>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+          Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+            Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorYieldResult<ReactNode>'.
+              Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }' is not assignable to type 'ReactNode'.
+app/(publicpages)/pets/[id]/page.tsx(143,15): error TS2322: Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]' is not assignable to type 'ReactNode'.
+  Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'ReactNode'.
+    Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[]' is not assignable to type 'Iterable<ReactNode>'.
+      The types returned by '[Symbol.iterator]().next(...)' are incompatible between these types.
+        Type 'IteratorResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }, undefined>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+          Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorResult<ReactNode, any>'.
+            Type 'IteratorYieldResult<{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }>' is not assignable to type 'IteratorYieldResult<ReactNode>'.
+              Type '{ id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }' is not assignable to type 'ReactNode'.
+app/(publicpages)/pets/[id]/page.tsx(156,29): error TS2339: Property 'name' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; } | ... 32 more ... | { ...; }'.
+  Property 'name' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; }'.
+app/(publicpages)/pets/[id]/page.tsx(159,25): error TS2339: Property 'name' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; } | ... 32 more ... | { ...; }'.
+  Property 'name' does not exist on type '{ id: string; createdAt: Date; updatedAt: Date; notes: string | null; deletedAt: Date | null; animalId: string; recordedAt: Date; weightGrams: number | null; temperatureC: number | null; bodyConditionScore: number | null; recordedById: string; }'.
+app/(publicpages)/pets/favorites/page.tsx(5,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/(publicpages)/sign-in/page.tsx(2,16): error TS2305: Module '"@/auth"' has no exported member 'providerMap'.
+app/(publicpages)/sign-in/page.tsx(2,29): error TS2305: Module '"@/auth"' has no exported member 'signIn'.
+app/(publicpages)/sign-in/page.tsx(13,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/(publicpages)/sign-in/page.tsx(56,22): error TS18046: 'provider' is of type 'unknown'.
+app/(publicpages)/sign-in/page.tsx(59,32): error TS18046: 'provider' is of type 'unknown'.
+app/(publicpages)/sign-in/page.tsx(66,59): error TS18046: 'provider' is of type 'unknown'.
+app/(publicpages)/sign-in/page.tsx(68,33): error TS18046: 'provider' is of type 'unknown'.
+app/(publicpages)/sign-in/page.tsx(69,35): error TS18046: 'provider' is of type 'unknown'.
+app/(publicpages)/sign-in/page.tsx(72,43): error TS18046: 'provider' is of type 'unknown'.
+app/api/people/search/route.ts(8,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/api/upload-to-blob/route.ts(10,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/dashboard/fosters/(table)/page.tsx(66,43): error TS7006: Parameter 's' implicitly has an 'any' type.
+app/dashboard/layout.tsx(14,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/dashboard/people-directory/[id]/(with-layout)/fostering/page.tsx(45,6): error TS7006: Parameter 'p' implicitly has an 'any' type.
+app/lib/actions/adoption-application.actions.ts(41,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/lib/actions/adoption-application.actions.ts(234,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/lib/actions/adoption-application.actions.ts(401,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/lib/actions/animal-assessment.actions.ts(37,22): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-assessment.actions.ts(37,27): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal-assessment.actions.ts(217,22): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-assessment.actions.ts(217,27): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal-assessment.actions.ts(274,22): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-assessment.actions.ts(274,27): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal-assessment.actions.ts(325,22): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-assessment.actions.ts(325,27): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal-note.actions.ts(24,24): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-note.actions.ts(24,29): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal-placement.actions.ts(40,25): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-placement.actions.ts(40,30): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal-task.actions.ts(39,25): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-task.actions.ts(39,30): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal-vitals.actions.ts(100,25): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-vitals.actions.ts(100,30): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal-vitals.actions.ts(124,24): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-vitals.actions.ts(124,29): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal-vitals.actions.ts(179,24): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-vitals.actions.ts(179,29): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal-vitals.actions.ts(221,24): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-vitals.actions.ts(221,29): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal-vitals.actions.ts(263,24): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal-vitals.actions.ts(263,29): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal.actions.ts(69,25): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal.actions.ts(69,30): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal.actions.ts(300,25): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal.actions.ts(300,30): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal.actions.ts(522,20): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal.actions.ts(522,25): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/animal.actions.ts(608,25): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/animal.actions.ts(608,30): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/auth.actions.ts(5,10): error TS2305: Module '"@/auth"' has no exported member 'signIn'.
+app/lib/actions/foster-application.actions.ts(103,23): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-application.actions.ts(103,28): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/foster-application.actions.ts(116,23): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-application.actions.ts(116,28): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/foster-application.actions.ts(125,30): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-application.actions.ts(125,35): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/foster-application.actions.ts(134,30): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-application.actions.ts(134,35): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/foster-application.actions.ts(135,31): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-application.actions.ts(135,36): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/foster-application.actions.ts(144,26): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-application.actions.ts(144,31): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/foster-application.actions.ts(221,48): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-application.actions.ts(221,53): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/foster-application.actions.ts(243,24): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-application.actions.ts(243,29): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/foster-application.actions.ts(351,24): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-application.actions.ts(351,29): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/foster-placement.actions.ts(44,25): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-placement.actions.ts(44,30): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/foster-placement.actions.ts(205,25): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-placement.actions.ts(205,30): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/foster-placement.actions.ts(331,25): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/foster-placement.actions.ts(331,30): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/household-profile.actions.ts(33,20): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/household-profile.actions.ts(33,25): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/intake.actions.ts(50,25): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/intake.actions.ts(50,30): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/my-adoption-application.actions.ts(60,35): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/my-adoption-application.actions.ts(60,40): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/my-adoption-application.actions.ts(165,35): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/my-adoption-application.actions.ts(165,40): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/my-adoption-application.actions.ts(197,24): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/my-adoption-application.actions.ts(197,29): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/my-adoption-application.actions.ts(262,35): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/my-adoption-application.actions.ts(262,40): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/my-adoption-application.actions.ts(295,24): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/my-adoption-application.actions.ts(295,29): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/my-adoption-application.actions.ts(360,18): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/my-adoption-application.actions.ts(360,23): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/my-adoption-application.actions.ts(383,30): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/my-adoption-application.actions.ts(383,35): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/my-adoption-application.actions.ts(392,30): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/my-adoption-application.actions.ts(392,35): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/my-adoption-application.actions.ts(393,31): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/my-adoption-application.actions.ts(393,36): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/my-adoption-application.actions.ts(402,26): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/my-adoption-application.actions.ts(402,31): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/outcome.actions.ts(42,25): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/outcome.actions.ts(42,30): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/partner-note.actions.ts(51,19): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/partner-note.actions.ts(51,24): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/person-note.actions.ts(50,19): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/person-note.actions.ts(50,24): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/actions/person.actions.ts(248,20): error TS18048: 'user' is possibly 'undefined'.
+app/lib/actions/person.actions.ts(248,25): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/auth/hasPermission.ts(13,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/lib/auth/hasPermission.ts(24,27): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type 'Record<Role, readonly AppPermission[]>'.
+app/lib/auth/protected-actions.ts(16,27): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/lib/data/fosters/my-foster-animals.data.ts(42,20): error TS18048: 'user' is possibly 'undefined'.
+app/lib/data/fosters/my-foster-animals.data.ts(42,25): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/data/fosters/my-foster-application.data.ts(46,28): error TS18048: 'user' is possibly 'undefined'.
+app/lib/data/fosters/my-foster-application.data.ts(46,33): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/data/fosters/my-foster-application.data.ts(57,22): error TS18048: 'user' is possibly 'undefined'.
+app/lib/data/fosters/my-foster-application.data.ts(57,27): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/data/fosters/my-foster-application.data.ts(84,28): error TS18048: 'user' is possibly 'undefined'.
+app/lib/data/fosters/my-foster-application.data.ts(84,33): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/data/my-adoption-applications.data.ts(26,20): error TS18048: 'user' is possibly 'undefined'.
+app/lib/data/my-adoption-applications.data.ts(26,25): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/data/my-adoption-applications.data.ts(122,20): error TS18048: 'user' is possibly 'undefined'.
+app/lib/data/my-adoption-applications.data.ts(122,25): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/data/my-adoption-applications.data.ts(176,20): error TS18048: 'user' is possibly 'undefined'.
+app/lib/data/my-adoption-applications.data.ts(176,25): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/data/my-adoption-applications.data.ts(252,20): error TS18048: 'user' is possibly 'undefined'.
+app/lib/data/my-adoption-applications.data.ts(252,25): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/data/people-directory/people-directory.data.ts(334,20): error TS18048: 'user' is possibly 'undefined'.
+app/lib/data/people-directory/people-directory.data.ts(334,25): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/data/people-directory/people-directory.data.ts(412,26): error TS18048: 'user' is possibly 'undefined'.
+app/lib/data/people-directory/people-directory.data.ts(412,31): error TS2339: Property 'personId' does not exist on type 'User'.
+app/lib/data/public.data.ts(107,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/lib/data/public.data.ts(190,14): error TS2322: Type '{ [x: string]: { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]; [x: number]: never; [x: symbol]: neve...' is not assignable to type '{ id: string; name: string; state: string | null; city: string | null; birthDate: Date; listingStatus: AnimalListingStatus; likes: { userId: string; }[]; animalImages: { ...; }[]; }[]'.
+  Type '{ [x: string]: { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; speciesId: string; typicalSize: AnimalSize | null; }[] | { id: string; name: string; createdAt: Date; updatedAt: Date; deletedAt: Date | null; }[] | ... 31 more ... | { ...; }[]; [x: number]: never; [x: symbol]: neve...' is missing the following properties from type '{ id: string; name: string; state: string | null; city: string | null; birthDate: Date; listingStatus: AnimalListingStatus; likes: { userId: string; }[]; animalImages: { ...; }[]; }': id, name, state, city, and 4 more.
+app/lib/data/public.data.ts(252,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/lib/data/public.data.ts(307,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+app/lib/data/public.data.ts(402,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+components/dashboard/nav/side-nav-user.tsx(32,20): error TS18048: 'user' is possibly 'undefined'.
+components/dashboard/nav/side-nav-user.tsx(50,35): error TS18048: 'user' is possibly 'undefined'.
+components/dashboard/nav/side-nav-user.tsx(57,18): error TS18048: 'user' is possibly 'undefined'.
+components/dashboard/nav/side-nav-user.tsx(59,22): error TS18048: 'user' is possibly 'undefined'.
+components/dashboard/nav/side-nav-user.tsx(75,37): error TS18048: 'user' is possibly 'undefined'.
+components/dashboard/nav/side-nav-user.tsx(82,20): error TS18048: 'user' is possibly 'undefined'.
+components/dashboard/nav/side-nav-user.tsx(84,24): error TS18048: 'user' is possibly 'undefined'.
+components/public-pages/nav/top-nav-wrapper.tsx(6,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+components/public-pages/pets/favorites/favorites-grid.tsx(6,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+components/public-pages/pets/pet-grid.tsx(25,25): error TS2349: This expression is not callable.
+  Type 'Auth<{ emailAndPassword: { enabled: true; disableSignUp: true; }; plugins: [{ id: "next-cookies"; version: string; hooks: { before: { matcher(ctx: HookEndpointContext): boolean; handler: Middleware<...>; }[]; after: { ...; }[]; }; }]; database: (options: BetterAuthOptions) => DBAdapter<...>; socialProviders: { ...; ...' has no call signatures.
+prisma/seed.ts(1855,11): error TS2353: Object literal may only specify known properties, and 'password' does not exist in type '(Without<UserUncheckedCreateInput, UserCreateInput> & UserCreateInput & object) | { personId?: undefined; ... 11 more ...; accounts?: Exact<...>; }'.
