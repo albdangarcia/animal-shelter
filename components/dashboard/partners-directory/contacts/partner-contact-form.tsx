@@ -26,7 +26,7 @@ import {
 } from "@/app/lib/actions/partner-contact.actions";
 import { PartnerContactFormSchema } from "@/app/lib/zod-schemas/partners-directory.schemas";
 import { PartnerContactsPayload, LinkablePersonPayload } from "@/app/lib/types";
-import { PersonPicker, type SelectedPerson } from "./person-picker";
+import { PartnerContactPicker, type SelectedPerson } from "./partner-contact-picker";
 
 const INITIAL_FORM_STATE: PartnerContactFormState = {
   success: false,
@@ -147,7 +147,7 @@ export const PartnerContactForm = ({
           render={() => (
             <FormItem>
               <FormLabel>Person</FormLabel>
-              <PersonPicker
+              <PartnerContactPicker
                 people={people}
                 value={selectedPerson}
                 onChange={handlePersonChange}
