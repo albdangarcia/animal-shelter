@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { auth } from "@/auth";
+import { getCachedSession } from "./session";
 import { rolePermissions } from "./roles.config";
 import { type AppPermission } from "./permissions";
 
@@ -10,7 +10,7 @@ import { type AppPermission } from "./permissions";
  * @returns A boolean indicating if the user has the permission.
  */
 export const hasPermission = cache(async (requiredPermission: AppPermission) => {
-  const session = await auth();
+  const session = await getCachedSession();
   if (!session?.user) {
     return false;
   }
@@ -20,8 +20,10 @@ export const hasPermission = cache(async (requiredPermission: AppPermission) => 
     return false;
   }
 
-  // Get the list of permissions for the user's role
-  const userPermissions = rolePermissions[userRole];
+  // Get the list of permissions for the user's role. `role` now originates
+  // from a database string column (D3) rather than an enum-typed read, so a
+  // missing key would throw on `.includes` without the fallback.
+  const userPermissions = rolePermissions[userRole] ?? [];
 
   // Check if the required permission is in the user's list
   return userPermissions.includes(requiredPermission);

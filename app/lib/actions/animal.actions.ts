@@ -520,6 +520,9 @@ const _togglePetLike = async (
   animalId: string
 ): Promise<{ success: boolean; message: string }> => {
   const personId = user.personId;
+  if (!personId) {
+    return { success: false, message: "Access Denied." };
+  }
   const parsedPetId = cuidSchema.safeParse(animalId);
   if (!parsedPetId.success) {
     return { success: false, message: "Invalid Pet ID format." };

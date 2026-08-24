@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react";
-import type { Session } from "next-auth";
+import type { SessionUser } from "@/app/lib/auth/session.types";
 import { IconPaw } from "@tabler/icons-react";
 import Link from "next/link";
 import { NavDocuments } from "@/components/dashboard/nav/side-nav-documents";
@@ -20,7 +20,7 @@ import {
 import { NavDocument, NavItem } from "./nav-links.config";
 
 interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
-  user: Session["user"];
+  user: SessionUser;
   navMainItems: NavItem[];
   documentItems: NavDocument[];
   navSecondaryItems: NavItem[];

@@ -40,6 +40,9 @@ const _fetchMyFosterAnimals = async (
   user: SessionUser,
 ): Promise<MyFosterAnimalsResult> => {
   const personId = user.personId;
+  if (!personId) {
+    return { hasFosterProfile: false, currentPlacements: [], pastPlacements: [] };
+  }
 
   try {
     const fosterProfile = await prisma.fosterProfile.findUnique({
