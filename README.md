@@ -15,20 +15,6 @@ This is an open-source, full-featured web application designed to be a comprehen
 
 The platform features a public-facing portal for potential adopters and a powerful, permission-controlled dashboard for staff and volunteers to manage all aspects of shelter operations with a focus on data integrity and workflow automation.
 
-## Table of Contents
-
-- [Core Features](#core-features)
-  - [Animal Lifecycle Management](#animal-lifecycle-management)
-  - [Comprehensive Animal Profiles](#comprehensive-animal-profiles)
-  - [Adoption Application Workflow](#adoption-application-workflow)
-  - [User & Data Integrity](#user--data-integrity)
-- [Tech Stack](#tech-stack)
-- [Environment Variables](#environment-variables)
-- [Admin Dashboard Access](#admin-dashboard-access)
-- [Getting Started](#getting-started)
-- [Running the App](#running-the-app)
-- [Credits](#credits)
-
 ## Core Features
 
 The application is built around distinct, interconnected modules that handle the complex needs of a modern animal shelter.
@@ -84,7 +70,7 @@ The system is built with security and data consistency as top priorities.
 - **Database**: [PostgreSQL](https://www.postgresql.org/)
 - **File Storage**: [Vercel Blob](https://vercel.com/docs/vercel-blob/)
 - **ORM**: [Prisma](https://www.prisma.io/)
-- **Authentication**: [Auth.js](https://authjs.dev/) (NextAuth)
+- **Authentication**: [Better Auth](https://better-auth.com/)
 
 ### UI & Styling
 
@@ -101,14 +87,26 @@ Add the following variables to your `.env` file. See `.env.example` for a full r
 
 ### Authentication
 
-| Variable             | Required    | Description                                                                                                           |
-| -------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------- |
-| `AUTH_SECRET`        | ✅ Required | Secret key for authentication. [See generation instructions below.](#generating-auth_secret)                          |
-| `AUTH_GITHUB_ID`     | ⚪ Optional | GitHub OAuth client ID, from your [GitHub Developer settings](https://github.com/settings/developers).                |
-| `AUTH_GITHUB_SECRET` | ⚪ Optional | GitHub OAuth client secret, from your [GitHub Developer settings](https://github.com/settings/developers).            |
-| `ADMIN_PASSWORD`     | ✅ Required | Password for the default admin user, used when seeding the database. Also the password for all other seeded accounts. |
+| Variable                     | Required    | Description                                                                                                           |
+| ---------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------- |
+| `BETTER_AUTH_SECRET`         | ✅ Required | Signs session cookies. [See generation instructions below.](#generating-better_auth_secret) Use a different value in each environment. |
+| `BETTER_AUTH_ALLOWED_HOSTS`  | ✅ Required | Comma-separated allowlist of hosts the app may be served from. The host is read from the incoming request and matched against this list, which is what lets preview deployments work despite changing URLs. Hosts only — no scheme, no path. Supports exact matches, wildcards, and port wildcards (`localhost:*`). |
+| `BETTER_AUTH_URL`            | ✅ Required | Fallback base URL, used when a request has no host to derive one from. Full URL with scheme, no trailing slash, and no `/api/auth` suffix — Better Auth appends its own base path. |
+| `GITHUB_CLIENT_ID`           | ⚪ Optional | GitHub OAuth client ID, from your [GitHub Developer settings](https://github.com/settings/developers).                |
+| `GITHUB_CLIENT_SECRET`       | ⚪ Optional | GitHub OAuth client secret, from your [GitHub Developer settings](https://github.com/settings/developers).            |
+| `ADMIN_PASSWORD`             | ✅ Required | Password for the default admin user, used when seeding the database. Also the password for all other seeded accounts. |
 
-> **`AUTH_TRUST_HOST`** — Not in `.env.example`, but Auth.js supports `AUTH_TRUST_HOST=true` to trust the host header in development. This is typically set automatically on Vercel.
+Typical values per environment:
+
+| Environment | `BETTER_AUTH_ALLOWED_HOSTS`                          | `BETTER_AUTH_URL`            |
+| ----------- | ---------------------------------------------------- | ---------------------------- |
+| Local       | `localhost:*`                                        | `http://localhost:3000`      |
+| Preview     | `your-app-*-your-vercel-scope.vercel.app`            | your production URL          |
+| Production  | `your-app.vercel.app`                                | `https://your-app.vercel.app`|
+
+> **Keep preview host patterns scoped to your own Vercel team.** A bare `*.vercel.app` would trust every application on the platform, not just yours. Your Vercel scope suffix (visible in any preview URL) is the part nobody else can reproduce.
+
+> **GitHub OAuth callback URL** — register `http://localhost:3000/api/auth/callback/github` on your OAuth App for local development. A GitHub OAuth App accepts only one callback URL, so use a separate OAuth App per environment. Preview deployments get a new URL per deploy, so GitHub sign-in does not work there; email and password sign-in does.
 
 ### Database
 
@@ -138,8 +136,9 @@ Add the following variables to your `.env` file. See `.env.example` for a full r
 | Variable              | Required    | Description                                                                                                                                                                                                    |
 | ---------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SEED_IMAGE_BASE_URL` | ⚪ Optional | Base URL/path the seed uses for animal images. Read at seed time and baked into stored image paths. `/uploads` for local dev (default); a blob/CDN base URL for hosted deploys. Independent of the demo flag. Re-seed after changing it. |
+| `DEV_LINK_TEST_EMAIL` | ⚪ Optional | Local development only. When set, gives one seeded walk-in person this email address, so signing in with an OAuth account whose verified email matches will exercise the account-to-person linking rule. Leave unset in any shared or deployed environment. |
 
-### Generating `AUTH_SECRET`
+### Generating `BETTER_AUTH_SECRET`
 
 Run the following command to generate a secure secret key:
 
@@ -147,12 +146,16 @@ Run the following command to generate a secure secret key:
 openssl rand -base64 32
 ```
 
+Run it once per environment. A session cookie signed with one secret is valid anywhere that secret is used, so sharing a value between preview and production means a preview deployment can mint a valid production session.
+
 - **macOS / Linux** — OpenSSL is usually pre-installed. Verify with `openssl version`.
 - **Windows** — Install via the [OpenSSL website](https://www.openssl.org/) or Chocolatey: `choco install openssl`.
 
 ## Admin Dashboard Access
 
-These credentials are created when you seed the database (`npx prisma db seed`).
+These credentials are created when you seed the database (`npx prisma db seed`, or `npm run db:reset` to reset and reseed in one step).
+
+Sign-in supports email and password as well as GitHub OAuth. There is no self-serve registration — application accounts are created by seeding, or on first sign-in with GitHub.
 
 ### Admin
 
@@ -179,7 +182,7 @@ All non-admin accounts use the same password as `ADMIN_PASSWORD`.
 
 To run this project, you will need to have the following installed:
 
-- [Node.js](https://nodejs.org/) (v18 or later)
+- [Node.js](https://nodejs.org/) (v22.22 or later — see `engines` in `package.json`)
 - [Docker](https://www.docker.com/) and Docker Compose
 - A free [Vercel](https://vercel.com/) account to use Vercel Blob for image storage.
 
@@ -203,7 +206,8 @@ First, clone the repository and set up your environment variables.
 3.  **Fill out the `.env` file**:
     - Update the `POSTGRES_*` variables. The default values in `.env.example` are configured to work with the Docker setup below.
     - Set `ADMIN_PASSWORD` to a password of your choice. This will be the password for all seeded accounts.
-    - Generate an `AUTH_SECRET` by running `openssl rand -base64 32`.
+    - Generate a `BETTER_AUTH_SECRET` by running `openssl rand -base64 32`.
+    - Set `BETTER_AUTH_URL` to `http://localhost:3000` and leave `BETTER_AUTH_ALLOWED_HOSTS` as `localhost:*`.
     - Log into your Vercel account, create a new Blob store, and get your `BLOB_READ_WRITE_TOKEN`. **This is required for all image upload/delete functionality.**
 
 ## Running the App
@@ -240,7 +244,9 @@ This method mirrors the live production environment. It's ideal for testing the 
     - Add the **Vercel Postgres** integration to create a serverless database.
     - Add the **Vercel Blob** integration for image storage.
 4.  **Connect Environment Variables**: Vercel will automatically provide `POSTGRES_URL` and `BLOB_READ_WRITE_TOKEN` from the integrations. Copy these and all other variables from your `.env` file into the **Environment Variables** section of your Vercel project settings.
-5.  **Deploy**: Trigger a new deployment on Vercel. Your application will be live.
+5.  **Set the auth variables per environment scope.** `BETTER_AUTH_SECRET` needs its own value in Production and in Preview — see the table in [Environment Variables](#environment-variables) for `BETTER_AUTH_ALLOWED_HOSTS` and `BETTER_AUTH_URL`. Preview deployments get a new URL per deploy, which is why the allowlist is a pattern rather than a single URL.
+6.  **GitHub sign-in needs its own OAuth App per environment**, with that environment's `/api/auth/callback/github` registered on it. It will not work on preview deployments, since their URLs change per deploy; email and password sign-in is unaffected.
+7.  **Deploy**: Trigger a new deployment on Vercel. Your application will be live.
 
 ## End-to-End Tests
 
@@ -257,7 +263,7 @@ Playwright is configured for a Chromium-only E2E workflow that mirrors the local
 ### Requirements
 
 - Docker with `docker compose`
-- A populated `.env` file with at least `AUTH_SECRET` and `ADMIN_PASSWORD`
+- A populated `.env` file with at least `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and `ADMIN_PASSWORD`
 
 ### Install the browser once
 
