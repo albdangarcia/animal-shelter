@@ -1879,9 +1879,20 @@ async function seedPersonsAndUsers() {
 // A pool of ~40-60 distinct walk-in persons (no User account) for seed
 // animals to draw surrenderers/finders/owners from — replacing the old
 // reliance on a single shared "External Agency" record.
+const linkTestEmail = process.env.DEV_LINK_TEST_EMAIL;
+// D8 link-branch exercise: when set, gives one walk-in Person this email so
+// signing in with a matching, provider-verified OAuth account (GitHub) hits
+// the link branch (existing Person, no duplicate created) instead of create.
+// Unset in the repo and in the demo deploy — the seed's normal behavior is
+// unchanged. Set DEV_LINK_TEST_EMAIL in .env.local (gitignored) to your own
+// GitHub-verified email to exercise it locally.
+
 async function seedWalkInPersons() {
   console.log("Seeding walk-in person pool...");
   const persons = generateWalkInPersons(WALK_IN_PERSON_COUNT);
+  if (linkTestEmail) {
+    persons[0].email = linkTestEmail;
+  }
   for (const p of persons) {
     await prisma.person.create({ data: p });
   }
