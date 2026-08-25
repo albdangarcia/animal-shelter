@@ -40,10 +40,10 @@ import { phoneNormalizationExtension } from "@/app/lib/prisma-extensions/phone-n
 const adapter = new PrismaPg({ connectionString: resolveDatabaseUrl("direct") });
 const prisma = new PrismaClient({ adapter }).$extends(phoneNormalizationExtension);
 
-// D6/D9 — seed-only auth instance: direct-connection client, never mounted on
+// seed-only auth instance: direct-connection client, never mounted on
 // a route, no nextCookies() (would reach for next/headers outside a request
 // context). disableSignUp:false is what lets this instance call signUpEmail
-// at all — the app instance disables it (D7). autoSignIn:false stops every
+// at all — the app instance disables it. autoSignIn:false stops every
 // seeded user from also getting a junk session row on every reseed.
 const seedAuth = betterAuth({
   ...authOptions(prisma),

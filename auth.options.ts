@@ -4,7 +4,7 @@ import prisma from "@/app/lib/prisma";
 
 type ExtendedPrismaClient = typeof prisma;
 
-// D8 — on user creation, link to an existing Person by exact email match only
+// on user creation, link to an existing Person by exact email match only
 // if the provider marked the email verified AND that Person has no user yet;
 // otherwise create a new Person. Write an audit entry on every auto-link.
 // Never match on phone or name.
@@ -15,9 +15,9 @@ type ExtendedPrismaClient = typeof prisma;
 //    GitHub's per-email `verified` field) — trust it directly.
 //  - Credential sign-up (email/password): `/sign-up/email` hardcodes
 //    `emailVerified: false` unconditionally, so it never signals verification
-//    itself. But `disableSignUp: true` on the app instance (D7) means
+//    itself. But `disableSignUp: true` on the app instance means
 //    `/sign-up/email` can never reach this hook there — the only caller that
-//    can ever hit this path is the seed's instance (D6/D9), which is trusted
+//    can ever hit this path is the seed's instance, which is trusted
 //    by construction, not by anything the request itself claims.
 function makeLinkOrCreatePerson(db: ExtendedPrismaClient) {
   return async function linkOrCreatePerson(
@@ -61,6 +61,10 @@ function makeLinkOrCreatePerson(db: ExtendedPrismaClient) {
 export const authOptions = (db: ExtendedPrismaClient) =>
   ({
     database: prismaAdapter(db, { provider: "postgresql" }),
+    baseURL: {
+      allowedHosts: process.env.BETTER_AUTH_ALLOWED_HOSTS?.split(",") ?? [],
+      fallback: process.env.BETTER_AUTH_URL,
+    },
     emailAndPassword: {
       enabled: true,
     },
