@@ -1,13 +1,13 @@
 import { put, del } from "@vercel/blob";
 import prisma from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { AnimalActivityType } from "@/prisma/generated/client";
 
 export async function POST(request: Request) {
-  const session = await auth();
+  const session = await getCachedSession();
   if (!session?.user) {
     return NextResponse.json(
       { error: "Unauthorized: You must be logged in." },

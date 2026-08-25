@@ -40,10 +40,16 @@ const _fetchMyFosterApplication = async (
   applicantDefaults: FosterApplicantDefaultsPayload | null;
   hasActiveFosterProfile: boolean;
 }> => {
+  const personId = user.personId;
+
+  if (!personId) {
+    return { application: null, applicantDefaults: null, hasActiveFosterProfile: false };
+  }
+
   try {
     const [application, applicantDefaults, fosterProfile] = await Promise.all([
       prisma.fosterApplication.findFirst({
-        where: { personId: user.personId },
+        where: { personId },
         orderBy: { submittedAt: "desc" },
         include: {
           speciesCapabilities: { select: { id: true, name: true } },
@@ -54,7 +60,7 @@ const _fetchMyFosterApplication = async (
         },
       }),
       prisma.person.findUnique({
-        where: { id: user.personId },
+        where: { id: personId },
         select: {
           name: true,
           email: true,
@@ -81,7 +87,7 @@ const _fetchMyFosterApplication = async (
       // application status — a staff direct-add can activate one without an
       // APPROVED application row.
       prisma.fosterProfile.findUnique({
-        where: { personId: user.personId, status: FosterStatus.ACTIVE },
+        where: { personId, status: FosterStatus.ACTIVE },
         select: { id: true },
       }),
     ]);

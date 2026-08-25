@@ -1,5 +1,5 @@
 import { fetchPublishedPets } from "@/app/lib/data/public.data";
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import PetCard from "./pet-card";
 import { SimplePagination } from "@/components/simple-pagination";
 
@@ -22,7 +22,7 @@ const PetGrid = async ({
   size,
   sort,
 }: Props) => {
-  const session = await auth();
+  const session = await getCachedSession();
   const currentUserPersonId = session?.user?.personId;
 
   const { pets, totalPages } = await fetchPublishedPets({

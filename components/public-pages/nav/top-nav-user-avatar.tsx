@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { signOut } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { authClient } from "@/app/lib/auth/auth-client";
 import { BellIcon } from "@heroicons/react/24/outline";
 import { User } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -16,6 +17,8 @@ interface UserAvatarProps {
 }
 
 const UserMenu = ({ userImage }: UserAvatarProps) => {
+  const router = useRouter();
+
   return (
     <div className="flex items-center gap-x-4">
       <Button
@@ -44,7 +47,11 @@ const UserMenu = ({ userImage }: UserAvatarProps) => {
             <Link href="/dashboard/account">Account</Link>
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => signOut()}
+            onClick={() =>
+              authClient.signOut({
+                fetchOptions: { onSuccess: () => router.refresh() },
+              })
+            }
             className="cursor-pointer"
           >
             Sign out

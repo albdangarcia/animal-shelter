@@ -1,4 +1,5 @@
-import bcrypt from "bcrypt";
+import { betterAuth } from "better-auth";
+import { authOptions } from "@/auth.options";
 import { PrismaClient } from "@/prisma/generated/client";
 import { Prisma } from "@/prisma/generated/client";
 import {
@@ -38,6 +39,16 @@ import { phoneNormalizationExtension } from "@/app/lib/prisma-extensions/phone-n
 
 const adapter = new PrismaPg({ connectionString: resolveDatabaseUrl("direct") });
 const prisma = new PrismaClient({ adapter }).$extends(phoneNormalizationExtension);
+
+// seed-only auth instance: direct-connection client, never mounted on
+// a route, no nextCookies() (would reach for next/headers outside a request
+// context). disableSignUp:false is what lets this instance call signUpEmail
+// at all — the app instance disables it. autoSignIn:false stops every
+// seeded user from also getting a junk session row on every reseed.
+const seedAuth = betterAuth({
+  ...authOptions(prisma),
+  emailAndPassword: { enabled: true, disableSignUp: false, autoSignIn: false },
+});
 
 
 // =================================================================//
@@ -1841,21 +1852,24 @@ async function seedPersonsAndUsers() {
     });
 
     if (pData.role) {
-      let passwordToHash = "7dJbys5@?tMA"; // Default password for non-admin users
+      let password = "7dJbys5@?tMA"; // Default password for non-admin users
 
       if (pData.role === Role.ADMIN) {
-        passwordToHash = process.env.ADMIN_PASSWORD;
+        password = process.env.ADMIN_PASSWORD;
       }
 
-      const hashedPassword = await bcrypt.hash(passwordToHash, 10);
+      // D9 — sign up through the seed auth instance (matching email) so the
+      // linkOrCreatePerson hook (D8) links this user to the Person just
+      // created above, instead of a raw insert. `role` is `input: false`
+      // (D3) so it can't ride along in the signUpEmail body — set it with a
+      // follow-up update.
+      const { user } = await seedAuth.api.signUpEmail({
+        body: { name: pData.name, email: pData.email, password },
+      });
 
-      await prisma.user.create({
-        data: {
-          email: pData.email,
-          password: hashedPassword,
-          role: pData.role,
-          person: { connect: { id: person.id } },
-        },
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { role: pData.role },
       });
     }
   }
@@ -1865,9 +1879,20 @@ async function seedPersonsAndUsers() {
 // A pool of ~40-60 distinct walk-in persons (no User account) for seed
 // animals to draw surrenderers/finders/owners from — replacing the old
 // reliance on a single shared "External Agency" record.
+const linkTestEmail = process.env.DEV_LINK_TEST_EMAIL;
+// D8 link-branch exercise: when set, gives one walk-in Person this email so
+// signing in with a matching, provider-verified OAuth account (GitHub) hits
+// the link branch (existing Person, no duplicate created) instead of create.
+// Unset in the repo and in the demo deploy — the seed's normal behavior is
+// unchanged. Set DEV_LINK_TEST_EMAIL in .env.local (gitignored) to your own
+// GitHub-verified email to exercise it locally.
+
 async function seedWalkInPersons() {
   console.log("Seeding walk-in person pool...");
   const persons = generateWalkInPersons(WALK_IN_PERSON_COUNT);
+  if (linkTestEmail) {
+    persons[0].email = linkTestEmail;
+  }
   for (const p of persons) {
     await prisma.person.create({ data: p });
   }
@@ -3120,7 +3145,12 @@ async function clearDatabase() {
   await prisma.color.deleteMany();
   await prisma.characteristic.deleteMany();
 
+  // Session/Account cascade from User, but clear them explicitly (H6) — the
+  // next reset's signUpEmail would otherwise collide on account's unique
+  // (issuer, accountId) index. Verification has no FK to User; clear it too.
+  await prisma.session.deleteMany();
   await prisma.account.deleteMany();
+  await prisma.verification.deleteMany();
   await prisma.user.deleteMany();
   await prisma.person.deleteMany();
 

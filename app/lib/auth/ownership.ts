@@ -24,6 +24,13 @@ export async function isFosteringAnimal(
   personId: string,
   animalId: string
 ): Promise<boolean> {
+  // H1: Prisma treats `undefined` in a `where` as "omit this condition" —
+  // an empty/falsy personId here must never fall through to the query below,
+  // or it silently widens to "any fostered animal, any caller."
+  if (!personId) {
+    return false;
+  }
+
   const openPlacement = await prisma.fosterPlacement.findFirst({
     where: {
       animalId,

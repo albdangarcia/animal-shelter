@@ -3,7 +3,7 @@ import {
   getAnimalForAdoptionApplication,
 } from "@/app/lib/data/my-adoption-applications.data";
 import { IDParamType, AnimalForAdoptionApplicationPayload } from "@/app/lib/types";
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import { notFound, redirect } from "next/navigation";
 import { MyApplicationForm } from "@/components/dashboard/my-adoption-applications/my-adoption-application-form";
 
@@ -14,9 +14,9 @@ interface Props {
 const Page = async ({ params }: Props) => {
   const { id } = await params;
 
-  const session = await auth();
+  const session = await getCachedSession();
   if (!session || !session.user) {
-    redirect("/api/auth/signin");
+    redirect(`/sign-in?callbackUrl=${encodeURIComponent(`/pets/${id}/adopt`)}`);
   }
 
   const animalToAdopt: AnimalForAdoptionApplicationPayload | null =

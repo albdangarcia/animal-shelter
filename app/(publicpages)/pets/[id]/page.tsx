@@ -10,7 +10,7 @@ import {
   formatAnimalSize,
 } from "@/app/lib/utils/enum-formatter";
 import PetGallery from "@/components/public-pages/pets/pet-gallery";
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { MapPinIcon } from "@heroicons/react/24/outline";
@@ -21,7 +21,7 @@ interface Props {
 
 const Page = async ({ params }: Props) => {
   const { id: animalId } = await params;
-  const session = await auth();
+  const session = await getCachedSession();
   const currentUserPersonId = session?.user?.personId;
 
   const animal = await fetchPublicPagePetById(animalId);

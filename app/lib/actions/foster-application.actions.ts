@@ -65,6 +65,13 @@ const _createMyFosterApplication = async (
     };
   }
 
+  if (!user.personId) {
+    return {
+      ok: false,
+      message: "Database Error: Failed to submit application. Please try again.",
+    };
+  }
+
   const {
     applicantName,
     applicantEmail,

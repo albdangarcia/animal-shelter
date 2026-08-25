@@ -3,7 +3,7 @@ import WelcomeImage from "../../components/public-pages/welcome-image";
 import { fetchLatestPublicAnimals } from "../lib/data/public.data";
 import { Suspense } from "react";
 import PetCard from "@/components/public-pages/pets/pet-card";
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import LatestPetsSkeleton from "@/components/public-pages/latest-pets-skeleton";
 
 const categories = ["Dog", "Cat", "Bird", "Reptile"];
@@ -125,7 +125,7 @@ const Page = () => {
 const LatestPetsContent = async () => {
   const latestAnimals = await fetchLatestPublicAnimals();
 
-  const session = await auth();
+  const session = await getCachedSession();
   const currentUserPersonId = session?.user?.personId;
 
   return (

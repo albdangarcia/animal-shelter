@@ -25,6 +25,10 @@ const _fetchMyAdoptionApplications = async (
 }> => {
   const personId = user.personId;
 
+  if (!personId) {
+    return { myApplications: [], totalPages: 0, totalRows: 0 };
+  }
+
   const validatedArgs = MyAdoptionApplicationsSchema.safeParse({
     query: queryInput,
     currentPage: currentPageInput,
@@ -121,6 +125,10 @@ const _fetchMyAdoptionAppById = async (
 ): Promise<AdoptionApplicationPayload | null> => {
   const personId = user.personId;
 
+  if (!personId) {
+    return null;
+  }
+
   // Validate the adoptionAppId at runtime
   const parsedAdoptionAppId = cuidSchema.safeParse(adoptionAppId);
 
@@ -174,6 +182,10 @@ const _getAnimalForAdoptionApplication = async (
   animalId: string
 ): Promise<AnimalForAdoptionApplicationPayload | null> => {
   const personId = user.personId;
+
+  if (!personId) {
+    return null;
+  }
 
   // Validate the animalId
   const parsedId = cuidSchema.safeParse(animalId);

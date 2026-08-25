@@ -46,12 +46,12 @@ export const E2E_DATABASE_URL =
   process.env.PLAYWRIGHT_DATABASE_URL ?? buildDatabaseUrl();
 
 export const getPlaywrightEnv = (): NodeJS.ProcessEnv => {
-  const authSecret = process.env.AUTH_SECRET;
+  const authSecret = process.env.BETTER_AUTH_SECRET;
   const adminPassword = process.env.ADMIN_PASSWORD;
 
   if (!authSecret) {
     throw new Error(
-      "AUTH_SECRET must be set before running Playwright E2E tests.",
+      "BETTER_AUTH_SECRET must be set before running Playwright E2E tests.",
     );
   }
 
@@ -63,12 +63,11 @@ export const getPlaywrightEnv = (): NodeJS.ProcessEnv => {
 
   return {
     ...process.env,
-    AUTH_SECRET: authSecret,
+    BETTER_AUTH_SECRET: authSecret,
     ADMIN_PASSWORD: adminPassword,
     DATABASE_URL: E2E_DATABASE_URL,
     PLAYWRIGHT_DATABASE_URL: E2E_DATABASE_URL,
-    AUTH_URL: E2E_BASE_URL,
-    AUTH_TRUST_HOST: "true",
+    BETTER_AUTH_URL: E2E_BASE_URL,
     HOSTNAME: "127.0.0.1",
     PORT: E2E_APP_PORT,
     POSTGRES_HOST: "127.0.0.1",

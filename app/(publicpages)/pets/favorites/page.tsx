@@ -1,8 +1,8 @@
-import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import FavoritesGrid from "@/components/public-pages/pets/favorites/favorites-grid";
 
 const Page = async () => {
-  const session = await auth();
+  const session = await getCachedSession();
 
   return (
     <div className="space-y-4">

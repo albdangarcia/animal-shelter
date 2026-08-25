@@ -1,9 +1,9 @@
 import { hasPermission } from "./hasPermission";
-import { auth } from "@/auth";
-import { type Session } from "next-auth";
+import { getCachedSession } from "./session";
 import { type AppPermission } from "./permissions";
+import type { SessionUser } from "./session.types";
 
-export type SessionUser = Session["user"];
+export type { SessionUser };
 
 /**
  * A HOF that protects an action by ensuring the user is authenticated.
@@ -13,7 +13,7 @@ export function withAuthenticatedUser<TArgs extends unknown[], TReturn>(
   action: (user: SessionUser, ...args: TArgs) => Promise<TReturn>,
 ) {
   return async (...args: TArgs): Promise<TReturn> => {
-    const session = await auth();
+    const session = await getCachedSession();
     if (!session?.user) {
       throw new Error(
         "Access Denied. You must be logged in to perform this action.",

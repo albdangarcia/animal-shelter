@@ -1,16 +1,19 @@
 import { redirect } from "next/navigation";
-import { auth, providerMap, signIn } from "@/auth";
+import { auth } from "@/auth";
+import { getCachedSession } from "@/app/lib/auth/session";
 import { ProviderIcon } from "@/components/auth/provider-icon";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { SearchParamsType } from "@/app/lib/types";
 import clsx from "clsx";
+
+const providerMap = [{ id: "github", name: "GitHub" }] as const;
 
 interface Props {
   searchParams: SearchParamsType;
 }
 
 const SignInPage = async ({ searchParams }: Props) => {
-  const session = await auth();
+  const session = await getCachedSession();
   if (session) {
     return redirect("/");
   }
@@ -56,7 +59,10 @@ const SignInPage = async ({ searchParams }: Props) => {
                 key={provider.id}
                 action={async () => {
                   "use server";
-                  await signIn(provider.id, { redirectTo });
+                  const { url } = await auth.api.signInSocial({
+                    body: { provider: provider.id, callbackURL: redirectTo },
+                  });
+                  if (url) redirect(url);
                 }}
               >
                 <button
