@@ -1,12 +1,19 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { getCachedSession } from "@/app/lib/auth/session";
-import { ProviderIcon } from "@/components/auth/provider-icon";
+import { GitHubIcon, GoogleIcon } from "@/components/auth/provider-icons";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { SearchParamsType } from "@/app/lib/types";
-import clsx from "clsx";
 
-const providerMap = [{ id: "github", name: "GitHub" }] as const;
+const providerMap = [
+  { id: "github", name: "GitHub", label: "Sign in with GitHub" },
+  { id: "google", name: "Google", label: "Sign in with Google" },
+] as const;
+
+const providerIcons = {
+  github: GitHubIcon,
+  google: GoogleIcon,
+} as const;
 
 interface Props {
   searchParams: SearchParamsType;
@@ -48,37 +55,36 @@ const SignInPage = async ({ searchParams }: Props) => {
               </div>
             </div>
           </div>
-          <div
-            className={clsx(
-              "mt-6 grid gap-3",
-              providerMap.length > 2 ? "grid-cols-2" : "grid-cols-1",
-            )}
-          >
-            {Object.values(providerMap).map((provider) => (
-              <form
-                key={provider.id}
-                action={async () => {
-                  "use server";
-                  const { url } = await auth.api.signInSocial({
-                    body: { provider: provider.id, callbackURL: redirectTo },
-                  });
-                  if (url) redirect(url);
-                }}
-              >
-                <button
-                  type="submit"
-                  className="w-full inline-flex justify-center py-2 px-4 border rounded-md shadow bg-card text-sm font-medium text-foreground hover:bg-accent"
+          <div className="mt-6 grid grid-cols-1 gap-3">
+            {providerMap.map((provider) => {
+              const Icon = providerIcons[provider.id];
+              return (
+                <form
+                  key={provider.id}
+                  action={async () => {
+                    "use server";
+                    const { url } = await auth.api.signInSocial({
+                      body: { provider: provider.id, callbackURL: redirectTo },
+                    });
+                    if (url) redirect(url);
+                  }}
                 >
-                  <span className="sr-only">Sign in with {provider.name}</span>
-                  <ProviderIcon
-                    providerId={provider.id}
-                    providerName={provider.name}
-                    className="w-5 h-5"
-                  />
-                  <span className="ml-2">{provider.name}</span>
-                </button>
-              </form>
-            ))}
+                  <button
+                    type="submit"
+                    className="w-full inline-flex items-center justify-center py-2 px-4 border rounded-md shadow bg-card text-sm font-medium text-foreground hover:bg-accent"
+                  >
+                    {provider.id === "google" ? (
+                      <span className="flex items-center justify-center rounded bg-white p-1">
+                        <Icon aria-hidden="true" className="w-4 h-4" />
+                      </span>
+                    ) : (
+                      <Icon aria-hidden="true" className="w-5 h-5" />
+                    )}
+                    <span className="ml-2">{provider.label}</span>
+                  </button>
+                </form>
+              );
+            })}
           </div>
         </div>
       </div>

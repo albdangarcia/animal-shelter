@@ -45,8 +45,11 @@ const prisma = new PrismaClient({ adapter }).$extends(phoneNormalizationExtensio
 // context). disableSignUp:false is what lets this instance call signUpEmail
 // at all — the app instance disables it. autoSignIn:false stops every
 // seeded user from also getting a junk session row on every reseed.
+// trustProvidedEmails:true is what makes linkOrCreatePerson treat every
+// signup here as provider-verified — safe because this instance is trusted
+// by construction, not because of anything a request claims.
 const seedAuth = betterAuth({
-  ...authOptions(prisma),
+  ...authOptions(prisma, { trustProvidedEmails: true }),
   emailAndPassword: { enabled: true, disableSignUp: false, autoSignIn: false },
 });
 
@@ -1881,11 +1884,11 @@ async function seedPersonsAndUsers() {
 // reliance on a single shared "External Agency" record.
 const linkTestEmail = process.env.DEV_LINK_TEST_EMAIL;
 // D8 link-branch exercise: when set, gives one walk-in Person this email so
-// signing in with a matching, provider-verified OAuth account (GitHub) hits
-// the link branch (existing Person, no duplicate created) instead of create.
-// Unset in the repo and in the demo deploy — the seed's normal behavior is
-// unchanged. Set DEV_LINK_TEST_EMAIL in .env.local (gitignored) to your own
-// GitHub-verified email to exercise it locally.
+// signing in with a matching, provider-verified OAuth account (GitHub,
+// Google, ...) hits the link branch (existing Person, no duplicate created)
+// instead of create. Unset in the repo and in the demo deploy — the seed's
+// normal behavior is unchanged. Set DEV_LINK_TEST_EMAIL in .env
+// (gitignored) to your own provider-verified email to exercise it locally.
 
 async function seedWalkInPersons() {
   console.log("Seeding walk-in person pool...");
