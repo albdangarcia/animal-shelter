@@ -94,6 +94,8 @@ Add the following variables to your `.env` file. See `.env.example` for a full r
 | `BETTER_AUTH_URL`            | ✅ Required | Fallback base URL, used when a request has no host to derive one from. Full URL with scheme, no trailing slash, and no `/api/auth` suffix — Better Auth appends its own base path. |
 | `GITHUB_CLIENT_ID`           | ⚪ Optional | GitHub OAuth client ID, from your [GitHub Developer settings](https://github.com/settings/developers).                |
 | `GITHUB_CLIENT_SECRET`       | ⚪ Optional | GitHub OAuth client secret, from your [GitHub Developer settings](https://github.com/settings/developers).            |
+| `GOOGLE_CLIENT_ID`           | ⚪ Optional | Google OAuth client ID, from your [Google Cloud Console](https://console.cloud.google.com/apis/credentials).          |
+| `GOOGLE_CLIENT_SECRET`       | ⚪ Optional | Google OAuth client secret, from your [Google Cloud Console](https://console.cloud.google.com/apis/credentials).      |
 | `ADMIN_PASSWORD`             | ✅ Required | Password for the default admin user, used when seeding the database. Also the password for all other seeded accounts. |
 
 Typical values per environment:
