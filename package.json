@@ -23,7 +23,7 @@
     "db:reset": "prisma migrate reset --force && prisma db seed",
     "postinstall": "npm run prisma:generate",
     "prisma:push": "dotenv -e .env.local -e .env.development -- prisma db push",
-    "prisma:generate": "dotenv -e .env.local -e .env.development -- prisma generate",
+    "prisma:generate": "prisma generate",
     "prisma:studio": "dotenv -e .env.local -e .env.development -- prisma studio",
     "prisma:backfill-phone": "dotenv -e .env.local -e .env.development -e .env -- tsx prisma/backfill-phone-normalized.ts"
   },
