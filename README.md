@@ -112,14 +112,16 @@ Typical values per environment:
 
 ### Database
 
-| Variable            | Required       | Description                                                                                                                                            |
-| ------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DATABASE_URL`      | ✅ Required    | Connection URL used by Prisma. For local dev, use your Docker values (see below). For production, replace with your provider's URL (e.g. Vercel/Neon). |
-| `POSTGRES_USER`     | 🐳 Docker only | PostgreSQL username. Used by Docker Compose to initialize the container.                                                                               |
-| `POSTGRES_PASSWORD` | 🐳 Docker only | PostgreSQL password. Used by Docker Compose to initialize the container.                                                                               |
-| `POSTGRES_HOST`     | 🐳 Docker only | Set to `postgres` (the Docker Compose service name) for local dev.                                                                                     |
-| `POSTGRES_DB`       | 🐳 Docker only | PostgreSQL database name. Used by Docker Compose to initialize the container.                                                                          |
-| `POSTGRES_PORT`     | 🐳 Docker only | PostgreSQL port. Defaults to `5432`.                                                                                                                   |
+| Variable                | Required       | Description                                                                                                                                                                                                                                            |
+| ----------------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATABASE_URL`          | ✅ Required    | The **pooled** connection the running app uses. Running `npm run dev` directly on your host, point this at `127.0.0.1:5432`. Under `docker compose`, the `nextjs` service overrides this to point at the `postgres` service instead — see Option 1 below. On a provider (Vercel/Neon), use the pooled URL, which carries a `-pooler` suffix in the host. |
+| `DATABASE_URL_UNPOOLED` | ✅ Required    | The **direct** connection migrations and seeding require — Prisma Migrate breaks against a PgBouncer transaction-mode pooler. Identical to `DATABASE_URL` for local Postgres, which has no pooler; on a provider, use the direct URL (no `-pooler` suffix). |
+| `POSTGRES_USER`         | 🐳 Docker only | PostgreSQL username. Used by Docker Compose to initialize the `postgres` service's container.                                                                                                                                                            |
+| `POSTGRES_PASSWORD`     | 🐳 Docker only | PostgreSQL password. Used by Docker Compose to initialize the `postgres` service's container.                                                                                                                                                            |
+| `POSTGRES_DB`           | 🐳 Docker only | PostgreSQL database name. Used by Docker Compose to initialize the `postgres` service's container.                                                                                                                                                       |
+| `POSTGRES_PORT`         | 🐳 Docker only | Host port the `postgres` service's container publishes to. Change if `5432` is already in use on your machine. Defaults to `5432`.                                                                                                                       |
+
+> **These `POSTGRES_*` rows are the `postgres` Docker image's own initialization variables** — unrelated to the similarly-named `POSTGRES_*` family Vercel's Neon integration injects (`POSTGRES_URL`, `POSTGRES_DATABASE`, etc.). They merely rhyme: Neon injects `POSTGRES_DATABASE`, but the Docker `postgres` image's contract wants `POSTGRES_DB`. This confusion between the two unrelated families is what produced the original, since-removed resolver fallback chain — don't reintroduce it.
 
 ### Storage
 
@@ -206,7 +208,7 @@ First, clone the repository and set up your environment variables.
 ```
 
 3.  **Fill out the `.env` file**:
-    - Update the `POSTGRES_*` variables. The default values in `.env.example` are configured to work with the Docker setup below.
+    - `DATABASE_URL` and `DATABASE_URL_UNPOOLED` are already set to matching local values in `.env.example`, which work as-is for both the Docker setup and a host-run `npm run dev` (see Option 1 below).
     - Set `ADMIN_PASSWORD` to a password of your choice. This will be the password for all seeded accounts.
     - Generate a `BETTER_AUTH_SECRET` by running `openssl rand -base64 32`.
     - Set `BETTER_AUTH_URL` to `http://localhost:3000` and leave `BETTER_AUTH_ALLOWED_HOSTS` as `localhost:*`.
@@ -218,7 +220,9 @@ You have two main options for running the application, depending on your goal.
 
 ### Option 1: Recommended Local Development (Docker)
 
-This is the fastest way for contributors to get the application running on their local machine. This setup uses **Docker** to run the Next.js app and the PostgreSQL database, but still connects to **Vercel Blob** for image storage.
+This is the fastest way for contributors to get the application running on their local machine. This setup uses **Docker** to run the Next.js app and a PostgreSQL container, but still connects to **Vercel Blob** for image storage.
+
+This is a local-dev/demo image, not a production build: it runs `next dev` under `NODE_ENV=development`, the same as running the app on your host.
 
 1.  Build and run the Docker containers:
 
@@ -228,6 +232,19 @@ This is the fastest way for contributors to get the application running on their
     ```
 
 2.  Open your browser and navigate to `http://localhost:3000`.
+
+If port `5432` is already in use on your machine (e.g. by a local Postgres install), set `POSTGRES_PORT` in `.env` to a free port before running `docker compose up` — the `postgres` container's own `5432` inside the Docker network is unaffected, only the host-side publish changes.
+
+**What happens on start:** the `postgres` container initializes (if its named volume is new) and must report healthy before `nextjs` starts. `nextjs` then runs `prisma db push` unconditionally (idempotent — safe to run on every start) and seeds the database **only if it's empty** (checked with a row count against the `animals` table), so restarting the stack never wipes data you've created through the app.
+
+**Resetting to a clean, reseeded database:**
+
+```sh
+docker compose down -v
+docker compose up -d
+```
+
+`-v` drops the named Postgres volume, so the next `up` starts from an empty database and seeds it from scratch.
 
 > #### ⚠️ **A Note on Local Image Seeding**
 >
@@ -245,7 +262,7 @@ This method mirrors the live production environment. It's ideal for testing the 
 3.  **Set up Vercel Integrations**:
     - Add the **Vercel Postgres** integration to create a serverless database.
     - Add the **Vercel Blob** integration for image storage.
-4.  **Connect Environment Variables**: Vercel will automatically provide `POSTGRES_URL` and `BLOB_READ_WRITE_TOKEN` from the integrations. Copy these and all other variables from your `.env` file into the **Environment Variables** section of your Vercel project settings.
+4.  **Connect Environment Variables**: the Vercel Postgres (Neon) integration provides several `POSTGRES_*` variables, but the app reads `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (direct) — set both explicitly, per environment scope (Production and Preview each need their own). **Give Preview its own Neon branch**, rather than pointing it at the Production database: Preview and Production previously shared one database, which meant every preview migration was also a production migration. Copy the remaining variables from your `.env` file into the **Environment Variables** section of your Vercel project settings.
 5.  **Set the auth variables per environment scope.** `BETTER_AUTH_SECRET` needs its own value in Production and in Preview — see the table in [Environment Variables](#environment-variables) for `BETTER_AUTH_ALLOWED_HOSTS` and `BETTER_AUTH_URL`. Preview deployments get a new URL per deploy, which is why the allowlist is a pattern rather than a single URL.
 6.  **GitHub sign-in needs its own OAuth App per environment**, with that environment's `/api/auth/callback/github` registered on it. It will not work on preview deployments, since their URLs change per deploy; email and password sign-in is unaffected.
 7.  **Deploy**: Trigger a new deployment on Vercel. Your application will be live.

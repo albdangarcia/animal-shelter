@@ -13,7 +13,7 @@ for (const envFile of envFiles) {
   const envPath = path.join(process.cwd(), envFile);
 
   if (fs.existsSync(envPath)) {
-    dotenv.config({ path: envPath, override: true });
+    dotenv.config({ path: envPath, override: true, quiet: true });
   }
 }
 
@@ -66,6 +66,7 @@ export const getPlaywrightEnv = (): NodeJS.ProcessEnv => {
     BETTER_AUTH_SECRET: authSecret,
     ADMIN_PASSWORD: adminPassword,
     DATABASE_URL: E2E_DATABASE_URL,
+    DATABASE_URL_UNPOOLED: E2E_DATABASE_URL,
     PLAYWRIGHT_DATABASE_URL: E2E_DATABASE_URL,
     BETTER_AUTH_URL: E2E_BASE_URL,
     HOSTNAME: "127.0.0.1",
