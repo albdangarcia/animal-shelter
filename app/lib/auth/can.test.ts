@@ -20,6 +20,7 @@ test("USER holds none of the operational permissions", () => {
     AppPermissions.ANIMAL_INFO_MANAGE,
     AppPermissions.ANIMAL_VITALS_MANAGE,
     AppPermissions.REPORTS_READ,
+    AppPermissions.AI_CHAT_USE,
   ];
 
   for (const permission of operational) {
@@ -54,4 +55,11 @@ test("an unknown role string returns false rather than throwing", () => {
 test("null and undefined return false rather than throwing", () => {
   assert.equal(can(null, AppPermissions.ANIMAL_INFO_READ), false);
   assert.equal(can(undefined, AppPermissions.ANIMAL_INFO_READ), false);
+});
+
+test("AI_CHAT_USE is held by VOLUNTEER and above, but not USER", () => {
+  assert.equal(can(Role.USER, AppPermissions.AI_CHAT_USE), false);
+  for (const role of [Role.VOLUNTEER, Role.STAFF, Role.ADMIN]) {
+    assert.equal(can(role, AppPermissions.AI_CHAT_USE), true);
+  }
 });

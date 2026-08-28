@@ -34,6 +34,7 @@ const volunteerPermissions: readonly AppPermission[] = [
   AppPermissions.PARTNERS_READ,
   AppPermissions.PERSONS_READ,
   AppPermissions.FOSTERS_READ,
+  AppPermissions.AI_CHAT_USE,
 ] as const;
 
 // Staff inherit volunteer permissions + management of operational data
