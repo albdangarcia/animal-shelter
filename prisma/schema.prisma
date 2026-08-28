@@ -1265,6 +1265,8 @@ enum AnimalActivityType {
   VITALS_RECORDED // A vitals entry (weight/temperature/body condition) was recorded
   TASK_CREATED // A task was created
   TASK_STATUS_CHANGED // A task's status was updated
+  TASK_UPDATED // A task's fields were edited
+  TASK_ASSIGNED // A task's assignee changed
   STATUS_CHANGE // A significant status like listing or health status changed
   INTAKE_PROCESSED // The initial intake event
   OUTCOME_PROCESSED // A final outcome event

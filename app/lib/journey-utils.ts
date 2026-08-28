@@ -96,6 +96,10 @@ export const formatJourneyItem = (
           };
       }
 
+    // No TASK_* cases by design: fetchAnimalJourney (animal-journey.data.ts)
+    // filters to lifecycle events only, so TASK_CREATED / TASK_STATUS_CHANGED /
+    // TASK_UPDATED / TASK_ASSIGNED never reach this function. Task activity
+    // shows on the animal's Activity feed, not its Journey timeline.
     default:
       return null;
   }

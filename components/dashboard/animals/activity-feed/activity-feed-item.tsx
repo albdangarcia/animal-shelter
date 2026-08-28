@@ -16,6 +16,7 @@ import {
   Home,
   Undo2,
   Weight,
+  UserPlus,
   LucideProps,
 } from "lucide-react";
 import { AnimalActivityType } from "@/prisma/generated/enums";
@@ -92,6 +93,14 @@ const activityConfig: Record<
   [AnimalActivityType.TASK_STATUS_CHANGED]: {
     icon: ClipboardList,
     text: "updated a task's status",
+  },
+  [AnimalActivityType.TASK_UPDATED]: {
+    icon: Pencil,
+    text: "edited a task",
+  },
+  [AnimalActivityType.TASK_ASSIGNED]: {
+    icon: UserPlus,
+    text: "changed a task's assignee",
   },
 };
 

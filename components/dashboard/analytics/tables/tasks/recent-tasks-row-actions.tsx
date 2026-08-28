@@ -46,13 +46,13 @@ export function DataTableRowActions({
 
   const onSoftDelete = () => {
     const originalStatus = task.status;
-    updateAnimalTaskStatus(row.original.animal.id, task.id, TaskStatus.DELETED);
+    updateAnimalTaskStatus(task.id, TaskStatus.DELETED);
 
     toast.success("Task moved to trash.", {
       action: {
         label: "Undo",
         onClick: () => {
-          updateAnimalTaskStatus(row.original.animal.id, task.id, originalStatus);
+          updateAnimalTaskStatus(task.id, originalStatus);
           toast.info("Task restored.");
         },
       },
@@ -84,11 +84,7 @@ export function DataTableRowActions({
               <DropdownMenuRadioGroup
                 value={task.status}
                 onValueChange={(newStatus) => {
-                  updateAnimalTaskStatus(
-                    row.original.animal.id,
-                    task.id,
-                    newStatus as TaskStatus
-                  );
+                  updateAnimalTaskStatus(task.id, newStatus as TaskStatus);
                   toast.success(`Task status updated`);
                 }}
               >
