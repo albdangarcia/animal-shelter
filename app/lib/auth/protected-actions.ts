@@ -1,6 +1,7 @@
 import { hasPermission } from "./hasPermission";
 import { getCachedSession } from "./session";
 import { type AppPermission } from "./permissions";
+import { ForbiddenError, UnauthenticatedError } from "../utils/errors";
 import type { SessionUser } from "./session.types";
 
 export type { SessionUser };
@@ -15,7 +16,7 @@ export function withAuthenticatedUser<TArgs extends unknown[], TReturn>(
   return async (...args: TArgs): Promise<TReturn> => {
     const session = await getCachedSession();
     if (!session?.user) {
-      throw new Error(
+      throw new UnauthenticatedError(
         "Access Denied. You must be logged in to perform this action.",
       );
     }
@@ -35,7 +36,7 @@ export function RequirePermission(requiredPermission: AppPermission) {
     return async (...args: TArgs): Promise<TReturn> => {
       const isAllowed = await hasPermission(requiredPermission);
       if (!isAllowed) {
-        throw new Error(
+        throw new ForbiddenError(
           "Access Denied. You do not have permission to perform this action.",
         );
       }
