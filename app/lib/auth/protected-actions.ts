@@ -44,3 +44,32 @@ export function RequirePermission(requiredPermission: AppPermission) {
     };
   };
 }
+
+/**
+ * Like `RequirePermission`, but the caller must hold **every** listed
+ * permission (logical AND). Use this over nesting `RequirePermission` calls:
+ * one wrapper, one explicit list, and a single `ForbiddenError` rather than a
+ * failure that depends on evaluation order.
+ *
+ * First needed by `fetchAttentionQueue` (`ANIMAL_INFO_READ` + `ANIMAL_TASK_READ`,
+ * since it surfaces task detail alongside animal identity); If you only need one permission, use
+ * `RequirePermission`.
+ */
+export function RequireAllPermissions(
+  ...requiredPermissions: [AppPermission, ...AppPermission[]]
+) {
+  return function <TArgs extends unknown[], TReturn>(
+    target: (...args: TArgs) => Promise<TReturn>,
+  ) {
+    return async (...args: TArgs): Promise<TReturn> => {
+      for (const permission of requiredPermissions) {
+        if (!(await hasPermission(permission))) {
+          throw new ForbiddenError(
+            "Access Denied. You do not have permission to perform this action.",
+          );
+        }
+      }
+      return target(...args);
+    };
+  };
+}

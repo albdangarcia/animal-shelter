@@ -333,6 +333,10 @@ export type AnimalsRequiringAttentionPayload = Prettify<
   }
 >;
 
+// Health-status-only; backs the dashboard health table. Not dead code and not
+// superseded by `fetchAttentionQueue` in `animals/attention-queue.data.ts` —
+// that one is a work queue (task/health/foster signals, each clears when acted
+// on) and a different shape. The two are deliberate siblings (D14).
 const _fetchAnimalsRequiringAttention = async (): Promise<
   AnimalsRequiringAttentionPayload[]
 > => {
