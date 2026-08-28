@@ -1,4 +1,4 @@
-import { google } from "@ai-sdk/google";
+import { groq } from "@ai-sdk/groq";
 import { resolveDatabaseUrl } from "@/app/lib/db-url";
 import {
   assertAiProviderAllowed,
@@ -10,21 +10,29 @@ import {
  * module imports `model` from here, so swapping providers or model versions is
  * a one-file change and never touches tool code.
  *
- * Model: `gemini-3.5-flash` — a GA Gemini 3 Flash model on the free tier, one
- * notch below the newest (`gemini-3.7-flash`). Pinned (not `gemini-flash-latest`)
- * so a model swap is a deliberate edit.
+ * Model: `openai/gpt-oss-120b` on Groq.
  *
- * Not `gemini-2.5-flash`: already 404s for new API keys ("no longer available
- * to new users"). Not `gemini-3.7-flash`: as of 2026-08 its free-tier tool-use
- * path returns sustained `503 "high demand"` — verified unusable for this
- * feature's tool loop, while `gemini-3.5-flash` answers tool-call prompts
- * reliably. Revisit once 3.7's capacity settles; it is a one-line change.
+ * Was `gemini-3.5-flash` (`@ai-sdk/google`). The move is not
+ * about latency — it is that Gemini's free tier allows **20 requests per day**
+ * for this model (`generate_content_free_tier_requests`), and one answer costs
+ * one request *per tool-loop step*, times up to three SDK retry attempts. That
+ * is roughly four conversations before a 24-hour lockout, which is not a
+ * development environment.
  *
- * Auth: `@ai-sdk/google` reads `GOOGLE_GENERATIVE_AI_API_KEY` from the
- * environment on its own.
+ * Why this model of the ones Groq serves: the behaviour that decides this
+ * feature is refusing to guess between two animals with the same name, which
+ * is instruction-following under ambiguity rather than throughput.
+ * `gpt-oss-120b` is the largest reasoning-trained general model available
+ * there; `gpt-oss-20b` trades exactly that capability for speed this feature
+ * does not need. `groq/compound` is excluded on design grounds rather than
+ * quality: it carries its own built-in server-side tools, which would break
+ * the guarantee that a request contains only the tools the caller's role
+ * permits.
+ *
+ * Auth: `@ai-sdk/groq` reads `GROQ_API_KEY` from the environment on its own.
  */
 
-export const MODEL_ID = "gemini-3.5-flash";
+export const MODEL_ID = "openai/gpt-oss-120b";
 
 /**
  * Hard cap on the tool loop. findAnimals →
@@ -41,4 +49,4 @@ assertAiProviderAllowed({
   databaseUrl: resolveDatabaseUrl("pooled"),
 });
 
-export const model = google(MODEL_ID);
+export const model = groq(MODEL_ID);

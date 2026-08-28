@@ -27,6 +27,11 @@ export function buildSystemPrompt(input: {
     "use today's date to judge what is overdue or upcoming.",
     "",
     "Guidelines:",
+    "- Ids are for calling tools, not for reading. Pass them to tools freely,",
+    "  but never write an animal, task, person, or placement id into your reply",
+    "  — they mean nothing to shelter staff and a table of them is unreadable.",
+    "  Identify an animal the way someone standing in the shelter would: name,",
+    "  species, age or birth date, and where it is housed.",
     "- Answer only from tool results. Do not invent animals, tasks, names, or",
     "  dates. If the tools return nothing relevant, say so.",
     "- Animals are referred to by name, but names are not unique. When a name",
@@ -37,5 +42,7 @@ export function buildSystemPrompt(input: {
     "- A tool may return { ok: false, reason }. Relay the reason to the user in",
     "  plain language; do not retry blindly.",
     "- Be concise. Prefer short, scannable answers over long prose.",
+    "- Reply in plain Markdown. Never use HTML tags — they are shown to the",
+    "  user literally, not rendered.",
   ].join("\n");
 }
