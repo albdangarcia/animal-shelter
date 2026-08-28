@@ -500,6 +500,11 @@ interface AnimalBlueprint {
   // blueprints set this to deliberately model the shelter dropping the ball:
   // an animal that needs care and nobody has planned anything.
   skipIntakeFollowUpTask?: boolean;
+  // Overrides the default `getRandomDate()` birth date. Set only for
+  // hand-authored animals whose age must stay fixed across reseeds — the
+  // "Bruno" disambiguation pair needs two same-named animals a human can tell apart
+  // by birth date alone, every reseed.
+  birthDate?: Date;
 }
 
 // Hand-authored animals, kept so a handful of profiles have real photos.
@@ -840,6 +845,55 @@ const animalSeedData: AnimalBlueprint[] = [
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
   },
+
+  // --- Disambiguation pair: two non-archived animals named "Bruno" ----------
+  // Acceptance check 3 needs a same-name collision the assistant must 
+  // resolve by asking rather than guessing.
+  // Distinct birth dates, distinct breeds, and one kenneled vs one
+  // unplaced so `findAnimals` and `getAnimalSummary` read unmistakably
+  // different. Both HEALTHY and untasked, and both kept out of the foster
+  // lottery (disambiguationScenarioAnimalNames), so neither ever drifts into
+  // the attention queue or changes housing state between reseeds.
+  {
+    name: "Bruno",
+    sex: Sex.MALE,
+    size: AnimalSize.LARGE,
+    weightGrams: 27000,
+    heightCm: 55,
+    microchipNumber: "985141000100016",
+    species: allSpecies.DOG,
+    breeds: [allSpecies.DOG.breeds.LABRADOR],
+    colors: [allColors.GOLDEN],
+    primaryColor: allColors.GOLDEN,
+    characteristics: [allCharacteristics.GOOD_WITH_KIDS],
+    intakeType: IntakeType.OWNER_SURRENDER,
+    healthStatus: AnimalHealthStatus.HEALTHY,
+    images: [`${baseUrl}/dog2.jpg`],
+    unitName: allLocations.DOG_BLOCK_A.units.A3.name,
+    archetype: "IN_CARE",
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    birthDate: new Date("2023-04-11"),
+  },
+  {
+    name: "Bruno",
+    sex: Sex.MALE,
+    size: AnimalSize.MEDIUM,
+    weightGrams: 19000,
+    heightCm: 46,
+    microchipNumber: "985141000100017",
+    species: allSpecies.DOG,
+    breeds: [allSpecies.DOG.breeds.MIXED_BREED],
+    colors: [allColors.BLACK, allColors.WHITE],
+    primaryColor: allColors.BLACK,
+    characteristics: [allCharacteristics.HOUSEBROKEN],
+    intakeType: IntakeType.STRAY,
+    healthStatus: AnimalHealthStatus.HEALTHY,
+    images: [`${baseUrl}/dog3.jpg`],
+    unitName: null,
+    archetype: "IN_CARE",
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    birthDate: new Date("2019-08-02"),
+  },
 ];
 
 // Hand-authored animals that back specific attention-queue scenarios. Kept out
@@ -853,6 +907,13 @@ const attentionQueueScenarioAnimalNames = [
   "Nutmeg",
   "Juniper",
 ];
+
+// Hand-authored animals kept out of the random foster lottery for a reason
+// other than the attention queue: the "Bruno" disambiguation pair (acceptance
+// check 3) must stay in its fixed, scripted housing state across reseeds — a
+// random foster placement would null one Bruno's `currentUnitId` and change
+// what `getAnimalSummary` returns for it.
+const disambiguationScenarioAnimalNames = ["Bruno"];
 
 // Ambient, future-dated tasks scattered across random animals. These do NOT
 // feed the attention queue (nothing here is overdue) — the deterministic
@@ -1906,7 +1967,7 @@ async function seedReturnAndReadoptAnimal(opts: {
   const animal = await prisma.animal.create({
     data: {
       name: blueprint.name,
-      birthDate: getRandomDate(),
+      birthDate: blueprint.birthDate ?? getRandomDate(),
       sex: blueprint.sex,
       size: blueprint.size,
       currentWeightGrams: blueprint.weightGrams,
@@ -2096,10 +2157,10 @@ async function seedPersonsAndUsers() {
         password = process.env.ADMIN_PASSWORD;
       }
 
-      // D9 — sign up through the seed auth instance (matching email) so the
-      // linkOrCreatePerson hook (D8) links this user to the Person just
+      // sign up through the seed auth instance (matching email) so the
+      // linkOrCreatePerson hook links this user to the Person just
       // created above, instead of a raw insert. `role` is `input: false`
-      // (D3) so it can't ride along in the signUpEmail body — set it with a
+      // so it can't ride along in the signUpEmail body — set it with a
       // follow-up update.
       const { user } = await seedAuth.api.signUpEmail({
         body: { name: pData.name, email: pData.email, password },
@@ -2118,7 +2179,7 @@ async function seedPersonsAndUsers() {
 // animals to draw surrenderers/finders/owners from — replacing the old
 // reliance on a single shared "External Agency" record.
 const linkTestEmail = process.env.DEV_LINK_TEST_EMAIL;
-// D8 link-branch exercise: when set, gives one walk-in Person this email so
+// link-branch exercise: when set, gives one walk-in Person this email so
 // signing in with a matching, provider-verified OAuth account (GitHub,
 // Google, ...) hits the link branch (existing Person, no duplicate created)
 // instead of create. Unset in the repo and in the demo deploy — the seed's
@@ -2419,7 +2480,7 @@ async function seedAnimalsAndRelations() {
       const animal = await prisma.animal.create({
         data: {
           name: blueprint.name,
-          birthDate: getRandomDate(),
+          birthDate: blueprint.birthDate ?? getRandomDate(),
           sex: blueprint.sex,
           // Staff-set expected adult size — independent of weightGrams.
           size: blueprint.size,
@@ -2816,7 +2877,12 @@ async function seedFostering() {
         in: [AnimalListingStatus.PUBLISHED, AnimalListingStatus.DRAFT],
       },
       currentUnitId: { not: null },
-      name: { notIn: attentionQueueScenarioAnimalNames },
+      name: {
+        notIn: [
+          ...attentionQueueScenarioAnimalNames,
+          ...disambiguationScenarioAnimalNames,
+        ],
+      },
     },
     select: { id: true, currentUnitId: true },
   });
@@ -3464,7 +3530,7 @@ async function clearDatabase() {
   await prisma.color.deleteMany();
   await prisma.characteristic.deleteMany();
 
-  // Session/Account cascade from User, but clear them explicitly (H6) — the
+  // Session/Account cascade from User, but clear them explicitly — the
   // next reset's signUpEmail would otherwise collide on account's unique
   // (issuer, accountId) index. Verification has no FK to User; clear it too.
   await prisma.session.deleteMany();

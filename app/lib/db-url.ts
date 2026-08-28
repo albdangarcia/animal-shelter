@@ -49,3 +49,54 @@ export function resolveDatabaseUrl(
   }
   return url;
 }
+
+/**
+ * True when a Postgres connection URL points at a loopback or private-network
+ * host — a local container or dev box, never a shared database that could hold
+ * real records.
+ *
+ * This is the single fact the AI provider's free-tier guard trusts (see
+ * `app/lib/ai/provider-guard.ts`). It is derived from the connection URL the
+ * app actually runs against, so — unlike a separate `IS_DEMO`-style flag —
+ * there is no way to point the app at a production database and still have the
+ * guard treat it as safe.
+ *
+ * Unparseable input returns `false` (fail closed). "Private" here means:
+ * `localhost`, the IPv4 loopback (`127/8`) and unspecified (`0.0.0.0`)
+ * addresses, IPv6 loopback (`::1`), RFC 1918 ranges (`10/8`, `172.16/12`,
+ * `192.168/16`), mDNS `.local` names, and bare single-label hostnames such as
+ * the `postgres` / `db` service names Docker Compose resolves on its own
+ * bridge network.
+ */
+export function isLocalDatabaseUrl(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (!host) return false;
+
+  // For non-special schemes (`postgresql:`), `new URL` keeps the brackets on a
+  // literal IPv6 host — normalize `[::1]` down to `::1`.
+  if (host.startsWith("[") && host.endsWith("]")) host = host.slice(1, -1);
+  if (host === "::1") return true;
+  if (host === "localhost" || host === "0.0.0.0") return true;
+  if (host.endsWith(".local")) return true;
+
+  // Bare hostname with no dots — a Docker Compose service name or similar,
+  // not a publicly routable host. (IPv6 addresses contain colons and are
+  // handled above / below, so a colon-free, dot-free token is a short name.)
+  if (!host.includes(".") && !host.includes(":")) return true;
+
+  const ipv4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const first = Number(ipv4[1]);
+    const second = Number(ipv4[2]);
+    if (first === 127 || first === 10) return true;
+    if (first === 192 && second === 168) return true;
+    if (first === 172 && second >= 16 && second <= 31) return true;
+  }
+
+  return false;
+}

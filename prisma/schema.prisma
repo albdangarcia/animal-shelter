@@ -103,7 +103,7 @@ model User {
 }
 
 /// Better Auth session row — first time this app has session rows; the prior
-/// strategy was JWT-only (D5).
+/// strategy was JWT-only.
 model Session {
   id        String   @id @default(cuid())
   token     String   @unique

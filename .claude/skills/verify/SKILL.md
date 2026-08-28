@@ -109,7 +109,7 @@ app logic — just a more reliable way to get an authenticated Playwright contex
 
 ## Auth layout
 
-Better Auth, three files, one shared config (migration doc D6):
+Better Auth, three files, one shared config:
 
 - `auth.options.ts` — shared options, Prisma client **injected** as a parameter, no
   plugins. Holds `prismaAdapter`, `emailAndPassword.enabled: true`, `socialProviders`
@@ -120,7 +120,7 @@ Better Auth, three files, one shared config (migration doc D6):
   `emailAndPassword.disableSignUp: true`, and `plugins: [nextCookies()]`. **`nextCookies()`
   must be last in the array** — without it, sign-in through a server action creates the
   session row but never sets the browser cookie, and the user appears logged out with no
-  error anywhere (H5).
+  error anywhere.
 - `prisma/seed.ts` — its own `seedAuth` instance on the **direct** client, with
   `disableSignUp: false`, `autoSignIn: false`, and `trustProvidedEmails: true`.
 
@@ -144,9 +144,9 @@ in page/layout guards and in `protectedAction`.
 Session reads go through `getCachedSession()` in `app/lib/auth/session.ts` — a zero-arg
 React `cache()` wrapper around `auth.api.getSession({ headers: await headers() })`.
 `withAuthenticatedUser` and `hasPermission` both call it, so a whole render converges on
-one session read (D5a). **`auth()` is not callable** — that was next-auth. Sessions are
+one session. **`auth()` is not callable** — that was next-auth. Sessions are
 DB-backed with no `cookieCache`, deliberately: roles stay always-fresh and a demotion
-takes effect on the next request (D5).
+takes effect on the next reques.
 
 The session user type is `SessionUser` from `app/lib/auth/session.types.ts` (types only,
 safe for client components). `personId` on it is `string`, not nullable — `User.personId`

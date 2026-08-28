@@ -59,7 +59,7 @@ export type FosterOverdueRow = {
   animal: AttentionAnimal;
   placementId: string;
   expectedEndDate: Date;
-  fosterName: string; // person's display name only — no email/phone/address (D7)
+  fosterName: string; // person's display name only — no email/phone/address
 };
 
 // Structured reasons, not pre-formatted strings: a dashboard card and an AI

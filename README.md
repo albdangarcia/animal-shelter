@@ -135,6 +135,13 @@ Typical values per environment:
 | ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SHELTER_TIMEZONE` | ⚪ Optional | IANA timezone the shelter operates in (e.g. `America/New_York`). All report date-range boundaries are computed in this zone. Defaults to `America/New_York`. |
 
+### AI Staff Chat
+
+| Variable                       | Required    | Description                                                                                                                                                                                                                                                                                              |
+| ------------------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | ⚪ Optional | Gemini API key for the AI staff chat (`@ai-sdk/google`). Get one from [Google AI Studio](https://aistudio.google.com/apikey). Unset ⇒ the chat feature is unavailable.                                                                                                                                     |
+| `AI_PROVIDER_TIER`             | ⚪ Optional | `free` (default) or `paid`. Free-tier Gemini retains prompts and tool results for training/human review, so on `free` the provider module refuses to start unless `DATABASE_URL` points at a local/private database (derived from the URL — no separate flag to get wrong). A networked database needs `paid`. |
+
 ### Seeding
 
 | Variable              | Required    | Description                                                                                                                                                                                                    |

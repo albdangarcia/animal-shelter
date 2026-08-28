@@ -15,6 +15,6 @@ export const auth = betterAuth({
     disableSignUp: true,
   },
   // Must be last: without it, sign-in via a server action creates the
-  // session row but never sets the cookie in the browser (H5).
+  // session row but never sets the cookie in the browser.
   plugins: [nextCookies()],
 });

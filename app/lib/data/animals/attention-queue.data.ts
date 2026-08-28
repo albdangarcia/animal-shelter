@@ -61,7 +61,12 @@ const toAttentionAnimal = (animal: AttentionAnimalRow): AttentionAnimal => ({
     : null,
 });
 
-const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
+// Exported unwrapped for the AI tool layer: a tool's `execute` runs
+// mid-stream where `RequirePermission`'s ambient session read is unreliable.
+// `getAttentionQueue` calls `requireFor` for both permissions
+// itself before calling this. The `RequirePermission`-wrapped `fetchAttentionQueue`
+// export below stays for server components.
+export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
   try {
     const now = new Date();
     // Signal 1 counts a task due at any point today ("<= end of today").
