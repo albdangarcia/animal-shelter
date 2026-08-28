@@ -4,6 +4,7 @@ import { getCachedSession } from "@/app/lib/auth/session";
 import { GitHubIcon, GoogleIcon } from "@/components/auth/provider-icons";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { SearchParamsType } from "@/app/lib/types";
+import { safeInternalPath } from "@/app/lib/utils/safe-redirect";
 
 const providerMap = [
   { id: "github", name: "GitHub", label: "Sign in with GitHub" },
@@ -20,13 +21,17 @@ interface Props {
 }
 
 const SignInPage = async ({ searchParams }: Props) => {
+  const { callbackUrl } = await searchParams;
+  // Guards the auth.api.signInSocial call below, which nothing downstream
+  // validates. auth.actions.ts guards its own argument separately — it's a
+  // public POST endpoint — so this looks redundant for the credentials path.
+  // It isn't: remove this and the social path goes unchecked.
+  const redirectTo = safeInternalPath(callbackUrl, "/");
+
   const session = await getCachedSession();
   if (session) {
-    return redirect("/");
+    return redirect(redirectTo);
   }
-
-  const { callbackUrl } = await searchParams;
-  const redirectTo = callbackUrl ?? "/";
 
   return (
     <div className="flex flex-col items-center justify-center pt-8 pb-17 px-4 sm:px-6 lg:px-8">
