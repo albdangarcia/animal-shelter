@@ -23,8 +23,11 @@ export const findAnimalsTool = tool({
     "first whenever the user refers to an animal by name — you need an id " +
     "before you can call getAnimalSummary or any write tool. Returns the " +
     "match set: id, name, species, birth date, and current unit. If more " +
-    "than one animal matches, ask the user which one rather than guessing. " +
-    "Archived animals (adopted, transferred out, deceased) are not returned.",
+    "than one animal matches, ask the user which one rather than guessing, " +
+    "and tell them apart by birth date and unit. The returned `animalId` is an " +
+    "internal handle for calling other tools — never show it to the user or " +
+    "put it in a table. Archived animals (adopted, transferred out, deceased) " +
+    "are not returned.",
   inputSchema: z.object({
     query: z
       .string()

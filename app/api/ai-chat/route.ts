@@ -1,0 +1,138 @@
+import { NextResponse } from "next/server";
+import {
+  convertToModelMessages,
+  createUIMessageStreamResponse,
+  isStepCount,
+  streamText,
+  toUIMessageStream,
+} from "ai";
+import { getCachedSession } from "@/app/lib/auth/session";
+import { can } from "@/app/lib/auth/can";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { toActor } from "@/app/lib/auth/actor";
+import { PreconditionFailedError } from "@/app/lib/utils/errors";
+import { MAX_STEPS, model } from "@/app/lib/ai/provider";
+import { buildToolsForActor } from "@/app/lib/ai/registry";
+import { buildSystemPrompt } from "@/app/lib/ai/prompt";
+import { CHAT_ERROR_COPY, classifyChatError } from "@/app/lib/ai/chat-errors";
+import type { ShelterUIMessage } from "@/app/lib/ai/ui-message";
+
+/**
+ * Seconds the whole streamed turn may take, including the tool loop.
+ *
+ * Measured on this seed with free-tier `gemini-3.5-flash`: 27s for a two-step
+ * answer, 35s for three steps, and 44s recorded in D8 — non-streamed, but
+ * streaming shortens time-to-first-token, not the tail. `MAX_STEPS` bounds the
+ * worst case.
+ *
+ * 60 is deliberate rather than generous: it is the largest value valid on every
+ * Vercel configuration, including Hobby without Fluid compute, and a value the
+ * plan disallows fails the build rather than degrading. Raise it only after
+ * confirming the deployment target's ceiling — with Fluid compute the limit is
+ * 300s, which is the number to use if the tool loop ever grows past two or
+ * three steps in the common case.
+ */
+export const maxDuration = 60;
+
+/**
+ * The chat endpoint.
+ *
+ * and the reason this handler looks the way it does: tool `execute` runs
+ * *after* this function has returned its `Response`, while the stream is still
+ * open. Request-scoped async storage is not reliably available there. So the
+ * session is read once, here, at the top; the actor is derived from it and
+ * handed to the tools through `toolsContext`. Nothing downstream of
+ * `streamText` may call `headers()`, `cookies()`, `getCachedSession()`, or
+ * `revalidatePath()`.
+ *
+ * The request body contributes exactly one thing: the messages. Role, actor,
+ * and tool list are all derived server-side from the session cookie — a role
+ * or tool name arriving in the body is ignored, not trusted.
+ */
+export async function POST(request: Request) {
+  const session = await getCachedSession();
+  if (!session?.user) {
+    return NextResponse.json(
+      { error: "Unauthorized: You must be logged in." },
+      { status: 401 },
+    );
+  }
+
+  if (!can(session.user.role, AppPermissions.AI_CHAT_USE)) {
+    return NextResponse.json(
+      { error: "Forbidden: You do not have access to the AI assistant." },
+      { status: 403 },
+    );
+  }
+
+  let actor;
+  try {
+    actor = toActor(session.user);
+  } catch (error) {
+    // A user with no linked person record is authenticated but unusable —
+    // a broken User → Person link, not a missing session.
+    if (error instanceof PreconditionFailedError) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
+    }
+    throw error;
+  }
+
+  let messages: ShelterUIMessage[];
+  try {
+    ({ messages } = (await request.json()) as { messages: ShelterUIMessage[] });
+  } catch {
+    return NextResponse.json(
+      { error: "Bad Request: expected a JSON body." },
+      { status: 400 },
+    );
+  }
+  if (!Array.isArray(messages)) {
+    return NextResponse.json(
+      { error: "Bad Request: `messages` must be an array." },
+      { status: 400 },
+    );
+  }
+
+  // Filtered by the caller's permissions. A tool this actor may not use is
+  // absent from both objects, so the model never learns it exists.
+  const { tools, toolsContext } = buildToolsForActor(actor);
+
+  const result = streamText({
+    model,
+    instructions: buildSystemPrompt({
+      actor,
+      displayName: session.user.name,
+    }),
+    messages: await convertToModelMessages(messages),
+    tools,
+    toolsContext,
+    stopWhen: isStepCount(MAX_STEPS),
+  });
+
+  return createUIMessageStreamResponse({
+    stream: toUIMessageStream({
+      stream: result.stream,
+      // The current model reasons before answering. That reasoning is not
+      // rendered — the progress indicator is what the person watches — and
+      // shipping it would put the model's half-formed statements about shelter
+      // data in the browser for no benefit.
+      sendReasoning: false,
+      onError: describeStreamError,
+    }),
+  });
+}
+
+/**
+ * Turns a mid-stream failure into copy a person can act on.
+ *
+ * Whatever this returns is sent to the browser, so it is picked from the
+ * authored table rather than derived from the provider's message. The raw error
+ * is logged here instead — free-tier capacity exhaustion is a recurring
+ * condition on this provider and worth being able to confirm in the server log.
+ */
+function describeStreamError(error: unknown): string {
+  console.error("AI chat stream failed.", error);
+
+  const message = error instanceof Error ? error.message : String(error);
+  return CHAT_ERROR_COPY[classifyChatError(message)];
+}

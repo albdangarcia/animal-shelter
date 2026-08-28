@@ -27,7 +27,11 @@ export const getAttentionQueueTool = tool({
     "health status with no open task, or a foster placement past its " +
     "expected end date. Use this for questions like \"what needs attention\", " +
     "\"what's overdue\", or \"what should we prioritise today\". Takes no " +
-    "arguments. Sorted most urgent first.",
+    "arguments. The result is already sorted most urgent first — report every " +
+    "entry, in the order given, and do not drop or summarise any away. A task " +
+    "reason carries `overdue: true` when it should already have been done; " +
+    "those are the most urgent items in the list and must never be presented " +
+    "as less important than one due today.",
   inputSchema: z.object({}),
   contextSchema: actorContextSchema,
   async execute(

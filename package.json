@@ -30,6 +30,8 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.56",
+    "@ai-sdk/groq": "^4.0.34",
+    "@ai-sdk/react": "^4.0.87",
     "@better-auth/prisma-adapter": "^1.7.1",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
@@ -83,7 +85,9 @@
     "react-dom": "^19.2.8",
     "react-hook-form": "^7.65.0",
     "react-hot-toast": "^2.5.2",
+    "react-markdown": "^10.1.0",
     "recharts": "^3.8.1",
+    "remark-gfm": "^4.0.1",
     "sonner": "^2.0.5",
     "tailwind-merge": "^3.3.1",
     "use-debounce": "^10.0.4",

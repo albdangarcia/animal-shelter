@@ -1,6 +1,7 @@
 import type { Actor } from "@/app/lib/auth/actor";
 import { can } from "@/app/lib/auth/can";
 import type { AppPermission } from "@/app/lib/auth/permissions";
+import type { AiToolName } from "./tool-names";
 import {
   FIND_ANIMALS_PERMISSIONS,
   findAnimalsTool,
@@ -14,16 +15,17 @@ import {
   getAttentionQueueTool,
 } from "./tools/get-attention-queue";
 
-export type AiToolName =
-  | "findAnimals"
-  | "getAnimalSummary"
-  | "getAttentionQueue";
+export type { AiToolName };
 
+// `satisfies` rather than a type annotation: it keeps the literal type (which
+// `AiToolSet` and the SDK's tool-part inference are built from) while still
+// failing the build if the table and `AiToolName` ever disagree in either
+// direction.
 const AI_TOOLS = {
   findAnimals: findAnimalsTool,
   getAnimalSummary: getAnimalSummaryTool,
   getAttentionQueue: getAttentionQueueTool,
-};
+} satisfies Record<AiToolName, unknown>;
 
 export type AiToolSet = typeof AI_TOOLS;
 
