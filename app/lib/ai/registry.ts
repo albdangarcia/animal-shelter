@@ -14,6 +14,10 @@ import {
   GET_ATTENTION_QUEUE_PERMISSIONS,
   getAttentionQueueTool,
 } from "./tools/get-attention-queue";
+import {
+  SET_TASK_STATUS_PERMISSIONS,
+  setTaskStatusTool,
+} from "./tools/set-task-status";
 
 export type { AiToolName };
 
@@ -25,6 +29,7 @@ const AI_TOOLS = {
   findAnimals: findAnimalsTool,
   getAnimalSummary: getAnimalSummaryTool,
   getAttentionQueue: getAttentionQueueTool,
+  setTaskStatus: setTaskStatusTool,
 } satisfies Record<AiToolName, unknown>;
 
 export type AiToolSet = typeof AI_TOOLS;
@@ -36,6 +41,7 @@ const TOOL_PERMISSIONS: Record<AiToolName, readonly AppPermission[]> = {
   findAnimals: FIND_ANIMALS_PERMISSIONS,
   getAnimalSummary: GET_ANIMAL_SUMMARY_PERMISSIONS,
   getAttentionQueue: GET_ATTENTION_QUEUE_PERMISSIONS,
+  setTaskStatus: SET_TASK_STATUS_PERMISSIONS,
 };
 
 const TOOL_NAMES = Object.keys(TOOL_PERMISSIONS) as AiToolName[];

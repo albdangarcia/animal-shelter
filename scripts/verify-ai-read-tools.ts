@@ -66,7 +66,11 @@ async function ask(who: { actor: Actor; name: string }, question: string) {
     try {
       const result = await generateText({
         model,
-        system: buildSystemPrompt({ actor: who.actor, displayName: who.name }),
+        system: buildSystemPrompt({
+          actor: who.actor,
+          displayName: who.name,
+          availableTools: Object.keys(tools) as (keyof typeof tools)[],
+        }),
         prompt: question,
         tools,
         toolsContext,

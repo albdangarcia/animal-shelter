@@ -19,12 +19,16 @@ export function ChatComposer({
   onSubmit,
   onStop,
   isStreaming,
+  disabled = false,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
   onStop: () => void;
   isStreaming: boolean;
+  /** Held open but not streaming — e.g. a pending approval. Input is blocked
+   * and the send button is disabled, but no Stop button is shown. */
+  disabled?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -39,7 +43,7 @@ export function ChatComposer({
     el.style.height = `${el.scrollHeight}px`;
   }, [value]);
 
-  const canSend = value.trim().length > 0 && !isStreaming;
+  const canSend = value.trim().length > 0 && !isStreaming && !disabled;
 
   return (
     <form
@@ -53,7 +57,7 @@ export function ChatComposer({
         ref={textareaRef}
         value={value}
         rows={1}
-        disabled={isStreaming}
+        disabled={isStreaming || disabled}
         placeholder="Ask about an animal, a task, or today's priorities…"
         aria-label="Message the shelter assistant"
         onChange={(event) => onChange(event.target.value)}

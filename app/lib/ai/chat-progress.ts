@@ -32,6 +32,7 @@ const STEP_LABELS: Record<AiToolName, string> = {
   getAttentionQueue: "Checking today's attention queue",
   findAnimals: "Looking up animals",
   getAnimalSummary: "Reading the record",
+  setTaskStatus: "Updating the task",
 };
 
 const THINKING_STEP = { key: "thinking", label: "Thinking" } as const;

@@ -18,6 +18,7 @@ import {
   type TaskStatus,
 } from "@/prisma/generated/enums";
 import { NotFoundError } from "../utils/errors";
+import { applyTaskStatusChange } from "../tasks/apply-task-status-change";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 type TaskFormInput = z.input<typeof TaskFormSchema>;
@@ -325,38 +326,17 @@ const _updateTaskStatus = async (
 
   let animalId: string;
   try {
-    animalId = await prisma.$transaction(async (tx) => {
-      const existing = await tx.task.findUnique({
-        where: { id: parsedTaskId.data },
-        select: { status: true, title: true },
-      });
-
-      if (!existing) {
-        throw new NotFoundError("Task not found.");
-      }
-
-      // The animal id is no longer a parameter — it was validated and then
-      // never read, since the where clause is the task id alone. It comes
-      // back from the write instead, still needed for revalidation.
-      const task = await tx.task.update({
-        where: { id: parsedTaskId.data },
-        data: { status },
-        select: { animalId: true },
-      });
-
-      if (existing.status !== status) {
-        await tx.animalActivityLog.create({
-          data: {
-            animalId: task.animalId,
-            activityType: AnimalActivityType.TASK_STATUS_CHANGED,
-            changedById: editorId,
-            changeSummary: `Task "${existing.title}" status changed from ${existing.status} to ${status}.`,
-          },
-        });
-      }
-
-      return task.animalId;
-    });
+    // The transaction body (read prior, update, log iff changed) lives in
+    // applyTaskStatusChange so the AI write tool runs the exact same path plus
+    // its own AiActionLog row. The animal id comes back from the write — it was
+    // never a real parameter, only revalidation needs it.
+    ({ animalId } = await prisma.$transaction((tx) =>
+      applyTaskStatusChange(tx, {
+        taskId: parsedTaskId.data,
+        status,
+        changedById: editorId,
+      }),
+    ));
   } catch (error) {
     if (error instanceof NotFoundError) {
       return { success: false, message: error.message };

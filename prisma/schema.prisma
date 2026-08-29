@@ -69,6 +69,7 @@ model Person {
   MedicationLog     MedicationLog[]
   Assessment        Assessment[]
   AnimalActivityLog AnimalActivityLog[]
+  aiActionLogs      AiActionLog[]
   vitalsLogs        VitalsLog[]
 
   @@index([phoneNormalized])
@@ -1291,6 +1292,46 @@ model AnimalActivityLog {
   changedAt DateTime @default(now())
 
   @@map("animal_activity_logs")
+}
+
+// Forensic record of every AI-initiated mutation. It does NOT replace
+// AnimalActivityLog: that stays the human-facing activity feed (animal-scoped,
+// free-text summary, no before/after). An AI task change writes BOTH, in one
+// transaction. This model carries what an audit undo path needs:
+// the tool, the model-supplied input as received, before/after values, the
+// actor, and the approval correlation ids.
+model AiActionLog {
+  id String @id @default(cuid())
+
+  toolName   String
+  // The AI SDK's tool-call id and approval id. Conversations are ephemeral,
+  // so there is no conversationId/messageId to correlate against — these are.
+  // approvalId is nullable: a mutation reached through a non-approval path (none
+  // in v1) would have no approval to record.
+  toolCallId String
+  approvalId String?
+
+  targetType AiActionTargetType
+  targetId   String
+
+  input  Json // the model-supplied tool input, as received — not the validated shape
+  before Json
+  after  Json
+
+  actorId String @map("actor_id")
+  actor   Person @relation(fields: [actorId], references: [id])
+
+  undoneAt DateTime? @map("undone_at")
+
+  createdAt DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([actorId])
+  @@map("ai_action_logs")
+}
+
+enum AiActionTargetType {
+  TASK
 }
 
 // ═══════════════════════════════════════════════════

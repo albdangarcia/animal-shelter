@@ -12,8 +12,12 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { toActor } from "@/app/lib/auth/actor";
 import { PreconditionFailedError } from "@/app/lib/utils/errors";
 import { MAX_STEPS, model } from "@/app/lib/ai/provider";
+import { AiProviderConfigError } from "@/app/lib/ai/provider-guard";
+import { getToolApprovalSecret } from "@/app/lib/ai/approval-secret";
 import { buildToolsForActor } from "@/app/lib/ai/registry";
+import { WRITE_TOOL_NAMES } from "@/app/lib/ai/tool-names";
 import { buildSystemPrompt } from "@/app/lib/ai/prompt";
+import { setTaskStatusApproval } from "@/app/lib/ai/tools/set-task-status";
 import { CHAT_ERROR_COPY, classifyChatError } from "@/app/lib/ai/chat-errors";
 import type { ShelterUIMessage } from "@/app/lib/ai/ui-message";
 
@@ -96,16 +100,46 @@ export async function POST(request: Request) {
   // Filtered by the caller's permissions. A tool this actor may not use is
   // absent from both objects, so the model never learns it exists.
   const { tools, toolsContext } = buildToolsForActor(actor);
+  const availableTools = Object.keys(tools) as (keyof typeof tools)[];
+
+  // Write tools sign their approval requests. Fail closed: a missing secret
+  // must not degrade to unsigned approvals, so if this actor's set contains a
+  // write tool and the secret is unset, refuse the whole request rather than
+  // stream one that could be approved by a forged message. A volunteer's
+  // read-only chat does not reach this.
+  const hasWriteTool = WRITE_TOOL_NAMES.some((name) => name in tools);
+  let toolApprovalSecret: string | undefined;
+  if (hasWriteTool) {
+    try {
+      toolApprovalSecret = getToolApprovalSecret();
+    } catch (error) {
+      if (error instanceof AiProviderConfigError) {
+        console.error("AI chat refused: approval secret missing.", error);
+        return NextResponse.json(
+          { error: CHAT_ERROR_COPY.misconfigured },
+          { status: 500 },
+        );
+      }
+      throw error;
+    }
+  }
 
   const result = streamText({
     model,
     instructions: buildSystemPrompt({
       actor,
       displayName: session.user.name,
+      availableTools,
     }),
     messages: await convertToModelMessages(messages),
     tools,
     toolsContext,
+    // The actor is re-derived from the session on every turn regardless of
+    // signing — message history is client input, and signing protects the
+    // approval, not the identity. The approval function resolves the task
+    // server-side and builds the confirmation card's text from the database.
+    toolApproval: { setTaskStatus: setTaskStatusApproval },
+    experimental_toolApprovalSecret: toolApprovalSecret,
     stopWhen: isStepCount(MAX_STEPS),
   });
 

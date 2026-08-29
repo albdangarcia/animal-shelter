@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, getToolName, isToolUIPart } from "ai";
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+} from "ai";
 import { IconAlertCircle, IconRefresh } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { describeChatError } from "@/app/lib/ai/chat-errors";
 import { describeActiveStep } from "@/app/lib/ai/chat-progress";
 import type { ChatExample } from "@/app/lib/ai/chat-examples";
-import { WRITE_TOOL_NAMES, type AiToolName } from "@/app/lib/ai/tool-names";
+import type { AiToolName } from "@/app/lib/ai/tool-names";
 import type { ShelterUIMessage } from "@/app/lib/ai/ui-message";
 import { ChatComposer } from "./chat-composer";
 import { ChatEmptyState } from "./chat-empty-state";
@@ -43,18 +46,23 @@ export function AiChat({
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
-  const { messages, sendMessage, status, error, stop, regenerate } =
+  const { messages, sendMessage, status, error, stop, regenerate, addToolApprovalResponse } =
     useChat<ShelterUIMessage>({
       transport: new DefaultChatTransport({ api: "/api/ai-chat" }),
+      // After the person answers the approval card, resubmit so the tool loop
+      // continues on the server (executes the write, or handles the denial).
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
       onFinish: ({ message }) => {
-        // a tool cannot call `revalidatePath`, and the dashboard behind
-        // this client component would not know a write happened. No write tool
-        // exists; the call site is wired now so that phase only
-        // has to add a name to WRITE_TOOL_NAMES.
+        // A tool cannot call `revalidatePath`, and the dashboard behind this
+        // client component would not know a write happened. Refresh only on a
+        // turn that actually changed a task — not on the turn that merely
+        // *requested* approval, and not on a no-op.
         const wrote = message.parts.some(
           (part) =>
-            isToolUIPart(part) &&
-            WRITE_TOOL_NAMES.includes(getToolName(part) as AiToolName),
+            part.type === "tool-setTaskStatus" &&
+            part.state === "output-available" &&
+            part.output.ok &&
+            part.output.result.changed,
         );
         if (wrote) router.refresh();
       },
@@ -63,6 +71,17 @@ export function AiChat({
   const isBusy = status === "submitted" || status === "streaming";
   const lastMessage = messages.at(-1);
   const activeStep = describeActiveStep({ status, messages });
+
+  // A pending approval card holds the tool loop open server-side. Block the
+  // composer until it is answered — a new question sent now would be appended
+  // to a turn that has not finished.
+  const awaitingApproval =
+    lastMessage?.role === "assistant" &&
+    lastMessage.parts.some(
+      (part) =>
+        part.type === "tool-setTaskStatus" &&
+        part.state === "approval-requested",
+    );
 
   const send = useCallback(
     (text: string) => {
@@ -122,6 +141,18 @@ export function AiChat({
                 isIncomplete={
                   showIncompleteOnLast && message.id === lastMessage?.id
                 }
+                onApprovalRespond={(approvalId, approved) =>
+                  addToolApprovalResponse({
+                    id: approvalId,
+                    approved,
+                    // Give the model an explicit signal on a denial — without a
+                    // reason it reads the declined tool call as "not confirmed
+                    // yet" and re-offers instead of dropping it.
+                    reason: approved
+                      ? undefined
+                      : "The user reviewed the confirmation and declined. Do not make this change or offer to retry it.",
+                  })
+                }
               />
             ))}
 
@@ -162,10 +193,12 @@ export function AiChat({
           onSubmit={() => send(input)}
           onStop={stop}
           isStreaming={isBusy}
+          disabled={Boolean(awaitingApproval)}
         />
         <p className="text-muted-foreground mt-2 text-center text-xs">
-          Answers come from live shelter data. This conversation isn&apos;t
-          saved — refreshing clears it.
+          {awaitingApproval
+            ? "Approve or deny the change above to continue."
+            : "Answers come from live shelter data. This conversation isn’t saved — refreshing clears it."}
         </p>
       </div>
     </div>

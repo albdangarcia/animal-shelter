@@ -7,7 +7,8 @@ import type { AiToolName } from "./tool-names";
  * empty state has to teach the tool set. These are drawn from what the seed can
  * actually answer, which makes the empty state double as the demo path: the
  * attention queue, the deliberate two-Bruno collision, an animal in an acute
- * health status, and a summary with open tasks attached.
+ * health status, a summary with open tasks attached, and — staff only — a task
+ * status change behind the approval card (Daisy's overdue post-op recheck).
  *
  * Because the animal names are seed fixtures, they change when the seed does —
  * see `attentionScenarioAnimalNames` and the "Bruno" pair in `prisma/seed.ts`.
@@ -46,14 +47,20 @@ const CHAT_EXAMPLES: readonly ChatExample[] = [
     prompt: "Does Juniper have any open tasks?",
     requiresTools: ["findAnimals", "getAnimalSummary"],
   },
+  {
+    label: "Mark Daisy's post-op recheck done",
+    prompt: "Mark Daisy's post-op wound recheck as done.",
+    requiresTools: ["findAnimals", "getAnimalSummary", "setTaskStatus"],
+  },
 ] as const;
 
 /**
  * The examples an actor can actually have answered.
  *
- * Tools are all reads that volunteers and staff both hold, so this filter
- * passes everything for every role that can reach the page — which is the
- * correct outcome, not a missing feature.
+ * The read examples need tools volunteers and staff both hold. The task-status
+ * example needs `setTaskStatus`, which only staff and admin hold — so a
+ * volunteer's empty state never suggests a write it cannot perform, and the
+ * role-awareness comes from the same `can()` decisions the registry makes.
  */
 export function examplesForTools(
   availableTools: readonly AiToolName[],
