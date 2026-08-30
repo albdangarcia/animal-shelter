@@ -29,7 +29,6 @@
     "verify:ai": "dotenv -e .env.local -e .env.development -e .env -- tsx scripts/verify-ai-read-tools.ts"
   },
   "dependencies": {
-    "@ai-sdk/google": "^4.0.56",
     "@ai-sdk/groq": "^4.0.34",
     "@ai-sdk/react": "^4.0.87",
     "@better-auth/prisma-adapter": "^1.7.1",

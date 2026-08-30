@@ -96,7 +96,7 @@ function findApprovalId(
  * asking a person to confirm something pointless or impossible:
  *
  * - the id does not resolve to a task (the model can hallucinate a cuid);
- * - the task is already in the requested status (the Phase 1 no-op guard,
+ * - the task is already in the requested status (the no-op guard,
  *   moved up front so `execute` only runs on a real change).
  *
  * Runs at request time and again on replay (the SDK re-evaluates the policy

@@ -24,10 +24,10 @@ import type { ShelterUIMessage } from "@/app/lib/ai/ui-message";
 /**
  * Seconds the whole streamed turn may take, including the tool loop.
  *
- * Measured on this seed with free-tier `gemini-3.5-flash`: 27s for a two-step
- * answer, 35s for three steps, and 44s recorded in D8 — non-streamed, but
- * streaming shortens time-to-first-token, not the tail. `MAX_STEPS` bounds the
- * worst case.
+ * Measured on this seed through the streaming route with Groq
+ * `openai/gpt-oss-120b`: 0.7–1.3s to first token and 1.7–2.0s to a
+ * complete two-step answer, with the slowest observed run at 9.8s first token /
+ * 10.8s complete. `MAX_STEPS` bounds the worst case.
  *
  * 60 is deliberate rather than generous: it is the largest value valid on every
  * Vercel configuration, including Hobby without Fluid compute, and a value the
@@ -35,6 +35,10 @@ import type { ShelterUIMessage } from "@/app/lib/ai/ui-message";
  * confirming the deployment target's ceiling — with Fluid compute the limit is
  * 300s, which is the number to use if the tool loop ever grows past two or
  * three steps in the common case.
+ *
+ * Under Groq the binding constraint is that platform ceiling, not latency: the
+ * observed answers finish well inside 60s, so 60 buys portability across Vercel
+ * plans rather than headroom for a slow provider.
  */
 export const maxDuration = 60;
 
@@ -161,8 +165,9 @@ export async function POST(request: Request) {
  *
  * Whatever this returns is sent to the browser, so it is picked from the
  * authored table rather than derived from the provider's message. The raw error
- * is logged here instead — free-tier capacity exhaustion is a recurring
- * condition on this provider and worth being able to confirm in the server log.
+ * is logged here instead — Groq's free-tier ceiling was not hit once
+ * but a capacity or rate-limit failure still needs to
+ * be confirmable in the server log when it does happen.
  */
 function describeStreamError(error: unknown): string {
   console.error("AI chat stream failed.", error);

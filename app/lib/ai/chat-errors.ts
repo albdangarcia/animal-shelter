@@ -3,7 +3,7 @@
  * the client.
  *
  * Three different things go wrong here and they look identical if you let them:
- * the free tier running out of capacity (recurring, and genuinely fixed by
+ * the free tier running out of capacity (transient, and genuinely fixed by
  * waiting), a misconfigured key (never fixed by waiting), and everything else.
  * The route classifies server-side failures into these strings; the client
  * classifies transport failures and then renders *only* strings from this

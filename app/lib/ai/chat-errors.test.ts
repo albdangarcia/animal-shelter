@@ -45,6 +45,7 @@ test("raw provider and database text never reaches the screen", () => {
     "GoogleGenerativeAIError: models/gemini-3.5-flash is not found for API version v1beta",
     'PrismaClientKnownRequestError: connect ECONNREFUSED 10.0.0.4:5432',
     "AI_APICallError: x-goog-api-key AIzaSyC-not-a-real-key",
+    "AI_APICallError: Invalid API Key provided: gsk_notARealGroqKey000000000000000000000000000000000000",
   ];
 
   for (const message of leaky) {
@@ -55,7 +56,7 @@ test("raw provider and database text never reaches the screen", () => {
       ),
       `expected authored copy, got: ${shown}`,
     );
-    assert.doesNotMatch(shown, /gemini|Prisma|ECONNREFUSED|AIzaSy/i);
+    assert.doesNotMatch(shown, /gemini|Prisma|ECONNREFUSED|AIzaSy|gsk_/i);
   }
 });
 
