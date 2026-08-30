@@ -35,7 +35,18 @@ export interface NavItem {
   title: string;
   url: string;
   icon: IconName;
+  /**
+   * Single required permission. Mutually exclusive with `anyPermissions` —
+   * if both are set, `anyPermissions` wins (see `getFilteredNavLinks`).
+   */
   permission?: AppPermission;
+  /**
+   * Show the entry when the user holds ANY of these. Added for Settings, which
+   * is reachable by several disjoint permissions (each settings card gates
+   * itself); a single `permission` can't express "role-manager OR ai-activity
+   * reader OR …". Every other entry uses the single `permission` form.
+   */
+  anyPermissions?: readonly AppPermission[];
   isActive?: boolean;
   items?: Array<{
     title: string;
@@ -43,6 +54,25 @@ export interface NavItem {
     permission?: AppPermission;
   }>;
 }
+
+/**
+ * Every permission that unlocks at least one card on the Settings page. The
+ * single source of truth for "can this user reach Settings at all" — used both
+ * by the sidebar entry below (`anyPermissions`) and by the page's own top-level
+ * gate (`app/dashboard/settings/page.tsx`), so the two can't drift.
+ *
+ * Keep in sync with `settingsCards` on the settings page: adding a card with a
+ * new permission means adding it here too, or staff granted only that
+ * permission would reach the page with no way to navigate to it.
+ */
+export const SETTINGS_PERMISSIONS: readonly AppPermission[] = [
+  AppPermissions.MANAGE_ROLES,
+  AppPermissions.MANAGE_CHARACTERISTICS_CATALOG,
+  AppPermissions.MANAGE_ANIMAL_TAXONOMY,
+  AppPermissions.MANAGE_ASSESSMENT_TEMPLATES,
+  AppPermissions.MANAGE_LOCATIONS,
+  AppPermissions.AI_ACTIVITY_READ,
+] as const;
 
 export interface NavDocument {
   name: string;
@@ -137,6 +167,12 @@ export const navMainItems: readonly NavItem[] = [
     icon: "IconLayoutBoard",
     permission: AppPermissions.ANIMAL_INFO_READ,
   },
+  {
+    title: "AI Assistant",
+    url: "/dashboard/ai-chat",
+    icon: "IconFileAi",
+    permission: AppPermissions.AI_CHAT_USE,
+  },
 ] as const;
 
 // Navigation with collapsible sub-items
@@ -180,7 +216,7 @@ export const navSecondaryItems: readonly NavItem[] = [
     title: "Settings",
     url: "/dashboard/settings",
     icon: "IconSettings",
-    permission: AppPermissions.MANAGE_ROLES,
+    anyPermissions: SETTINGS_PERMISSIONS,
   },
   {
     title: "Get Help",

@@ -5,10 +5,20 @@ import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ThemeToggle } from "./light-dark-theme/theme-toggle";
 
+// Slugs whose per-word capitalisation reads wrong. The rule below works for
+// every route whose segments are ordinary words; an acronym is not one, so
+// "ai-chat" would otherwise render as "Ai Chat".
+const TITLE_OVERRIDES: Record<string, string> = {
+  "ai-chat": "AI Assistant",
+};
+
 // Helper function to format the title string
 const formatTitle = (s: string) => {
   if (typeof s !== 'string' || s.length === 0) {
     return '';
+  }
+  if (TITLE_OVERRIDES[s]) {
+    return TITLE_OVERRIDES[s];
   }
   // 1. Split the string by hyphens.
   // 2. Capitalize the first letter of each word.

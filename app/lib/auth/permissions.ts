@@ -29,6 +29,12 @@ export const AppPermissions = {
   ANIMAL_ACTIVITY_READ: "animal_activity:read",
   ANIMAL_JOURNEY_READ: "animal_journey:read",
 
+  // AI Activity Log (oversight surface for AI-initiated writes)
+  // Gates the /dashboard/settings/ai-activity page and the undo path there.
+  // Granted to STAFF and ADMIN only — volunteers hold no write tools, so
+  // nothing of theirs is ever recorded in AiActionLog.
+  AI_ACTIVITY_READ: "ai_activity:read",
+
   // Animal Assessment Permissions
   ANIMAL_ASSESSMENT_READ: "animal_assessment:read",
   ANIMAL_ASSESSMENT_MANAGE: "animal_assessment:manage",
@@ -44,6 +50,15 @@ export const AppPermissions = {
   // Animal Task Permissions
   ANIMAL_TASK_READ: "animal_task:read",
   ANIMAL_TASK_MANAGE: "animal_task:manage",
+
+  // AI Staff Chat
+  // Gates the sidebar entry and the /dashboard/ai-chat route only. Which tools
+  // the assistant may call is decided per-request from the caller's other
+  // permissions (see app/lib/ai/registry.ts) — this one does not imply any of
+  // them. Gating chat on ANIMAL_INFO_READ would produce the same role matrix
+  // today by coincidence; a distinct entitlement lets chat access diverge later
+  // without a change of intent.
+  AI_CHAT_USE: "ai_chat:use",
 
   // Partner Management
   PARTNERS_READ: "partners:read", // Directory listing + detail

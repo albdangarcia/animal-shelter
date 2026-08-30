@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveDatabaseUrl } from "./db-url";
+import { isLocalDatabaseUrl, resolveDatabaseUrl } from "./db-url";
 
 // DATABASE_URL and DATABASE_URL_UNPOOLED are both set to
 // real-looking dev values, as they would be in an actual local .env. This
@@ -49,4 +49,38 @@ test("direct mode throws when DATABASE_URL_UNPOOLED is absent, naming the variab
     () => resolveDatabaseUrl("direct", {} as unknown as NodeJS.ProcessEnv),
     /DATABASE_URL_UNPOOLED/,
   );
+});
+
+test("isLocalDatabaseUrl: loopback and private hosts are local", () => {
+  for (const url of [
+    "postgresql://postgres:pw@localhost:5432/postgres",
+    "postgresql://postgres:pw@127.0.0.1:5432/postgres",
+    "postgres://user:pw@127.5.6.7/db",
+    "postgresql://user:pw@[::1]:5432/db",
+    "postgresql://user:pw@0.0.0.0:5432/db",
+    "postgresql://user:pw@10.1.2.3:5432/db",
+    "postgresql://user:pw@192.168.1.20:5432/db",
+    "postgresql://user:pw@172.16.0.5:5432/db",
+    "postgresql://user:pw@172.31.255.255:5432/db",
+    "postgresql://postgres:pw@db:5432/postgres", // docker-compose service name
+    "postgresql://postgres:pw@postgres/postgres",
+    "postgresql://user:pw@mymachine.local:5432/db",
+  ]) {
+    assert.equal(isLocalDatabaseUrl(url), true, url);
+  }
+});
+
+test("isLocalDatabaseUrl: public / managed hosts are not local", () => {
+  for (const url of [
+    "postgresql://user:pw@ep-cool-name-123456-pooler.us-east-2.aws.neon.tech/db?sslmode=require",
+    "postgresql://user:pw@db.abcdefgh.supabase.co:5432/postgres",
+    "postgres://user:pw@my-instance.abc123.us-east-1.rds.amazonaws.com:5432/db",
+    "postgresql://user:pw@172.15.0.1:5432/db", // just outside 172.16/12
+    "postgresql://user:pw@172.32.0.1:5432/db",
+    "postgresql://user:pw@11.0.0.1:5432/db",
+    "not a url",
+    "",
+  ]) {
+    assert.equal(isLocalDatabaseUrl(url), false, url);
+  }
 });

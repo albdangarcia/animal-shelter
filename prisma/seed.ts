@@ -14,6 +14,8 @@ import {
   TaskCategory,
   TaskPriority,
   TaskStatus,
+  AnimalActivityType,
+  AiActionTargetType,
   CharacteristicCategory,
   AssessmentType,
   AssessmentOutcome,
@@ -492,6 +494,19 @@ interface AnimalBlueprint {
   // A minority of open stays run long (90-160 days) so the length-of-stay
   // report's "over 90 days" bucket has real entries.
   longStay?: boolean;
+  // Suppresses the automatic "Schedule Vet Examination" follow-up task that
+  // intake creates for any non-healthy in-care animal. That auto-task is
+  // realistic — staff really do open one at triage — but it means an acute
+  // animal is never *untasked*, so signal 2 of the attention queue
+  // (acute health + no open task) would have nothing to match. A few
+  // blueprints set this to deliberately model the shelter dropping the ball:
+  // an animal that needs care and nobody has planned anything.
+  skipIntakeFollowUpTask?: boolean;
+  // Overrides the default `getRandomDate()` birth date. Set only for
+  // hand-authored animals whose age must stay fixed across reseeds — the
+  // "Bruno" disambiguation pair needs two same-named animals a human can tell apart
+  // by birth date alone, every reseed.
+  birthDate?: Date;
 }
 
 // Hand-authored animals, kept so a handful of profiles have real photos.
@@ -699,8 +714,212 @@ const animalSeedData: AnimalBlueprint[] = [
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
   },
+
+  // --- Attention-queue signal 2: acute health, nobody has planned anything ---
+  // These animals are in an acute health status but carry NO open task
+  // (skipIntakeFollowUpTask suppresses the usual triage follow-up). They model
+  // the gap the queue exists to surface — an animal needing care that has
+  // fallen through the cracks. The auto-task the other acute animals get
+  // (Flash, Fido, Godzilla, Daisy) is the realistic norm; these are the
+  // exceptions, and there are only a few on purpose.
+  {
+    name: "Marigold",
+    sex: Sex.FEMALE,
+    size: AnimalSize.SMALL,
+    weightGrams: 3600,
+    heightCm: 24,
+    microchipNumber: "985141000100010",
+    species: allSpecies.CAT,
+    breeds: [allSpecies.CAT.breeds.DOMESTIC_SHORTHAIR],
+    colors: [allColors.BLACK, allColors.WHITE],
+    primaryColor: allColors.BLACK,
+    characteristics: [],
+    intakeType: IntakeType.STRAY,
+    healthStatus: AnimalHealthStatus.HOSPITALISED,
+    images: [`${baseUrl}/cat1.webp`],
+    unitName: null,
+    archetype: "IN_CARE",
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    skipIntakeFollowUpTask: true,
+  },
+  {
+    name: "Rocket",
+    sex: Sex.MALE,
+    size: AnimalSize.MEDIUM,
+    weightGrams: 15000,
+    heightCm: 42,
+    microchipNumber: "985141000100011",
+    species: allSpecies.DOG,
+    breeds: [allSpecies.DOG.breeds.MIXED_BREED],
+    colors: [allColors.BROWN],
+    primaryColor: allColors.BROWN,
+    characteristics: [],
+    intakeType: IntakeType.OWNER_SURRENDER,
+    healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
+    images: [`${baseUrl}/dog2.jpg`],
+    unitName: allLocations.DOG_BLOCK_A.units.A4.name,
+    archetype: "IN_CARE",
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    skipIntakeFollowUpTask: true,
+  },
+  {
+    name: "Fern",
+    sex: Sex.FEMALE,
+    size: AnimalSize.SMALL,
+    weightGrams: 1600,
+    heightCm: 22,
+    microchipNumber: "985141000100012",
+    species: allSpecies.RABBIT,
+    breeds: [allSpecies.RABBIT.breeds.LIONHEAD],
+    colors: [allColors.WHITE, allColors.GRAY],
+    primaryColor: allColors.WHITE,
+    characteristics: [],
+    intakeType: IntakeType.STRAY,
+    healthStatus: AnimalHealthStatus.AWAITING_TRIAGE,
+    images: [`${baseUrl}/rabbit1.webp`],
+    unitName: allLocations.ISOLATION.units.ISO2.name,
+    archetype: "IN_CARE",
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    skipIntakeFollowUpTask: true,
+  },
+  {
+    name: "Rusty",
+    sex: Sex.MALE,
+    size: AnimalSize.LARGE,
+    weightGrams: 26000,
+    heightCm: 54,
+    microchipNumber: "985141000100013",
+    species: allSpecies.DOG,
+    breeds: [allSpecies.DOG.breeds.LABRADOR],
+    colors: [allColors.GOLDEN],
+    primaryColor: allColors.GOLDEN,
+    characteristics: [allCharacteristics.HOUSEBROKEN],
+    intakeType: IntakeType.TRANSFER_IN,
+    healthStatus: AnimalHealthStatus.RECOVERING_FROM_SURGERY,
+    images: [`${baseUrl}/dog3.jpg`],
+    unitName: null,
+    archetype: "IN_CARE",
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    skipIntakeFollowUpTask: true,
+  },
+  {
+    // AWAITING_SPAY_NEUTER is deliberately NOT in the acute set — spay/neuter is
+    // routine and sticky, and would dominate the queue. Nutmeg is untasked and
+    // acute-adjacent, and must still never appear via signal 2.
+    name: "Nutmeg",
+    sex: Sex.FEMALE,
+    size: AnimalSize.SMALL,
+    weightGrams: 3200,
+    heightCm: 23,
+    microchipNumber: "985141000100014",
+    species: allSpecies.CAT,
+    breeds: [allSpecies.CAT.breeds.TABBY],
+    colors: [allColors.TABBY],
+    primaryColor: allColors.TABBY,
+    characteristics: [],
+    intakeType: IntakeType.OWNER_SURRENDER,
+    healthStatus: AnimalHealthStatus.AWAITING_SPAY_NEUTER,
+    images: [`${baseUrl}/cat2.webp`],
+    unitName: allLocations.CAT_ROOM.units.C2.name,
+    archetype: "IN_CARE",
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    skipIntakeFollowUpTask: true,
+  },
+  {
+    // Signal 3 target: seedFostering places Juniper with a foster on an
+    // already-overdue expectedEndDate, and seedTasks gives her an overdue task,
+    // so she exercises the two-reason dedupe (TASK_DUE + FOSTER_OVERDUE).
+    name: "Juniper",
+    sex: Sex.FEMALE,
+    size: AnimalSize.MEDIUM,
+    weightGrams: 19000,
+    heightCm: 46,
+    microchipNumber: "985141000100015",
+    species: allSpecies.DOG,
+    breeds: [allSpecies.DOG.breeds.AIREDALE_TERRIER],
+    colors: [allColors.BLACK, allColors.BROWN],
+    primaryColor: allColors.BLACK,
+    characteristics: [allCharacteristics.GOOD_WITH_DOGS],
+    intakeType: IntakeType.STRAY,
+    healthStatus: AnimalHealthStatus.HEALTHY,
+    images: [`${baseUrl}/dog1-3.webp`],
+    unitName: allLocations.DOG_BLOCK_A.units.A4.name,
+    archetype: "IN_CARE",
+    listingStatus: AnimalListingStatus.PUBLISHED,
+  },
+
+  // --- Disambiguation pair: two non-archived animals named "Bruno" ----------
+  // Acceptance check 3 needs a same-name collision the assistant must 
+  // resolve by asking rather than guessing.
+  // Distinct birth dates, distinct breeds, and one kenneled vs one
+  // unplaced so `findAnimals` and `getAnimalSummary` read unmistakably
+  // different. Both HEALTHY and untasked, and both kept out of the foster
+  // lottery (disambiguationScenarioAnimalNames), so neither ever drifts into
+  // the attention queue or changes housing state between reseeds.
+  {
+    name: "Bruno",
+    sex: Sex.MALE,
+    size: AnimalSize.LARGE,
+    weightGrams: 27000,
+    heightCm: 55,
+    microchipNumber: "985141000100016",
+    species: allSpecies.DOG,
+    breeds: [allSpecies.DOG.breeds.LABRADOR],
+    colors: [allColors.GOLDEN],
+    primaryColor: allColors.GOLDEN,
+    characteristics: [allCharacteristics.GOOD_WITH_KIDS],
+    intakeType: IntakeType.OWNER_SURRENDER,
+    healthStatus: AnimalHealthStatus.HEALTHY,
+    images: [`${baseUrl}/dog2.jpg`],
+    unitName: allLocations.DOG_BLOCK_A.units.A3.name,
+    archetype: "IN_CARE",
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    birthDate: new Date("2023-04-11"),
+  },
+  {
+    name: "Bruno",
+    sex: Sex.MALE,
+    size: AnimalSize.MEDIUM,
+    weightGrams: 19000,
+    heightCm: 46,
+    microchipNumber: "985141000100017",
+    species: allSpecies.DOG,
+    breeds: [allSpecies.DOG.breeds.MIXED_BREED],
+    colors: [allColors.BLACK, allColors.WHITE],
+    primaryColor: allColors.BLACK,
+    characteristics: [allCharacteristics.HOUSEBROKEN],
+    intakeType: IntakeType.STRAY,
+    healthStatus: AnimalHealthStatus.HEALTHY,
+    images: [`${baseUrl}/dog3.jpg`],
+    unitName: null,
+    archetype: "IN_CARE",
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    birthDate: new Date("2019-08-02"),
+  },
 ];
 
+// Hand-authored animals that back specific attention-queue scenarios. Kept out
+// of the random foster lottery in seedFostering so their queue state stays
+// deterministic (Juniper gets her own scripted overdue placement).
+const attentionQueueScenarioAnimalNames = [
+  "Marigold",
+  "Rocket",
+  "Fern",
+  "Rusty",
+  "Nutmeg",
+  "Juniper",
+];
+
+// Hand-authored animals kept out of the random foster lottery for a reason
+// other than the attention queue: the "Bruno" disambiguation pair (acceptance
+// check 3) must stay in its fixed, scripted housing state across reseeds — a
+// random foster placement would null one Bruno's `currentUnitId` and change
+// what `getAnimalSummary` returns for it.
+const disambiguationScenarioAnimalNames = ["Bruno"];
+
+// Ambient, future-dated tasks scattered across random animals. These do NOT
+// feed the attention queue (nothing here is overdue) — the deterministic
+// overdue set is `overdueTaskSeedData` below.
 const taskSeedData = [
   {
     title: "Administer flea and tick medication",
@@ -731,14 +950,87 @@ const taskSeedData = [
     // 3 days from now
     dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
   },
+];
+
+// Deterministic overdue / due-today tasks, targeted at named IN_CARE animals so
+// attention-queue signal 1 has stable, verifiable input. Previously the one
+// past-due seed task was assigned to a random animal — it routinely landed on
+// an archived one, and the queue differed between resets. `daysOverdue: 0` is
+// "due today" (still caught by "dueDate <= end of today").
+const overdueTaskSeedData: {
+  animalName: string;
+  title: string;
+  details: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  category: TaskCategory;
+  daysOverdue: number;
+}[] = [
   {
-    title: "Submit monthly intake report to city council",
-    details: "Compile and send the monthly animal intake statistics report.",
+    animalName: "Frisco",
+    title: "Nail trim and ear check",
+    details: "Overdue routine grooming; check both ears while restrained.",
     status: TaskStatus.TODO,
     priority: TaskPriority.HIGH,
+    category: TaskCategory.MEDICAL,
+    daysOverdue: 8,
+  },
+  {
+    animalName: "Frisco",
+    title: "Refresh adoption listing copy",
+    details: "Bio still says 'just arrived'; update tone and photos.",
+    status: TaskStatus.TODO,
+    priority: TaskPriority.LOW,
     category: TaskCategory.ADMINISTRATIVE,
-    // 7 days in the past — shows as overdue
-    dueDate: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+    daysOverdue: 2,
+  },
+  {
+    animalName: "Whiskers",
+    title: "Deep-clean enclosure C-1",
+    details: "Due today on the rotation board.",
+    status: TaskStatus.IN_PROGRESS,
+    priority: TaskPriority.MEDIUM,
+    category: TaskCategory.CLEANING,
+    daysOverdue: 0,
+  },
+  {
+    animalName: "Buddy",
+    title: "Leash-reactivity reassessment",
+    details: "Follow-up on the intake behavioral flag.",
+    status: TaskStatus.TODO,
+    priority: TaskPriority.HIGH,
+    category: TaskCategory.BEHAVIORAL,
+    daysOverdue: 5,
+  },
+  {
+    animalName: "Leo",
+    title: "Switch to adult kibble",
+    details: "Transition plan was supposed to start last week.",
+    status: TaskStatus.TODO,
+    priority: TaskPriority.LOW,
+    category: TaskCategory.FEEDING,
+    daysOverdue: 10,
+  },
+  {
+    // Daisy is UNDER_VET_CARE and already has the intake follow-up task, so she
+    // never qualifies for signal 2 — this overdue task keeps her in signal 1.
+    animalName: "Daisy",
+    title: "Post-op wound recheck",
+    details: "Recheck incision site; overdue by several days.",
+    status: TaskStatus.TODO,
+    priority: TaskPriority.HIGH,
+    category: TaskCategory.MEDICAL,
+    daysOverdue: 3,
+  },
+  {
+    // Juniper is also placed with an overdue foster (seedFostering) — two reasons.
+    animalName: "Juniper",
+    title: "Collect foster progress photos",
+    details: "Foster hasn't sent an update; needed for the adoption listing.",
+    status: TaskStatus.TODO,
+    priority: TaskPriority.MEDIUM,
+    category: TaskCategory.ADMINISTRATIVE,
+    daysOverdue: 6,
   },
 ];
 
@@ -1298,6 +1590,12 @@ function daysAgo(n: number): Date {
   return date;
 }
 
+// A date `n` days after now — for forward-looking dates like a placement's
+// expectedEndDate.
+function daysFromNow(n: number): Date {
+  return daysAgo(-n);
+}
+
 // Generates a dated weigh-in history for one animal, using the same
 // cursor-increment idiom as the adoption-application status history
 // (addDaysClamped walking forward toward `windowEnd`). Only called for a
@@ -1671,7 +1969,7 @@ async function seedReturnAndReadoptAnimal(opts: {
   const animal = await prisma.animal.create({
     data: {
       name: blueprint.name,
-      birthDate: getRandomDate(),
+      birthDate: blueprint.birthDate ?? getRandomDate(),
       sex: blueprint.sex,
       size: blueprint.size,
       currentWeightGrams: blueprint.weightGrams,
@@ -1861,10 +2159,10 @@ async function seedPersonsAndUsers() {
         password = process.env.ADMIN_PASSWORD;
       }
 
-      // D9 — sign up through the seed auth instance (matching email) so the
-      // linkOrCreatePerson hook (D8) links this user to the Person just
+      // sign up through the seed auth instance (matching email) so the
+      // linkOrCreatePerson hook links this user to the Person just
       // created above, instead of a raw insert. `role` is `input: false`
-      // (D3) so it can't ride along in the signUpEmail body — set it with a
+      // so it can't ride along in the signUpEmail body — set it with a
       // follow-up update.
       const { user } = await seedAuth.api.signUpEmail({
         body: { name: pData.name, email: pData.email, password },
@@ -1883,7 +2181,7 @@ async function seedPersonsAndUsers() {
 // animals to draw surrenderers/finders/owners from — replacing the old
 // reliance on a single shared "External Agency" record.
 const linkTestEmail = process.env.DEV_LINK_TEST_EMAIL;
-// D8 link-branch exercise: when set, gives one walk-in Person this email so
+// link-branch exercise: when set, gives one walk-in Person this email so
 // signing in with a matching, provider-verified OAuth account (GitHub,
 // Google, ...) hits the link branch (existing Person, no duplicate created)
 // instead of create. Unset in the repo and in the demo deploy — the seed's
@@ -2184,7 +2482,7 @@ async function seedAnimalsAndRelations() {
       const animal = await prisma.animal.create({
         data: {
           name: blueprint.name,
-          birthDate: getRandomDate(),
+          birthDate: blueprint.birthDate ?? getRandomDate(),
           sex: blueprint.sex,
           // Staff-set expected adult size — independent of weightGrams.
           size: blueprint.size,
@@ -2350,8 +2648,13 @@ async function seedAnimalsAndRelations() {
       });
 
       // Only in-care animals get an open follow-up — an archived
-      // animal has already left the shelter's care.
-      if (isInCare && blueprint.healthStatus !== AnimalHealthStatus.HEALTHY) {
+      // animal has already left the shelter's care. `skipIntakeFollowUpTask`
+      // blueprints opt out so they stay untasked for attention-queue signal 2.
+      if (
+        isInCare &&
+        blueprint.healthStatus !== AnimalHealthStatus.HEALTHY &&
+        !blueprint.skipIntakeFollowUpTask
+      ) {
         await prisma.task.create({
           data: {
             animalId: animal.id,
@@ -2567,13 +2870,21 @@ async function seedFostering() {
   // --- Placements: one open, two closed with varied return reasons ---
 
   // Pull real in-care, currently-housed animals so the open placement
-  // faithfully seeds "currentUnitId nulled, previousUnitId set".
+  // faithfully seeds "currentUnitId nulled, previousUnitId set". The
+  // attention-queue scenario animals are excluded — their foster state is
+  // scripted below, not drawn from this lottery.
   const housedInCareAnimals = await prisma.animal.findMany({
     where: {
       listingStatus: {
         in: [AnimalListingStatus.PUBLISHED, AnimalListingStatus.DRAFT],
       },
       currentUnitId: { not: null },
+      name: {
+        notIn: [
+          ...attentionQueueScenarioAnimalNames,
+          ...disambiguationScenarioAnimalNames,
+        ],
+      },
     },
     select: { id: true, currentUnitId: true },
   });
@@ -2593,6 +2904,10 @@ async function seedFostering() {
         fosterProfileId: activeMedical.id,
         type: FosterPlacementType.GENERAL,
         startDate: openStart,
+        // Still within its expected window — attention-queue signal 3 must
+        // NOT flag this one. Juniper's scripted placement below is the overdue
+        // case.
+        expectedEndDate: daysFromNow(9),
         previousUnitId: openAnimal.currentUnitId,
         placedById: approver.id,
       },
@@ -2671,6 +2986,42 @@ async function seedFostering() {
     console.log(
       "Skipping open/closed placement seeding: not enough housed in-care animals.",
     );
+  }
+
+  // --- Attention-queue signal 3: an open placement past its expected end ---
+  // Scripted (not from the lottery above) so the overdue foster is always the
+  // same animal. Juniper also carries an overdue task (seedTasks), so she is
+  // the queue's two-reason dedupe case.
+  const juniper = await prisma.animal.findFirst({
+    where: { name: "Juniper" },
+    select: { id: true, currentUnitId: true },
+  });
+  if (juniper) {
+    const juniperPlacementStart = daysAgo(21);
+    await prisma.fosterPlacement.create({
+      data: {
+        animalId: juniper.id,
+        fosterProfileId: activeGeneralist.id,
+        type: FosterPlacementType.GENERAL,
+        startDate: juniperPlacementStart,
+        expectedEndDate: daysAgo(4), // overdue
+        previousUnitId: juniper.currentUnitId,
+        placedById: approver.id,
+      },
+    });
+    await prisma.animal.update({
+      where: { id: juniper.id },
+      data: { currentUnitId: null },
+    });
+    await prisma.animalActivityLog.create({
+      data: {
+        animalId: juniper.id,
+        activityType: "FOSTER_PLACED",
+        changedById: approver.id,
+        changedAt: juniperPlacementStart,
+        changeSummary: "Animal was placed with a foster.",
+      },
+    });
   }
 
   // --- Foster-to-adopt conversion: a dedicated animal, so its
@@ -3047,11 +3398,235 @@ async function seedTasks() {
         },
       });
     }
+
+    // Deterministic overdue set — assigned to a fixed staff member and attached
+    // to named animals by lookup so attention-queue signal 1 is reproducible.
+    const overdueAssignee =
+      staffMembers.find((s) => s.email === "staff1@example.com") ??
+      staffMembers[0];
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    for (const taskData of overdueTaskSeedData) {
+      const animal = animals.find((a) => a.name === taskData.animalName);
+      if (!animal) {
+        throw new Error(
+          `overdueTaskSeedData references animal "${taskData.animalName}", which was not seeded.`,
+        );
+      }
+      const dueDate = new Date(startOfToday);
+      dueDate.setDate(dueDate.getDate() - taskData.daysOverdue);
+
+      await prisma.task.create({
+        data: {
+          title: taskData.title,
+          details: taskData.details,
+          status: taskData.status,
+          priority: taskData.priority,
+          category: taskData.category,
+          dueDate,
+          animalId: animal.id,
+          assigneeId: overdueAssignee.id,
+          createdById: overdueAssignee.id,
+        },
+      });
+    }
   } catch (error) {
     console.error("Error seeding tasks:", error);
     throw error;
   }
   console.log("Seeded tasks.");
+}
+
+// The AI activity log reads AiActionLog, which only the setTaskStatus
+// write tool writes. A fresh seed would leave /dashboard/settings/ai-activity
+// empty, so the table, its filters, and the undo path would not be exercisable.
+// These rows are what that tool would have written for three plausible
+// scenarios — on dedicated, undated tasks so they never touch the attention
+// queue's signal-1 set.
+async function seedAiActivityLog() {
+  console.log("Seeding AI activity log...");
+  try {
+    const [staff1, staff2] = await Promise.all([
+      prisma.person.findFirst({
+        where: { user: { email: "staff1@example.com" } },
+      }),
+      prisma.person.findFirst({
+        where: { user: { email: "staff2@example.com" } },
+      }),
+    ]);
+    if (!staff1 || !staff2) {
+      console.log("Staff not found, skipping AI activity log seeding.");
+      return;
+    }
+
+    const animalByName = async (name: string) =>
+      prisma.animal.findFirst({ where: { name } });
+
+    const [frisco, buddy, whiskers] = await Promise.all([
+      animalByName("Frisco"),
+      animalByName("Buddy"),
+      animalByName("Whiskers"),
+    ]);
+    if (!frisco || !buddy || !whiskers) {
+      console.log(
+        "Expected animals for AI activity log not found, skipping.",
+      );
+      return;
+    }
+
+    const daysAgo = (n: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() - n);
+      return d;
+    };
+
+    // Undated so signal 1 of the attention queue ("dueDate <= end of today")
+    // never matches these, whatever their status.
+    const makeTask = (animalId: string, title: string, status: TaskStatus) =>
+      prisma.task.create({
+        data: {
+          title,
+          details: "Seeded for the AI activity log demo.",
+          status,
+          priority: TaskPriority.MEDIUM,
+          category: TaskCategory.ADMINISTRATIVE,
+          animalId,
+          assigneeId: staff1.id,
+          createdById: staff1.id,
+        },
+      });
+
+    const logStatusChange = (
+      animalId: string,
+      title: string,
+      from: TaskStatus,
+      to: TaskStatus,
+      changedById: string,
+      changedAt: Date,
+    ) =>
+      prisma.animalActivityLog.create({
+        data: {
+          animalId,
+          activityType: AnimalActivityType.TASK_STATUS_CHANGED,
+          changedById,
+          changedAt,
+          changeSummary: `Task "${title}" status changed from ${from} to ${to}.`,
+        },
+      });
+
+    // 1. Undoable: the assistant marked it DONE and nobody has touched it since.
+    //    Undo restores TODO.
+    const undoable = await makeTask(
+      frisco.id,
+      "Weigh-in and body condition score",
+      TaskStatus.DONE,
+    );
+    await logStatusChange(
+      frisco.id,
+      undoable.title,
+      TaskStatus.TODO,
+      TaskStatus.DONE,
+      staff1.id,
+      daysAgo(2),
+    );
+    await prisma.aiActionLog.create({
+      data: {
+        toolName: "setTaskStatus",
+        toolCallId: "seed-toolcall-undoable",
+        approvalId: "seed-approval-undoable",
+        targetType: AiActionTargetType.TASK,
+        targetId: undoable.id,
+        input: { taskId: undoable.id, status: TaskStatus.DONE },
+        before: { status: TaskStatus.TODO },
+        after: { status: TaskStatus.DONE },
+        actorId: staff1.id,
+        createdAt: daysAgo(2),
+      },
+    });
+
+    // 2. Stale: the assistant set IN_PROGRESS, then a human moved it to DONE.
+    //    Undo must refuse — this is the deterministic version of acceptance
+    //    check 6.
+    const stale = await makeTask(
+      buddy.id,
+      "Draft adoption listing copy",
+      TaskStatus.DONE,
+    );
+    await logStatusChange(
+      buddy.id,
+      stale.title,
+      TaskStatus.TODO,
+      TaskStatus.IN_PROGRESS,
+      staff1.id,
+      daysAgo(1),
+    );
+    await prisma.aiActionLog.create({
+      data: {
+        toolName: "setTaskStatus",
+        toolCallId: "seed-toolcall-stale",
+        approvalId: "seed-approval-stale",
+        targetType: AiActionTargetType.TASK,
+        targetId: stale.id,
+        input: { taskId: stale.id, status: TaskStatus.IN_PROGRESS },
+        before: { status: TaskStatus.TODO },
+        after: { status: TaskStatus.IN_PROGRESS },
+        actorId: staff1.id,
+        createdAt: daysAgo(1),
+      },
+    });
+    await logStatusChange(
+      buddy.id,
+      stale.title,
+      TaskStatus.IN_PROGRESS,
+      TaskStatus.DONE,
+      staff2.id,
+      daysAgo(0),
+    );
+
+    // 3. Already undone (by a second actor): the State facet and the disabled
+    //    Undo action both need a row to show.
+    const undone = await makeTask(
+      whiskers.id,
+      "Confirm microchip registration",
+      TaskStatus.TODO,
+    );
+    await prisma.aiActionLog.create({
+      data: {
+        toolName: "setTaskStatus",
+        toolCallId: "seed-toolcall-undone",
+        approvalId: "seed-approval-undone",
+        targetType: AiActionTargetType.TASK,
+        targetId: undone.id,
+        input: { taskId: undone.id, status: TaskStatus.DONE },
+        before: { status: TaskStatus.TODO },
+        after: { status: TaskStatus.DONE },
+        actorId: staff2.id,
+        createdAt: daysAgo(4),
+        undoneAt: daysAgo(3),
+      },
+    });
+    await logStatusChange(
+      whiskers.id,
+      undone.title,
+      TaskStatus.TODO,
+      TaskStatus.DONE,
+      staff2.id,
+      daysAgo(4),
+    );
+    await logStatusChange(
+      whiskers.id,
+      undone.title,
+      TaskStatus.DONE,
+      TaskStatus.TODO,
+      staff1.id,
+      daysAgo(3),
+    );
+  } catch (error) {
+    console.error("Error seeding AI activity log:", error);
+    throw error;
+  }
+  console.log("Seeded AI activity log.");
 }
 
 async function seedAssessments() {
@@ -3107,6 +3682,10 @@ async function clearDatabase() {
   await prisma.medicationSchedule.deleteMany();
   await prisma.assessmentField.deleteMany();
   await prisma.assessment.deleteMany();
+  // AiActionLog only FKs to Person (RESTRICT); no relation to Task, so order
+  // relative to the task delete below doesn't matter — it just has to precede
+  // the person delete.
+  await prisma.aiActionLog.deleteMany();
   await prisma.animalActivityLog.deleteMany();
   await prisma.task.deleteMany();
   await prisma.intake.deleteMany();
@@ -3148,7 +3727,7 @@ async function clearDatabase() {
   await prisma.color.deleteMany();
   await prisma.characteristic.deleteMany();
 
-  // Session/Account cascade from User, but clear them explicitly (H6) — the
+  // Session/Account cascade from User, but clear them explicitly — the
   // next reset's signUpEmail would otherwise collide on account's unique
   // (issuer, accountId) index. Verification has no FK to User; clear it too.
   await prisma.session.deleteMany();
@@ -3292,6 +3871,7 @@ export async function main() {
   await seedFostering();
   await seedApplicationNoise();
   await seedTasks();
+  await seedAiActivityLog();
   await seedAssessments();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");

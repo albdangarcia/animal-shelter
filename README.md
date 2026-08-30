@@ -135,6 +135,13 @@ Typical values per environment:
 | ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `SHELTER_TIMEZONE` | ⚪ Optional | IANA timezone the shelter operates in (e.g. `America/New_York`). All report date-range boundaries are computed in this zone. Defaults to `America/New_York`. |
 
+### AI Staff Chat
+
+| Variable                       | Required    | Description                                                                                                                                                                                                                                                                                              |
+| ------------------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GROQ_API_KEY`                 | ⚪ Optional | API key for the AI staff chat provider (`@ai-sdk/groq`). Get one from [console.groq.com/keys](https://console.groq.com/keys). Unset ⇒ the chat feature is unavailable.                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `AI_PROVIDER_TIER`             | ⚪ Optional | `free` (default, and unset), `paid`, or `free-synthetic`. Free provider tiers retain prompts and tool results for training/human review, so on `free` the provider module refuses to start unless `DATABASE_URL` points at a local/private database — derived from the URL, the only path that verifies anything. `paid` (a key whose traffic is not retained) allows any database. `free-synthetic` allows a networked database on the operator's word that it holds only seeded data; nothing verifies it, so set it only on a demo deployment. |
+
 ### Seeding
 
 | Variable              | Required    | Description                                                                                                                                                                                                    |

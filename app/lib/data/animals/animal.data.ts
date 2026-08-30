@@ -3,6 +3,7 @@ import {
   AnimalListingStatus,
   ApplicationStatus,
   IntakeType,
+  TaskStatus,
   type Sex,
 } from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
@@ -517,6 +518,144 @@ const _searchPublishedAnimals = async (
   } catch (error) {
     console.error("Error searching published animals.", error);
     throw new Error("Error searching animals.");
+  }
+};
+
+// ---------------------------------------------------------------------------
+// AI assistant read queries
+// These `_fetch*` are exported *unwrapped* on purpose. An AI tool's `execute`
+// runs mid-stream, after the route handler has returned, where the ambient
+// session read inside `RequirePermission` is not reliable. The
+// tool resolves the actor once, up front, calls `requireFor` itself as its
+// first line (a primary control — a tool has no `<Authorize>` in front of it)
+// and then calls these directly. Permission is declared once, next to the
+// tool, so the registry filter and the in-tool check cannot drift.
+//
+// Return shapes here are internal Prisma payloads; the hand-written projection
+// the model actually sees lives in `app/lib/ai/projections/`.
+// ---------------------------------------------------------------------------
+
+/** Cap on the disambiguation set `findAnimals` returns. */
+export const AI_ANIMAL_SEARCH_LIMIT = 25;
+
+const aiAnimalMatchSelect = {
+  id: true,
+  name: true,
+  birthDate: true,
+  species: { select: { name: true } },
+  currentUnit: {
+    select: { name: true, location: { select: { name: true } } },
+  },
+} satisfies Prisma.AnimalSelect;
+
+export type AiAnimalMatchRow = Prisma.AnimalGetPayload<{
+  select: typeof aiAnimalMatchSelect;
+}>;
+
+/**
+ * Name search for the assistant's disambiguation step. Case-insensitive
+ * substring match, archived animals excluded (their state is frozen history —
+ * not something the model should act on). Ordered so a same-name collision
+ * lists oldest-first and stable across calls.
+ */
+export const _findAnimalsByName = async (
+  query: string,
+): Promise<AiAnimalMatchRow[]> => {
+  const parsed = searchQuerySchema.safeParse(query);
+  const q = parsed.success ? parsed.data : "";
+
+  try {
+    return await prisma.animal.findMany({
+      where: {
+        name: { contains: q, mode: "insensitive" },
+        listingStatus: { not: AnimalListingStatus.ARCHIVED },
+      },
+      select: aiAnimalMatchSelect,
+      orderBy: [{ name: "asc" }, { birthDate: "asc" }],
+      take: AI_ANIMAL_SEARCH_LIMIT,
+    });
+  } catch (error) {
+    console.error("Error searching animals for the AI assistant.", error);
+    throw new Error("Error searching animals.");
+  }
+};
+
+const aiAnimalSummarySelect = {
+  id: true,
+  name: true,
+  sex: true,
+  birthDate: true,
+  size: true,
+  healthStatus: true,
+  listingStatus: true,
+  species: { select: { name: true } },
+  breeds: { where: { deletedAt: null }, select: { name: true } },
+  primaryColor: { select: { name: true } },
+  currentUnit: {
+    select: { name: true, location: { select: { name: true } } },
+  },
+  // At most one open placement per animal is an action-layer rule, not a DB
+  // constraint — order + take defensively.
+  fosterPlacements: {
+    where: { endDate: null },
+    orderBy: { startDate: "desc" },
+    take: 1,
+    select: {
+      id: true,
+      type: true,
+      startDate: true,
+      expectedEndDate: true,
+      fosterProfile: {
+        select: { person: { select: { id: true, name: true } } },
+      },
+    },
+  },
+  // Open tasks only — the model is expected to act on these.
+  tasks: {
+    where: { status: { in: [TaskStatus.TODO, TaskStatus.IN_PROGRESS] } },
+    orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      priority: true,
+      category: true,
+      dueDate: true,
+    },
+  },
+  intake: {
+    orderBy: { intakeDate: "desc" },
+    take: 1,
+    select: { intakeDate: true, type: true },
+  },
+} satisfies Prisma.AnimalSelect;
+
+export type AiAnimalSummaryRow = Prisma.AnimalGetPayload<{
+  select: typeof aiAnimalSummarySelect;
+}>;
+
+/**
+ * Single-animal summary for the assistant: identity, current housing/foster
+ * state, health, and open tasks. Returns `null` for an unknown or malformed
+ * id — the tool turns that into a structured failure the model can explain.
+ * Deliberately NOT `_fetchSectionCardsAnimalData`: that surfaces
+ * microchip number, foster contact, and application statuses under
+ * `ANIMAL_INFO_READ` alone.
+ */
+export const _fetchAnimalSummary = async (
+  animalId: string,
+): Promise<AiAnimalSummaryRow | null> => {
+  const parsedId = cuidSchema.safeParse(animalId);
+  if (!parsedId.success) return null;
+
+  try {
+    return await prisma.animal.findUnique({
+      where: { id: parsedId.data },
+      select: aiAnimalSummarySelect,
+    });
+  } catch (error) {
+    console.error("Error fetching animal summary for the AI assistant.", error);
+    throw new Error("Error fetching animal summary.");
   }
 };
 

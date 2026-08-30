@@ -25,9 +25,12 @@
     "prisma:push": "dotenv -e .env.local -e .env.development -- prisma db push",
     "prisma:generate": "prisma generate",
     "prisma:studio": "dotenv -e .env.local -e .env.development -- prisma studio",
-    "prisma:backfill-phone": "dotenv -e .env.local -e .env.development -e .env -- tsx prisma/backfill-phone-normalized.ts"
+    "prisma:backfill-phone": "dotenv -e .env.local -e .env.development -e .env -- tsx prisma/backfill-phone-normalized.ts",
+    "verify:ai": "dotenv -e .env.local -e .env.development -e .env -- tsx scripts/verify-ai-read-tools.ts"
   },
   "dependencies": {
+    "@ai-sdk/groq": "^4.0.34",
+    "@ai-sdk/react": "^4.0.87",
     "@better-auth/prisma-adapter": "^1.7.1",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/modifiers": "^9.0.0",
@@ -62,6 +65,7 @@
     "@uppy/react": "5.1.0",
     "@uppy/xhr-upload": "^5.2.0",
     "@vercel/blob": "^2.0.0",
+    "ai": "^7.0.83",
     "babel-plugin-react-compiler": "^1.0.0",
     "better-auth": "^1.7.1",
     "class-variance-authority": "^0.7.1",
@@ -80,7 +84,9 @@
     "react-dom": "^19.2.8",
     "react-hook-form": "^7.65.0",
     "react-hot-toast": "^2.5.2",
+    "react-markdown": "^10.1.0",
     "recharts": "^3.8.1",
+    "remark-gfm": "^4.0.1",
     "sonner": "^2.0.5",
     "tailwind-merge": "^3.3.1",
     "use-debounce": "^10.0.4",
