@@ -55,11 +55,16 @@ export function resolveDatabaseUrl(
  * host — a local container or dev box, never a shared database that could hold
  * real records.
  *
- * This is the single fact the AI provider's free-tier guard trusts (see
- * `app/lib/ai/provider-guard.ts`). It is derived from the connection URL the
- * app actually runs against, so — unlike a separate `IS_DEMO`-style flag —
- * there is no way to point the app at a production database and still have the
- * guard treat it as safe.
+ * This is the fact the AI provider's free-tier guard derives automatically
+ * (see `app/lib/ai/provider-guard.ts`). It comes from the connection URL the
+ * app actually runs against, not from a boolean an operator could set against a
+ * production URL, and it remains the *only automatic* path to the guard
+ * treating a database as safe — the one path that requires no trust.
+ *
+ * It is no longer the only path. `AI_PROVIDER_TIER=free-synthetic` is a
+ * deliberate, named exception: a networked database an operator explicitly
+ * certifies holds only seeded data. Nothing verifies that declaration, and it
+ * does not touch the derivation below.
  *
  * Unparseable input returns `false` (fail closed). "Private" here means:
  * `localhost`, the IPv4 loopback (`127/8`) and unspecified (`0.0.0.0`)

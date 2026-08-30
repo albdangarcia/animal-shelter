@@ -22,9 +22,17 @@ test("parseAiProviderTier: accepts free/paid case- and space-insensitively", () 
   assert.equal(parseAiProviderTier(" paid "), "paid");
 });
 
+test("parseAiProviderTier: accepts free-synthetic case- and space-insensitively", () => {
+  assert.equal(parseAiProviderTier("free-synthetic"), "free-synthetic");
+  assert.equal(parseAiProviderTier("FREE-SYNTHETIC"), "free-synthetic");
+  assert.equal(parseAiProviderTier(" free-synthetic "), "free-synthetic");
+});
+
 test("parseAiProviderTier: rejects anything else", () => {
   assert.throws(() => parseAiProviderTier("paidd"), AiProviderConfigError);
   assert.throws(() => parseAiProviderTier("trial"), AiProviderConfigError);
+  assert.throws(() => parseAiProviderTier("free-syntetic"), AiProviderConfigError);
+  assert.throws(() => parseAiProviderTier("free_synthetic"), AiProviderConfigError);
 });
 
 test("assertAiProviderAllowed: free tier is fine against a local database", () => {
@@ -43,5 +51,17 @@ test("assertAiProviderAllowed: free tier against a networked database throws", (
 test("assertAiProviderAllowed: paid tier allows any database", () => {
   assert.doesNotThrow(() =>
     assertAiProviderAllowed({ tier: "paid", databaseUrl: NEON_URL }),
+  );
+});
+
+test("assertAiProviderAllowed: free-synthetic allows a networked database", () => {
+  assert.doesNotThrow(() =>
+    assertAiProviderAllowed({ tier: "free-synthetic", databaseUrl: NEON_URL }),
+  );
+});
+
+test("assertAiProviderAllowed: free-synthetic allows a local database too", () => {
+  assert.doesNotThrow(() =>
+    assertAiProviderAllowed({ tier: "free-synthetic", databaseUrl: LOCAL_URL }),
   );
 });

@@ -1,27 +1,33 @@
 import { isLocalDatabaseUrl } from "@/app/lib/db-url";
 
 /**
- * Free-tier Gemini (and Groq) send every prompt and tool result to the
- * provider for "product improvement and human review". Overview decision
- * permits that here *only* because the shelter database is 100% synthetic —
- * but permitting is not enforcing.
+ * Free model-provider tiers send every prompt and tool result to the provider
+ * for "product improvement and human review". That retention is a property of
+ * free tiers generally, and applies to the Groq free tier the app uses today.
+ * The decision permits it here *only* because the shelter database is
+ * 100% synthetic — but permitting is not enforcing.
  *
- * This is the enforcement. It runs at import time in `provider.ts`, and the
- * only input it trusts for "is this database safe to leak" is the connection
- * URL the app actually runs against (`DATABASE_URL`), classified by
- * `isLocalDatabaseUrl`. A deployment pointed at a real, networked database
- * cannot flip a separate flag to make this pass — there is no separate flag.
+ * This is the enforcement. It runs at import time in `provider.ts`.
  *
- * `AI_PROVIDER_TIER` is the one declared knob:
- *   - `paid`  — the API key is a paid key whose traffic is not retained for
- *               training; any database is then allowed.
- *   - `free` / unset — free tier; allowed only against a local/private database.
+ * `AI_PROVIDER_TIER` is the one declared knob, and it has three values:
+ *   - `paid` — the API key is a paid key whose traffic is not retained for
+ *     training; any database is then allowed. This is a claim about the
+ *     *provider*.
+ *   - `free` / unset — free tier; allowed only against a database the
+ *     connection URL shows to be local/private (`isLocalDatabaseUrl` on
+ *     `DATABASE_URL`). This derivation is the only path to "allowed" that
+ *     verifies anything.
+ *   - `free-synthetic` — free tier against a networked database the operator
+ *     certifies holds only seeded data. This is a claim about the *data*, and
+ *     nothing here checks it: it is trusted, not verified.
  *
- * Fail-closed: an unset or unrecognized tier against a non-local database
- * throws.
+ * Fail-closed: the default is unchanged, so an unset or empty tier still parses
+ * to `free` and still throws against a networked database. An unrecognized or
+ * misspelled tier throws `AiProviderConfigError` at parse time rather than
+ * degrading to `free`.
  */
 
-export type AiProviderTier = "free" | "paid";
+export type AiProviderTier = "free" | "paid" | "free-synthetic";
 
 export class AiProviderConfigError extends Error {
   constructor(message: string) {
@@ -33,9 +39,11 @@ export class AiProviderConfigError extends Error {
 export function parseAiProviderTier(raw: string | undefined): AiProviderTier {
   const value = raw?.trim().toLowerCase();
   if (value === undefined || value === "") return "free";
-  if (value === "free" || value === "paid") return value;
+  if (value === "free" || value === "paid" || value === "free-synthetic") {
+    return value;
+  }
   throw new AiProviderConfigError(
-    `AI_PROVIDER_TIER must be "free" or "paid" (got "${raw}").`,
+    `AI_PROVIDER_TIER must be "free", "paid", or "free-synthetic" (got "${raw}").`,
   );
 }
 
@@ -50,6 +58,7 @@ export function assertAiProviderAllowed(input: {
   databaseUrl: string;
 }): void {
   if (input.tier === "paid") return;
+  if (input.tier === "free-synthetic") return;
   if (isLocalDatabaseUrl(input.databaseUrl)) return;
 
   throw new AiProviderConfigError(
