@@ -52,6 +52,9 @@ const staffPermissions: readonly AppPermission[] = [
   AppPermissions.PERSONS_MANAGE,
   AppPermissions.PARTNERS_MANAGE,
   AppPermissions.FOSTERS_MANAGE,
+  // Oversight of AI-initiated task changes — staff can already make (and undo)
+  // these by hand, so they can see and revert the assistant's.
+  AppPermissions.AI_ACTIVITY_READ,
 ] as const;
 
 // Admin inherits all staff permissions

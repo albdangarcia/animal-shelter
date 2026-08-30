@@ -9,6 +9,8 @@ import {
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
+import { hasAnyPermission } from "@/app/lib/getFilteredLinks";
+import { SETTINGS_PERMISSIONS } from "@/components/dashboard/nav/nav-links.config";
 
 interface SettingsCard {
     title: string;
@@ -17,6 +19,8 @@ interface SettingsCard {
     permission: AppPermission;
 }
 
+// Keep the permissions here in sync with SETTINGS_PERMISSIONS (nav-links.config)
+// — that list gates both this page and its sidebar entry.
 const settingsCards: readonly SettingsCard[] = [
     {
         title: "Role Management",
@@ -52,20 +56,27 @@ const settingsCards: readonly SettingsCard[] = [
         url: "/dashboard/settings/locations",
         permission: AppPermissions.MANAGE_LOCATIONS,
     },
+    {
+        title: "AI Activity",
+        description:
+            "Review changes the assistant made to shelter data, and undo them.",
+        url: "/dashboard/settings/ai-activity",
+        permission: AppPermissions.AI_ACTIVITY_READ,
+    },
 ] as const;
 
 const Page = async () => {
-    return (
-        // NOTE: settings is admin-only for now, so MANAGE_ROLES acts as the gate.
-        // If a non-admin role is ever granted a settings catalog permission,
-        // switch this to an any-of check over the settings permissions.
-        <Authorize
-            permission={AppPermissions.MANAGE_ROLES}
-            fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
-        >
-            <PageContent />
-        </Authorize>
-    );
+    // Settings is no longer admin-only: an any-of check over the settings
+    // catalog permissions, as the previous comment here anticipated. The
+    // per-card <Authorize> blocks below still hide the cards a user can't use,
+    // so a staff member with only AI_ACTIVITY_READ sees just that one.
+    const allowed = await hasAnyPermission(SETTINGS_PERMISSIONS);
+
+    if (!allowed) {
+        return <PageNotFoundOrAccessDenied type="accessDenied" />;
+    }
+
+    return <PageContent />;
 };
 
 const PageContent = async () => {

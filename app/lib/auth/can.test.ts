@@ -63,3 +63,11 @@ test("AI_CHAT_USE is held by VOLUNTEER and above, but not USER", () => {
     assert.equal(can(role, AppPermissions.AI_CHAT_USE), true);
   }
 });
+
+test("AI_ACTIVITY_READ is held by STAFF and ADMIN only", () => {
+  assert.equal(can(Role.STAFF, AppPermissions.AI_ACTIVITY_READ), true);
+  assert.equal(can(Role.ADMIN, AppPermissions.AI_ACTIVITY_READ), true);
+  // Not volunteers — they hold no write tools, so nothing of theirs is logged.
+  assert.equal(can(Role.VOLUNTEER, AppPermissions.AI_ACTIVITY_READ), false);
+  assert.equal(can(Role.USER, AppPermissions.AI_ACTIVITY_READ), false);
+});

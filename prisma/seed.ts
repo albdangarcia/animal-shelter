@@ -14,6 +14,8 @@ import {
   TaskCategory,
   TaskPriority,
   TaskStatus,
+  AnimalActivityType,
+  AiActionTargetType,
   CharacteristicCategory,
   AssessmentType,
   AssessmentOutcome,
@@ -3436,6 +3438,197 @@ async function seedTasks() {
   console.log("Seeded tasks.");
 }
 
+// The AI activity log reads AiActionLog, which only the setTaskStatus
+// write tool writes. A fresh seed would leave /dashboard/settings/ai-activity
+// empty, so the table, its filters, and the undo path would not be exercisable.
+// These rows are what that tool would have written for three plausible
+// scenarios — on dedicated, undated tasks so they never touch the attention
+// queue's signal-1 set.
+async function seedAiActivityLog() {
+  console.log("Seeding AI activity log...");
+  try {
+    const [staff1, staff2] = await Promise.all([
+      prisma.person.findFirst({
+        where: { user: { email: "staff1@example.com" } },
+      }),
+      prisma.person.findFirst({
+        where: { user: { email: "staff2@example.com" } },
+      }),
+    ]);
+    if (!staff1 || !staff2) {
+      console.log("Staff not found, skipping AI activity log seeding.");
+      return;
+    }
+
+    const animalByName = async (name: string) =>
+      prisma.animal.findFirst({ where: { name } });
+
+    const [frisco, buddy, whiskers] = await Promise.all([
+      animalByName("Frisco"),
+      animalByName("Buddy"),
+      animalByName("Whiskers"),
+    ]);
+    if (!frisco || !buddy || !whiskers) {
+      console.log(
+        "Expected animals for AI activity log not found, skipping.",
+      );
+      return;
+    }
+
+    const daysAgo = (n: number) => {
+      const d = new Date();
+      d.setDate(d.getDate() - n);
+      return d;
+    };
+
+    // Undated so signal 1 of the attention queue ("dueDate <= end of today")
+    // never matches these, whatever their status.
+    const makeTask = (animalId: string, title: string, status: TaskStatus) =>
+      prisma.task.create({
+        data: {
+          title,
+          details: "Seeded for the AI activity log demo.",
+          status,
+          priority: TaskPriority.MEDIUM,
+          category: TaskCategory.ADMINISTRATIVE,
+          animalId,
+          assigneeId: staff1.id,
+          createdById: staff1.id,
+        },
+      });
+
+    const logStatusChange = (
+      animalId: string,
+      title: string,
+      from: TaskStatus,
+      to: TaskStatus,
+      changedById: string,
+      changedAt: Date,
+    ) =>
+      prisma.animalActivityLog.create({
+        data: {
+          animalId,
+          activityType: AnimalActivityType.TASK_STATUS_CHANGED,
+          changedById,
+          changedAt,
+          changeSummary: `Task "${title}" status changed from ${from} to ${to}.`,
+        },
+      });
+
+    // 1. Undoable: the assistant marked it DONE and nobody has touched it since.
+    //    Undo restores TODO.
+    const undoable = await makeTask(
+      frisco.id,
+      "Weigh-in and body condition score",
+      TaskStatus.DONE,
+    );
+    await logStatusChange(
+      frisco.id,
+      undoable.title,
+      TaskStatus.TODO,
+      TaskStatus.DONE,
+      staff1.id,
+      daysAgo(2),
+    );
+    await prisma.aiActionLog.create({
+      data: {
+        toolName: "setTaskStatus",
+        toolCallId: "seed-toolcall-undoable",
+        approvalId: "seed-approval-undoable",
+        targetType: AiActionTargetType.TASK,
+        targetId: undoable.id,
+        input: { taskId: undoable.id, status: TaskStatus.DONE },
+        before: { status: TaskStatus.TODO },
+        after: { status: TaskStatus.DONE },
+        actorId: staff1.id,
+        createdAt: daysAgo(2),
+      },
+    });
+
+    // 2. Stale: the assistant set IN_PROGRESS, then a human moved it to DONE.
+    //    Undo must refuse — this is the deterministic version of acceptance
+    //    check 6.
+    const stale = await makeTask(
+      buddy.id,
+      "Draft adoption listing copy",
+      TaskStatus.DONE,
+    );
+    await logStatusChange(
+      buddy.id,
+      stale.title,
+      TaskStatus.TODO,
+      TaskStatus.IN_PROGRESS,
+      staff1.id,
+      daysAgo(1),
+    );
+    await prisma.aiActionLog.create({
+      data: {
+        toolName: "setTaskStatus",
+        toolCallId: "seed-toolcall-stale",
+        approvalId: "seed-approval-stale",
+        targetType: AiActionTargetType.TASK,
+        targetId: stale.id,
+        input: { taskId: stale.id, status: TaskStatus.IN_PROGRESS },
+        before: { status: TaskStatus.TODO },
+        after: { status: TaskStatus.IN_PROGRESS },
+        actorId: staff1.id,
+        createdAt: daysAgo(1),
+      },
+    });
+    await logStatusChange(
+      buddy.id,
+      stale.title,
+      TaskStatus.IN_PROGRESS,
+      TaskStatus.DONE,
+      staff2.id,
+      daysAgo(0),
+    );
+
+    // 3. Already undone (by a second actor): the State facet and the disabled
+    //    Undo action both need a row to show.
+    const undone = await makeTask(
+      whiskers.id,
+      "Confirm microchip registration",
+      TaskStatus.TODO,
+    );
+    await prisma.aiActionLog.create({
+      data: {
+        toolName: "setTaskStatus",
+        toolCallId: "seed-toolcall-undone",
+        approvalId: "seed-approval-undone",
+        targetType: AiActionTargetType.TASK,
+        targetId: undone.id,
+        input: { taskId: undone.id, status: TaskStatus.DONE },
+        before: { status: TaskStatus.TODO },
+        after: { status: TaskStatus.DONE },
+        actorId: staff2.id,
+        createdAt: daysAgo(4),
+        undoneAt: daysAgo(3),
+      },
+    });
+    await logStatusChange(
+      whiskers.id,
+      undone.title,
+      TaskStatus.TODO,
+      TaskStatus.DONE,
+      staff2.id,
+      daysAgo(4),
+    );
+    await logStatusChange(
+      whiskers.id,
+      undone.title,
+      TaskStatus.DONE,
+      TaskStatus.TODO,
+      staff1.id,
+      daysAgo(3),
+    );
+  } catch (error) {
+    console.error("Error seeding AI activity log:", error);
+    throw error;
+  }
+  console.log("Seeded AI activity log.");
+}
+
 async function seedAssessments() {
   console.log("Seeding assessments...");
   try {
@@ -3489,6 +3682,10 @@ async function clearDatabase() {
   await prisma.medicationSchedule.deleteMany();
   await prisma.assessmentField.deleteMany();
   await prisma.assessment.deleteMany();
+  // AiActionLog only FKs to Person (RESTRICT); no relation to Task, so order
+  // relative to the task delete below doesn't matter — it just has to precede
+  // the person delete.
+  await prisma.aiActionLog.deleteMany();
   await prisma.animalActivityLog.deleteMany();
   await prisma.task.deleteMany();
   await prisma.intake.deleteMany();
@@ -3674,6 +3871,7 @@ export async function main() {
   await seedFostering();
   await seedApplicationNoise();
   await seedTasks();
+  await seedAiActivityLog();
   await seedAssessments();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
