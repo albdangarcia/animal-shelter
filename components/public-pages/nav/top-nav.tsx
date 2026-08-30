@@ -35,57 +35,59 @@ const TopNav = ({ userImage, showUserProfile, links }: TopNavProps) => {
 
   return (
     <nav className="bg-gray-800 z-20 relative rounded-md mx-auto w-full max-w-7xl mb-4">
-      <div className="mx-auto max-w-7xl px-2 md:px-6 lg:px-8">
-        <div className="relative flex h-16 items-center justify-between">
-          <div className="absolute inset-y-0 left-0 flex items-center md:hidden">
-            <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-              <SheetTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-gray-400 hover:bg-gray-700 hover:text-white"
+      <div className="mx-auto max-w-7xl px-2 min-[915px]:px-6 lg:px-8">
+        <div className="flex h-16 items-center justify-between gap-x-2">
+          {/* Left cluster: hamburger (mobile only) + logo + desktop links */}
+          <div className="flex min-w-0 flex-1 items-center">
+            {/* Hamburger — in normal flow so the logo sits right beside it */}
+            <div className="flex items-center min-[915px]:hidden">
+              <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-gray-400 hover:bg-gray-700 hover:text-white"
+                  >
+                    <span className="sr-only">Open main menu</span>
+                    <Bars3Icon className="block size-6" aria-hidden="true" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent
+                  side="left"
+                  className="bg-gray-800 text-white border-r-gray-700 p-4"
                 >
-                  <span className="sr-only">Open main menu</span>
-                  <Bars3Icon className="block size-6" aria-hidden="true" />
-                </Button>
-              </SheetTrigger>
-              <SheetContent
-                side="left"
-                className="bg-gray-800 text-white border-r-gray-700 p-4"
-              >
-                <SheetHeader className="sr-only">
-                  <SheetTitle className="text-white">Menu</SheetTitle>
-                  <SheetDescription className="sr-only">
-                    Mobile navigation menu with links to different sections of
-                    the website.
-                  </SheetDescription>
-                </SheetHeader>
-                {/* Logo inside the Sheet */}
-                <div className="flex shrink-0 items-center">
-                  <IconPaw className="h-6 w-6" />
-                  <span className="text-white font-bold text-xl ml-2">
-                    Pet Adopt
-                  </span>
-                </div>
+                  <SheetHeader className="sr-only">
+                    <SheetTitle className="text-white">Menu</SheetTitle>
+                    <SheetDescription className="sr-only">
+                      Mobile navigation menu with links to different sections of
+                      the website.
+                    </SheetDescription>
+                  </SheetHeader>
+                  {/* Logo inside the Sheet */}
+                  <div className="flex shrink-0 items-center">
+                    <IconPaw className="h-6 w-6" />
+                    <span className="text-white font-bold text-xl ml-2">
+                      Pet Adopt
+                    </span>
+                  </div>
 
-                {/* Navigation links inside the Sheet */}
-                <div className="space-y-1">
-                  <NavItemsRenderer
-                    links={links}
-                    pathname={pathname}
-                    showUserProfile={showUserProfile}
-                    onLinkClick={() => setIsMobileMenuOpen(false)}
-                    itemClassName="block text-base"
-                    signInButtonClassName="block text-base"
-                  />
-                </div>
-              </SheetContent>
-            </Sheet>
-          </div>
+                  {/* Navigation links inside the Sheet */}
+                  <div className="space-y-1">
+                    <NavItemsRenderer
+                      links={links}
+                      pathname={pathname}
+                      showUserProfile={showUserProfile}
+                      onLinkClick={() => setIsMobileMenuOpen(false)}
+                      itemClassName="block text-base"
+                      signInButtonClassName="block text-base"
+                    />
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </div>
 
-          <div className="flex flex-1 items-center justify-center md:items-stretch md:justify-start">
-            {/* Logo for desktop */}
-            <div className="flex shrink-0 items-center">
+            {/* Logo — left aligned, sits next to the hamburger on mobile */}
+            <div className="flex shrink-0 items-center ml-2 min-[915px]:ml-0">
               <IconPaw className="h-6 w-6 text-white" />
               <span className="text-white font-bold text-xl ml-2">
                 Pet Adopt
@@ -93,7 +95,7 @@ const TopNav = ({ userImage, showUserProfile, links }: TopNavProps) => {
             </div>
 
             {/* Top nav links for desktop */}
-            <div className="hidden md:ml-6 md:flex md:space-x-2">
+            <div className="hidden min-[915px]:ml-6 min-[915px]:flex min-[915px]:space-x-2">
               <NavItemsRenderer
                 links={links}
                 pathname={pathname}
@@ -105,7 +107,7 @@ const TopNav = ({ userImage, showUserProfile, links }: TopNavProps) => {
           </div>
 
           {/* Right-side controls — always visible */}
-          <div className="flex items-center gap-x-4 ml-auto">
+          <div className="flex shrink-0 items-center gap-x-4">
             <ThemeToggle className="bg-transparent hover:bg-white! text-gray-200 hover:text-gray-700" />
 
             {/* User profile menu */}
