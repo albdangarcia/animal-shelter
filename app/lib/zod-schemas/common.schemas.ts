@@ -25,6 +25,21 @@ export const cuidSchema = z.cuid2({
   error: "Invalid ID format. Expected a CUID.",
 });
 
+/**
+ * Ids owned by Better Auth: User, Session, Account, Verification.
+ *
+ * Better Auth generates these itself on insert (32-char random base62), so the
+ * `@default(cuid())` on those models in schema.prisma never fires and the values
+ * are NOT CUIDs. Validating them with `cuidSchema` rejects any id containing an
+ * uppercase letter. Use this schema for those ids; use `cuidSchema` for every
+ * Prisma-generated id.
+ */
+export const authIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64, { error: "Invalid ID format." });
+
 // Reusable schema for currentPage
 export const currentPageSchema = z.int().positive({
   error: "Page number must be a positive integer.",

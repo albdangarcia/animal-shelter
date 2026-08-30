@@ -5,13 +5,13 @@ import { revalidatePath } from "next/cache";
 import { Role } from "@/prisma/generated/enums";
 import { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
-import { cuidSchema } from "../zod-schemas/common.schemas";
+import { authIdSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
 
 // Define a Zod schema for input validation
 const UpdateUserRoleSchema = z.object({
-  userId: cuidSchema,
+  userId: authIdSchema,
   // Ensure the role is one of the valid, non-admin enum values
   role: z.enum(Role).refine((role) => role !== Role.ADMIN, {
     error: "Assigning the Admin role is not permitted here.",
