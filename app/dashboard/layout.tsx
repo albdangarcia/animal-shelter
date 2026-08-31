@@ -5,6 +5,8 @@ import { AppSidebar } from "@/components/dashboard/nav/sidebar-links";
 import { SiteHeader } from "@/components/site-header";
 import { getFilteredNavLinks, getFilteredDocuments } from "../lib/getFilteredLinks";
 import { documentItems, navMainItems, navSecondaryItems } from "@/components/dashboard/nav/nav-links.config";
+import { hasPermission } from "../lib/auth/hasPermission";
+import { aiAssistantItem } from "@/components/dashboard/nav/nav-links.config";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -17,12 +19,13 @@ const Layout = async ({ children }: LayoutProps) => {
   }
 
   // Filter navigation links based on user permissions
-  const [filteredNavMain, filteredDocuments, filteredNavSecondary] =
-    await Promise.all([
-      getFilteredNavLinks(navMainItems),
-      getFilteredDocuments(documentItems),
-      getFilteredNavLinks(navSecondaryItems),
-    ]);
+  const [filteredNavMain, filteredDocuments, filteredNavSecondary, canUseAi] =
+  await Promise.all([
+    getFilteredNavLinks(navMainItems),
+    getFilteredDocuments(documentItems),
+    getFilteredNavLinks(navSecondaryItems),
+    hasPermission(aiAssistantItem.permission),
+  ]);
 
   return (
     <SidebarProvider
@@ -39,6 +42,7 @@ const Layout = async ({ children }: LayoutProps) => {
         documentItems={filteredDocuments}
         navSecondaryItems={filteredNavSecondary}
         variant="inset"
+        showAiAssistant={canUseAi}
       />
       <SidebarInset>
         <SiteHeader />
