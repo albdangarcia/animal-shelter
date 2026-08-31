@@ -43,15 +43,16 @@ export const NavAiAssistant = () => {
             "focus-visible:ring-primary/50 focus-visible:ring-2",
             // Collapsed rail: keeps the square filled tile instead of shrinking
             // to a bare icon.
-            "group-data-[collapsible=icon]:!size-8 group-data-[collapsible=icon]:!p-0",
-            "group-data-[collapsible=icon]:justify-center",
+            "group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2!",
             isActive &&
               "ring-primary/40 ring-offset-sidebar ring-2 ring-offset-2",
           )}
         >
           <Link href={AI_CHAT_URL}>
             <IconSparkles aria-hidden="true" />
-            <span>AI Assistant</span>
+            <span className="group-data-[collapsible=icon]:hidden">
+              AI Assistant
+            </span>
           </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
