@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authClient } from "@/app/lib/auth/auth-client";
@@ -20,11 +22,13 @@ const UserMenu = ({ userImage }: UserAvatarProps) => {
   const router = useRouter();
 
   return (
-    <div className="flex items-center gap-x-4">
+    <>
+      {/* Notifications — no handler yet, disabled so it doesn't read as broken */}
       <Button
+        variant="ghost"
         size="icon"
         aria-label="View notifications"
-        className="bg-transparent hover:bg-white text-gray-200 hover:text-gray-700"
+        className="text-gray-200 hover:bg-white! hover:text-gray-700"
       >
         <BellIcon className="size-5" />
       </Button>
@@ -32,7 +36,7 @@ const UserMenu = ({ userImage }: UserAvatarProps) => {
       {/* User Dropdown Menu */}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+          <Button variant="ghost" className="relative rounded-full">
             <span className="sr-only">Open user menu</span>
             <Avatar className="h-8 w-8">
               <AvatarImage src={userImage || ""} alt="User profile image" />
@@ -58,7 +62,7 @@ const UserMenu = ({ userImage }: UserAvatarProps) => {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
+    </>
   );
 };
 

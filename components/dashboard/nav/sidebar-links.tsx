@@ -1,9 +1,10 @@
-"use client"
+"use client";
 
 import * as React from "react";
 import type { SessionUser } from "@/app/lib/auth/session.types";
 import { IconPaw } from "@tabler/icons-react";
 import Link from "next/link";
+import { NavAiAssistant } from "@/components/dashboard/nav/nav-ai-assistant";
 import { NavDocuments } from "@/components/dashboard/nav/side-nav-documents";
 import { NavMain } from "@/components/dashboard/nav/side-nav-main";
 import { NavSecondary } from "@/components/dashboard/nav/side-nav-secondary";
@@ -16,6 +17,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { NavDocument, NavItem } from "./nav-links.config";
 
@@ -24,6 +26,8 @@ interface AppSidebarProps extends React.ComponentProps<typeof Sidebar> {
   navMainItems: NavItem[];
   documentItems: NavDocument[];
   navSecondaryItems: NavItem[];
+  /** Resolved server-side from `AppPermissions.AI_CHAT_USE`. */
+  showAiAssistant?: boolean;
 }
 
 export function AppSidebar({
@@ -31,6 +35,7 @@ export function AppSidebar({
   navMainItems,
   documentItems,
   navSecondaryItems,
+  showAiAssistant = false,
   ...props
 }: AppSidebarProps) {
   return (
@@ -49,6 +54,12 @@ export function AppSidebar({
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
+        {showAiAssistant && (
+          <>
+            <NavAiAssistant />
+            <SidebarSeparator className="mt-1" />
+          </>
+        )}
       </SidebarHeader>
       <SidebarContent>
         {navMainItems.length > 0 && <NavMain items={navMainItems} />}

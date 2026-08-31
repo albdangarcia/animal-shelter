@@ -143,17 +143,17 @@ export function StaffApplicationUpdateForm({
             </CardHeader>
             <CardContent>
               {isAdopted && outcome && (
-                <Alert className="mb-6 border-blue-300 bg-blue-50">
-                  <Info className="h-4 w-4 text-blue-600" />
-                  <AlertTitle className="text-blue-800">
+                <Alert className="mb-6 border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <AlertTitle className="text-blue-800 dark:text-blue-200">
                     Application Finalized
                   </AlertTitle>
-                  <AlertDescription className="text-blue-700">
+                  <AlertDescription className="text-blue-700 dark:text-blue-300">
                     This application was finalized on{" "}
                     {new Date(outcome.outcomeDate).toLocaleDateString()}.
                     <Link
                       href={`/dashboard/outcomes/${outcome.id}/edit`}
-                      className="ml-2 font-semibold text-blue-800 underline hover:text-blue-600"
+                      className="ml-2 font-semibold text-blue-800 underline hover:text-blue-600 dark:text-blue-200 dark:hover:text-blue-400"
                     >
                       View Outcome Record
                     </Link>
@@ -161,12 +161,12 @@ export function StaffApplicationUpdateForm({
                 </Alert>
               )}
               {isApproved && (
-                <Alert className="mb-6 border-green-300 bg-green-50">
-                  <Info className="h-4 w-4 text-green-600" />
-                  <AlertTitle className="text-green-800">
+                <Alert className="mb-6 border-green-300 bg-green-50 dark:border-green-800 dark:bg-green-950">
+                  <Info className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <AlertTitle className="text-green-800 dark:text-green-200">
                     Next Step: Finalize Adoption
                   </AlertTitle>
-                  <AlertDescription className="flex items-center justify-between text-green-700">
+                  <AlertDescription className="flex items-center justify-between text-green-700 dark:text-green-300">
                     <span>
                       This application is approved and ready for the final step.
                     </span>

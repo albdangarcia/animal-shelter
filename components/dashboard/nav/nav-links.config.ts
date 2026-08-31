@@ -167,13 +167,13 @@ export const navMainItems: readonly NavItem[] = [
     icon: "IconLayoutBoard",
     permission: AppPermissions.ANIMAL_INFO_READ,
   },
-  {
-    title: "AI Assistant",
-    url: "/dashboard/ai-chat",
-    icon: "IconFileAi",
-    permission: AppPermissions.AI_CHAT_USE,
-  },
 ] as const;
+
+export const aiAssistantItem = {
+  title: "AI Assistant",
+  url: "/dashboard/ai-chat",
+  permission: AppPermissions.AI_CHAT_USE,
+} as const;
 
 // Navigation with collapsible sub-items
 export const navCollapsibleItems: readonly NavItem[] = [

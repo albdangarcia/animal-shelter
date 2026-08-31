@@ -45,7 +45,7 @@ export function AnimalNavTabs() {
   return (
     <div className="@container/tabs">
       <DropdownMenu>
-        <DropdownMenuTrigger asChild className="w-32 @[581px]/tabs:hidden">
+        <DropdownMenuTrigger asChild className="w-32 @[700px]/tabs:hidden">
           <Button variant="outline">
             <Menu className="mr-2 h-4 w-4" />
             Navigation
@@ -75,7 +75,7 @@ export function AnimalNavTabs() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <LinkTabs links={dynamicLinks} className="hidden @[581px]/tabs:block" />
+      <LinkTabs links={dynamicLinks} className="hidden @[700px]/tabs:block" />
     </div>
   );
 }
