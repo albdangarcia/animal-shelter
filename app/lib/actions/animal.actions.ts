@@ -700,8 +700,83 @@ const _deleteAnimalImage = async (
   }
 };
 
+const _reorderAnimalImages = async (
+  user: SessionUser,
+  animalId: string,
+  orderedImageIds: string[]
+): Promise<{ success: boolean; message: string }> => {
+  const parsedId = cuidSchema.safeParse(animalId);
+  if (!parsedId.success) {
+    return { success: false, message: "Invalid Animal ID." };
+  }
+  const validatedAnimalId = parsedId.data;
+
+  const parsedImageIds = z
+    .array(cuidSchema)
+    .min(1, { error: "No photos were provided to reorder." })
+    .refine((ids) => new Set(ids).size === ids.length, {
+      error: "The photo order contains a duplicate.",
+    })
+    .safeParse(orderedImageIds);
+  if (!parsedImageIds.success) {
+    return { success: false, message: "Invalid photo order." };
+  }
+  const submittedIds = parsedImageIds.data;
+
+  try {
+    // The submitted array must be exactly this animal's current photo set —
+    // same members, same count. This keeps the action from being a cross-animal
+    // write primitive (an id belonging to another animal can never reach an
+    // update), and it rejects a stale client view — a photo uploaded or deleted
+    // in another tab since the page loaded — before a partial reorder can open
+    // gaps or collide sortOrder values.
+    const existingImages = await prisma.animalImage.findMany({
+      where: { animalId: validatedAnimalId },
+      select: { id: true },
+    });
+    const existingIds = new Set(existingImages.map((image) => image.id));
+    const matchesCurrentSet =
+      submittedIds.length === existingIds.size &&
+      submittedIds.every((id) => existingIds.has(id));
+    if (!matchesCurrentSet) {
+      return {
+        success: false,
+        message:
+          "This photo list is out of date — it may have changed in another tab. Refresh the page and try again.",
+      };
+    }
+
+    // Animals have 1–3 photos in seed data and a handful in reality, so a short
+    // loop of single-column updates in one transaction is fine — no CASE
+    // expression or raw SQL. Each update is scoped by animalId as well as id.
+    // Concurrent reorders are last-write-wins; no locking.
+    await prisma.$transaction(
+      submittedIds.map((id, index) =>
+        prisma.animalImage.update({
+          where: { id, animalId: validatedAnimalId },
+          data: { sortOrder: index },
+        })
+      )
+    );
+  } catch (error) {
+    console.error("Database Error: Failed to reorder animal images.", error);
+    return {
+      success: false,
+      message: "Database Error: Failed to update the photo order.",
+    };
+  }
+
+  revalidatePath(`/dashboard/animals/${validatedAnimalId}/photos`);
+
+  return { success: true, message: "Photo order updated." };
+};
+
 export const deleteAnimalImage = withAuthenticatedUser(
   RequirePermission(AppPermissions.ANIMAL_PHOTO_MANAGE)(_deleteAnimalImage)
+);
+
+export const reorderAnimalImages = withAuthenticatedUser(
+  RequirePermission(AppPermissions.ANIMAL_PHOTO_MANAGE)(_reorderAnimalImages)
 );
 
 export const createAnimal = withAuthenticatedUser(
