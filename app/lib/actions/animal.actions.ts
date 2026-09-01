@@ -44,6 +44,7 @@ const toAnimalData = (data: {
   foundState?: string;
   notes?: string;
   microchipNumber?: string;
+  isSpayedNeutered: boolean;
   description?: string;
   city?: string;
   state?: string;
@@ -57,6 +58,9 @@ const toAnimalData = (data: {
   foundState: data.foundState || null,
   notes: data.notes || null,
   microchipNumber: data.microchipNumber || null,
+  // Non-nullable with a default — no "" -> null treatment, unlike the fields
+  // above; passed straight through.
+  isSpayedNeutered: data.isSpayedNeutered,
   description: data.description || null,
   city: data.city || null,
   state: data.state || null,
@@ -187,6 +191,7 @@ const _createAnimal = async (
           listingStatus: listingStatus,
           publishedAt: publishedAt,
           microchipNumber: mapped.microchipNumber,
+          isSpayedNeutered: mapped.isSpayedNeutered,
           city: mapped.city,
           state: mapped.state,
           currentUnit: resolvedUnitId
@@ -455,6 +460,7 @@ const _updateAnimal = async (
           listingStatus: listingStatus,
           publishedAt: publishedAt,
           microchipNumber: mapped.microchipNumber,
+          isSpayedNeutered: mapped.isSpayedNeutered,
           city: mapped.city,
           state: mapped.state,
           currentUnit: resolvedUnitId

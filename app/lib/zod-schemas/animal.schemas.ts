@@ -134,6 +134,11 @@ const animalFieldsShape = {
     .positive({ error: "Height must be a positive number." })
     .nullable(),
   microchipNumber: z.string().optional(),
+  // Plain z.boolean() (no .default(false)): a default would make the input
+  // optional and break the z.input / z.output symmetry this file preserves so
+  // the input type stays usable as react-hook-form's values type. The form
+  // supplies the default in both the create and edit branches instead.
+  isSpayedNeutered: z.boolean(),
   description: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore, type ReactNode } from "react";
-import { Info } from "lucide-react";
+import { Info, type LucideIcon } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -15,6 +15,17 @@ interface FieldInfoProps {
   /** Accessible name for the trigger, e.g. "About expected adult size". */
   label: string;
   className?: string;
+  /**
+   * Trigger tone. "muted" (default) reads as a neutral, nice-to-know hint;
+   * "warning" is amber in both light and dark, for a constraint the user is
+   * being told about rather than an explanation they can take or leave.
+   */
+  tone?: "muted" | "warning";
+  /**
+   * Trigger glyph. Defaults to Info; pass an alert glyph (e.g. TriangleAlert)
+   * when the popover carries a constraint rather than an explanation.
+   */
+  icon?: LucideIcon;
 }
 
 const HOVER_QUERY = "(hover: hover) and (pointer: fine)";
@@ -48,7 +59,13 @@ const getHoverServerSnapshot = () => false;
  * the sr-only FormDescription at each call site) so it stays wired into the
  * field's aria-describedby.
  */
-export function FieldInfo({ children, label, className }: FieldInfoProps) {
+export function FieldInfo({
+  children,
+  label,
+  className,
+  tone = "muted",
+  icon: Icon = Info,
+}: FieldInfoProps) {
   const [open, setOpen] = useState(false);
   // Touch devices synthesize a mouseenter on tap, which would race the click
   // and flip the popover open-then-shut. Only bind hover where it's real.
@@ -94,11 +111,14 @@ export function FieldInfo({ children, label, className }: FieldInfoProps) {
           onBlur={() => setOpen(false)}
           {...hoverProps}
           className={cn(
-            "text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex size-4 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none",
+            "focus-visible:ring-ring inline-flex size-4 shrink-0 items-center justify-center rounded-full transition-colors focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none",
+            tone === "warning"
+              ? "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300"
+              : "text-muted-foreground hover:text-foreground",
             className,
           )}
         >
-          <Info className="size-3.5" aria-hidden="true" />
+          <Icon className="size-3.5" aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -107,6 +127,12 @@ export function FieldInfo({ children, label, className }: FieldInfoProps) {
         sideOffset={6}
         // Stops the popover stealing focus from the field the user is filling.
         onOpenAutoFocus={(event) => event.preventDefault()}
+        // Focus never enters the content (open auto-focus is suppressed above),
+        // so the close-time restore to the trigger is dead weight — and on
+        // hover devices it's a bug: the programmatic focus reads as
+        // :focus-visible, tripping onFocus into reopening what mouseleave just
+        // closed. Keyboard users never left the trigger, so nothing is lost.
+        onCloseAutoFocus={(event) => event.preventDefault()}
         className="text-muted-foreground w-64 p-3 text-sm leading-snug font-normal"
       >
         {children}

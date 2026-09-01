@@ -11,6 +11,7 @@ import {
   Check,
   ChevronsUpDown,
   Loader2,
+  TriangleAlert,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -33,6 +34,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -188,6 +190,7 @@ const AnimalForm = ({
           heightCm: animal.heightCm ?? null,
           healthStatus: animal.healthStatus ?? AnimalHealthStatus.HEALTHY,
           microchipNumber: animal.microchipNumber || "",
+          isSpayedNeutered: animal.isSpayedNeutered,
           listingStatus: animal.listingStatus,
           city: animal.city || "",
           state: animal.state || "",
@@ -210,6 +213,7 @@ const AnimalForm = ({
           weightGrams: null,
           heightCm: null,
           microchipNumber: "",
+          isSpayedNeutered: false,
           listingStatus: AnimalListingStatus.DRAFT,
           currentUnitId: "",
           notes: "",
@@ -710,10 +714,40 @@ const AnimalForm = ({
                 />
                 <FormField
                   control={form.control}
+                  name="isSpayedNeutered"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Spayed / Neutered</FormLabel>
+                      <div className="flex h-9 items-center">
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </div>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name="listingStatus"
                   render={({ field }) => (
                     <FormItem className="col-span-2">
-                      <FormLabel>Listing Status</FormLabel>
+                      <div className="flex items-center gap-1.5">
+                        <FormLabel>Listing Status</FormLabel>
+                        {isStatusLocked && (
+                          <FieldInfo
+                            label="Why the listing status is locked"
+                            tone="warning"
+                            icon={TriangleAlert}
+                          >
+                            Status is locked. It can only be changed via the
+                            application or outcome process.
+                          </FieldInfo>
+                        )}
+                      </div>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value}
@@ -732,8 +766,12 @@ const AnimalForm = ({
                           ))}
                         </SelectContent>
                       </Select>
+                      {/* Visually replaced by the FieldInfo popover above, but
+                          kept mounted: FormDescription is what wires this text
+                          into the select's aria-describedby, and popover
+                          content is unmounted while closed. */}
                       {isStatusLocked && (
-                        <FormDescription className="text-amber-600">
+                        <FormDescription className="sr-only">
                           Status is locked. It can only be changed via the
                           application or outcome process.
                         </FormDescription>

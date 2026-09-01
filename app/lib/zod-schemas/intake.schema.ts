@@ -97,6 +97,10 @@ export const ReIntakeFormSchema = z
   .object({
     ...intakeFieldsShape,
     healthStatus: z.enum(AnimalHealthStatus),
+    // An animal fact, not a transport-shared intake fact — so a sibling of the
+    // spread, like healthStatus, rather than part of intakeFieldsShape. Plain
+    // z.boolean() (the form supplies the default), matching animalFieldsShape.
+    isSpayedNeutered: z.boolean(),
   })
   .superRefine(intakeSuperRefine);
 
