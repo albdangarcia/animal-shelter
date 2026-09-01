@@ -3,14 +3,25 @@ export const getRandomItem = <T>(arr: T[]): T => {
   return arr[Math.floor(Math.random() * arr.length)];
 };
 
-// Helper function to generate random dates between 2023 and now
-export function getRandomDate(yearsBack = 3): Date {
-  const end = new Date();
+// Uniform random date in a window that ends `minYearsBack` years before now
+// (default: now) and begins `yearsBack` years before now. `minYearsBack` puts
+// a floor on how recent the date can be — pass a non-zero value to draw, say,
+// an adults-only birth-date range that clears an age gate.
+export function getRandomDate(yearsBack = 3, minYearsBack = 0): Date {
+  const now = new Date();
   const start = new Date(
-    end.getFullYear() - yearsBack,
-    end.getMonth(),
-    end.getDate(),
+    now.getFullYear() - yearsBack,
+    now.getMonth(),
+    now.getDate(),
   );
+  const end =
+    minYearsBack === 0
+      ? now
+      : new Date(
+          now.getFullYear() - minYearsBack,
+          now.getMonth(),
+          now.getDate(),
+        );
   return new Date(
     start.getTime() + Math.random() * (end.getTime() - start.getTime()),
   );

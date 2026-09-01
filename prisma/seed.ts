@@ -502,11 +502,17 @@ interface AnimalBlueprint {
   // blueprints set this to deliberately model the shelter dropping the ball:
   // an animal that needs care and nobody has planned anything.
   skipIntakeFollowUpTask?: boolean;
-  // Overrides the default `getRandomDate()` birth date. Set only for
-  // hand-authored animals whose age must stay fixed across reseeds — the
-  // "Bruno" disambiguation pair needs two same-named animals a human can tell apart
-  // by birth date alone, every reseed.
+  // Pins the birth date. When absent, `resolveBlueprintDerivedFields` fills it
+  // before creation (a random spread for most animals, an adult range for
+  // `longStay` ones) so age-gated flags can be derived from it. Set it here
+  // only when the age must stay fixed across reseeds — the "Bruno"
+  // disambiguation pair needs two same-named animals a human can tell apart by
+  // birth date alone, every reseed.
   birthDate?: Date;
+  // Whether the animal has been spayed/neutered. Normally derived from age by
+  // `resolveBlueprintDerivedFields`; set here only to pin it against the age
+  // gate. Read by the public pet detail page and the redesigned homepage badge.
+  isSpayedNeutered?: boolean;
 }
 
 // Hand-authored animals, kept so a handful of profiles have real photos.
@@ -1463,6 +1469,74 @@ function generateAnimalBlueprints(
   return blueprints;
 }
 
+// The hand-authored blueprints hold microchip numbers 985141000100001 through
+// 985141000100017. `microchipNumber` is `String? @unique`, so a collision
+// fails the seed partway through — every chip assigned procedurally continues
+// that one sequence rather than being randomised.
+const FIRST_GENERATED_MICROCHIP = 985141000100018;
+
+// Single pass over every blueprint — hand-authored and generated alike — run
+// once before any animal is created. It resolves each blueprint's birth date,
+// then derives `isSpayedNeutered` and `microchipNumber` from it. Doing all
+// three here (rather than at the two create sites) keeps the age math and the
+// timing identical for hand-authored and generated animals and gives the chip
+// sequence a single home.
+//
+// Age is measured against the moment the seed runs, never a hardcoded date, so
+// reseeding months later re-sorts every animal across the 6-month gate.
+//
+// Distribution (correlated with age so the homepage status badge carries
+// signal — a lone "Chipped" should read as "this one is young"):
+//   spay/neuter:  <6mo => 15%,  >=6mo => 85%
+//   microchip (conditional, both happen at one vet visit):
+//                 neutered => 95%,  not neutered => 65%
+// Landing ~70% neutered / ~85% chipped overall, with a small share (~1 in 11)
+// carrying neither flag — intended, and the un-neutered animals cluster young.
+//
+// The long-stay six the redesigned hero features are a deterministic
+// exception: both flags are hard-set true (a hero animal with no badge would
+// look like a bug across reseeds), and their birth dates are drawn from an
+// adult range so the hard-set stays consistent with the age gate.
+function resolveBlueprintDerivedFields(blueprints: AnimalBlueprint[]): void {
+  const now = new Date();
+  const sixMonthsAgo = new Date(
+    now.getFullYear(),
+    now.getMonth() - 6,
+    now.getDate(),
+  );
+  let nextMicrochip = FIRST_GENERATED_MICROCHIP;
+
+  for (const blueprint of blueprints) {
+    // 1. Birth date. Long-stayers skew adult (real ones do); everyone else
+    //    keeps the default spread.
+    if (!blueprint.birthDate) {
+      blueprint.birthDate = blueprint.longStay
+        ? getRandomDate(8, 2)
+        : getRandomDate();
+    }
+
+    // 2. Spay/neuter status, gated by age unless the blueprint pins it.
+    if (blueprint.isSpayedNeutered === undefined) {
+      if (blueprint.longStay) {
+        blueprint.isSpayedNeutered = true;
+      } else {
+        const neuterRate = blueprint.birthDate > sixMonthsAgo ? 0.15 : 0.85;
+        blueprint.isSpayedNeutered = Math.random() < neuterRate;
+      }
+    }
+
+    // 3. Microchip number, conditional on neuter status unless already set.
+    //    Long-stayers are always chipped for the same hero-determinism reason.
+    if (!blueprint.microchipNumber) {
+      const chipRate = blueprint.isSpayedNeutered ? 0.95 : 0.65;
+      if (blueprint.longStay || Math.random() < chipRate) {
+        blueprint.microchipNumber = String(nextMicrochip);
+        nextMicrochip += 1;
+      }
+    }
+  }
+}
+
 // =================================================================//
 //                       ADOPTION HELPERS                           //
 // =================================================================//
@@ -1975,6 +2049,7 @@ async function seedReturnAndReadoptAnimal(opts: {
       currentWeightGrams: blueprint.weightGrams,
       heightCm: blueprint.heightCm,
       microchipNumber: blueprint.microchipNumber,
+      isSpayedNeutered: blueprint.isSpayedNeutered,
       city: "New York",
       state: "NY",
       description: "A wonderful companion looking for a home.",
@@ -2364,6 +2439,10 @@ async function seedAnimalsAndRelations() {
     ...generateAnimalBlueprints("RETURN_READOPT", RETURN_READOPT_COUNT),
   ];
 
+  // Resolve birth dates and derive the age-gated `isSpayedNeutered` /
+  // `microchipNumber` values for the whole set before any animal is written.
+  resolveBlueprintDerivedFields(blueprints);
+
   // Failures are collected rather than swallowed: a partial/inconsistent
   // animal (e.g. an ARCHIVED row stranded without its closing outcome
   // because a later write in its sequence threw) must never be silently
@@ -2492,6 +2571,7 @@ async function seedAnimalsAndRelations() {
           currentWeightGrams: blueprint.weightGrams,
           heightCm: blueprint.heightCm,
           microchipNumber: blueprint.microchipNumber,
+          isSpayedNeutered: blueprint.isSpayedNeutered,
           city: "New York",
           state: "NY",
           description: "A wonderful companion looking for a home.",
@@ -3058,11 +3138,18 @@ async function seedFostering() {
     const animal = await prisma.animal.create({
       data: {
         name: "Winston",
-        birthDate: getRandomDate(2),
+        // Adopted adult dog: draw an adult age so the hard-set
+        // isSpayedNeutered below stays consistent with the age gate.
+        birthDate: getRandomDate(6, 1),
         sex: Sex.MALE,
         size: AnimalSize.LARGE,
         currentWeightGrams: 22000,
         heightCm: 48,
+        // Outside the blueprint system, so both flags are set explicitly. The
+        // microchip sits well clear of the seeded sequence (…018 upward, a few
+        // hundred at most) and the hand-authored block (…001–…017).
+        isSpayedNeutered: true,
+        microchipNumber: "985141000109999",
         city: "New York",
         state: "NY",
         description: "A wonderful companion looking for a home.",
