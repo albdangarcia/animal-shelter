@@ -22,6 +22,7 @@ import { DashboardAnimalsSchema } from "../../zod-schemas/animal.schemas";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { LATEST_ENTRY_ORDER } from "../../utils/vitals-order";
+import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
 
 // data for the animals table in the dashboard
 const _fetchAnimals = async (
@@ -155,9 +156,7 @@ const _fetchSectionCardsAnimalData = async (
           select: {
             url: true,
           },
-          orderBy: {
-            createdAt: "asc",
-          },
+          orderBy: ANIMAL_IMAGE_ORDER,
           take: 1,
         },
         species: {
@@ -393,9 +392,7 @@ const _fetchAnimalForPhotoPage = async (id: string) => {
         id: true,
         name: true,
         animalImages: {
-          orderBy: {
-            createdAt: "desc",
-          },
+          orderBy: ANIMAL_IMAGE_ORDER,
         },
       },
     });

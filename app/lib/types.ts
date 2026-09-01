@@ -50,9 +50,9 @@ export type AnimalSectionCardPayload = Prisma.AnimalGetPayload<{
       select: {
         url: true;
       };
-      orderBy: {
-        createdAt: "asc";
-      };
+      // Mirrors ANIMAL_IMAGE_ORDER (app/lib/utils/animal-image-order.ts) — keep
+      // in sync; this type documents the shape the fetcher actually queries.
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }];
       take: 1;
     };
     species: {

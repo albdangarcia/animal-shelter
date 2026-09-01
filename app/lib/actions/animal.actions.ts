@@ -622,11 +622,20 @@ const _addAnimalImage = async (
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Append to the end of this animal's gallery, mirroring the upload route
+      // (app/api/upload-to-blob/route.ts). Not unique — reads break a collision
+      // on createdAt (see app/lib/utils/animal-image-order.ts).
+      const { _max } = await tx.animalImage.aggregate({
+        where: { animalId: validatedAnimalId },
+        _max: { sortOrder: true },
+      });
+
       // Create the AnimalImage record
       await tx.animalImage.create({
         data: {
           url: imageUrl,
           animalId: validatedAnimalId,
+          sortOrder: (_max.sortOrder ?? -1) + 1,
         },
       });
 
