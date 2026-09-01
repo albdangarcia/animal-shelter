@@ -284,6 +284,7 @@ const _fetchAnimalById = async (
         description: true,
         listingStatus: true,
         microchipNumber: true,
+        isSpayedNeutered: true,
         healthStatus: true,
         speciesId: true,
         primaryColorId: true,

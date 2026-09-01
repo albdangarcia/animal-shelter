@@ -74,7 +74,8 @@ const _createReIntake = async (
     };
   }
 
-  const { intakeDate, intakeType, healthStatus } = validatedFields.data;
+  const { intakeDate, intakeType, healthStatus, isSpayedNeutered } =
+    validatedFields.data;
   const mapped = toReIntakeData(validatedFields.data);
 
   try {
@@ -90,6 +91,7 @@ const _createReIntake = async (
           listingStatus: AnimalListingStatus.DRAFT,
           archiveReason: null,
           healthStatus: healthStatus,
+          isSpayedNeutered: isSpayedNeutered,
         },
       });
 

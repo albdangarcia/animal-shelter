@@ -33,6 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -188,6 +189,7 @@ const AnimalForm = ({
           heightCm: animal.heightCm ?? null,
           healthStatus: animal.healthStatus ?? AnimalHealthStatus.HEALTHY,
           microchipNumber: animal.microchipNumber || "",
+          isSpayedNeutered: animal.isSpayedNeutered,
           listingStatus: animal.listingStatus,
           city: animal.city || "",
           state: animal.state || "",
@@ -210,6 +212,7 @@ const AnimalForm = ({
           weightGrams: null,
           heightCm: null,
           microchipNumber: "",
+          isSpayedNeutered: false,
           listingStatus: AnimalListingStatus.DRAFT,
           currentUnitId: "",
           notes: "",
@@ -704,6 +707,24 @@ const AnimalForm = ({
                       <FormControl>
                         <Input placeholder="e.g., 900123000456789" {...field} />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="isSpayedNeutered"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Spayed / Neutered</FormLabel>
+                      <div className="flex h-9 items-center">
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
