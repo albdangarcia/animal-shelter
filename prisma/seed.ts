@@ -1987,7 +1987,10 @@ async function seedReturnAndReadoptAnimal(opts: {
       primaryColor: { connect: { id: primaryColor.id } },
       characteristics: { connect: connectedChars },
       animalImages: {
-        create: blueprint.images.map((imageUrl) => ({ url: imageUrl })),
+        create: blueprint.images.map((imageUrl, index) => ({
+          url: imageUrl,
+          sortOrder: index,
+        })),
       },
       ...(currentUnit ? { currentUnit: { connect: { id: currentUnit.id } } } : {}),
     },
@@ -2501,7 +2504,10 @@ async function seedAnimalsAndRelations() {
           primaryColor: { connect: { id: primaryColor.id } },
           characteristics: { connect: connectedChars },
           animalImages: {
-            create: blueprint.images.map((imageUrl) => ({ url: imageUrl })),
+            create: blueprint.images.map((imageUrl, index) => ({
+              url: imageUrl,
+              sortOrder: index,
+            })),
           },
           ...(currentUnit
             ? { currentUnit: { connect: { id: currentUnit.id } } }
@@ -3067,7 +3073,9 @@ async function seedFostering() {
         breeds: { connect: [{ id: breed.id }] },
         colors: { connect: [{ id: primaryColor.id }] },
         primaryColor: { connect: { id: primaryColor.id } },
-        animalImages: { create: [{ url: `${baseUrl}/${PLACEHOLDER_IMAGE}` }] },
+        animalImages: {
+          create: [{ url: `${baseUrl}/${PLACEHOLDER_IMAGE}`, sortOrder: 0 }],
+        },
         currentUnit: { connect: { id: startUnit.id } },
       },
     });

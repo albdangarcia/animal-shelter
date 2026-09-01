@@ -11,6 +11,7 @@ import {
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { computeStays, type StayEvent } from "@/app/lib/utils/stay-utils";
+import { ANIMAL_IMAGE_ORDER } from "@/app/lib/utils/animal-image-order";
 
 export type FosterPickerOption = {
   id: string;
@@ -85,7 +86,7 @@ const _fetchAnimalsEligibleForFosterPlacement = async (): Promise<
         animalImages: {
           select: { url: true },
           take: 1,
-          orderBy: { createdAt: "asc" },
+          orderBy: ANIMAL_IMAGE_ORDER,
         },
         intake: { select: { intakeDate: true } },
         Outcome: { select: { outcomeDate: true } },

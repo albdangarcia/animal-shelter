@@ -7,6 +7,7 @@ import {
 } from "@/app/lib/auth/protected-actions";
 import { isFosteringAnimal } from "@/app/lib/auth/ownership";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { ANIMAL_IMAGE_ORDER } from "@/app/lib/utils/animal-image-order";
 
 const fosterPlacementForMyAnimalsInclude = {
   animal: {
@@ -19,7 +20,7 @@ const fosterPlacementForMyAnimalsInclude = {
       breeds: { select: { name: true } },
       animalImages: {
         select: { url: true },
-        orderBy: { createdAt: "asc" },
+        orderBy: ANIMAL_IMAGE_ORDER,
         take: 1,
       },
     },

@@ -603,60 +603,6 @@ const _togglePetLike = async (
   }
 };
 
-const _addAnimalImage = async (
-  user: SessionUser,
-  animalId: string,
-  imageUrl: string
-): Promise<{ success: boolean; message: string }> => {
-  const staffMemberId = user.personId;
-  const parsedId = cuidSchema.safeParse(animalId);
-
-  if (!parsedId.success) {
-    return { success: false, message: "Invalid Animal ID." };
-  }
-  const validatedAnimalId = parsedId.data;
-
-  if (!imageUrl) {
-    return { success: false, message: "Image URL is missing." };
-  }
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      // Create the AnimalImage record
-      await tx.animalImage.create({
-        data: {
-          url: imageUrl,
-          animalId: validatedAnimalId,
-        },
-      });
-
-      // Log the activity
-      if (staffMemberId) {
-        await tx.animalActivityLog.create({
-          data: {
-            animalId: validatedAnimalId,
-            activityType: AnimalActivityType.PHOTO_UPLOADED,
-            changedById: staffMemberId,
-            changeSummary: `A new photo was uploaded. URL: ${imageUrl}`,
-          },
-        });
-      }
-    });
-
-    // Revalidate paths to show the new image immediately
-    revalidatePath(`/dashboard/animals/${validatedAnimalId}`);
-    revalidatePath(`/dashboard/animals/${validatedAnimalId}/documents`);
-
-    return { success: true, message: "Image saved successfully!" };
-  } catch (error) {
-    console.error("Database Error: Failed to add animal image.", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to save the image.",
-    };
-  }
-};
-
 const _deleteAnimalImage = async (
   user: SessionUser,
   imageId: string,
@@ -681,8 +627,10 @@ const _deleteAnimalImage = async (
       where: { id: parsedImageId.data },
     });
 
-    // Revalidate the page to show the change immediately
-    revalidatePath(`/dashboard/animals/${animalId}/documents`);
+    // Revalidate the photos tab plus the animal page, whose section cards render
+    // whichever image is now [0].
+    revalidatePath(`/dashboard/animals/${animalId}/photos`);
+    revalidatePath(`/dashboard/animals/${animalId}`);
 
     return { success: true, message: 'Image deleted successfully.' };
   } catch (error) {
@@ -691,8 +639,88 @@ const _deleteAnimalImage = async (
   }
 };
 
+const _reorderAnimalImages = async (
+  user: SessionUser,
+  animalId: string,
+  orderedImageIds: string[]
+): Promise<{ success: boolean; message: string }> => {
+  const parsedId = cuidSchema.safeParse(animalId);
+  if (!parsedId.success) {
+    return { success: false, message: "Invalid Animal ID." };
+  }
+  const validatedAnimalId = parsedId.data;
+
+  const parsedImageIds = z
+    .array(cuidSchema)
+    .min(1, { error: "No photos were provided to reorder." })
+    .refine((ids) => new Set(ids).size === ids.length, {
+      error: "The photo order contains a duplicate.",
+    })
+    .safeParse(orderedImageIds);
+  if (!parsedImageIds.success) {
+    return { success: false, message: "Invalid photo order." };
+  }
+  const submittedIds = parsedImageIds.data;
+
+  try {
+    // The submitted array must be exactly this animal's current photo set —
+    // same members, same count. This keeps the action from being a cross-animal
+    // write primitive (an id belonging to another animal can never reach an
+    // update), and it rejects a stale client view — a photo uploaded or deleted
+    // in another tab since the page loaded — before a partial reorder can open
+    // gaps or collide sortOrder values.
+    const existingImages = await prisma.animalImage.findMany({
+      where: { animalId: validatedAnimalId },
+      select: { id: true },
+    });
+    const existingIds = new Set(existingImages.map((image) => image.id));
+    const matchesCurrentSet =
+      submittedIds.length === existingIds.size &&
+      submittedIds.every((id) => existingIds.has(id));
+    if (!matchesCurrentSet) {
+      return {
+        success: false,
+        message:
+          "This photo list is out of date — it may have changed in another tab. Refresh the page and try again.",
+      };
+    }
+
+    // Animals have 1–3 photos in seed data and a handful in reality, so a short
+    // loop of single-column updates in one transaction is fine — no CASE
+    // expression or raw SQL. Each update is scoped by animalId as well as id.
+    // Concurrent reorders are last-write-wins; no locking.
+    await prisma.$transaction(
+      submittedIds.map((id, index) =>
+        prisma.animalImage.update({
+          where: { id, animalId: validatedAnimalId },
+          data: { sortOrder: index },
+        })
+      )
+    );
+  } catch (error) {
+    console.error("Database Error: Failed to reorder animal images.", error);
+    return {
+      success: false,
+      message: "Database Error: Failed to update the photo order.",
+    };
+  }
+
+  // The photos tab plus the animal page (its section cards render image [0]).
+  // Reordering also changes the public thumbnail and gallery order.
+  revalidatePath(`/dashboard/animals/${validatedAnimalId}/photos`);
+  revalidatePath(`/dashboard/animals/${validatedAnimalId}`);
+  revalidatePath(`/pets/${validatedAnimalId}`);
+  revalidatePath("/pets");
+
+  return { success: true, message: "Photo order updated." };
+};
+
 export const deleteAnimalImage = withAuthenticatedUser(
   RequirePermission(AppPermissions.ANIMAL_PHOTO_MANAGE)(_deleteAnimalImage)
+);
+
+export const reorderAnimalImages = withAuthenticatedUser(
+  RequirePermission(AppPermissions.ANIMAL_PHOTO_MANAGE)(_reorderAnimalImages)
 );
 
 export const createAnimal = withAuthenticatedUser(

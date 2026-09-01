@@ -10,6 +10,7 @@ import { AnimalListingStatus, type ApplicationStatus } from "@/prisma/generated/
 import type { Prisma } from "@/prisma/generated/client";
 import { RequirePermission, SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
+import { ANIMAL_IMAGE_ORDER } from "../utils/animal-image-order";
 
 const _fetchMyAdoptionApplications = async (
   user: SessionUser,
@@ -99,6 +100,7 @@ const _fetchMyAdoptionApplications = async (
                 select: {
                   url: true,
                 },
+                orderBy: ANIMAL_IMAGE_ORDER,
                 take: 1,
               },
             },

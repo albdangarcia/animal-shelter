@@ -529,12 +529,19 @@ model AnimalImage {
   id  String @id @default(cuid())
   url String
 
+  /// Gallery position within an animal's photos, ascending. "Primary" is the
+  /// lowest sortOrder — there is no isPrimary flag. Not unique per animal:
+  /// concurrent uploads can transiently collide, and reads break the tie on
+  /// createdAt (see app/lib/utils/animal-image-order.ts).
+  sortOrder Int @default(0) @map(name: "sort_order")
+
   animalId String @map(name: "animal_id")
   animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([animalId, sortOrder])
   @@map(name: "animal_images")
 }
 

@@ -51,8 +51,16 @@ export async function POST(request: Request) {
 
     // save to DB
     await prisma.$transaction(async (tx) => {
+      // New photo lands at the end of this animal's gallery. Not unique, so a
+      // concurrent upload can pick the same value — reads break the tie on
+      // createdAt (see app/lib/utils/animal-image-order.ts).
+      const { _max } = await tx.animalImage.aggregate({
+        where: { animalId },
+        _max: { sortOrder: true },
+      });
+
       await tx.animalImage.create({
-        data: { url: blob.url, animalId },
+        data: { url: blob.url, animalId, sortOrder: (_max.sortOrder ?? -1) + 1 },
       });
 
       await tx.animalActivityLog.create({

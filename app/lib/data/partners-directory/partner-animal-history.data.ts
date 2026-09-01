@@ -3,6 +3,7 @@ import type { IntakeType, OutcomeType } from "@/prisma/generated/enums";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
+import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
 
 export type PartnerTransferDirection = "TRANSFER_IN" | "TRANSFER_OUT";
 
@@ -27,7 +28,7 @@ const animalSelect = {
   species: { select: { name: true } },
   animalImages: {
     select: { url: true },
-    orderBy: { createdAt: "asc" as const },
+    orderBy: ANIMAL_IMAGE_ORDER,
     take: 1,
   },
 } as const;

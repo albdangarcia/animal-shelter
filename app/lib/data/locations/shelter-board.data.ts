@@ -2,6 +2,7 @@ import prisma from "@/app/lib/prisma";
 import type { LocationType, Sex } from "@/prisma/generated/enums";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
 
 // Minimal per-animal payload rendered as an occupant/unplaced chip. Carries just
 // enough identity for the chip (thumbnail + species) and its hover-card (breed,
@@ -61,7 +62,7 @@ const animalChipSelect = {
   animalImages: {
     select: { url: true },
     take: 1,
-    orderBy: { createdAt: "asc" },
+    orderBy: ANIMAL_IMAGE_ORDER,
   },
 } as const;
 

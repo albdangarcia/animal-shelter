@@ -4,6 +4,7 @@ import {
   cuidSchema,
   currentPageSchema,
 } from "../../zod-schemas/common.schemas";
+import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import z from "zod";
@@ -55,7 +56,8 @@ export type PersonAdoptionApplicationPayload =
           species: { select: { name: true } };
           animalImages: {
             select: { url: true };
-            orderBy: { createdAt: "asc" };
+            // Mirrors ANIMAL_IMAGE_ORDER used in the query below — keep in sync.
+            orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }];
             take: 1;
           };
         };
@@ -114,7 +116,7 @@ const _fetchPersonAdoptionApplications = async (
               species: { select: { name: true } },
               animalImages: {
                 select: { url: true },
-                orderBy: { createdAt: "asc" },
+                orderBy: ANIMAL_IMAGE_ORDER,
                 take: 1,
               },
             },

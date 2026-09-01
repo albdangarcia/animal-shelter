@@ -4,6 +4,7 @@ import type { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { PublishedPetsSchema } from "../zod-schemas/animal.schemas";
+import { ANIMAL_IMAGE_ORDER } from "../utils/animal-image-order";
 
 export type PetsPayload = Prisma.AnimalGetPayload<{
   select: {
@@ -165,6 +166,7 @@ export const fetchPublishedPets = async ({
             select: {
               url: true,
             },
+            orderBy: ANIMAL_IMAGE_ORDER,
             take: 1,
           },
           ...(personId && {
@@ -270,6 +272,7 @@ export const fetchFavoritePets = async (): Promise<{
             listingStatus: true,
             animalImages: {
               select: { url: true },
+              orderBy: ANIMAL_IMAGE_ORDER,
               take: 1,
             },
           },
@@ -328,7 +331,9 @@ export const fetchPublicPagePetById = async (id: string) => {
         currentWeightGrams: true,
         heightCm: true,
         description: true,
-        animalImages: true,
+        animalImages: {
+          orderBy: ANIMAL_IMAGE_ORDER,
+        },
         sex: true,
         size: true,
         isSpayedNeutered: true,
@@ -417,6 +422,7 @@ export const fetchLatestPublicAnimals = async () => {
           select: {
             url: true,
           },
+          orderBy: ANIMAL_IMAGE_ORDER,
           take: 1,
         },
         ...(personId && {
