@@ -603,69 +603,6 @@ const _togglePetLike = async (
   }
 };
 
-const _addAnimalImage = async (
-  user: SessionUser,
-  animalId: string,
-  imageUrl: string
-): Promise<{ success: boolean; message: string }> => {
-  const staffMemberId = user.personId;
-  const parsedId = cuidSchema.safeParse(animalId);
-
-  if (!parsedId.success) {
-    return { success: false, message: "Invalid Animal ID." };
-  }
-  const validatedAnimalId = parsedId.data;
-
-  if (!imageUrl) {
-    return { success: false, message: "Image URL is missing." };
-  }
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      // Append to the end of this animal's gallery, mirroring the upload route
-      // (app/api/upload-to-blob/route.ts). Not unique — reads break a collision
-      // on createdAt (see app/lib/utils/animal-image-order.ts).
-      const { _max } = await tx.animalImage.aggregate({
-        where: { animalId: validatedAnimalId },
-        _max: { sortOrder: true },
-      });
-
-      // Create the AnimalImage record
-      await tx.animalImage.create({
-        data: {
-          url: imageUrl,
-          animalId: validatedAnimalId,
-          sortOrder: (_max.sortOrder ?? -1) + 1,
-        },
-      });
-
-      // Log the activity
-      if (staffMemberId) {
-        await tx.animalActivityLog.create({
-          data: {
-            animalId: validatedAnimalId,
-            activityType: AnimalActivityType.PHOTO_UPLOADED,
-            changedById: staffMemberId,
-            changeSummary: `A new photo was uploaded. URL: ${imageUrl}`,
-          },
-        });
-      }
-    });
-
-    // Revalidate paths to show the new image immediately
-    revalidatePath(`/dashboard/animals/${validatedAnimalId}`);
-    revalidatePath(`/dashboard/animals/${validatedAnimalId}/documents`);
-
-    return { success: true, message: "Image saved successfully!" };
-  } catch (error) {
-    console.error("Database Error: Failed to add animal image.", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to save the image.",
-    };
-  }
-};
-
 const _deleteAnimalImage = async (
   user: SessionUser,
   imageId: string,
@@ -690,8 +627,10 @@ const _deleteAnimalImage = async (
       where: { id: parsedImageId.data },
     });
 
-    // Revalidate the page to show the change immediately
-    revalidatePath(`/dashboard/animals/${animalId}/documents`);
+    // Revalidate the photos tab plus the animal page, whose section cards render
+    // whichever image is now [0].
+    revalidatePath(`/dashboard/animals/${animalId}/photos`);
+    revalidatePath(`/dashboard/animals/${animalId}`);
 
     return { success: true, message: 'Image deleted successfully.' };
   } catch (error) {
@@ -766,7 +705,12 @@ const _reorderAnimalImages = async (
     };
   }
 
+  // The photos tab plus the animal page (its section cards render image [0]).
+  // Reordering also changes the public thumbnail and gallery order.
   revalidatePath(`/dashboard/animals/${validatedAnimalId}/photos`);
+  revalidatePath(`/dashboard/animals/${validatedAnimalId}`);
+  revalidatePath(`/pets/${validatedAnimalId}`);
+  revalidatePath("/pets");
 
   return { success: true, message: "Photo order updated." };
 };
