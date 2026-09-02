@@ -110,6 +110,42 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Organic ramps — resolved from .theme-organic, so these utilities are
+     inert outside that scope. Inline, so nothing lands on :root. */
+  --color-organic-neutral-100: var(--organic-neutral-100);
+  --color-organic-neutral-200: var(--organic-neutral-200);
+  --color-organic-neutral-300: var(--organic-neutral-300);
+  --color-organic-neutral-400: var(--organic-neutral-400);
+  --color-organic-neutral-500: var(--organic-neutral-500);
+  --color-organic-neutral-600: var(--organic-neutral-600);
+  --color-organic-neutral-700: var(--organic-neutral-700);
+  --color-organic-neutral-800: var(--organic-neutral-800);
+  --color-organic-neutral-900: var(--organic-neutral-900);
+
+  --color-organic-accent-100: var(--organic-accent-100);
+  --color-organic-accent-200: var(--organic-accent-200);
+  --color-organic-accent-300: var(--organic-accent-300);
+  --color-organic-accent-400: var(--organic-accent-400);
+  --color-organic-accent-500: var(--organic-accent-500);
+  --color-organic-accent-600: var(--organic-accent-600);
+  --color-organic-accent-700: var(--organic-accent-700);
+  --color-organic-accent-800: var(--organic-accent-800);
+  --color-organic-accent-900: var(--organic-accent-900);
+
+  --color-organic-sage-100: var(--organic-sage-100);
+  --color-organic-sage-200: var(--organic-sage-200);
+  --color-organic-sage-300: var(--organic-sage-300);
+  --color-organic-sage-400: var(--organic-sage-400);
+  --color-organic-sage-500: var(--organic-sage-500);
+  --color-organic-sage-600: var(--organic-sage-600);
+  --color-organic-sage-700: var(--organic-sage-700);
+  --color-organic-sage-800: var(--organic-sage-800);
+  --color-organic-sage-900: var(--organic-sage-900);
+
+  --shadow-organic-sm: var(--shadow-organic-sm);
+  --shadow-organic-md: var(--shadow-organic-md);
+  --shadow-organic-lg: var(--shadow-organic-lg);
 }
 
 :root {
@@ -179,4 +215,81 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+}
+/* ── Organic theme scope ──────────────────────────────────────────────────
+   Public pages only. Custom properties set here beat the ones inherited from
+   html.dark for this subtree — closest element wins, so no .dark variant is
+   needed. Tailwind's dark: utilities still key off html.dark, so public
+   components must not use them. */
+.theme-organic {
+  color-scheme: light;
+
+  /* shadcn semantic roles — same meanings, organic values */
+  --background: #f5ead8;
+  --foreground: #201e1d;
+  --card: #ebddc5;
+  --card-foreground: #201e1d;
+  --popover: #f9f4ed;
+  --popover-foreground: #201e1d;
+  --primary: #c67139;
+  --primary-foreground: #f5ead8;
+  --secondary: #e1eecc;
+  --secondary-foreground: #3d472b;
+  --muted: #ebddc5;
+  --muted-foreground: color-mix(in srgb, #201e1d 55%, transparent);
+  --accent: #eee7db;            /* stays a subtle hover, NOT terracotta */
+  --accent-foreground: #201e1d;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: color-mix(in srgb, #201e1d 16%, transparent);
+  --input: color-mix(in srgb, #201e1d 16%, transparent);
+  --ring: #c67139;
+  --radius: 1rem;
+
+  /* organic-only ramps — prefixed, no collision with @theme inline */
+  --organic-neutral-100: #f9f4ed;
+  --organic-neutral-200: #eee7db;
+  --organic-neutral-300: #dcd3c4;
+  --organic-neutral-400: #c0b6a5;
+  --organic-neutral-500: #a19786;
+  --organic-neutral-600: #82796a;
+  --organic-neutral-700: #645c50;
+  --organic-neutral-800: #474238;
+  --organic-neutral-900: #2e2b25;
+
+  --organic-accent-100: #fff2eb;
+  --organic-accent-200: #ffe1d0;
+  --organic-accent-300: #ffc6a5;
+  --organic-accent-400: #f6a06b;
+  --organic-accent-500: #d67f48;
+  --organic-accent-600: #b2622d;
+  --organic-accent-700: #8c491a;
+  --organic-accent-800: #643312;
+  --organic-accent-900: #402310;
+
+  --organic-sage-100: #f0fae1;
+  --organic-sage-200: #e1eecc;
+  --organic-sage-300: #ccdbb2;
+  --organic-sage-400: #aebf92;
+  --organic-sage-500: #8fa073;
+  --organic-sage-600: #728157;
+  --organic-sage-700: #56633f;
+  --organic-sage-800: #3d472b;
+  --organic-sage-900: #272e1b;
+
+  --shadow-organic-sm: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
+  --shadow-organic-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
+  --shadow-organic-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
+
+  font-family: var(--font-figtree), system-ui, sans-serif;
+}
+
+.theme-organic h1,
+.theme-organic h2,
+.theme-organic h3,
+.theme-organic h4,
+.theme-organic .font-display {
+  font-family: var(--font-caprasimo), system-ui, sans-serif;
+  font-weight: 400;
+  line-height: 1.12;
+  letter-spacing: -0.015em;
 }

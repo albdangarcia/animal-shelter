@@ -1,87 +1,74 @@
-import {
-  FacebookIcon,
-  InstagramIcon,
-  TwitterIcon,
-} from "@/components/public-pages/social-media-icons";
 import Link from "next/link";
+
+// Species links are hardcoded to Dog and Cat only — those two are stable in the
+// seed. A name that doesn't exist would 404 into an empty filtered list.
+const footerColumns = [
+  {
+    heading: "Adopt",
+    links: [
+      { name: "All animals", href: "/pets" },
+      { name: "Dogs", href: "/pets?category=Dog" },
+      { name: "Cats", href: "/pets?category=Cat" },
+    ],
+  },
+  {
+    heading: "Support",
+    links: [
+      { name: "Donate", href: "#" },
+      { name: "Volunteer", href: "#" },
+      { name: "Foster", href: "/foster" },
+    ],
+  },
+  {
+    heading: "About",
+    links: [
+      { name: "About", href: "/about" },
+      { name: "Contact", href: "/contact" },
+      { name: "Privacy", href: "#" },
+    ],
+  },
+];
 
 export default function Footer() {
   return (
-    <footer className="mx-auto w-full max-w-7xl bg-card px-10 pt-10 pb-8 rounded-b-sm border-t">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-8 border-b pb-8">
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Navigation
-          </h3>
-          <ul className="mt-4 space-y-2">
-            <li>
-              <Link
-                href="/about"
-                className="text-sm text-muted-foreground hover:text-foreground"
-              >
-                About Us
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/contact"
-                className="text-sm text-muted-foreground hover:text-foreground"
-              >
-                Contact
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="/pets"
-                className="text-sm text-muted-foreground hover:text-foreground"
-              >
-                Find a Pet
-              </Link>
-            </li>
-          </ul>
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Legal
-          </h3>
-          <ul className="mt-4 space-y-2">
-            <li>
-              <Link
-                href="#"
-                className="text-sm text-muted-foreground hover:text-foreground"
-              >
-                Privacy Policy
-              </Link>
-            </li>
-            <li>
-              <Link
-                href="#"
-                className="text-sm text-muted-foreground hover:text-foreground"
-              >
-                Terms of Service
-              </Link>
-            </li>
-          </ul>
-        </div>
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-            Connect
-          </h3>
-          <div className="flex gap-5 mt-4">
-            <Link href="#" aria-label="Facebook">
-              <FacebookIcon className="w-6 h-6 fill-muted-foreground hover:fill-foreground" />
-            </Link>
-            <Link href="#" aria-label="Twitter">
-              <TwitterIcon className="w-6 h-6 fill-muted-foreground hover:fill-foreground" />
-            </Link>
-            <Link href="#" aria-label="Instagram">
-              <InstagramIcon className="w-6 h-6 fill-muted-foreground hover:fill-foreground" />
-            </Link>
+    <footer className="bg-organic-neutral-900 px-5 py-14 text-organic-neutral-200 sm:px-8 lg:px-14">
+      <div className="mx-auto w-full max-w-6xl">
+        <div className="grid gap-10 pb-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          <div>
+            <div className="mb-3 font-display text-[20px] text-background">
+              Pet Adopt
+            </div>
+            <p className="m-0 max-w-[30ch] text-[14px] leading-[1.6] text-organic-neutral-400">
+              120 Maple Street, Springfield. Open Wednesday to Sunday, 11am –
+              6pm.
+            </p>
           </div>
+
+          {footerColumns.map((column) => (
+            <div
+              key={column.heading}
+              className="flex flex-col gap-[10px] text-[14px]"
+            >
+              <div className="font-display text-[12px] tracking-[0.08em] text-organic-neutral-500 uppercase">
+                {column.heading}
+              </div>
+              {column.links.map((link) => (
+                <Link
+                  key={link.name}
+                  href={link.href}
+                  className="text-inherit transition-colors hover:text-background"
+                >
+                  {link.name}
+                </Link>
+              ))}
+            </div>
+          ))}
         </div>
-      </div>
-      <div className="pt-6 text-center text-sm text-muted-foreground">
-        © {new Date().getFullYear()} Pet Adopt. All Rights Reserved.
+
+        <div className="flex flex-col gap-2 border-t border-organic-neutral-800 pt-[22px] text-[12.5px] text-organic-neutral-500 sm:flex-row sm:justify-between">
+          <span>© {new Date().getFullYear()} Pet Adopt</span>
+          <span>Springfield</span>
+        </div>
       </div>
     </footer>
   );
