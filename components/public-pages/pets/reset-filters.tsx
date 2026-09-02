@@ -3,6 +3,8 @@
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { RESET_FILTER_SHAPE } from "@/components/table-common/reset-filter-shape";
+import { cn } from "@/lib/utils";
 
 interface ResetFiltersProps {
   /** param keys that count toward "isFiltered" (e.g. "query", "category", "color") */
@@ -21,13 +23,25 @@ export function ResetFilters({
   if (!isFiltered) return null;
 
   return (
+    // Shape from the shared constant, colour from the tokens this subtree
+    // resolves — terracotta here, and whatever the dashboard's scope gives when
+    // its own reset buttons pick the same device up.
+    //
+    // Every state names BOTH halves of its pairing, so a background can never
+    // land without the foreground meant to sit on it. focus-visible previously
+    // moved only the border and ring, leaving the label on the resting colour.
     <Button
       variant="ghost"
       onClick={() => router.push(pathname)}
-      className="h-8 px-2 lg:px-3"
+      className={cn(
+        RESET_FILTER_SHAPE,
+        "h-9 border-primary/45 text-primary",
+        "hover:border-primary hover:bg-primary hover:text-primary-foreground",
+        "focus-visible:border-primary focus-visible:bg-primary focus-visible:text-primary-foreground"
+      )}
     >
       Reset
-      <X className="ml-2 h-4 w-4" />
+      <X className="size-3.5" />
     </Button>
   );
 }

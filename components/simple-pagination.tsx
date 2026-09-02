@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname, useSearchParams } from "next/navigation";
+import { cn } from "@/lib/utils";
 import {
   Pagination,
   PaginationContent,
@@ -13,9 +14,21 @@ import {
 
 interface Props {
   totalPages: number;
+  /**
+   * Merged into every page link, including previous/next. Opt-in: this
+   * component is shared with the dashboard's tables, which keep the default
+   * shadcn pagination.
+   */
+  linkClassName?: string;
+  /** Merged into the current page's link, after `linkClassName`. */
+  activeLinkClassName?: string;
 }
 
-export function SimplePagination({ totalPages }: Props) {
+export function SimplePagination({
+  totalPages,
+  linkClassName,
+  activeLinkClassName,
+}: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentPage = Number(searchParams.get("page")) || 1;
@@ -37,7 +50,11 @@ export function SimplePagination({ totalPages }: Props) {
           isActive={currentPage === 1}
           aria-disabled={currentPage === 1}
           tabIndex={currentPage === 1 ? -1 : undefined}
-          className={currentPage === 1 ? "pointer-events-none" : ""}
+          className={cn(
+            linkClassName,
+            currentPage === 1 && activeLinkClassName,
+            currentPage === 1 && "pointer-events-none"
+          )}
         >
           1
         </PaginationLink>
@@ -62,7 +79,11 @@ export function SimplePagination({ totalPages }: Props) {
             isActive={currentPage === page}
             aria-disabled={currentPage === page}
             tabIndex={currentPage === page ? -1 : undefined}
-            className={currentPage === page ? "pointer-events-none" : ""}
+            className={cn(
+              linkClassName,
+              currentPage === page && activeLinkClassName,
+              currentPage === page && "pointer-events-none"
+            )}
           >
             {page}
           </PaginationLink>
@@ -84,7 +105,11 @@ export function SimplePagination({ totalPages }: Props) {
             isActive={currentPage === totalPages}
             aria-disabled={currentPage === totalPages}
             tabIndex={currentPage === totalPages ? -1 : undefined}
-            className={currentPage === totalPages ? "pointer-events-none" : ""}
+            className={cn(
+              linkClassName,
+              currentPage === totalPages && activeLinkClassName,
+              currentPage === totalPages && "pointer-events-none"
+            )}
           >
             {totalPages}
           </PaginationLink>
@@ -103,9 +128,10 @@ export function SimplePagination({ totalPages }: Props) {
             href={createPageURL(currentPage - 1)}
             aria-disabled={currentPage <= 1}
             tabIndex={currentPage <= 1 ? -1 : undefined}
-            className={
-              currentPage <= 1 ? "pointer-events-none opacity-50" : undefined
-            }
+            className={cn(
+              linkClassName,
+              currentPage <= 1 && "pointer-events-none opacity-50"
+            )}
           />
         </PaginationItem>
         {renderPaginationItems()}
@@ -114,11 +140,10 @@ export function SimplePagination({ totalPages }: Props) {
             href={createPageURL(currentPage + 1)}
             aria-disabled={currentPage >= totalPages}
             tabIndex={currentPage >= totalPages ? -1 : undefined}
-            className={
-              currentPage >= totalPages
-                ? "pointer-events-none opacity-50"
-                : undefined
-            }
+            className={cn(
+              linkClassName,
+              currentPage >= totalPages && "pointer-events-none opacity-50"
+            )}
           />
         </PaginationItem>
       </PaginationContent>

@@ -66,7 +66,7 @@ const Page = () => (
     <section className="mx-auto w-full max-w-6xl px-5 pb-16 sm:px-8 lg:px-14 lg:pb-20">
       <div className="relative aspect-[16/7] w-full overflow-hidden rounded-[28px]">
         <Image
-          src="/homeimage15.webp"
+          src="/about-closing-band.webp"
           alt="A merle puppy in a blue harness sitting on grass."
           fill
           sizes="(max-width: 1152px) 100vw, 1152px"
