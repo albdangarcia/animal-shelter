@@ -50,14 +50,14 @@ const LikeButton = ({
         disabled={isPending}
         aria-label={isLikedByCurrentUser ? "Unlike this pet" : "Like this pet"}
         className={clsx(
-          "p-1.5 rounded-full bg-white/80 hover:bg-white transition-all duration-150 ease-in-out ",
-          "shadow hover:shadow-md focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75"
+          "p-1.5 rounded-full bg-background/85 hover:bg-background transition-all duration-150 ease-in-out",
+          "shadow-organic-sm focus:outline-none focus:ring-2 focus:ring-ring"
         )}
       >
         {isLikedByCurrentUser ? (
-          <SolidHeartIcon className="h-5 w-5 text-red-500" />
+          <SolidHeartIcon className="h-5 w-5 text-primary" />
         ) : (
-          <OutlineHeartIcon className="h-5 w-5 text-red-400" />
+          <OutlineHeartIcon className="h-5 w-5 text-organic-neutral-600" />
         )}
       </button>
 
@@ -65,6 +65,10 @@ const LikeButton = ({
         <LoginPromptModal
           isOpen={isLoginModalOpen}
           onClose={() => setIsLoginModalOpen(false)}
+          // The dialog portals to <body>, outside the public layout's
+          // .theme-organic div, so it has to re-open the scope or its tokens
+          // resolve against html.dark.
+          className="theme-organic"
         />
       )}
     </>

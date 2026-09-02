@@ -14,13 +14,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface LoginPromptModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /**
+   * Merged into DialogContent. The dialog portals to <body>, so a caller inside
+   * a token scope (the public pages' `.theme-organic`) has to re-open it here —
+   * that decision belongs at the call site, since this modal is shared and a
+   * dashboard caller must keep inheriting the dashboard's theme.
+   */
+  className?: string;
 }
 
-const LoginPromptModal = ({ isOpen, onClose }: LoginPromptModalProps) => {
+const LoginPromptModal = ({
+  isOpen,
+  onClose,
+  className,
+}: LoginPromptModalProps) => {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
@@ -36,7 +48,7 @@ const LoginPromptModal = ({ isOpen, onClose }: LoginPromptModalProps) => {
         if (!open) onClose();
       }}
     >
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className={cn("sm:max-w-[425px]", className)}>
         <DialogHeader>
           <DialogTitle className="flex items-center pr-8">
             <Lock className="mr-2 h-5 w-5 text-primary" />

@@ -712,11 +712,13 @@ const _reorderAnimalImages = async (
   }
 
   // The photos tab plus the animal page (its section cards render image [0]).
-  // Reordering also changes the public thumbnail and gallery order.
+  // Reordering also changes the public thumbnail and gallery order, and the
+  // homepage hero and browse strip both render the primary photo.
   revalidatePath(`/dashboard/animals/${validatedAnimalId}/photos`);
   revalidatePath(`/dashboard/animals/${validatedAnimalId}`);
   revalidatePath(`/pets/${validatedAnimalId}`);
   revalidatePath("/pets");
+  revalidatePath("/");
 
   return { success: true, message: "Photo order updated." };
 };
