@@ -1,0 +1,254 @@
+"use client";
+
+import { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import clsx from "clsx";
+import { PhotoIcon } from "@heroicons/react/24/outline";
+import type { SpotlightAnimal } from "@/app/lib/data/public.data";
+import { formatWeight } from "@/app/lib/utils/weight-format";
+import LikeButton from "../like-button";
+
+interface SpotlightHeroProps {
+  animals: SpotlightAnimal[];
+  /** Total PUBLISHED animals — drives the "+N" circle. */
+  availableCount: number;
+  currentUserPersonId: string | undefined;
+}
+
+/**
+ * The homepage hero band: one animal shown large, with a row of thumbnails that
+ * swap which one that is. Client-side because the swap is local state — picking
+ * a different animal must not navigate.
+ *
+ * Every field on a SpotlightAnimal except `id` and `name` can be null: an
+ * animal backfilled into the spotlight (published, but with no open stay) may
+ * arrive with no photo, no description, no weight and no badge. That is a
+ * normal state, not an error, so each of those pieces is omitted rather than
+ * placeholdered — the badge and the kicker are absolutely positioned or
+ * block-level, so nothing below them shifts when they are absent.
+ */
+const SpotlightHero = ({
+  animals,
+  availableCount,
+  currentUserPersonId,
+}: SpotlightHeroProps) => {
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  // Every fetched candidate gets a circle — the hero is always one of them, so
+  // the selected ring always has a thumbnail to sit on and nothing is fetched
+  // and then discarded.
+  // Defensive: a reseed between render and hydration can't change this, but an
+  // index past the end would blank the whole band.
+  const animal = animals[selectedIndex] ?? animals[0];
+
+  // How many animals the visitor hasn't seen in this row. Hidden at zero rather
+  // than rendering "+0".
+  const remainingCount = Math.max(availableCount - animals.length, 0);
+
+  // Never assert the negative: an animal that isn't neutered simply drops the
+  // word, and an animal with neither flag renders no badge at all.
+  const badges = [
+    animal.isSpayedNeutered && "Neutered",
+    animal.hasMicrochip && "Chipped",
+  ].filter((badge): badge is string => Boolean(badge));
+
+  const meta = [
+    animal.breedString,
+    animal.ageString,
+    animal.speciesName,
+    formatWeight(animal.weightGrams),
+  ].filter((part): part is string => Boolean(part));
+
+  return (
+    <section
+      aria-labelledby="spotlight-heading"
+      className="relative overflow-hidden bg-organic-accent-100"
+    >
+      {/* Decorative only, and clipped by this section — so neither circle may
+          bleed off the TOP edge: the nav is a sibling above, not a parent, and
+          a negative top would show as a straight cut across the band. Right and
+          bottom bleed are fine (viewport edge, band boundary). Hidden below md,
+          where they crowd the text instead of decorating it. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute top-0 right-[-90px] hidden size-[340px] rounded-full bg-organic-accent-200 md:block"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute bottom-[-120px] left-[38%] hidden size-[220px] rounded-full bg-organic-sage-200 md:block"
+      />
+
+      <div className="relative mx-auto w-full max-w-6xl px-5 pt-6 pb-8 sm:px-8 lg:px-14">
+        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_470px] lg:gap-12">
+          {/* Portrait — first when stacked, right-hand column on lg */}
+          <div className="order-first lg:order-last lg:justify-self-end">
+            <div className="relative mx-auto w-[min(72vw,320px)] sm:w-[min(60vw,380px)] lg:w-[440px]">
+              {/* Sage disc, offset up and left behind the portrait */}
+              <div
+                aria-hidden="true"
+                className="absolute inset-[-18px_30px_30px_-18px] rounded-full bg-organic-sage-300"
+              />
+
+              <div className="relative aspect-square overflow-hidden rounded-full bg-organic-neutral-300 shadow-organic-lg">
+                {animal.imageUrl ? (
+                  <Image
+                    // Remounts on swap. Without it the <img> is reused and the
+                    // browser keeps painting the PREVIOUS animal's photo until
+                    // the new one decodes — the old face under the new name,
+                    // which reads as a bug. A blank disc for a beat is honest.
+                    key={animal.id}
+                    src={animal.imageUrl}
+                    alt={`Photo of ${animal.name}`}
+                    fill
+                    sizes="(max-width: 640px) 72vw, (max-width: 1024px) 60vw, 440px"
+                    // The LCP element — every other image on the page is below
+                    // the fold or smaller than this one. `priority` is
+                    // deprecated as of Next 16, and `preload` injects a <link>
+                    // in <head>, which is wrong for a src that changes on
+                    // click; eager + high fetch priority is the replacement.
+                    loading="eager"
+                    fetchPriority="high"
+                    // Biased up from centre: these are full-body shots as often
+                    // as head shots, and a square crop of a standing dog puts
+                    // the head near the top.
+                    className="object-cover object-[50%_30%]"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-organic-neutral-300">
+                    <PhotoIcon
+                      className="size-24 text-organic-neutral-600"
+                      aria-hidden="true"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {badges.length > 0 && (
+                <div className="absolute top-[14px] right-[6px] rounded-full bg-background px-[18px] py-[9px] text-[13px] shadow-organic-md">
+                  {badges.join(" · ")}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Text column */}
+          <div>
+            {animal.waitingDays !== null && (
+              <p className="mb-5 text-[13.5px] text-organic-accent-700">
+                Waiting {animal.waitingDays}{" "}
+                {animal.waitingDays === 1 ? "day" : "days"} — the longest of
+                anyone here
+              </p>
+            )}
+
+            <h1
+              id="spotlight-heading"
+              className="mb-2.5 font-display text-[clamp(52px,9vw,104px)] leading-[0.94] tracking-[-0.03em]"
+            >
+              {animal.name}
+            </h1>
+
+            <p className="mb-4 text-[15px] text-organic-neutral-700">
+              {meta.join(" · ")}
+            </p>
+
+            {animal.description && (
+              <p className="mb-7 max-w-[46ch] text-[15px] leading-[1.65] text-pretty text-organic-neutral-800 line-clamp-3">
+                {animal.description}
+              </p>
+            )}
+
+            <div className="flex flex-wrap items-center gap-3.5">
+              <Link
+                href={`/pets/${animal.id}`}
+                className="inline-flex items-center rounded-full bg-primary px-[26px] py-[13px] font-display text-[15px] leading-[1.2] text-primary-foreground transition-colors hover:bg-organic-accent-600"
+              >
+                Meet {animal.name}
+              </Link>
+              <LikeButton
+                // Keyed so the button resets its pending state when the hero
+                // swaps to a different animal.
+                key={animal.id}
+                animalId={animal.id}
+                currentUserPersonId={currentUserPersonId}
+                isLikedByCurrentUser={animal.isLikedByCurrentUser}
+                label="Save to favourites"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Flick-through row — still inside the accent band */}
+        <div className="mt-10 flex items-center gap-[26px]">
+          <span
+            id="flick-through-label"
+            className="max-w-[9ch] shrink-0 text-[13px] leading-[1.3] text-organic-accent-800"
+          >
+            Or flick through
+          </span>
+
+          {/* Scrolls horizontally on narrow screens rather than wrapping or
+              shrinking the circles below a comfortable tap target. */}
+          <div
+            role="group"
+            aria-labelledby="flick-through-label"
+            className="flex gap-[22px] overflow-x-auto snap-x snap-mandatory pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            {animals.map((thumbnail, index) => {
+              const isSelected = index === selectedIndex;
+              return (
+                <button
+                  key={thumbnail.id}
+                  type="button"
+                  onClick={() => setSelectedIndex(index)}
+                  aria-pressed={isSelected}
+                  className="shrink-0 snap-start text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-organic-accent-100 rounded-[20px]"
+                >
+                  <span
+                    className={clsx(
+                      "relative block size-[78px] overflow-hidden rounded-full bg-organic-neutral-300",
+                      isSelected && "shadow-[0_0_0_3px_var(--primary)]",
+                    )}
+                  >
+                    {thumbnail.imageUrl ? (
+                      <Image
+                        src={thumbnail.imageUrl}
+                        alt=""
+                        fill
+                        sizes="78px"
+                        className="object-cover object-[50%_30%]"
+                      />
+                    ) : (
+                      <PhotoIcon
+                        className="absolute inset-0 m-auto size-8 text-organic-neutral-600"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </span>
+                  <span className="mt-[7px] block max-w-[78px] truncate text-[12.5px]">
+                    {thumbnail.name}
+                  </span>
+                </button>
+              );
+            })}
+
+            {remainingCount > 0 && (
+              <Link
+                href="/pets"
+                className="shrink-0 snap-start text-center focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-organic-accent-100 rounded-[20px]"
+              >
+                <span className="grid size-[78px] place-items-center rounded-full border border-dashed border-organic-accent-400 font-display text-[15px] text-organic-accent-700">
+                  +{remainingCount}
+                </span>
+                <span className="mt-[7px] block text-[12.5px]">Everyone</span>
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+export default SpotlightHero;

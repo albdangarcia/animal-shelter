@@ -510,6 +510,13 @@ export type SpotlightAnimal = {
   /** Days of the current open stay. Null when the animal is not in care. */
   waitingDays: number | null;
   imageUrl: string | null;
+  /**
+   * Whether the signed-in user has already liked this animal. Resolved here
+   * rather than in the hero because the hero's "Save to favourites" control is
+   * `LikeButton`, which toggles: handed a hardcoded `false` it would silently
+   * UNLIKE an animal the user had already saved.
+   */
+  isLikedByCurrentUser: boolean;
 };
 
 /** Hero plus its five thumbnails. */
@@ -532,6 +539,9 @@ const SPOTLIGHT_COUNT = 6;
  * on them, so featuring them as the animal who has waited longest is misleading.
  */
 export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
+  const session = await getCachedSession();
+  const personId = session?.user?.personId;
+
   try {
     // PERF: this walks every published animal's full intake/outcome history in
     // memory (O(animals)), mirroring _fetchLengthOfStaySummary's approach.
@@ -561,6 +571,13 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
         },
         intake: { select: { intakeDate: true } },
         Outcome: { select: { outcomeDate: true } },
+        ...(personId && {
+          likes: {
+            select: { userId: true },
+            where: { userId: personId },
+            take: 1,
+          },
+        }),
       },
     });
 
@@ -624,6 +641,7 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
       hasMicrochip: animal.microchipNumber !== null,
       waitingDays: currentStayDays,
       imageUrl: animal.animalImages[0]?.url ?? null,
+      isLikedByCurrentUser: (animal.likes?.length ?? 0) > 0,
     }));
   } catch (error) {
     console.error("Error fetching spotlight animals.", error);

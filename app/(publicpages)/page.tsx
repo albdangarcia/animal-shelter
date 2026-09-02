@@ -1,139 +1,130 @@
 import Link from "next/link";
-import WelcomeImage from "../../components/public-pages/welcome-image";
-import { fetchLatestPublicAnimals } from "../lib/data/public.data";
 import { Suspense } from "react";
 import PetCard from "@/components/public-pages/pets/pet-card";
-import { getCachedSession } from "@/app/lib/auth/session";
 import LatestPetsSkeleton from "@/components/public-pages/latest-pets-skeleton";
+import SpotlightHero from "@/components/public-pages/home/spotlight-hero";
+import SpeciesPills from "@/components/public-pages/home/species-pills";
+import HelpPanel from "@/components/public-pages/home/help-panel";
+import { getCachedSession } from "@/app/lib/auth/session";
+import {
+  fetchAvailableAnimalCount,
+  fetchLatestPublicAnimals,
+  fetchSpecies,
+  fetchSpotlightAnimals,
+} from "../lib/data/public.data";
 
-const categories = ["Dog", "Cat", "Bird", "Reptile"];
+/** How many cards the browse strip shows before deferring to /pets. */
+const BROWSE_STRIP_COUNT = 10;
 
-const Page = () => {
-  return (
-    <>
-      <WelcomeImage />
+const Page = () => (
+  <>
+    <Suspense fallback={<SpotlightBandFallback />}>
+      <SpotlightBand />
+    </Suspense>
 
-      <section aria-labelledby="featured-pets-heading" className="my-12">
-        <h2
-          id="featured-pets-heading"
-          className="text-2xl font-semibold text-foreground text-center mb-8"
-        >
-          Friends Awaiting a Home
-        </h2>
+    <section
+      aria-labelledby="browse-heading"
+      className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 sm:py-14 lg:px-14"
+    >
+      <div className="mb-6 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between lg:gap-8">
+        <div>
+          <h2 id="browse-heading" className="mb-1.5 font-display text-[36px]">
+            Browse everyone
+          </h2>
+          <Suspense fallback={<p className="text-[14.5px]">&nbsp;</p>}>
+            <BrowseSubline />
+          </Suspense>
+        </div>
 
-        <Suspense fallback={<LatestPetsSkeleton />}>
-          <LatestPetsContent />
+        <Suspense fallback={null}>
+          <SpeciesPillsContent />
         </Suspense>
+      </div>
 
-        <div className="text-center mt-20">
-          <Link
-            href="/pets?page=1"
-            className="inline-block bg-primary text-primary-foreground font-semibold py-3 px-8 rounded-lg shadow-md hover:shadow-lg transition-all"
-          >
-            View All Our Animals
-          </Link>
-        </div>
-      </section>
+      <Suspense fallback={<LatestPetsSkeleton />}>
+        <LatestPetsContent />
+      </Suspense>
 
-      <section aria-labelledby="categories-heading" className="my-12">
-        <h2
-          id="categories-heading"
-          className="text-2xl font-semibold text-foreground text-center mb-8"
+      <div className="mt-10 flex justify-center">
+        <Link
+          href="/pets?page=1"
+          className="inline-flex items-center rounded-full border border-border px-[26px] py-3 font-display text-[14px] leading-[1.2] transition-colors hover:bg-foreground/[0.07]"
         >
-          Browse by Category
-        </h2>
-        <div className="flex flex-wrap justify-center mt-2 gap-4 mb-5">
-          {categories.map((category) => (
-            <Link
-              href={`pets?page=1&category=${category}`}
-              key={category}
-              className="flex items-center justify-center w-40 h-20 sm:w-48 sm:h-24 rounded-lg shadow-md bg-secondary hover:bg-secondary/80 transition-colors duration-200"
-            >
-              <h3 className="font-medium text-lg text-secondary-foreground">
-                {category}
-              </h3>
-            </Link>
-          ))}
-        </div>
-      </section>
+          View all animals
+        </Link>
+      </div>
+    </section>
 
-      <section
-        aria-labelledby="how-to-help-heading"
-        className="my-12 px-4 rounded-lg"
-      >
-        <h2
-          id="how-to-help-heading"
-          className="text-2xl font-semibold text-foreground mb-8 text-center"
-        >
-          How You Can Help
-        </h2>
-        <div className="grid md:grid-cols-3 gap-8 text-center max-w-4xl mx-auto">
-          {/* Donate */}
-          <div className="p-6 bg-muted rounded-lg border">
-            <h3 className="text-xl font-semibold text-foreground mb-2">
-              Donate
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              Your generosity helps us provide essential care, medical
-              treatment, and find loving homes for animals.
-            </p>
-            <Link
-              href="/donate"
-              className="inline-block bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2 px-5 rounded-md shadow transition-colors"
-            >
-              Give Today
-            </Link>
-          </div>
-          {/* Volunteer */}
-          <div className="p-6 bg-muted rounded-lg border">
-            <h3 className="text-xl font-semibold text-foreground mb-2">
-              Volunteer
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              Lend your time and skills to make a difference in the lives of our
-              animals. Every hour helps!
-            </p>
-            <Link
-              href="/volunteer"
-              className="inline-block bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2 px-5 rounded-md shadow transition-colors"
-            >
-              Join Our Team
-            </Link>
-          </div>
-          {/* Foster */}
-          <div className="p-6 bg-muted rounded-lg border">
-            <h3 className="text-xl font-semibold text-foreground mb-2">
-              Foster
-            </h3>
-            <p className="text-muted-foreground mb-4">
-              Open your home temporarily to an animal in need, providing them
-              with a nurturing environment.
-            </p>
-            <Link
-              href="/foster"
-              className="inline-block bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-2 px-5 rounded-md shadow transition-colors"
-            >
-              Learn to Foster
-            </Link>
-          </div>
-        </div>
-      </section>
-    </>
+    <HelpPanel />
+  </>
+);
+
+/**
+ * The hero band. Renders nothing at all when there is no published animal to
+ * feature — an empty accent band with a heading and no content reads as a bug,
+ * and the browse strip below already says the list is empty.
+ */
+const SpotlightBand = async () => {
+  const [spotlightAnimals, availableCount, session] = await Promise.all([
+    fetchSpotlightAnimals(),
+    fetchAvailableAnimalCount(),
+    getCachedSession(),
+  ]);
+
+  if (spotlightAnimals.length === 0) return null;
+
+  return (
+    <SpotlightHero
+      animals={spotlightAnimals}
+      availableCount={availableCount}
+      currentUserPersonId={session?.user?.personId}
+    />
   );
 };
 
-const LatestPetsContent = async () => {
-  const latestAnimals = await fetchLatestPublicAnimals();
+/**
+ * Holds the band's colour and roughly its height while the spotlight query
+ * resolves, so the nav doesn't sit on a cream page for a beat and then get a
+ * band shoved under it.
+ */
+const SpotlightBandFallback = () => (
+  <div
+    aria-hidden="true"
+    className="h-[560px] w-full bg-organic-accent-100 lg:h-[640px]"
+  />
+);
 
-  const session = await getCachedSession();
-  const currentUserPersonId = session?.user?.personId;
+const BrowseSubline = async () => {
+  const availableCount = await fetchAvailableAnimalCount();
 
   return (
-    <div className="mt-6 flex flex-wrap justify-center gap-4 gap-y-14">
+    <p className="text-[14.5px] text-organic-neutral-700">
+      {availableCount} {availableCount === 1 ? "animal" : "animals"}. New
+      arrivals appear here as soon as they&apos;re ready to meet people.
+    </p>
+  );
+};
+
+const SpeciesPillsContent = async () => {
+  const species = await fetchSpecies();
+
+  return <SpeciesPills speciesNames={species.map(({ name }) => name)} />;
+};
+
+const LatestPetsContent = async () => {
+  const [latestAnimals, session] = await Promise.all([
+    fetchLatestPublicAnimals(BROWSE_STRIP_COUNT),
+    getCachedSession(),
+  ]);
+
+  return (
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-6">
       {latestAnimals.map((animal) => (
-        <div key={animal.id} className="w-44">
-          <PetCard pet={animal} currentUserPersonId={currentUserPersonId} />
-        </div>
+        <PetCard
+          key={animal.id}
+          pet={animal}
+          currentUserPersonId={session?.user?.personId}
+        />
       ))}
     </div>
   );

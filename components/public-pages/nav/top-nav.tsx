@@ -36,7 +36,12 @@ const TopNav = ({ userImage, showUserProfile, links }: TopNavProps) => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <header className="relative z-20 px-5 py-[22px] sm:px-8 lg:px-14">
+    // bg-organic-accent-100 unconditionally, on every public page — no route
+    // check. On the homepage it merges with the hero band into one continuous
+    // band, as the mockup draws it; elsewhere it reads as a deliberate header
+    // band a shade warmer than the cream below. A usePathname branch would buy
+    // nothing and risk a seam.
+    <header className="relative z-20 bg-organic-accent-100 px-5 py-[22px] sm:px-8 lg:px-14">
       <div className="mx-auto flex w-full max-w-6xl items-center gap-x-4">
         {/* Hamburger — mobile only, sits left of the brand */}
         <div className="flex items-center min-[915px]:hidden">
