@@ -146,7 +146,6 @@ Typical values per environment:
 
 | Variable              | Required    | Description                                                                                                                                                                                                    |
 | ---------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SEED_IMAGE_BASE_URL` | ⚪ Optional | Base URL/path the seed uses for animal images. Read at seed time and baked into stored image paths. `/uploads` for local dev (default); a blob/CDN base URL for hosted deploys. Independent of the demo flag. Re-seed after changing it. |
 | `DEV_LINK_TEST_EMAIL` | ⚪ Optional | Local development only. When set, gives one seeded walk-in person this email address, so signing in with an OAuth account whose verified email matches will exercise the account-to-person linking rule. Leave unset in any shared or deployed environment. |
 
 ### Generating `BETTER_AUTH_SECRET`
