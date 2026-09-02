@@ -375,6 +375,11 @@ export const fetchPublicPagePetById = async (id: string) => {
         sex: true,
         size: true,
         isSpayedNeutered: true,
+        // Server-side only: mapped to the `hasMicrochip` boolean below and
+        // never included in what this function returns. Same contract as
+        // fetchSpotlightAnimals — the detail page only needs to know whether
+        // to show the "Microchipped" pill, not the number itself.
+        microchipNumber: true,
         species: {
           select: {
             name: true,
@@ -434,7 +439,12 @@ export const fetchPublicPagePetById = async (id: string) => {
       },
     });
 
-    return pet;
+    if (!pet) {
+      return null;
+    }
+
+    const { microchipNumber, ...rest } = pet;
+    return { ...rest, hasMicrochip: microchipNumber !== null };
   } catch (error) {
     console.error("Error fetching pet.", error);
     throw new Error("Error fetching pet.");

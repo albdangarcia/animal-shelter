@@ -43,10 +43,29 @@ const PetGallery = ({
         >
           {selectedImage ? (
             <Image
+              // Remounts on swap. Without it the <img> is reused and the
+              // browser keeps painting the PREVIOUS photo until the new one
+              // decodes — the old image under the new selection, which reads
+              // as a bug. The shimmer placeholder for a beat is honest. Same
+              // reasoning as the spotlight hero's portrait.
+              key={selectedImage}
               className="object-contain group-hover:opacity-90 transition-opacity"
               src={selectedImage}
               fill
               sizes="(max-width: 1024px) 100vw, 50vw"
+              // This is the detail page's LCP element — measured at 1280, the
+              // photo is the largest paint on the page. `priority` is
+              // deprecated as of Next 16, and it injects a <link rel=preload>
+              // in <head>, which is wrong for a src that changes on thumbnail
+              // click; eager + high fetch priority is the replacement. The
+              // thumbnails below stay lazy.
+              //
+              // Note that Next's own LCP warning can never fire here: the
+              // check in get-img-props.js is gated on `placeholder === "empty"`
+              // and this image passes a shimmer, so silence from the dev
+              // overlay is not evidence that the loading strategy is right.
+              loading="eager"
+              fetchPriority="high"
               placeholder={`data:image/svg+xml;base64,${toBase64(
                 shimmer(600, 600),
               )}`}
