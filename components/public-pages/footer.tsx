@@ -39,8 +39,7 @@ export default function Footer() {
               Pet Adopt
             </div>
             <p className="m-0 max-w-[30ch] text-[14px] leading-[1.6] text-organic-neutral-400">
-              120 Maple Street, Springfield. Open Wednesday to Sunday, 11am –
-              6pm.
+              248 Rescue Way, Brooklyn, NY 11201. Open Wednesday to Sunday, 11am – 6pm.
             </p>
           </div>
 
@@ -67,7 +66,7 @@ export default function Footer() {
 
         <div className="flex flex-col gap-2 border-t border-organic-neutral-800 pt-[22px] text-[12.5px] text-organic-neutral-500 sm:flex-row sm:justify-between">
           <span>© {new Date().getFullYear()} Pet Adopt</span>
-          <span>Springfield</span>
+          <span>Brooklyn, New York</span>
         </div>
       </div>
     </footer>

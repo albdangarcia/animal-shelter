@@ -26,8 +26,12 @@ const Page = () => (
       aria-labelledby="browse-heading"
       className="mx-auto w-full max-w-6xl px-5 py-10 sm:px-8 sm:py-14 lg:px-14"
     >
-      <div className="mb-6 flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between lg:gap-8">
-        <div>
+      {/* The pills get their own full-width row rather than sharing one with
+          the heading. The mockup's six fit beside a heading; the real
+          species list plus "Everyone" does not, and one pill dropping to a
+          second line beside the heading reads as a bug rather than a wrap. */}
+      <div className="mb-6">
+        <div className="mb-5">
           <h2 id="browse-heading" className="mb-1.5 font-display text-[36px]">
             Browse everyone
           </h2>

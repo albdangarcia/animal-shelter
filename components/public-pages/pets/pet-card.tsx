@@ -52,11 +52,30 @@ const PetCard = ({
   // The first tag falls back to the species name, because pickBreeds() leaves
   // some species with no breed at all — without it a breedless card never says
   // what kind of animal it is.
+  //
+  // Each slot carries its own variant from organic.css (.tag-accent,
+  // .tag-neutral, .tag-accent-2), and the variant belongs to the SLOT, not to
+  // the position in the rendered row. Pairing the class with the label BEFORE
+  // the filter is what enforces that: `size` is null for any animal whose breed
+  // has no typical size (the seed's "Mixed Breed" is one), so deriving the
+  // variant from the filtered index instead would slide sage up into the size
+  // slot and recolour the row depending on which fields happen to be recorded.
   const tags = [
-    pet.breeds[0]?.name ?? pet.species.name,
-    formatAnimalSize(pet.size),
-    pet.characteristics[0]?.name,
-  ].filter((tag): tag is string => Boolean(tag));
+    {
+      label: pet.breeds[0]?.name ?? pet.species.name,
+      className: "bg-organic-accent-100 text-organic-accent-800",
+    },
+    {
+      label: formatAnimalSize(pet.size),
+      className: "bg-organic-neutral-100 text-organic-neutral-800",
+    },
+    {
+      label: pet.characteristics[0]?.name,
+      className: "bg-organic-sage-100 text-organic-sage-800",
+    },
+  ].filter((tag): tag is { label: string; className: string } =>
+    Boolean(tag.label),
+  );
 
   const inner = (
     <>
@@ -112,12 +131,15 @@ const PetCard = ({
 
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
-          {tags.map((tag, index) => (
+          {tags.map(({ label, className }, index) => (
             <span
-              key={`${index}-${tag}`}
-              className="inline-flex items-center rounded-full bg-organic-neutral-100 px-2.5 py-[3px] text-[11px] tracking-[0.02em] text-organic-neutral-800"
+              key={`${index}-${label}`}
+              className={clsx(
+                "inline-flex items-center rounded-full px-2.5 py-0.75 text-[11px] tracking-[0.02em]",
+                className,
+              )}
             >
-              {tag}
+              {label}
             </span>
           ))}
         </div>

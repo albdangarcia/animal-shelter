@@ -76,10 +76,20 @@ const SpotlightHero = ({
     animal.name.length * 0.653
   ).toFixed(2)}))`;
 
+  // Breed · age · weight, matching the mockup's three segments. Species was a
+  // fourth until it was measured: at Caprasimo 22px in the 522px text column,
+  // "American Eskimo Dog · 11 months · Dog · 99.99 kg" is 552px and wraps, as do
+  // the next two longest single-breed combinations. Dropping species brings the
+  // worst single-breed line to 492px, 30px inside the column.
+  //
+  // It does NOT save the two-breed animals the seed produces — breedString joins
+  // every breed, so "American Eskimo Dog, Golden Retriever · …" is 695px and
+  // wraps either way. Two lines is a graceful wrap rather than an overflow, and
+  // the card tags carry species regardless, so the hero does not
+  // need to be a spec sheet.
   const meta = [
     animal.breedString,
     animal.ageString,
-    animal.speciesName,
     formatWeight(animal.weightGrams),
   ].filter((part): part is string => Boolean(part));
 
@@ -159,7 +169,11 @@ const SpotlightHero = ({
               column's width rather than the viewport's. */}
           <div className="@container">
             {animal.waitingDays !== null && (
-              <p className="mb-5 text-[13.5px] text-organic-accent-700">
+              // The mockup's `.tag.tag-accent-2`: sage-100 on sage-800, pill
+              // radius, 20px below. Its 11px is sized for a one-word tag and
+              // this is a full sentence, so it takes the 12.5px / 5px 14px
+              // the colours and the pill shape are exact.
+              <p className="mb-5 inline-flex rounded-full bg-organic-sage-100 px-3.5 py-[5px] text-[12.5px] tracking-[0.02em] text-organic-sage-800">
                 Waiting {animal.waitingDays}{" "}
                 {animal.waitingDays === 1 ? "day" : "days"} — the longest of
                 anyone here
@@ -180,12 +194,12 @@ const SpotlightHero = ({
               {animal.name}
             </h1>
 
-            <p className="mb-4 text-[15px] text-organic-neutral-700">
+            <p className="mb-[18px] font-display text-[22px] leading-[1.55] text-organic-accent-700">
               {meta.join(" · ")}
             </p>
 
             {animal.description && (
-              <p className="mb-7 max-w-[46ch] text-[15px] leading-[1.65] text-pretty text-organic-neutral-800 line-clamp-3">
+              <p className="mb-7 max-w-[46ch] text-[17.5px] leading-[1.65] text-pretty text-organic-neutral-800">
                 {animal.description}
               </p>
             )}
@@ -224,7 +238,21 @@ const SpotlightHero = ({
           <div
             role="group"
             aria-labelledby="flick-through-label"
-            className="flex min-w-0 gap-[22px] overflow-x-auto snap-x snap-mandatory pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            // p-1.5 / -m-1.5: overflow-x:auto forces the block axis to `auto`
+            // too, so this scrollport clips vertically as well, and at
+            // scrollLeft:0 it clips the left edge — cutting the selected
+            // thumbnail's 3px ring on two sides. Padding by more than the ring
+            // width and pulling it back with the matching negative margin gives
+            // the ring room inside the scrollport without moving the row.
+            //
+            // scroll-p-1.5 is the other half of the fix and is NOT optional:
+            // snap-mandatory aligns a snap-start item with the SNAPPORT, which
+            // is the padding box unless scroll-padding insets it. Without it
+            // the row rests at scrollLeft 6 with the first thumbnail flush
+            // against the visible edge, scrolling the padding we just added out
+            // of view and cutting the ring again — measurably, at every width
+            // where the row overflows.
+            className="-m-1.5 flex min-w-0 gap-[22px] snap-x snap-mandatory scroll-p-1.5 overflow-x-auto p-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {animals.map((thumbnail, index) => {
               const isSelected = index === selectedIndex;
