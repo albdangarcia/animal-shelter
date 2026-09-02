@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { betterAuth } from "better-auth";
 import { authOptions } from "@/auth.options";
 import { PrismaClient } from "@/prisma/generated/client";
@@ -60,12 +62,10 @@ const seedAuth = betterAuth({
 //                             MOCK DATA                            //
 // =================================================================//
 
-// Base URL/path the seed uses for animal images. Read at seed time and baked
-// into the stored image strings, so set it for the environment whose DB you're
-// seeding: "/uploads" for local dev (default), or a blob/CDN base URL for a
-// hosted deploy. Independent of NEXT_PUBLIC_IS_DEMO, which now only controls
-// demo-specific UI (banner, reset).
-const baseUrl = process.env.SEED_IMAGE_BASE_URL ?? "/uploads";
+// Root-relative path the seed uses for animal images. Next.js serves
+// public/ at this path on every host — local dev and Vercel alike — with no
+// per-environment configuration needed.
+const baseUrl = "/seed-images";
 
 const personData = [
   {
@@ -353,49 +353,99 @@ const generatedNamesBySpecies: Record<keyof typeof allSpecies, string[]> = {
   ],
 };
 
-// Per-species image pools for generated animals, built from the actual files
-// in public/uploads (and mirrored in the hosted blob store under the same
-// names). Filenames are listed explicitly rather than computed, since
-// extensions and numbering are irregular. "Other" has no real photos, so it
-// falls back to the placeholder.
 const PLACEHOLDER_IMAGE = "placeholder.jpg";
 
-const speciesImagePools: Record<keyof typeof allSpecies, string[]> = {
-  DOG: [
-    "dog1.jpg", "dog1-1.webp", "dog1-2.jpg", "dog1-3.webp", "dog2.jpg",
-    "dog2-1.webp", "dog3.jpg", "dog3-1.jpg", "dog3-2.webp",
-  ],
-  CAT: [
-    "cat1.webp", "cat1-1.jpg", "cat1-2.jpg", "cat2.webp", "cat2-1.jpg",
-    "cat2-2.jpg",
-  ],
-  BIRD: [
-    "bird1.webp", "bird1-1.webp", "bird1-2.webp", "bird2.webp",
-    "bird2-1.webp", "bird2-2.webp",
-  ],
-  RABBIT: ["rabbit1.webp", "rabbit1-1.jpg", "rabbit1-2.webp"],
-  REPTILE: [
-    "reptile1.webp", "reptile1-1.webp", "reptile1-2.jpg", "reptile2.webp",
-    "reptile2-1.jpg", "reptile2-2.jpg",
-  ],
-  OTHER: [],
-};
+// One individual animal's photos within a species' library, ordered by the
+// `M` (photo number) segment of its filenames.
+interface SpeciesIndividual {
+  photos: string[]; // paths relative to `baseUrl`, e.g. "dog/dog-01-1.webp"
+}
 
-// Resolves `count` species-appropriate image URLs for a generated animal,
-// falling back to the placeholder for species with an empty pool (Other).
-function pickSpeciesImages(speciesName: string, count: number): string[] {
+// Per-species image pools for generated animals, built by reading
+// public/seed-images/<species>/ at seed time and grouping filenames
+// (`<species>-NN-M.ext`) by their `NN` individual. Adding photos later needs
+// no seed edit. Fails loudly, naming the species, if a folder is missing or
+// has no recognizable photos — a silent fallback to the placeholder is how a
+// whole species quietly ships as grey squares.
+function buildSpeciesImagePools(): Record<keyof typeof allSpecies, SpeciesIndividual[]> {
+  const speciesKeys = Object.keys(allSpecies) as (keyof typeof allSpecies)[];
+  const pools = {} as Record<keyof typeof allSpecies, SpeciesIndividual[]>;
+
+  for (const speciesKey of speciesKeys) {
+    const folder = speciesKey.toLowerCase();
+    const dirPath = path.join(process.cwd(), "public/seed-images", folder);
+
+    let filenames: string[];
+    try {
+      filenames = fs
+        .readdirSync(dirPath, { withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => entry.name);
+    } catch {
+      filenames = [];
+    }
+
+    const byIndividual = new Map<number, { photoNum: number; filename: string }[]>();
+    for (const filename of filenames) {
+      const match = filename.match(/^[a-z]+-(\d+)-(\d+)\.[a-z0-9]+$/i);
+      if (!match) continue;
+      const individualNum = Number(match[1]);
+      const photoNum = Number(match[2]);
+      const photos = byIndividual.get(individualNum) ?? [];
+      photos.push({ photoNum, filename });
+      byIndividual.set(individualNum, photos);
+    }
+
+    if (byIndividual.size === 0) {
+      throw new Error(
+        `Seed image pool for species "${speciesKey}" is missing or empty. ` +
+          `Expected photos named like "${folder}-01-1.webp" under public/seed-images/${folder}/.`,
+      );
+    }
+
+    pools[speciesKey] = [...byIndividual.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([, photos]) => ({
+        photos: photos
+          .sort((a, b) => a.photoNum - b.photoNum)
+          .map((p) => `${folder}/${p.filename}`),
+      }));
+  }
+
+  return pools;
+}
+
+const speciesImagePools = buildSpeciesImagePools();
+
+// Per-species queue of not-yet-dealt individuals, so generated animals are
+// spread across every individual before any repeats. Reshuffled (rather than
+// picked at random each time) whenever a species' queue runs dry.
+const individualDealQueues: Partial<Record<keyof typeof allSpecies, SpeciesIndividual[]>> = {};
+
+function dealIndividual(speciesKey: keyof typeof allSpecies): SpeciesIndividual {
+  let queue = individualDealQueues[speciesKey];
+  if (!queue || queue.length === 0) {
+    queue = [...speciesImagePools[speciesKey]].sort(() => Math.random() - 0.5);
+  }
+  const [individual, ...rest] = queue;
+  individualDealQueues[speciesKey] = rest;
+  return individual;
+}
+
+// Resolves a generated animal's gallery: one individual, up to 3 of its
+// photos in order — never a mix of different individuals of the same
+// species. `sortOrder` is assigned by map index at the create sites, so
+// photos[0] (`<species>-NN-1`) lands at sortOrder 0 and becomes the primary.
+function pickSpeciesImages(speciesName: string): string[] {
   const speciesKey = (Object.keys(allSpecies) as (keyof typeof allSpecies)[]).find(
     (key) => allSpecies[key].name === speciesName,
   );
-  const pool = speciesKey ? speciesImagePools[speciesKey] : [];
-  if (pool.length === 0) return [`${baseUrl}/${PLACEHOLDER_IMAGE}`];
+  if (!speciesKey) return [`${baseUrl}/${PLACEHOLDER_IMAGE}`];
 
-  const shuffled = [...pool].sort(() => Math.random() - 0.5);
-  const picked: string[] = [];
-  for (let i = 0; i < count; i++) {
-    picked.push(shuffled[i % shuffled.length]);
-  }
-  return picked.map((filename) => `${baseUrl}/${filename}`);
+  const individual = dealIndividual(speciesKey);
+  return individual.photos
+    .slice(0, 3)
+    .map((relativePath) => `${baseUrl}/${relativePath}`);
 }
 
 // Realistic weight/height ranges per species, used only to generate a
@@ -536,7 +586,7 @@ const animalSeedData: AnimalBlueprint[] = [
     ],
     intakeType: IntakeType.OWNER_SURRENDER,
     healthStatus: AnimalHealthStatus.HEALTHY,
-    images: [`${baseUrl}/dog1.jpg`, `${baseUrl}/dog1-1.webp`],
+    images: [`${baseUrl}/dog/dog-01-1.webp`, `${baseUrl}/dog/dog-01-2.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A1.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -560,7 +610,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.NEEDS_QUIET_HOME],
     intakeType: IntakeType.STRAY,
     healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
-    images: [`${baseUrl}/dog2.jpg`, `${baseUrl}/dog2-1.webp`],
+    images: [`${baseUrl}/dog/dog-02-1.webp`, `${baseUrl}/dog/dog-02-2.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A2.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -579,7 +629,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.HOUSEBROKEN],
     intakeType: IntakeType.TRANSFER_IN,
     healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
-    images: [`${baseUrl}/dog3.jpg`, `${baseUrl}/dog3-1.jpg`],
+    images: [`${baseUrl}/dog/dog-03-1.webp`, `${baseUrl}/dog/dog-03-2.webp`],
     unitName: allLocations.MEDICAL_WING.units.MED1.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -599,9 +649,9 @@ const animalSeedData: AnimalBlueprint[] = [
     intakeType: IntakeType.OWNER_SURRENDER,
     healthStatus: AnimalHealthStatus.HEALTHY,
     images: [
-      `${baseUrl}/cat1.webp`,
-      `${baseUrl}/cat1-1.jpg`,
-      `${baseUrl}/cat1-2.jpg`,
+      `${baseUrl}/cat/cat-07-1.webp`,
+      `${baseUrl}/cat/cat-07-2.webp`,
+      `${baseUrl}/cat/cat-07-3.webp`,
     ],
     unitName: allLocations.CAT_ROOM.units.C1.name,
     archetype: "IN_CARE",
@@ -624,9 +674,9 @@ const animalSeedData: AnimalBlueprint[] = [
     intakeType: IntakeType.BORN_IN_CARE,
     healthStatus: AnimalHealthStatus.AWAITING_SPAY_NEUTER,
     images: [
-      `${baseUrl}/cat2.webp`,
-      `${baseUrl}/cat2-1.jpg`,
-      `${baseUrl}/cat2-2.jpg`,
+      `${baseUrl}/cat/cat-09-1.webp`,
+      `${baseUrl}/cat/cat-09-2.webp`,
+      `${baseUrl}/cat/cat-09-3.webp`,
     ],
     unitName: allLocations.CAT_ROOM.units.C1.name,
     archetype: "IN_CARE",
@@ -647,9 +697,9 @@ const animalSeedData: AnimalBlueprint[] = [
     intakeType: IntakeType.SEIZE,
     healthStatus: AnimalHealthStatus.AWAITING_TRIAGE,
     images: [
-      `${baseUrl}/reptile2.webp`,
-      `${baseUrl}/reptile2-1.jpg`,
-      `${baseUrl}/reptile2-2.jpg`,
+      `${baseUrl}/reptile/reptile-01-1.webp`,
+      `${baseUrl}/reptile/reptile-01-2.webp`,
+      `${baseUrl}/reptile/reptile-01-3.webp`,
     ],
     unitName: allLocations.ISOLATION.units.ISO1.name,
     archetype: "IN_CARE",
@@ -672,7 +722,7 @@ const animalSeedData: AnimalBlueprint[] = [
     ],
     intakeType: IntakeType.STRAY,
     healthStatus: AnimalHealthStatus.HEALTHY,
-    images: [`${baseUrl}/dog3-2.webp`],
+    images: [`${baseUrl}/dog/dog-04-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A3.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -694,7 +744,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.GOOD_WITH_CATS],
     intakeType: IntakeType.BORN_IN_CARE,
     healthStatus: AnimalHealthStatus.HEALTHY,
-    images: [`${baseUrl}/dog1-3.webp`],
+    images: [`${baseUrl}/cat/cat-01-1.webp`],
     // Unplaced: not yet assigned to a unit (shows in the "Unplaced" column).
     unitName: null,
     archetype: "IN_CARE",
@@ -715,7 +765,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.DEAF],
     intakeType: IntakeType.TRANSFER_IN,
     healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
-    images: [`${baseUrl}/dog1-2.jpg`],
+    images: [`${baseUrl}/dog/dog-05-1.webp`],
     unitName: allLocations.MEDICAL_WING.units.MED2.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -742,7 +792,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [],
     intakeType: IntakeType.STRAY,
     healthStatus: AnimalHealthStatus.HOSPITALISED,
-    images: [`${baseUrl}/cat1.webp`],
+    images: [`${baseUrl}/cat/cat-02-1.webp`],
     unitName: null,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -762,7 +812,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [],
     intakeType: IntakeType.OWNER_SURRENDER,
     healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
-    images: [`${baseUrl}/dog2.jpg`],
+    images: [`${baseUrl}/dog/dog-06-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A4.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -782,7 +832,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [],
     intakeType: IntakeType.STRAY,
     healthStatus: AnimalHealthStatus.AWAITING_TRIAGE,
-    images: [`${baseUrl}/rabbit1.webp`],
+    images: [`${baseUrl}/rabbit/rabbit-01-1.webp`],
     unitName: allLocations.ISOLATION.units.ISO2.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -802,7 +852,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.HOUSEBROKEN],
     intakeType: IntakeType.TRANSFER_IN,
     healthStatus: AnimalHealthStatus.RECOVERING_FROM_SURGERY,
-    images: [`${baseUrl}/dog3.jpg`],
+    images: [`${baseUrl}/dog/dog-07-1.webp`],
     unitName: null,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -825,7 +875,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [],
     intakeType: IntakeType.OWNER_SURRENDER,
     healthStatus: AnimalHealthStatus.AWAITING_SPAY_NEUTER,
-    images: [`${baseUrl}/cat2.webp`],
+    images: [`${baseUrl}/cat/cat-03-1.webp`],
     unitName: allLocations.CAT_ROOM.units.C2.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -848,7 +898,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.GOOD_WITH_DOGS],
     intakeType: IntakeType.STRAY,
     healthStatus: AnimalHealthStatus.HEALTHY,
-    images: [`${baseUrl}/dog1-3.webp`],
+    images: [`${baseUrl}/dog/dog-08-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A4.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -876,7 +926,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.GOOD_WITH_KIDS],
     intakeType: IntakeType.OWNER_SURRENDER,
     healthStatus: AnimalHealthStatus.HEALTHY,
-    images: [`${baseUrl}/dog2.jpg`],
+    images: [`${baseUrl}/dog/dog-09-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A3.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -896,7 +946,7 @@ const animalSeedData: AnimalBlueprint[] = [
     characteristics: [allCharacteristics.HOUSEBROKEN],
     intakeType: IntakeType.STRAY,
     healthStatus: AnimalHealthStatus.HEALTHY,
-    images: [`${baseUrl}/dog3.jpg`],
+    images: [`${baseUrl}/dog/dog-10-1.webp`],
     unitName: null,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
@@ -1212,6 +1262,23 @@ function pickWeighted<T>(options: { value: T; weight: number }[]): T {
   return options[options.length - 1].value;
 }
 
+// Real shelters skew heavily toward dogs and cats — uniform species picking
+// (the old behavior) spreads ~150 animals evenly across 6 species and ends up
+// with as many reptiles as dogs. Weights checked against each species'
+// individual count in the photo library before landing on these (see the
+// seed run's reported per-species counts); none get stretched thin enough to
+// look worse than the uniform split would have.
+function pickGeneratedSpeciesKey(): keyof typeof allSpecies {
+  return pickWeighted([
+    { value: "DOG" as const, weight: 40 },
+    { value: "CAT" as const, weight: 35 },
+    { value: "RABBIT" as const, weight: 10 },
+    { value: "BIRD" as const, weight: 6 },
+    { value: "REPTILE" as const, weight: 5 },
+    { value: "OTHER" as const, weight: 4 },
+  ]);
+}
+
 function pickIntakeType(archetype: Archetype): IntakeType {
   if (archetype === "RETURNED_TO_OWNER") {
     // Reclaims are realistically dominated by owner surrenders/strays.
@@ -1421,11 +1488,10 @@ function generateAnimalBlueprints(
   opts: { longStayCount?: number; draftCount?: number } = {},
 ): AnimalBlueprint[] {
   const { longStayCount = 0, draftCount = 0 } = opts;
-  const speciesKeys = Object.keys(allSpecies) as (keyof typeof allSpecies)[];
 
   const blueprints: AnimalBlueprint[] = [];
   for (let i = 0; i < count; i++) {
-    const speciesKey = getRandomItem(speciesKeys);
+    const speciesKey = pickGeneratedSpeciesKey();
     const species = allSpecies[speciesKey];
     const bodyStats = bodyStatsBySpecies[speciesKey];
     const { primary, all: colors } = pickColors();
@@ -1452,7 +1518,7 @@ function generateAnimalBlueprints(
       colors,
       primaryColor: primary,
       characteristics: pickCharacteristics(),
-      images: pickSpeciesImages(species.name, randomInt(1, 3)),
+      images: pickSpeciesImages(species.name),
       unitName:
         archetype === "IN_CARE" && Math.random() < 0.5
           ? getRandomItem(allUnitNames)
