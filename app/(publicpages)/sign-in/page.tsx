@@ -1,10 +1,16 @@
 import { redirect } from "next/navigation";
+import { IconPaw } from "@tabler/icons-react";
 import { auth } from "@/auth";
 import { getCachedSession } from "@/app/lib/auth/session";
 import { GitHubIcon, GoogleIcon } from "@/components/auth/provider-icons";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { SearchParamsType } from "@/app/lib/types";
 import { safeInternalPath } from "@/app/lib/utils/safe-redirect";
+
+/**
+ * A door, not a room. No accent band and no decorative circles — the page sits
+ * on --background and spends none of the boldness the homepage hero uses.
+ */
 
 const providerMap = [
   { id: "github", name: "GitHub", label: "Sign in with GitHub" },
@@ -34,33 +40,38 @@ const SignInPage = async ({ searchParams }: Props) => {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center pt-8 pb-17 px-4 sm:px-6 lg:px-8">
-      <div className="w-full max-w-md space-y-8">
-        <div>
-          <div className="flex justify-center">
-            <span className="font-display text-[32px] text-primary">
-              Pet Adopt
+    // min-h-full centres the card in whatever the nav and footer leave behind:
+    // <main> is a grown flex item, so its height is definite and the
+    // percentage resolves. The padding carries the layout if it ever doesn't.
+    <div className="flex min-h-full flex-col items-center justify-center px-5 py-14 sm:px-8 sm:py-20">
+      <div className="w-full max-w-md">
+        <div className="flex flex-col items-center">
+          {/* The nav's brand mark repeated. Decorative — the nav's own mark,
+              directly above, is the link home. */}
+          <span
+            aria-hidden="true"
+            className="grid size-[38px] place-items-center rounded-full bg-primary"
+          >
+            <IconPaw className="size-5 text-background" />
+          </span>
+          <h1 className="mt-5 font-display text-[32px]">Sign in</h1>
+        </div>
+
+        <div className="mt-8 rounded-[32px] bg-card p-8 shadow-organic-md">
+          <SignInForm callbackUrl={redirectTo} />
+
+          {/* Hairline with "or" plated over it in --card, rather than a gap */}
+          <div className="relative my-6 flex justify-center">
+            <span
+              aria-hidden="true"
+              className="absolute inset-x-0 top-1/2 h-px bg-border"
+            />
+            <span className="relative bg-card px-3 text-[12px] text-muted-foreground">
+              or
             </span>
           </div>
-          <h2 className="mt-6 text-center font-display text-[24px] text-foreground">
-            Sign in to your account
-          </h2>
-        </div>
-        <div className="rounded-[28px] bg-card px-4 py-8 shadow-organic-md sm:px-10">
-          <SignInForm callbackUrl={redirectTo} />
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="bg-card px-2 text-muted-foreground">
-                  Or continue with
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="mt-6 grid grid-cols-1 gap-3">
+
+          <div className="grid grid-cols-1 gap-3">
             {providerMap.map((provider) => {
               const Icon = providerIcons[provider.id];
               return (
@@ -76,7 +87,7 @@ const SignInPage = async ({ searchParams }: Props) => {
                 >
                   <button
                     type="submit"
-                    className="inline-flex w-full items-center justify-center rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-organic-sm transition-colors hover:bg-accent"
+                    className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-border bg-transparent px-4 text-[14px] transition-colors hover:bg-accent"
                   >
                     {provider.id === "google" ? (
                       // Deliberate literal white: Google's mark is multi-colour
@@ -88,7 +99,7 @@ const SignInPage = async ({ searchParams }: Props) => {
                     ) : (
                       <Icon aria-hidden="true" className="w-5 h-5" />
                     )}
-                    <span className="ml-2">{provider.label}</span>
+                    <span>{provider.label}</span>
                   </button>
                 </form>
               );
