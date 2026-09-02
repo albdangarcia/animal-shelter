@@ -12,16 +12,22 @@ import {
 
 interface Props {
   species: SpeciesModel[];
-  speciesName: string;
 }
 
-const CategoryList = ({ species, speciesName }: Props) => {
+const CategoryList = ({ species }: Props) => {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const { replace } = useRouter();
 
   // List of options for the dropdown
   const optionList = ["All", ...species.map((s) => s.name)];
+
+  // Derive the displayed value from the URL on every render. A Radix Select
+  // given only `defaultValue` is uncontrolled: it reads the prop once on mount
+  // and then owns its own state, so a navigation that clears `category` (e.g.
+  // the Reset button) moves the URL on while the trigger keeps showing the old
+  // species. Reading searchParams here keeps the control in sync with the URL.
+  const currentValue = searchParams.get("category") || "All";
 
   function handleCategoryChange(value: string) {
     const params = new URLSearchParams(searchParams);
@@ -37,12 +43,8 @@ const CategoryList = ({ species, speciesName }: Props) => {
   }
 
   return (
-    <Select
-      onValueChange={handleCategoryChange}
-      // Set the default value. If `speciesName` is not in the URL, it defaults to "All".
-      defaultValue={speciesName || "All"}
-    >
-      <SelectTrigger className="w-52">
+    <Select onValueChange={handleCategoryChange} value={currentValue}>
+      <SelectTrigger className="w-52" aria-label="Species">
         {/* SelectValue will display the selected value, or the placeholder if none is selected */}
         <SelectValue placeholder="Select a category" />
       </SelectTrigger>

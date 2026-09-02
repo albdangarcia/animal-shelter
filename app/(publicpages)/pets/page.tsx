@@ -60,7 +60,7 @@ const Page = async ({ searchParams }: Props) => {
         </div>
 
         <div className="flex flex-row flex-wrap items-center gap-2">
-          <CategoryList species={speciesList} speciesName={speciesName} />
+          <CategoryList species={speciesList} />
           <ServerSideFacetedFilter
             title="Color"
             paramKey="color"
