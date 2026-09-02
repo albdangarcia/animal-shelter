@@ -60,27 +60,27 @@ const Page = async ({ params }: Props) => {
 
   const adoptCta =
     animal.listingStatus === "PENDING_ADOPTION" ? (
-      <div className="block w-full text-center bg-yellow-500 text-white px-8 py-3 rounded-md font-semibold text-lg shadow-sm cursor-not-allowed">
+      <div className="block w-full cursor-not-allowed rounded-full bg-organic-accent-300 px-8 py-3 text-center text-lg font-semibold text-organic-accent-900 shadow-organic-sm">
         Pending Adoption
       </div>
     ) : currentUserHasActiveApplication ? (
       <Link
         href="/dashboard/my-adoption-applications"
-        className="block w-full text-center bg-gray-500 hover:bg-gray-600 text-white px-8 py-3 rounded-md font-semibold text-lg transition-colors duration-150 ease-in-out shadow-sm hover:shadow-md"
+        className="block w-full rounded-full bg-secondary px-8 py-3 text-center text-lg font-semibold text-secondary-foreground shadow-organic-sm transition-colors duration-150 ease-in-out hover:shadow-organic-md"
       >
         View Your Application
       </Link>
     ) : (
       <Link
         href={`${animalId}/adopt`}
-        className="block w-full text-center bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-md font-semibold text-lg transition-colors duration-150 ease-in-out shadow-sm hover:shadow-md"
+        className="block w-full rounded-full bg-primary px-8 py-3 text-center text-lg font-semibold text-primary-foreground shadow-organic-sm transition-colors duration-150 ease-in-out hover:bg-organic-accent-600 hover:shadow-organic-md"
       >
         Adopt {animal.name}
       </Link>
     );
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6 lg:gap-y-0 items-start">
+    <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-start gap-x-8 gap-y-6 px-5 py-10 sm:px-8 sm:py-14 lg:grid-cols-2 lg:gap-y-0 lg:px-14">
       <PetGallery
         images={animal.animalImages}
         currentUserPersonId={currentUserPersonId}
@@ -92,16 +92,16 @@ const Page = async ({ params }: Props) => {
         {/* Name, location, age badge */}
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-3xl font-semibold text-foreground">
+            <h1 className="font-display text-[clamp(38px,6vw,56px)] text-foreground">
               {animal.name}
             </h1>
             <p className="text-sm text-muted-foreground mt-1 flex items-center">
-              <MapPinIcon className="size-5 inline mr-1 text-red-400" />
+              <MapPinIcon className="size-5 inline mr-1 text-primary" />
               {animal.city}, {animal.state}
             </p>
           </div>
           {ageString && (
-            <span className="shrink-0 bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 text-sm font-medium px-3 py-1 rounded-full whitespace-nowrap">
+            <span className="shrink-0 rounded-full bg-organic-accent-200 px-3 py-1 text-sm font-medium whitespace-nowrap text-organic-accent-800">
               {ageString}
             </span>
           )}
@@ -111,7 +111,7 @@ const Page = async ({ params }: Props) => {
         {adoptCta}
 
         {/* Key facts as a two-column key/value table */}
-        <dl className="bg-muted rounded-lg px-4 sm:grid sm:grid-cols-2 sm:gap-x-8">
+        <dl className="rounded-[20px] bg-card px-4 sm:grid sm:grid-cols-2 sm:gap-x-8">
           <PetCardDetail label="Species" value={animal.species.name} />
           <PetCardDetail label="Sex" value={formatSingleEnumOption(animal.sex)} />
           <PetCardDetail label="Breed" value={breedString} />
@@ -154,7 +154,7 @@ const Page = async ({ params }: Props) => {
               {animal.characteristics.map((char) => (
                 <span
                   key={char.name}
-                  className="bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 text-sm font-medium px-3 py-1 rounded-full"
+                  className="rounded-full bg-organic-accent-200 px-3 py-1 text-sm font-medium text-organic-accent-800"
                 >
                   {char.name}
                 </span>

@@ -5,8 +5,8 @@ interface CardProps {
 
 const Card = ({ title, children }: CardProps) => {
   return (
-    <div className="bg-muted rounded-lg px-5 py-4">
-      <h3 className="text-base font-medium text-foreground">{title}</h3>
+    <div className="rounded-[28px] bg-card p-6">
+      <h3 className="font-display text-[19px] text-foreground">{title}</h3>
       <div className="mt-1.5">{children}</div>
     </div>
   );

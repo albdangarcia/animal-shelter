@@ -2,15 +2,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 const Loading = () => {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-6 lg:gap-y-0 items-start">
+    <div className="mx-auto grid w-full max-w-6xl grid-cols-1 items-start gap-x-8 gap-y-6 px-5 py-10 sm:px-8 sm:py-14 lg:grid-cols-2 lg:gap-y-0 lg:px-14">
       {/* Gallery (left column) */}
       <div className="flex flex-col gap-y-2">
         {/* Large image */}
-        <Skeleton className="w-full h-75 rounded-xl" />
+        <Skeleton className="h-75 w-full rounded-[28px]" />
         {/* Thumbnail row */}
         <div className="grid grid-cols-4 gap-2">
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="aspect-square rounded-md" />
+            <Skeleton key={i} className="aspect-square rounded-[16px]" />
           ))}
         </div>
       </div>
@@ -27,10 +27,10 @@ const Loading = () => {
         </div>
 
         {/* Adoption CTA button */}
-        <Skeleton className="h-12 w-full rounded-md" />
+        <Skeleton className="h-12 w-full rounded-full" />
 
         {/* Key facts table */}
-        <div className="bg-muted rounded-lg px-4 sm:grid sm:grid-cols-2 sm:gap-x-8">
+        <div className="rounded-[20px] bg-card px-4 sm:grid sm:grid-cols-2 sm:gap-x-8">
           {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
             <div
               key={i}

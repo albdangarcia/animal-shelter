@@ -31,8 +31,8 @@ const RadioSkeleton = () => (
 
 const Loading = () => {
   return (
-    <main className="max-w-3xl mx-auto pb-10 pt-5">
-      <h1 className="text-3xl font-opensans font-medium text-foreground mb-6 text-center">
+    <main className="mx-auto w-full max-w-3xl px-5 py-10 sm:px-8 sm:py-14 lg:px-14">
+      <h1 className="mb-6 text-center font-display text-[clamp(32px,5vw,44px)] text-foreground">
         Adoption Application
       </h1>
 

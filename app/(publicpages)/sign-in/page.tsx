@@ -38,15 +38,15 @@ const SignInPage = async ({ searchParams }: Props) => {
       <div className="w-full max-w-md space-y-8">
         <div>
           <div className="flex justify-center">
-            <span className="text-3xl font-semibold text-indigo-600 dark:text-indigo-400">
+            <span className="font-display text-[32px] text-primary">
               Pet Adopt
             </span>
           </div>
-          <h2 className="mt-6 text-center text-2xl font-medium text-foreground">
+          <h2 className="mt-6 text-center font-display text-[24px] text-foreground">
             Sign in to your account
           </h2>
         </div>
-        <div className="bg-card py-8 px-4 shadow sm:rounded-lg sm:px-10">
+        <div className="rounded-[28px] bg-card px-4 py-8 shadow-organic-md sm:px-10">
           <SignInForm callbackUrl={redirectTo} />
           <div className="mt-6">
             <div className="relative">
@@ -76,9 +76,12 @@ const SignInPage = async ({ searchParams }: Props) => {
                 >
                   <button
                     type="submit"
-                    className="w-full inline-flex items-center justify-center py-2 px-4 border rounded-md shadow bg-card text-sm font-medium text-foreground hover:bg-accent"
+                    className="inline-flex w-full items-center justify-center rounded-full border border-border bg-card px-4 py-2 text-sm font-medium text-foreground shadow-organic-sm transition-colors hover:bg-accent"
                   >
                     {provider.id === "google" ? (
+                      // Deliberate literal white: Google's mark is multi-colour
+                      // and needs a light plate to stay legible on any surface
+                      // the button lands on.
                       <span className="flex items-center justify-center rounded bg-white p-1">
                         <Icon aria-hidden="true" className="w-4 h-4" />
                       </span>

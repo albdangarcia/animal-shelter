@@ -45,7 +45,7 @@ const PetGrid = async ({
 
   return (
     <>
-      <div className="my-6 mb-12 grid gap-4 gap-y-14 grid-cols-[repeat(auto-fill,minmax(--spacing(40),1fr))]">
+      <div className="my-6 mb-12 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-6">
         {pets.map((pet) => (
           <PetCard
             key={pet.id}

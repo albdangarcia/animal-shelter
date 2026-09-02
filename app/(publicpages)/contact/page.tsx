@@ -39,7 +39,7 @@ const Page = () => {
           <Card key={index} title={contact.title}>
             <a
               href={`mailto:${contact.email}`}
-              className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 transition-colors duration-150"
+              className="flex items-center gap-2 text-sm font-medium text-primary transition-colors duration-150 hover:text-organic-accent-700"
             >
               <Mail className="size-4 shrink-0" aria-hidden="true" />
               {contact.email}

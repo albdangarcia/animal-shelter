@@ -65,7 +65,9 @@ const LikeButton = ({
           "focus:outline-none focus:ring-2 focus:ring-ring",
           label
             ? "inline-flex items-center gap-2 border border-border px-[22px] py-[13px] font-display text-[15px] leading-[1.2] hover:bg-foreground/[0.07]"
-            : "bg-background/85 p-1.5 shadow-organic-sm hover:bg-background",
+            : // p-3 puts the chip at 44px on touch screens; it drops back
+              // to 32px from sm, where it's a pointer target sitting on a photo.
+              "bg-background/85 p-3 shadow-organic-sm hover:bg-background sm:p-1.5",
         )}
       >
         {isLikedByCurrentUser ? (

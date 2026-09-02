@@ -57,7 +57,7 @@ export const SignInForm = ({ callbackUrl }: SignInFormProps) => {
             aria-describedby={
               form.formState.errors.email ? "email-error" : undefined
             }
-            className="block w-full appearance-none rounded-md border border-input bg-background text-foreground px-3 py-2 placeholder-muted-foreground shadow focus:border-ring focus:outline-none focus:ring-ring sm:text-sm"
+            className="block w-full appearance-none rounded-full border border-input bg-background px-4 py-2 text-foreground placeholder-muted-foreground shadow-sm focus:border-ring focus:ring-ring focus:outline-none sm:text-sm"
             {...form.register("email")}
           />
           {form.formState.errors.email && (
@@ -87,7 +87,7 @@ export const SignInForm = ({ callbackUrl }: SignInFormProps) => {
             aria-describedby={
               form.formState.errors.password ? "password-error" : undefined
             }
-            className="block w-full appearance-none rounded-md border border-input bg-background text-foreground px-3 py-2 pr-10 placeholder-muted-foreground shadow focus:border-ring focus:outline-none focus:ring-ring sm:text-sm"
+            className="block w-full appearance-none rounded-full border border-input bg-background px-4 py-2 pr-10 text-foreground placeholder-muted-foreground shadow-sm focus:border-ring focus:ring-ring focus:outline-none sm:text-sm"
             {...form.register("password")}
           />
           <button
@@ -116,7 +116,7 @@ export const SignInForm = ({ callbackUrl }: SignInFormProps) => {
       <button
         type="submit"
         disabled={isPending}
-        className="flex w-full justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50"
+        className="flex w-full justify-center rounded-full border border-transparent bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-organic-accent-600 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:ring-offset-background focus:outline-none disabled:opacity-50"
       >
         {isPending ? "Signing in..." : "Sign in"}
       </button>

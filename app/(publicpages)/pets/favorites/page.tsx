@@ -5,10 +5,14 @@ const Page = async () => {
   const session = await getCachedSession();
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-6xl space-y-4 px-5 py-10 sm:px-8 sm:py-14 lg:px-14">
       <div className="space-y-1">
-        <div className="text-3xl font-medium">My Favorites</div>
-        <div className="text-sm text-gray-500">Pets you&apos;ve liked</div>
+        <h1 className="font-display text-[clamp(38px,6vw,56px)]">
+          My Favorites
+        </h1>
+        <div className="text-sm text-muted-foreground">
+          Pets you&apos;ve liked
+        </div>
       </div>
 
       {session?.user?.personId ? (

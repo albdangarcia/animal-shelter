@@ -53,6 +53,29 @@ const SpotlightHero = ({
     animal.hasMicrochip && "Chipped",
   ].filter((badge): badge is string => Boolean(badge));
 
+  // The mockup's flat 104px is sized for "Sadie". Caprasimo averages ~0.653em
+  // per character, so the 522px text column only fits about 8 characters at
+  // that size — and the seed's most common name length IS 8. Measured at the
+  // design width, "Cinnamon" wants 543px and either breaks mid-word or spills
+  // under the portrait.
+  //
+  // So cap the size by the name's own length as well as the ceiling, against
+  // the column (cqw) rather than the viewport: a short name still gets the
+  // mockup's exact 104px, a long one steps down instead of overflowing, and
+  // past max-w-6xl the column stops growing so wide screens get margins rather
+  // than a runaway heading.
+  //
+  // 0.653em is Caprasimo's average advance, measured off "Cinnamon" — which
+  // means it is an average, NOT an upper bound. Per-glyph advances run from
+  // 0.356em ("i") to 1.040em ("W"), so a wide-glyph name defeats the estimate:
+  // "MAXWELL" is only 7 characters but 572px at 104px in a 522px column. The
+  // heading's `break-words` is what catches those — it is load-bearing here,
+  // not decorative. Widening the coefficient to cover "W" instead would shrink
+  // every ordinary name to pay for a rare one.
+  const nameFontSize = `max(32px, min(104px, 100cqw / ${(
+    animal.name.length * 0.653
+  ).toFixed(2)}))`;
+
   const meta = [
     animal.breedString,
     animal.ageString,
@@ -132,8 +155,9 @@ const SpotlightHero = ({
             </div>
           </div>
 
-          {/* Text column */}
-          <div>
+          {/* Text column. @container so the name can size itself against this
+              column's width rather than the viewport's. */}
+          <div className="@container">
             {animal.waitingDays !== null && (
               <p className="mb-5 text-[13.5px] text-organic-accent-700">
                 Waiting {animal.waitingDays}{" "}
@@ -144,7 +168,14 @@ const SpotlightHero = ({
 
             <h1
               id="spotlight-heading"
-              className="mb-2.5 font-display text-[clamp(52px,9vw,104px)] leading-[0.94] tracking-[-0.03em]"
+              // break-words (overflow-wrap: break-word) is the backstop for
+              // any name the character-count estimate under-measures — a
+              // wide-glyph or all-caps name wraps to a second line instead of
+              // spilling under the portrait. Verified: "MAXWELL" and
+              // "MMMMMMMM" both wrap; "Marshmallow" (the longest seeded name)
+              // stays on one line at 72.7px.
+              className="mb-2.5 font-display leading-[0.94] tracking-[-0.03em] break-words"
+              style={{ fontSize: nameFontSize }}
             >
               {animal.name}
             </h1>
@@ -193,7 +224,7 @@ const SpotlightHero = ({
           <div
             role="group"
             aria-labelledby="flick-through-label"
-            className="flex gap-[22px] overflow-x-auto snap-x snap-mandatory pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            className="flex min-w-0 gap-[22px] overflow-x-auto snap-x snap-mandatory pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             {animals.map((thumbnail, index) => {
               const isSelected = index === selectedIndex;

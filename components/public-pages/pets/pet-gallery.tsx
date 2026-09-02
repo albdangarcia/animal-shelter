@@ -38,7 +38,7 @@ const PetGallery = ({
       <div className="flex flex-col gap-y-2">
         {/* Large image */}
         <div
-          className="relative overflow-hidden flex items-center justify-center w-full h-75 bg-muted rounded-xl cursor-pointer group"
+          className="group relative flex h-75 w-full cursor-pointer items-center justify-center overflow-hidden rounded-[28px] bg-card"
           onClick={() => selectedImage && openLightbox(selectedImage)}
         >
           {selectedImage ? (
@@ -53,11 +53,11 @@ const PetGallery = ({
               alt="Selected pet image, click to enlarge"
             />
           ) : (
-            <div className="w-full h-full bg-muted rounded-xl flex">
+            <div className="flex h-full w-full rounded-[28px] bg-card">
               <PhotoIcon className="w-8 h-8 m-auto text-muted-foreground" />
             </div>
           )}
-          <div className="absolute top-3 right-3 z-10 rounded-full bg-white border shadow-sm">
+          <div className="absolute top-3 right-3 z-10">
             <LikeButton
               animalId={animalId}
               currentUserPersonId={currentUserPersonId}
@@ -74,9 +74,9 @@ const PetGallery = ({
                 key={image.id}
                 type="button"
                 className={clsx(
-                  "group relative aspect-square rounded-md overflow-hidden cursor-pointer transition-opacity duration-150 ease-in-out focus:outline-none",
+                  "group relative aspect-square cursor-pointer overflow-hidden rounded-[16px] transition-opacity duration-150 ease-in-out focus:outline-none",
                   selectedImage === image.url
-                    ? "opacity-100 ring-2 ring-primary ring-offset-1 ring-offset-background"
+                    ? "opacity-100 ring-2 ring-ring ring-offset-1 ring-offset-background"
                     : "opacity-70 hover:opacity-100 focus:ring-2 focus:ring-ring ring-offset-1 ring-offset-background",
                 )}
                 onClick={() => setSelectedImage(image.url)}
@@ -100,7 +100,9 @@ const PetGallery = ({
 
       {/* Lightbox Dialog using shadcn/ui */}
       <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
-        <DialogContent className="max-w-3xl p-2 border-none sm:rounded-lg">
+        {/* Portals to <body>, outside the layout's .theme-organic div, so it
+            has to re-open the token scope for itself. */}
+        <DialogContent className="theme-organic max-w-3xl border-none p-2 sm:rounded-[28px]">
           {/* Visually hidden title for screen reader accessibility */}
           <DialogTitle className="sr-only">Enlarged Pet Image</DialogTitle>
           {lightboxImageUrl && (
@@ -109,7 +111,7 @@ const PetGallery = ({
               alt="Enlarged pet image"
               width={1200}
               height={800}
-              className="object-contain w-full h-auto max-h-[80vh] rounded"
+              className="h-auto max-h-[80vh] w-full rounded-[20px] object-contain"
               placeholder={`data:image/svg+xml;base64,${toBase64(
                 shimmer(1200, 800),
               )}`}

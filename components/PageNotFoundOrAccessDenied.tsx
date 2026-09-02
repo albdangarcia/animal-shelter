@@ -90,13 +90,13 @@ const PageNotFoundOrAccessDenied = ({ type, actionButton, itemName, redirectUrl,
   return (
     <div className="flex flex-col items-center justify-center text-center px-4 py-12 sm:py-16 md:py-20">
       {icon}
-      <p className="text-sm sm:text-base font-semibold text-indigo-600 uppercase tracking-wide">
+      <p className="text-sm sm:text-base font-semibold text-primary uppercase tracking-wide">
         {errorCode}
       </p>
-      <h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight text-gray-900 md:text-5xl">
+      <h1 className="mt-2 text-3xl sm:text-4xl font-bold tracking-tight text-foreground md:text-5xl">
         {title}
       </h1>
-      <p className="mt-3 text-base text-gray-600 max-w-md sm:max-w-lg">
+      <p className="mt-3 text-base text-muted-foreground max-w-md sm:max-w-lg">
         {description}
       </p>
 

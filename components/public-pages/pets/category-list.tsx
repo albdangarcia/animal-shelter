@@ -48,7 +48,10 @@ const CategoryList = ({ species }: Props) => {
         {/* SelectValue will display the selected value, or the placeholder if none is selected */}
         <SelectValue placeholder="Select a category" />
       </SelectTrigger>
-      <SelectContent>
+      {/* Portals to <body>, outside the layout's .theme-organic div, so it has
+          to re-open the token scope for itself. Unconditional here because this
+          control is only ever used on the public pages. */}
+      <SelectContent className="theme-organic">
         {optionList.map((value) => (
           <SelectItem key={value} value={value}>
             {value}

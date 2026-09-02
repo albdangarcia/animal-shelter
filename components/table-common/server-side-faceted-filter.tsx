@@ -30,12 +30,20 @@ interface ServerSideFacetedFilterProps {
     value: string;
     icon?: React.ComponentType<{ className?: string }>;
   }[];
+  /**
+   * Merged into PopoverContent. The popover portals to <body>, so a caller
+   * inside a token scope (the public pages' `.theme-organic`) has to re-open it
+   * here — that decision belongs at the call site, since this filter is shared
+   * and every dashboard caller must keep inheriting the dashboard's theme.
+   */
+  contentClassName?: string;
 }
 
 export function ServerSideFacetedFilter({
   title,
   paramKey,
   options,
+  contentClassName,
 }: ServerSideFacetedFilterProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -105,7 +113,10 @@ export function ServerSideFacetedFilter({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-50 p-0" align="start">
+      <PopoverContent
+        className={cn("w-50 p-0", contentClassName)}
+        align="start"
+      >
         <Command>
           <CommandInput placeholder={title} />
           <CommandList>

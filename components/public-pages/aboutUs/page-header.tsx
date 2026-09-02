@@ -8,21 +8,22 @@ const PublicPageHeader = ({ title, description, as = "page" }: Props) => {
   if (as === "section") {
     return (
       <div className="mb-6 flex items-center gap-3">
-        <h2 className="text-xl font-semibold text-foreground tracking-tight whitespace-nowrap">
+        <h2 className="font-display text-[24px] whitespace-nowrap text-foreground">
           {title}
         </h2>
-        <span className="flex-1 h-px bg-border" />
+        <span className="h-px flex-1 bg-border" />
       </div>
     );
   }
 
   return (
     <div className="text-left">
-      <h1 className="text-4xl font-semibold text-foreground tracking-tight">
+      {/* clamp rather than a breakpoint jump — 56px overflows a 320px phone. */}
+      <h1 className="font-display text-[clamp(38px,6vw,56px)] text-foreground">
         {title}
       </h1>
       {description && (
-        <p className="mt-5 text-muted-foreground tracking-wide leading-relaxed max-w-2xl">
+        <p className="mt-5 max-w-2xl leading-relaxed text-muted-foreground">
           {description}
         </p>
       )}
