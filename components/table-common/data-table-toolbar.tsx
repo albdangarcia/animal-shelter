@@ -7,6 +7,8 @@ import { X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DataTableViewOptions } from "@/components/table-common/data-table-view-options";
+import { RESET_FILTER_SHAPE } from "@/components/table-common/reset-filter-shape";
+import { cn } from "@/lib/utils";
 
 interface DataTableToolbarProps<TData extends RowData> {
   table: Table<StockFeatures, TData>;
@@ -86,10 +88,25 @@ export function DataTableToolbar<TData extends RowData>({
             <Button
               variant="ghost"
               onClick={() => router.push(pathname)}
-              className="h-8 px-2 lg:px-3"
+              className={cn(
+                RESET_FILTER_SHAPE, "rounded-md",
+                // Shape shared with the public pages' reset; colour supplied
+                // here from the dashboard's tokens at the denser h-8. --primary
+                // resolves per theme scope, so this holds in light and dark.
+                // Every state names both halves of its pairing so a background
+                // never lands without its foreground.
+                "h-8 border-primary/45 text-primary",
+                "hover:border-primary hover:bg-primary hover:text-primary-foreground",
+                // The ghost variant ships `dark:hover:bg-accent/50`, which sorts
+                // after a plain `hover:bg-*` and would otherwise win in dark
+                // mode — leaving the dark hover label on a translucent accent
+                // fill instead of --primary. Restate the fill at the dark layer.
+                "dark:hover:bg-primary",
+                "focus-visible:border-primary focus-visible:bg-primary focus-visible:text-primary-foreground"
+              )}
             >
               Reset
-              <X className="ml-2 h-4 w-4" />
+              <X className="size-3.5" />
             </Button>
           )}
         </div>
