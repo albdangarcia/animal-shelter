@@ -40,7 +40,7 @@ const DemoBanner = () => {
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2.5">
-            <span className="inline-flex shrink-0 items-center justify-center rounded-lg bg-foreground px-1.75 py-0.75 text-background">
+            <span className="inline-flex shrink-0 items-center justify-center rounded-[5px] bg-foreground px-1.75 py-0.75 text-background">
               <Info className="size-3" aria-hidden="true" />
             </span>
             <p className="text-[13px] font-semibold leading-[1.2]">Heads Up!</p>

@@ -24,9 +24,11 @@ interface SpotlightHeroProps {
  * Every field on a SpotlightAnimal except `id` and `name` can be null: an
  * animal backfilled into the spotlight (published, but with no open stay) may
  * arrive with no photo, no description, no weight and no badge. That is a
- * normal state, not an error, so each of those pieces is omitted rather than
- * placeholdered — the badge and the kicker are absolutely positioned or
- * block-level, so nothing below them shifts when they are absent.
+ * normal state, not an error. The description is placeholdered — a fixed
+ * three-line slot holds its space so swapping animals doesn't re-centre the
+ * text column — but the photo, weight and badge are still omitted rather than
+ * placeholdered, being absolutely positioned or block-level so nothing below
+ * them shifts when they are absent.
  */
 const SpotlightHero = ({
   animals,
@@ -158,8 +160,23 @@ const SpotlightHero = ({
               </div>
 
               {badges.length > 0 && (
-                <div className="absolute top-[14px] right-[6px] rounded-full bg-background px-[18px] py-[9px] text-[13px] shadow-organic-md">
-                  {badges.join(" · ")}
+                <div className="absolute top-[14px] right-[6px] flex items-center gap-2 rounded-full bg-background px-[18px] py-[9px] text-[13px] shadow-organic-md">
+                  {badges.map((badge, index) => (
+                    <span
+                      key={badge}
+                      className="inline-flex items-center gap-2"
+                    >
+                      {index > 0 && (
+                        <span
+                          aria-hidden="true"
+                          className="text-[10px] align-middle"
+                        >
+                          •
+                        </span>
+                      )}
+                      <span>{badge}</span>
+                    </span>
+                  ))}
                 </div>
               )}
             </div>
@@ -194,15 +211,34 @@ const SpotlightHero = ({
               {animal.name}
             </h1>
 
-            <p className="mb-[18px] font-display text-[22px] leading-[1.55] text-organic-accent-700">
-              {meta.join(" · ")}
+            <p className="mb-[18px] flex flex-wrap items-center gap-2.5 font-display text-[22px] leading-[1.55] text-organic-accent-700">
+              {meta.map((part, index) => (
+                <span key={index} className="inline-flex items-center gap-2.5">
+                  {index > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className="text-[12px] align-middle"
+                    >
+                      •
+                    </span>
+                  )}
+                  <span>{part}</span>
+                </span>
+              ))}
             </p>
 
-            {animal.description && (
-              <p className="mb-7 max-w-[46ch] text-[17.5px] leading-[1.65] text-pretty text-organic-neutral-800">
-                {animal.description}
-              </p>
-            )}
+            {/* Fixed three-line slot. The copy varies in length and can be absent, and
+                the grid is items-center, so an unreserved block re-centres the whole
+                column — the name drops as the buttons rise. min-h and line-clamp must
+                agree: 3 x 29px = 87px, which is why the line-height is a whole number
+                rather than the 1.65 (28.875px) it started as. */}
+            <div className="mb-7 min-h-[87px] max-w-[46ch]">
+              {animal.description && (
+                <p className="line-clamp-3 text-[17.5px] leading-[29px] text-pretty text-organic-neutral-800">
+                  {animal.description}
+                </p>
+              )}
+            </div>
 
             <div className="flex flex-wrap items-center gap-3.5">
               <Link

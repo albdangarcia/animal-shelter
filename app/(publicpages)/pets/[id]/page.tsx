@@ -126,8 +126,17 @@ const Page = async ({ params }: Props) => {
             {animal.name}
           </h1>
 
-          <p className="mb-[18px] font-display text-[22px] leading-[1.55] text-organic-accent-700">
-            {meta.join(" · ")}
+          <p className="mb-[18px] flex flex-wrap items-center gap-2.5 font-display text-[22px] leading-[1.55] text-organic-accent-700">
+            {meta.map((item, index) => (
+              <span key={index} className="inline-flex items-center gap-2.5">
+                {index > 0 && (
+                  <span aria-hidden="true" className="text-[12px] align-middle">
+                    •
+                  </span>
+                )}
+                <span>{item}</span>
+              </span>
+            ))}
           </p>
 
           {locationString && (

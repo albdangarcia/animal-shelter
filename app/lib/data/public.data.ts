@@ -642,8 +642,22 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
     return [...longestWaiting, ...topUp].map(({ animal, currentStayDays }) => ({
       id: animal.id,
       name: animal.name,
-      breedString:
-        animal.breeds.map((breed) => breed.name).join(", ") || "Mixed breed",
+      // Hero shows ONE breed only: breedString joins every breed, and a full
+      // multi-breed list overflows the 522px name column and wraps, orphaning
+      // the weight onto its own line. The detail page and the card tags keep
+      // the full list, which is where a comparison needs it. Prisma doesn't
+      // guarantee relation order and there's no primary-breed field, so which
+      // name wins on a genuine two-real-breed animal could vary between
+      // requests — fine for the seeded six (only Buddy is multi-breed, and his
+      // other entry is "Mixed Breed").
+      breedString: (() => {
+        const named = animal.breeds
+          .map((breed) => breed.name)
+          .filter((name) => name !== "Mixed Breed");
+        if (named.length === 0) return "Mixed breed";
+        const [first] = named;
+        return named.length < animal.breeds.length ? `${first} mix` : first;
+      })(),
       ageString: calculateAgeString({
         birthDate: animal.birthDate,
         simple: true,

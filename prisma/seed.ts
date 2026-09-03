@@ -563,6 +563,9 @@ interface AnimalBlueprint {
   // `resolveBlueprintDerivedFields`; set here only to pin it against the age
   // gate. Read by the public pet detail page and the redesigned homepage badge.
   isSpayedNeutered?: boolean;
+  // Public-facing copy, shown on the homepage hero and the pet detail page.
+  // Only the hero six set this; everything else keeps the generic literal.
+  description?: string;
 }
 
 // Hand-authored animals, kept so a handful of profiles have real photos.
@@ -590,6 +593,9 @@ const animalSeedData: AnimalBlueprint[] = [
     unitName: allLocations.DOG_BLOCK_A.units.A1.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
+    longStay: true,
+    description:
+      "She jumps when she is happy, which is most of the time. Good with children, easy with other dogs, untested with cats.",
   },
   {
     name: "Flash",
@@ -633,6 +639,9 @@ const animalSeedData: AnimalBlueprint[] = [
     unitName: allLocations.MEDICAL_WING.units.MED1.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
+    longStay: true,
+    description:
+      "Quietly determined about the door — he will stand and wait rather than ask twice.",
   },
   {
     name: "Whiskers",
@@ -656,6 +665,9 @@ const animalSeedData: AnimalBlueprint[] = [
     unitName: allLocations.CAT_ROOM.units.C1.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
+    longStay: true,
+    description:
+      "Whiskers will hold a conversation from the top of the cat tree for as long as you keep answering, and shares the run without a fuss.",
   },
   {
     name: "Misty",
@@ -704,6 +716,9 @@ const animalSeedData: AnimalBlueprint[] = [
     unitName: allLocations.ISOLATION.units.ISO1.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
+    longStay: true,
+    description:
+      "Six feet of iguana, most of it tail. He spends the warm half of the day under the basking lamp and the rest watching the corridor.",
   },
   {
     name: "Buddy",
@@ -726,6 +741,9 @@ const animalSeedData: AnimalBlueprint[] = [
     unitName: allLocations.DOG_BLOCK_A.units.A3.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
+    longStay: true,
+    description:
+      "Housetrained since the day he arrived and never once asked twice. Patient with children, happy to be climbed on all afternoon.",
   },
   {
     name: "Leo",
@@ -769,6 +787,9 @@ const animalSeedData: AnimalBlueprint[] = [
     unitName: allLocations.MEDICAL_WING.units.MED2.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
+    longStay: true,
+    description:
+      "Daisy is deaf and does not appear to consider it a problem. She watches faces instead of listening, and learns hand signals fast.",
   },
 
   // --- Attention-queue signal 2: acute health, nobody has planned anything ---
@@ -2118,7 +2139,8 @@ async function seedReturnAndReadoptAnimal(opts: {
       isSpayedNeutered: blueprint.isSpayedNeutered,
       city: "New York",
       state: "NY",
-      description: "A wonderful companion looking for a home.",
+      description:
+        blueprint.description ?? "A wonderful companion looking for a home.",
       listingStatus: AnimalListingStatus.PUBLISHED,
       publishedAt: stay1.intakeDate,
       healthStatus: blueprint.healthStatus,
@@ -2493,7 +2515,7 @@ async function seedAnimalsAndRelations() {
     ...generateAnimalBlueprints(
       "IN_CARE",
       IN_CARE_COUNT - handAuthoredInCareCount,
-      { longStayCount: 6, draftCount: 5 },
+      { longStayCount: 0, draftCount: 5 },
     ),
     ...generateAnimalBlueprints("TRANSFERRED_OUT", TRANSFERRED_OUT_COUNT),
     ...generateAnimalBlueprints("RETURNED_TO_OWNER", RETURNED_TO_OWNER_COUNT),
@@ -2640,7 +2662,9 @@ async function seedAnimalsAndRelations() {
           isSpayedNeutered: blueprint.isSpayedNeutered,
           city: "New York",
           state: "NY",
-          description: "A wonderful companion looking for a home.",
+          description:
+            blueprint.description ??
+            "A wonderful companion looking for a home.",
           listingStatus: interimListingStatus,
           publishedAt: stay.intakeDate,
           healthStatus: blueprint.healthStatus,

@@ -323,3 +323,11 @@
   line-height: 1.12;
   letter-spacing: -0.015em;
 }
+
+/* Terracotta selection, public pages only. The mockup's --color-accent is
+   #c67139, which maps to --primary here, NOT --accent: globals.css keeps
+   --accent as a near-invisible cream (#eee7db) on purpose*/
+.theme-organic ::selection,
+.theme-organic::selection {
+  background: color-mix(in srgb, var(--primary) 30%, transparent);
+}
