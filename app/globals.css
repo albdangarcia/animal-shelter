@@ -1,7 +1,14 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:where(.dark, .dark *));
+/* `.dark` lives on <html>, an ancestor of the public pages' `.theme-organic`
+   div, so an unscoped `dark:` utility fires inside that scope and overrides the
+   tokens it sets — including ones inherited from shadcn primitives via `cn()`,
+   which no source-level grep can find. The `:not()` makes every `dark:` utility
+   inert inside the scope, which is what the scope always claimed to guarantee.
+   Both `:where()` and `:not(:where())` contribute zero specificity, so this
+   narrows what matches without moving anything in the cascade. */
+@custom-variant dark (&:where(.dark, .dark *):not(:where(.theme-organic, .theme-organic *)));
 
 @theme {
   --background-image-gradient-radial: radial-gradient(var(--tw-gradient-stops));

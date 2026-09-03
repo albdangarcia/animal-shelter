@@ -184,7 +184,14 @@ export const fetchPublishedPets = async ({
 
   try {
     const offset = (currentPage - 1) * ITEMS_PER_PAGE;
-    const [totalCount, pets] = await prisma.$transaction([
+    // Promise.all, not $transaction([...]). The array form pins both queries to
+    // one connection and @prisma/adapter-pg then issues them concurrently on the
+    // same `pg` client, which trips node-postgres' "client is already executing a
+    // query" deprecation. Two pooled connections avoid it, and there is nothing
+    // to preserve here: the count and the page share a filter but no invariant —
+    // at worst a write between them makes the page count momentarily stale on a
+    // public listing.
+    const [totalCount, pets] = await Promise.all([
       prisma.animal.count({ where: whereClause }),
       prisma.animal.findMany({
         where: whereClause,
