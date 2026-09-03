@@ -92,7 +92,7 @@ const _fetchFosterApplications = async (
   }
 
   try {
-    const [fosterApplications, count] = await prisma.$transaction([
+    const [fosterApplications, count] = await Promise.all([
       prisma.fosterApplication.findMany({
         where: whereClause,
         select: {

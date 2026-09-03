@@ -2,15 +2,20 @@ import { PhotoIcon } from "@heroicons/react/24/outline";
 import Image from "next/image";
 import Link from "next/link";
 import clsx from "clsx";
+import type { AnimalSize } from "@/prisma/generated/enums";
 import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
 import LikeButton from "../like-button";
 import { calculateAgeString } from "@/app/lib/utils/date-utils";
+import { formatAnimalSize } from "@/app/lib/utils/enum-formatter";
 
 export interface PetCardData {
   id: string;
   name: string;
-  city: string | null;
   birthDate: Date;
+  size: AnimalSize | null;
+  species: { name: string };
+  breeds: { name: string }[];
+  characteristics: { name: string }[];
   animalImages: { url: string }[];
   likes?: { userId: string }[];
 }
@@ -39,66 +44,129 @@ const PetCard = ({
     simple: true,
   });
 
+  // Breed, size, characteristic — in that order, skipping whatever the animal
+  // doesn't have. Three sources, so the "at most three tags" rule holds by
+  // construction. An animal with no characteristics shows two tags rather than
+  // a gap, and one with none shows no tag row at all.
+  //
+  // The first tag falls back to the species name, because pickBreeds() leaves
+  // some species with no breed at all — without it a breedless card never says
+  // what kind of animal it is.
+  //
+  // Each slot carries its own variant from organic.css (.tag-accent,
+  // .tag-neutral, .tag-accent-2), and the variant belongs to the SLOT, not to
+  // the position in the rendered row. Pairing the class with the label BEFORE
+  // the filter is what enforces that: `size` is null for any animal whose breed
+  // has no typical size (the seed's "Mixed Breed" is one), so deriving the
+  // variant from the filtered index instead would slide sage up into the size
+  // slot and recolor the row depending on which fields happen to be recorded.
+  const tags = [
+    {
+      label: pet.breeds[0]?.name ?? pet.species.name,
+      className: "bg-organic-accent-100 text-organic-accent-800",
+    },
+    {
+      label: formatAnimalSize(pet.size),
+      className: "bg-organic-neutral-100 text-organic-neutral-800",
+    },
+    {
+      label: pet.characteristics[0]?.name,
+      className: "bg-organic-sage-100 text-organic-sage-800",
+    },
+  ].filter((tag): tag is { label: string; className: string } =>
+    Boolean(tag.label),
+  );
+
   const inner = (
     <>
-      <div className="relative w-full aspect-square overflow-hidden rounded-lg">
+      <div className="relative h-[210px] w-full overflow-hidden rounded-[20px]">
         {pet.animalImages?.length > 0 ? (
           <Image
             src={pet.animalImages[0].url}
             alt={`Photo of ${pet.name}`}
             fill
-            sizes="(max-width: 480px) 80vw, (max-width: 768px) 40vw, (max-width: 1024px) 30vw, 224px"
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 45vw, 280px"
             placeholder={`data:image/svg+xml;base64,${toBase64(
-              shimmer(224, 224),
+              shimmer(280, 210),
             )}`}
             className={clsx(
-              "rounded-md object-cover transition-transform duration-300 ease-in-out",
+              "object-cover transition-transform duration-300 ease-in-out",
               isAvailable && "group-hover:scale-110",
               !isAvailable && "grayscale",
             )}
           />
         ) : (
-          <div className="w-full h-full bg-muted rounded-md flex items-center justify-center">
-            <PhotoIcon className="w-16 h-16 text-muted-foreground" />
+          <div className="flex h-full w-full items-center justify-center bg-organic-neutral-300">
+            <PhotoIcon className="h-16 w-16 text-organic-neutral-600" />
           </div>
         )}
 
         {!isAvailable && (
-          <div className="absolute inset-0 rounded-lg bg-background/40 flex items-start justify-start p-2">
-            <span className="rounded-full bg-background/90 px-2 py-0.5 text-xs font-medium text-muted-foreground shadow">
+          <div className="pointer-events-none absolute inset-0 flex items-start justify-start bg-background/40 p-2">
+            <span className="rounded-full bg-background/90 px-2.5 py-0.5 text-xs font-medium text-muted-foreground shadow-organic-sm">
               Unavailable
             </span>
           </div>
         )}
-      </div>
 
-      <div className="absolute -bottom-6.5 left-2 right-2">
-        <div className="text-sm flex flex-col px-4 py-2 bg-card shadow-lg rounded-lg relative">
-          <span className="font-semibold w-full">{pet.name}</span>
-          <div className="text-xs text-muted-foreground">
-            <span>{`${ageString} • ${pet.city ?? ""}`}</span>
-          </div>
-          <div className="absolute -top-4 right-2 z-10">
-            <LikeButton
-              animalId={pet.id}
-              currentUserPersonId={currentUserPersonId}
-              isLikedByCurrentUser={isLikedByCurrentUser}
-            />
-          </div>
+        <div className="absolute top-2 right-2">
+          <LikeButton
+            animalId={pet.id}
+            currentUserPersonId={currentUserPersonId}
+            isLikedByCurrentUser={isLikedByCurrentUser}
+          />
         </div>
       </div>
+
+      <div className="flex items-baseline justify-between gap-2">
+        {/* min-w-0 + truncate so a long name ellipsizes rather than pushing the
+            age out of the card in a narrow column. */}
+        <span className="min-w-0 truncate font-display text-[21px]">
+          {pet.name}
+        </span>
+        <span className="shrink-0 text-[13px] text-muted-foreground">
+          {ageString}
+        </span>
+      </div>
+
+      {tags.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {tags.map(({ label, className }, index) => (
+            <span
+              key={`${index}-${label}`}
+              className={clsx(
+                "inline-flex items-center rounded-full px-2.5 py-0.75 text-[11px] tracking-[0.02em]",
+                className,
+              )}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {isAvailable && (
+        // A span, not a button or a link: the whole card is already the link,
+        // and nesting an interactive element inside it is invalid HTML.
+        <span className="mt-auto block rounded-full bg-primary px-4 py-2.5 text-center text-[13.5px] font-semibold text-primary-foreground transition-colors group-hover:bg-organic-accent-600">
+          Meet {pet.name}
+        </span>
+      )}
     </>
   );
 
   const wrapperClass =
-    "relative max-w-56 bg-card block rounded-lg group transition-shadow duration-150 ease-in-out";
+    "group flex flex-col gap-[10px] rounded-[32px] bg-card p-[14px] transition-shadow duration-150 ease-in-out";
 
   // Available pets link through to the detail page; unavailable ones render a
   // non-clickable div (the detail fetcher only serves available pets, so a link
   // would 404). The like button inside still works in both cases.
   if (isAvailable) {
     return (
-      <Link href={`/pets/${pet.id}`} className={clsx(wrapperClass, "hover:shadow-lg")}>
+      <Link
+        href={`/pets/${pet.id}`}
+        className={clsx(wrapperClass, "hover:shadow-organic-md")}
+      >
         {inner}
       </Link>
     );

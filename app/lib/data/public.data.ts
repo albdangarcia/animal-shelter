@@ -5,6 +5,8 @@ import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { PublishedPetsSchema } from "../zod-schemas/animal.schemas";
 import { ANIMAL_IMAGE_ORDER } from "../utils/animal-image-order";
+import { calculateAgeString } from "../utils/date-utils";
+import { computeStays, type StayEvent } from "../utils/stay-utils";
 
 export type PetsPayload = Prisma.AnimalGetPayload<{
   select: {
@@ -14,6 +16,22 @@ export type PetsPayload = Prisma.AnimalGetPayload<{
     state: true;
     birthDate: true;
     listingStatus: true;
+    size: true;
+    species: {
+      select: {
+        name: true;
+      };
+    };
+    breeds: {
+      select: {
+        name: true;
+      };
+    };
+    characteristics: {
+      select: {
+        name: true;
+      };
+    };
     animalImages: {
       select: {
         url: true;
@@ -28,6 +46,20 @@ export type PetsPayload = Prisma.AnimalGetPayload<{
     };
   };
 }>;
+
+// What PetCard turns into tags: first breed (or the species name, for the
+// species pickBreeds() leaves breedless), size, first characteristic. Shared so
+// every fetcher that feeds a PetCard selects the same set — a fetcher that skips
+// one renders a card with a missing tag, and one that skips `species` renders a
+// breedless card that never says what kind of animal it is.
+// Soft-deleted breeds and characteristics are excluded: they are still attached
+// to the animal but must never be shown publicly.
+const PET_CARD_TAG_SELECT = {
+  size: true,
+  species: { select: { name: true } },
+  breeds: { where: { deletedAt: null }, select: { name: true } },
+  characteristics: { where: { deletedAt: null }, select: { name: true } },
+} satisfies Prisma.AnimalSelect;
 
 const ITEMS_PER_PAGE = 10
 
@@ -152,7 +184,14 @@ export const fetchPublishedPets = async ({
 
   try {
     const offset = (currentPage - 1) * ITEMS_PER_PAGE;
-    const [totalCount, pets] = await prisma.$transaction([
+    // Promise.all, not $transaction([...]). The array form pins both queries to
+    // one connection and @prisma/adapter-pg then issues them concurrently on the
+    // same `pg` client, which trips node-postgres' "client is already executing a
+    // query" deprecation. Two pooled connections avoid it, and there is nothing
+    // to preserve here: the count and the page share a filter but no invariant —
+    // at worst a write between them makes the page count momentarily stale on a
+    // public listing.
+    const [totalCount, pets] = await Promise.all([
       prisma.animal.count({ where: whereClause }),
       prisma.animal.findMany({
         where: whereClause,
@@ -162,6 +201,7 @@ export const fetchPublishedPets = async ({
           city: true,
           state: true,
           birthDate: true,
+          ...PET_CARD_TAG_SELECT,
           animalImages: {
             select: {
               url: true,
@@ -228,6 +268,10 @@ export type FavoritePet = {
   city: string | null;
   birthDate: Date;
   listingStatus: AnimalListingStatus;
+  size: AnimalSize | null;
+  species: { name: string };
+  breeds: { name: string }[];
+  characteristics: { name: string }[];
   animalImages: { url: string }[];
   // Always present (these are the user's own likes), kept for PetCard's heart state.
   likes: { userId: string }[];
@@ -270,6 +314,7 @@ export const fetchFavoritePets = async (): Promise<{
             city: true,
             birthDate: true,
             listingStatus: true,
+            ...PET_CARD_TAG_SELECT,
             animalImages: {
               select: { url: true },
               orderBy: ANIMAL_IMAGE_ORDER,
@@ -337,6 +382,11 @@ export const fetchPublicPagePetById = async (id: string) => {
         sex: true,
         size: true,
         isSpayedNeutered: true,
+        // Server-side only: mapped to the `hasMicrochip` boolean below and
+        // never included in what this function returns. Same contract as
+        // fetchSpotlightAnimals — the detail page only needs to know whether
+        // to show the "Microchipped" pill, not the number itself.
+        microchipNumber: true,
         species: {
           select: {
             name: true,
@@ -396,14 +446,19 @@ export const fetchPublicPagePetById = async (id: string) => {
       },
     });
 
-    return pet;
+    if (!pet) {
+      return null;
+    }
+
+    const { microchipNumber, ...rest } = pet;
+    return { ...rest, hasMicrochip: microchipNumber !== null };
   } catch (error) {
     console.error("Error fetching pet.", error);
     throw new Error("Error fetching pet.");
   }
 };
 
-export const fetchLatestPublicAnimals = async () => {
+export const fetchLatestPublicAnimals = async (take: number = 4) => {
   const session = await getCachedSession();
   const personId = session?.user?.personId;
 
@@ -418,6 +473,7 @@ export const fetchLatestPublicAnimals = async () => {
         name: true,
         birthDate: true,
         city: true,
+        ...PET_CARD_TAG_SELECT,
         animalImages: {
           select: {
             url: true,
@@ -440,11 +496,199 @@ export const fetchLatestPublicAnimals = async () => {
       orderBy: {
         createdAt: "desc",
       },
-      take: 4,
+      take,
     });
     return latestPets;
   } catch (error) {
     console.error("Error fetching latest pets.", error);
     throw new Error("Error fetching latest pets.");
+  }
+};
+/**
+ * One animal as the homepage hero renders it. Everything is pre-formatted here
+ * so the hero stays a presentational client component.
+ *
+ * Every field except `id` and `name` is optional in practice: a candidate can
+ * reach the hero with no description, no weight and no badge, and the hero must
+ * render that as a normal state rather than an error.
+ */
+export type SpotlightAnimal = {
+  id: string;
+  name: string;
+  breedString: string; // joined breed names, or "Mixed breed"
+  ageString: string | null;
+  city: string | null;
+  description: string | null;
+  weightGrams: number | null;
+  isSpayedNeutered: boolean;
+  /** Derived from `microchipNumber`. The number itself never leaves the server. */
+  hasMicrochip: boolean;
+  /** Days of the current open stay. Null when the animal is not in care. */
+  waitingDays: number | null;
+  imageUrl: string | null;
+  /**
+   * Whether the signed-in user has already liked this animal. Resolved here
+   * rather than in the hero because the hero's "Save to favorites" control is
+   * `LikeButton`, which toggles: handed a hardcoded `false` it would silently
+   * UNLIKE an animal the user had already saved.
+   */
+  isLikedByCurrentUser: boolean;
+};
+
+/** Hero plus its five thumbnails. */
+const SPOTLIGHT_COUNT = 6;
+
+/**
+ * The longest-waiting published animals, for the homepage hero and its
+ * thumbnail row.
+ *
+ * "Waiting" is the length of the animal's CURRENT stay, derived by pairing
+ * intake and outcome events through `computeStays` — never read off
+ * `listingStatus`, which is about public visibility, not physical presence.
+ *
+ * This deliberately does NOT call `_fetchAnimalStayEvents`: that helper is a
+ * private building block for permission-wrapped report fetchers, and it selects
+ * every animal regardless of listing status. This is an unauthenticated public
+ * read, so the PUBLISHED filter has to live in the query itself.
+ *
+ * PENDING_ADOPTION animals are excluded — someone already has an application in
+ * on them, so featuring them as the animal who has waited longest is misleading.
+ */
+export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
+  const session = await getCachedSession();
+  const personId = session?.user?.personId;
+
+  try {
+    // PERF: this walks every published animal's full intake/outcome history in
+    // memory (O(animals)), mirroring _fetchLengthOfStaySummary's approach.
+    // Acceptable at current shelter scale. Optimization candidate: a rollup or
+    // stay table is the cleaner win than a narrower fetch here, since "longest
+    // current stay" can't be expressed as an orderBy over the event rows.
+    const animals = await prisma.animal.findMany({
+      where: { listingStatus: AnimalListingStatus.PUBLISHED },
+      select: {
+        id: true,
+        name: true,
+        birthDate: true,
+        city: true,
+        description: true,
+        currentWeightGrams: true,
+        isSpayedNeutered: true,
+        // Server-side only: mapped to the `hasMicrochip` boolean below and
+        // never included in what this function returns.
+        microchipNumber: true,
+        publishedAt: true,
+        breeds: { where: { deletedAt: null }, select: { name: true } },
+        animalImages: {
+          select: { url: true },
+          orderBy: ANIMAL_IMAGE_ORDER,
+          take: 1,
+        },
+        intake: { select: { intakeDate: true } },
+        Outcome: { select: { outcomeDate: true } },
+        ...(personId && {
+          likes: {
+            select: { userId: true },
+            where: { userId: personId },
+            take: 1,
+          },
+        }),
+      },
+    });
+
+    const now = new Date();
+
+    const withStay = animals.map((animal) => {
+      const events: StayEvent[] = [
+        ...animal.intake.map(
+          (intake): StayEvent => ({ kind: "intake", date: intake.intakeDate }),
+        ),
+        ...animal.Outcome.map(
+          (outcome): StayEvent => ({
+            kind: "outcome",
+            date: outcome.outcomeDate,
+          }),
+        ),
+      ];
+      // currentStayDays is null unless the last stay is still open, which is
+      // exactly the `waitingDays` contract.
+      const { isInCare, currentStayDays } = computeStays(events, now);
+      return { animal, isInCare, currentStayDays };
+    });
+
+    const longestWaiting = withStay
+      .filter((row) => row.isInCare)
+      .sort((a, b) => (b.currentStayDays ?? 0) - (a.currentStayDays ?? 0))
+      .slice(0, SPOTLIGHT_COUNT);
+
+    // Top up from published animals that are NOT in care — an animal whose
+    // outcome has been recorded but whose listing hasn't been archived yet, or
+    // a backfilled seed animal with no intake history at all. They carry no
+    // waiting count, because there is no open stay to measure.
+    const shortfall = SPOTLIGHT_COUNT - longestWaiting.length;
+    const topUp =
+      shortfall > 0
+        ? withStay
+            .filter((row) => !row.isInCare)
+            .sort((a, b) => {
+              // Longest-listed first; a null publishedAt sorts last.
+              const aTime = a.animal.publishedAt?.getTime() ?? Infinity;
+              const bTime = b.animal.publishedAt?.getTime() ?? Infinity;
+              return aTime === bTime ? 0 : aTime - bTime;
+            })
+            .slice(0, shortfall)
+        : [];
+
+    return [...longestWaiting, ...topUp].map(({ animal, currentStayDays }) => ({
+      id: animal.id,
+      name: animal.name,
+      // Hero shows ONE breed only: breedString joins every breed, and a full
+      // multi-breed list overflows the 522px name column and wraps, orphaning
+      // the weight onto its own line. The detail page and the card tags keep
+      // the full list, which is where a comparison needs it. Prisma doesn't
+      // guarantee relation order and there's no primary-breed field, so which
+      // name wins on a genuine two-real-breed animal could vary between
+      // requests — fine for the seeded six (only Buddy is multi-breed, and his
+      // other entry is "Mixed Breed").
+      breedString: (() => {
+        const named = animal.breeds
+          .map((breed) => breed.name)
+          .filter((name) => name !== "Mixed Breed");
+        if (named.length === 0) return "Mixed breed";
+        const [first] = named;
+        return named.length < animal.breeds.length ? `${first} mix` : first;
+      })(),
+      ageString: calculateAgeString({
+        birthDate: animal.birthDate,
+        simple: true,
+      }),
+      city: animal.city,
+      description: animal.description,
+      weightGrams: animal.currentWeightGrams,
+      isSpayedNeutered: animal.isSpayedNeutered,
+      hasMicrochip: animal.microchipNumber !== null,
+      waitingDays: currentStayDays,
+      imageUrl: animal.animalImages[0]?.url ?? null,
+      isLikedByCurrentUser: (animal.likes?.length ?? 0) > 0,
+    }));
+  } catch (error) {
+    console.error("Error fetching spotlight animals.", error);
+    throw new Error("Error fetching spotlight animals.");
+  }
+};
+
+/**
+ * How many animals are publicly listed as available. Feeds the homepage's
+ * "+N / Everyone" circle and its "{n} animals" line, so it counts PUBLISHED
+ * only — the same set the hero draws from.
+ */
+export const fetchAvailableAnimalCount = async (): Promise<number> => {
+  try {
+    return await prisma.animal.count({
+      where: { listingStatus: AnimalListingStatus.PUBLISHED },
+    });
+  } catch (error) {
+    console.error("Error fetching available animal count.", error);
+    throw new Error("Error fetching available animal count.");
   }
 };

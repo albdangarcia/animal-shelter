@@ -100,7 +100,7 @@ const _fetchPersonAdoptionApplications = async (
   try {
     const offset = (currentPage - 1) * APPLICATIONS_PER_PAGE;
 
-    const [totalCount, applications] = await prisma.$transaction([
+    const [totalCount, applications] = await Promise.all([
       prisma.adoptionApplication.count({ where: whereClause }),
       prisma.adoptionApplication.findMany({
         where: whereClause,

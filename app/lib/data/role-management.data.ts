@@ -93,10 +93,8 @@ const _fetchUserRoles = async (
   if (status && status.length === 1) {
     whereClause.deactivatedAt = status[0] === "active" ? null : { not: null };
   }
-
-  // Fetch count and users in a single database transaction for efficiency
   try {
-    const [count, users] = await prisma.$transaction([
+    const [count, users] = await Promise.all([
       prisma.user.count({ where: whereClause }),
       prisma.user.findMany({
         where: whereClause,

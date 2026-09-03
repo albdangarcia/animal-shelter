@@ -95,7 +95,7 @@ const _fetchAnimalApplications = async (
   }
 
   try {
-    const [applications, count] = await prisma.$transaction([
+    const [applications, count] = await Promise.all([
       prisma.adoptionApplication.findMany({
         where: whereClause,
         select: {

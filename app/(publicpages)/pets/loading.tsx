@@ -1,50 +1,58 @@
 import { Skeleton } from "@/components/ui/skeleton";
+import PetCardSkeleton from "@/components/public-pages/pets/pet-card-skeleton";
 
 const Loading = () => {
   const cards = [0, 1, 2, 3, 4, 5, 6, 7];
+  const pills = [64, 52, 48, 68, 74];
 
   return (
-    <div className="space-y-4">
-      {/* Header */}
-      <div className="space-y-1">
-        <div className="text-3xl font-medium">Pet List</div>
-        <div className="text-sm text-muted-foreground">
-          Currently available for adoption
+    <>
+      {/* Band — same surface, container and type as the real header, so the
+          heading doesn't move when the data lands. */}
+      <section className="bg-organic-accent-100">
+        <div className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8 sm:py-20 lg:px-14">
+          <h1 className="mb-4 font-display text-[clamp(34px,5vw,56px)] leading-[1.05] tracking-[-0.02em]">
+            All animals
+          </h1>
+          {/* The count line is Suspended on the real page too — this reserves
+              the same single row of 15px text. */}
+          <div className="h-[22px]" />
         </div>
-      </div>
+      </section>
 
-      {/* Search + category controls */}
-      <div className="flex flex-row flex-wrap items-center justify-between gap-x-2 gap-y-2">
-        <div className="w-96">
-          <Skeleton className="h-9 w-full" />
+      <div className="mx-auto w-full max-w-6xl px-5 py-8 sm:px-8 sm:py-10 lg:px-14">
+        {/* Species pills */}
+        <div className="flex gap-2.5 overflow-hidden pb-1">
+          {pills.map((width, index) => (
+            <Skeleton
+              key={index}
+              className="h-[37px] shrink-0 rounded-full"
+              style={{ width }}
+            />
+          ))}
         </div>
-        <Skeleton className="h-9 w-52" />
-      </div>
 
-      {/* Pet grid */}
-      <div className="my-6 mb-12 grid gap-4 gap-y-14 grid-cols-[repeat(auto-fit,minmax(--spacing(40),1fr))]">
-        {cards.map((card) => (
-          <div key={card} className="relative max-w-56 block rounded-lg">
-            {/* Image */}
-            <Skeleton className="w-full aspect-square rounded-lg" />
-
-            {/* Overlapping info panel */}
-            <div className="absolute -bottom-6.5 left-2 right-2">
-              <div className="flex flex-col px-4 py-2 bg-card shadow-lg rounded-lg relative">
-                {/* Name */}
-                <Skeleton className="h-4 w-24" />
-                {/* Age • city */}
-                <Skeleton className="h-3 w-32 mt-1.5" />
-                {/* Like button */}
-                <div className="absolute -top-4 right-2 z-10">
-                  <Skeleton className="h-8 w-8 rounded-full" />
-                </div>
-              </div>
-            </div>
+        {/* Search + refinements */}
+        <div className="mt-4 flex flex-row flex-wrap items-center gap-2">
+          <div className="w-full min-w-0 lg:w-auto lg:max-w-sm lg:flex-1">
+            <Skeleton className="h-9 w-full rounded-full" />
           </div>
-        ))}
+          <div className="flex flex-row flex-wrap items-center gap-2">
+            <Skeleton className="h-9 w-24 rounded-full" />
+            <Skeleton className="h-9 w-20 rounded-full" />
+            <Skeleton className="h-9 w-22 rounded-full" />
+            <Skeleton className="h-9 w-40 rounded-full" />
+          </div>
+        </div>
+
+        {/* Pet grid */}
+        <div className="my-6 mb-12 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-6">
+          {cards.map((card) => (
+            <PetCardSkeleton key={card} />
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

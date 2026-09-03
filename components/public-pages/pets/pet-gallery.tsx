@@ -2,12 +2,17 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { PhotoIcon } from "@heroicons/react/24/outline";
+import { PhotoIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import type { AnimalImageModel } from "@/prisma/generated/models/AnimalImage";
 import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
 import LikeButton from "../like-button";
 import clsx from "clsx";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface PetGalleryProps {
   images: AnimalImageModel[];
@@ -38,26 +43,45 @@ const PetGallery = ({
       <div className="flex flex-col gap-y-2">
         {/* Large image */}
         <div
-          className="relative overflow-hidden flex items-center justify-center w-full h-75 bg-muted rounded-xl cursor-pointer group"
+          className="group relative flex h-75 w-full cursor-pointer items-center justify-center overflow-hidden rounded-[28px] bg-card"
           onClick={() => selectedImage && openLightbox(selectedImage)}
         >
           {selectedImage ? (
             <Image
-              className="object-contain group-hover:opacity-90 transition-opacity"
+              // Remounts on swap. Without it the <img> is reused and the
+              // browser keeps painting the PREVIOUS photo until the new one
+              // decodes — the old image under the new selection, which reads
+              // as a bug. The shimmer placeholder for a beat is honest. Same
+              // reasoning as the spotlight hero's portrait.
+              key={selectedImage}
+              className="object-cover group-hover:opacity-90 transition-opacity"
               src={selectedImage}
               fill
               sizes="(max-width: 1024px) 100vw, 50vw"
+              // This is the detail page's LCP element — measured at 1280, the
+              // photo is the largest paint on the page. `priority` is
+              // deprecated as of Next 16, and it injects a <link rel=preload>
+              // in <head>, which is wrong for a src that changes on thumbnail
+              // click; eager + high fetch priority is the replacement. The
+              // thumbnails below stay lazy.
+              //
+              // Note that Next's own LCP warning can never fire here: the
+              // check in get-img-props.js is gated on `placeholder === "empty"`
+              // and this image passes a shimmer, so silence from the dev
+              // overlay is not evidence that the loading strategy is right.
+              loading="eager"
+              fetchPriority="high"
               placeholder={`data:image/svg+xml;base64,${toBase64(
                 shimmer(600, 600),
               )}`}
               alt="Selected pet image, click to enlarge"
             />
           ) : (
-            <div className="w-full h-full bg-muted rounded-xl flex">
+            <div className="flex h-full w-full rounded-[28px] bg-card">
               <PhotoIcon className="w-8 h-8 m-auto text-muted-foreground" />
             </div>
           )}
-          <div className="absolute top-3 right-3 z-10 rounded-full bg-white border shadow-sm">
+          <div className="absolute top-3 right-3 z-10">
             <LikeButton
               animalId={animalId}
               currentUserPersonId={currentUserPersonId}
@@ -74,9 +98,9 @@ const PetGallery = ({
                 key={image.id}
                 type="button"
                 className={clsx(
-                  "group relative aspect-square rounded-md overflow-hidden cursor-pointer transition-opacity duration-150 ease-in-out focus:outline-none",
+                  "group relative aspect-square cursor-pointer overflow-hidden rounded-[16px] transition-opacity duration-150 ease-in-out focus:outline-none",
                   selectedImage === image.url
-                    ? "opacity-100 ring-2 ring-primary ring-offset-1 ring-offset-background"
+                    ? "opacity-100 ring-2 ring-ring ring-offset-1 ring-offset-background"
                     : "opacity-70 hover:opacity-100 focus:ring-2 focus:ring-ring ring-offset-1 ring-offset-background",
                 )}
                 onClick={() => setSelectedImage(image.url)}
@@ -100,16 +124,34 @@ const PetGallery = ({
 
       {/* Lightbox Dialog using shadcn/ui */}
       <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
-        <DialogContent className="max-w-3xl p-2 border-none sm:rounded-lg">
+        {/* Portals to <body>, outside the layout's .theme-organic div, so it
+            has to re-open the token scope for itself. Note the scope alone does
+            not fix inherited `color` — see the `@layer base` rule in
+            globals.css, which is what stops the dashboard's dark foreground
+            reaching the close button below. */}
+        <DialogContent
+          className="theme-organic max-w-3xl border-none p-2 sm:rounded-[28px]"
+          // The default close button is a bare X at 70% opacity. Over an
+          // arbitrary photo that disappears against any similarly-valued
+          // region, so this one supplies its own ground instead. Opting out
+          // here rather than editing components/ui/dialog.tsx, which has ~20
+          // dashboard callers.
+          showCloseButton={false}
+        >
           {/* Visually hidden title for screen reader accessibility */}
           <DialogTitle className="sr-only">Enlarged Pet Image</DialogTitle>
+          <DialogClose className="absolute top-4 right-4 z-10 grid size-9 place-items-center rounded-full bg-background/85 shadow-organic-sm transition-colors hover:bg-background focus:ring-2 focus:ring-ring focus:outline-none">
+            <XMarkIcon className="size-[18px]" aria-hidden="true" />
+            <span className="sr-only">Close</span>
+          </DialogClose>
+
           {lightboxImageUrl && (
             <Image
               src={lightboxImageUrl}
               alt="Enlarged pet image"
               width={1200}
               height={800}
-              className="object-contain w-full h-auto max-h-[80vh] rounded"
+              className="h-auto max-h-[80vh] w-full rounded-[20px] object-contain"
               placeholder={`data:image/svg+xml;base64,${toBase64(
                 shimmer(1200, 800),
               )}`}

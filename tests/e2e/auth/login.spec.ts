@@ -19,7 +19,7 @@ test("seeded admin can sign in and reach the dashboard", async ({ page }) => {
   });
 
   await expect(
-    page.getByRole("heading", { name: /sign in to your account/i }),
+    page.getByRole("heading", { name: /^sign in$/i }),
   ).toBeVisible();
 
   await page.getByLabel(/email address/i).fill("admin@example.com");

@@ -50,7 +50,7 @@ const _fetchAnimalActivityLogs = async (
   try {
     const offset = (currentPage - 1) * ACTIVITIES_PER_PAGE;
 
-    const [totalCount, activityLogs] = await prisma.$transaction([
+    const [totalCount, activityLogs] = await Promise.all([
       prisma.animalActivityLog.count({ where: whereClause }),
       prisma.animalActivityLog.findMany({
         where: whereClause,

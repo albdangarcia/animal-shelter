@@ -94,7 +94,7 @@ const _fetchAnimalTasks = async (
   try {
     const offset = (currentPage - 1) * pageSize;
 
-    const [totalCount, tasks] = await prisma.$transaction([
+    const [totalCount, tasks] = await Promise.all([
       prisma.task.count({ where: whereClause }),
       prisma.task.findMany({
         where: whereClause,

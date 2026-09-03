@@ -30,12 +30,32 @@ interface ServerSideFacetedFilterProps {
     value: string;
     icon?: React.ComponentType<{ className?: string }>;
   }[];
+  /**
+   * Merged into PopoverContent. The popover portals to <body>, so a caller
+   * inside a token scope (the public pages' `.theme-organic`) has to re-open it
+   * here — that decision belongs at the call site, since this filter is shared
+   * and every dashboard caller must keep inheriting the dashboard's theme.
+   */
+  contentClassName?: string;
+  /**
+   * Merged into the trigger button. Opt-in for the same reason as
+   * `contentClassName`: the public pages want a solid pill, every dashboard
+   * caller wants the dense dashed trigger it already has. Pass `border-solid`
+   * to drop the dash — tailwind-merge treats border-style and border-color as
+   * separate groups, so `border-border` alone will not displace it.
+   */
+  triggerClassName?: string;
+  /** Merged into the selected-count badges in the trigger. Opt-in, as above. */
+  badgeClassName?: string;
 }
 
 export function ServerSideFacetedFilter({
   title,
   paramKey,
   options,
+  contentClassName,
+  triggerClassName,
+  badgeClassName,
 }: ServerSideFacetedFilterProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -67,7 +87,11 @@ export function ServerSideFacetedFilter({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="sm" className="h-8 border-dashed">
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn("h-8 border-dashed", triggerClassName)}
+        >
           <PlusCircle className="mr-2 h-4 w-4" />
           {title}
           {selectedValues.size > 0 && (
@@ -75,7 +99,10 @@ export function ServerSideFacetedFilter({
               <Separator orientation="vertical" className="mx-2 h-4" />
               <Badge
                 variant="secondary"
-                className="rounded-sm px-1 font-normal lg:hidden"
+                className={cn(
+                  "rounded-sm px-1 font-normal lg:hidden",
+                  badgeClassName
+                )}
               >
                 {selectedValues.size}
               </Badge>
@@ -83,7 +110,7 @@ export function ServerSideFacetedFilter({
                 {selectedValues.size > 2 ? (
                   <Badge
                     variant="secondary"
-                    className="rounded-sm px-1 font-normal"
+                    className={cn("rounded-sm px-1 font-normal", badgeClassName)}
                   >
                     {selectedValues.size} selected
                   </Badge>
@@ -94,7 +121,10 @@ export function ServerSideFacetedFilter({
                       <Badge
                         variant="secondary"
                         key={option.value}
-                        className="rounded-sm px-1 font-normal"
+                        className={cn(
+                          "rounded-sm px-1 font-normal",
+                          badgeClassName
+                        )}
                       >
                         {option.label}
                       </Badge>
@@ -105,7 +135,10 @@ export function ServerSideFacetedFilter({
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-50 p-0" align="start">
+      <PopoverContent
+        className={cn("w-50 p-0", contentClassName)}
+        align="start"
+      >
         <Command>
           <CommandInput placeholder={title} />
           <CommandList>
@@ -126,7 +159,16 @@ export function ServerSideFacetedFilter({
                           : "opacity-50 [&_svg]:invisible"
                       )}
                     >
-                      <Check className={cn("h-4 w-4")} />
+                      {/* text-primary-foreground is load-bearing, not
+                          decoration: CommandItem carries
+                          `[&_svg:not([class*='text-'])]:text-muted-foreground`,
+                          so an unclassed icon is recolored by the row and the
+                          check came out dark on the filled --primary swatch.
+                          Naming the token both opts out of that selector and
+                          states the pairing, and it resolves per theme scope —
+                          cream on terracotta in .theme-organic, and the
+                          dashboard's own values in light and dark. */}
+                      <Check className="h-4 w-4 text-primary-foreground" />
                     </div>
                     {option.icon && (
                       <option.icon className="mr-2 h-4 w-4 text-muted-foreground" />

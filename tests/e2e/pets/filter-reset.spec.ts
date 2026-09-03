@@ -10,14 +10,18 @@ import { expect, test, type Page } from "@playwright/test";
 
 // Every species row is seeded unconditionally in prisma/seed.ts
 // (seedLookupTables creates Dog/Cat/Bird/Rabbit/Reptile/Other regardless of how
-// many animals the run generates), so these names are always in the dropdown.
-const selectSpecies = async (page: Page, name: string) => {
-  await page.getByRole("combobox", { name: "Species" }).click();
-  await page.getByRole("option", { name, exact: true }).click();
-};
+// many animals the run generates), so these pills are always in the row.
+//
+// Species is a pill row rather than a dropdown. The pressed
+// pill is the control's state, so that is what these assertions read.
+const speciesPill = (page: Page, name: string) =>
+  page
+    .getByRole("group", { name: "Species" })
+    .getByRole("button", { name, exact: true });
 
-const speciesTrigger = (page: Page) =>
-  page.getByRole("combobox", { name: "Species" });
+const selectSpecies = async (page: Page, name: string) => {
+  await speciesPill(page, name).click();
+};
 const sortTrigger = (page: Page) =>
   page.getByRole("combobox", { name: "Sort by:" });
 // Match the faceted-filter buttons in both states: unfiltered the accessible
@@ -32,7 +36,10 @@ test("selecting a species then resetting clears the species dropdown", async ({
 
   await selectSpecies(page, "Bird");
   await page.waitForURL((url) => url.searchParams.get("category") === "Bird");
-  await expect(speciesTrigger(page)).toHaveText("Bird");
+  await expect(speciesPill(page, "Bird")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
   await page.getByRole("button", { name: "Reset" }).click();
 
@@ -40,7 +47,14 @@ test("selecting a species then resetting clears the species dropdown", async ({
     (url) => url.pathname === "/pets" && url.search === "",
   );
   // The control must follow the URL back to the unfiltered state.
-  await expect(speciesTrigger(page)).toHaveText("All");
+  await expect(speciesPill(page, "All")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(speciesPill(page, "Bird")).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
   expect(new URL(page.url()).searchParams.has("category")).toBe(false);
 });
 
@@ -83,7 +97,10 @@ test("resetting several filters at once clears every control", async ({
   await page.waitForURL((url) => url.searchParams.get("query") === "bud");
 
   // Sanity check that the filters actually took before resetting.
-  await expect(speciesTrigger(page)).toHaveText("Dog");
+  await expect(speciesPill(page, "Dog")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await expect(sortTrigger(page)).toHaveText("Oldest");
 
   await page.getByRole("button", { name: "Reset" }).click();
@@ -92,7 +109,10 @@ test("resetting several filters at once clears every control", async ({
   );
 
   // Every control reads as unfiltered.
-  await expect(speciesTrigger(page)).toHaveText("All");
+  await expect(speciesPill(page, "All")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
   await expect(facetButton(page, "Color")).toHaveText("Color");
   await expect(facetButton(page, "Sex")).toHaveText("Sex");
   await expect(facetButton(page, "Size")).toHaveText("Size");
@@ -109,7 +129,10 @@ test("navigating to a pet detail page and back leaves the control matching the U
   // several IN_CARE dogs independent of the procedurally generated animals).
   await selectSpecies(page, "Dog");
   await page.waitForURL((url) => url.searchParams.get("category") === "Dog");
-  await expect(speciesTrigger(page)).toHaveText("Dog");
+  await expect(speciesPill(page, "Dog")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
   await page.locator('main a[href^="/pets/"]').first().click();
   await page.waitForURL((url) => /^\/pets\/[^/]+$/.test(url.pathname));
@@ -118,5 +141,8 @@ test("navigating to a pet detail page and back leaves the control matching the U
   await page.waitForURL((url) => url.searchParams.get("category") === "Dog");
 
   // Same class of bug: the control must reflect the URL it came back to.
-  await expect(speciesTrigger(page)).toHaveText("Dog");
+  await expect(speciesPill(page, "Dog")).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 });

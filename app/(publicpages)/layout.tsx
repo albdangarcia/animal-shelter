@@ -11,11 +11,13 @@ export default async function PagesLayout({
   return (
     <>
       {isDemo && <DemoBanner />}
-      <div className="flex min-h-screen flex-col p-6 bg-muted/40">
+      {/* theme-organic scopes the design tokens to the public subtree, so these
+          pages render the same whatever the dashboard's light/dark setting is.
+          Full-bleed by design: bands run to the viewport edge and every page
+          owns its own container. */}
+      <div className="theme-organic flex min-h-screen flex-col bg-background text-foreground">
         <TopNavWrapper />
-        <main className="grow mx-auto w-full max-w-7xl px-4 md:px-10 py-7 bg-card rounded-t-sm">
-          {children}
-        </main>
+        <main className="grow">{children}</main>
         <Footer />
       </div>
     </>

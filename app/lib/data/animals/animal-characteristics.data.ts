@@ -18,8 +18,7 @@ const _fetchAnimalCharacteristics = async (
   }
 
   try {
-    // Use a transaction to perform both reads in a single database round-trip.
-    const [allCharacteristics, animal] = await prisma.$transaction([
+    const [allCharacteristics, animal] = await Promise.all([
       prisma.characteristic.findMany({
         where: { deletedAt: null },
         orderBy: [{ category: "asc" }, { name: "asc" }],

@@ -50,8 +50,10 @@ export const pageSizeSchema = z.coerce
   .transform((val) => ([10, 20, 30, 40, 50].includes(val) ? val : 10));
 
 export const SignInFormSchema = z.object({
-  email: z.email(),
-  password: z.string().min(6),
+  email: z.email({ error: "Please enter a valid email address." }),
+  password: z
+    .string()
+    .min(6, { error: "Password must be at least 6 characters." }),
 });
 
 export type SignInFormInput = z.input<typeof SignInFormSchema>;

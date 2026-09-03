@@ -11,11 +11,11 @@ const TopNavWrapper = async () => {
     dashboardHref = "/dashboard/my-adoption-applications"; // Specific link for regular users
   }
 
-  // Define the navigation links dynamically
+  // Define the navigation links dynamically. Favorites is no longer a link —
+  // it's the heart button in TopNav's right cluster, still session-gated.
   const navLinks = [
     { name: "Home", href: "/" },
     { name: "Pets", href: "/pets" },
-    ...(session ? [{ name: "Favorites", href: "/pets/favorites" }] : []),
     { name: "About", href: "/about" },
     { name: "Contact", href: "/contact" },
     { name: "Dashboard", href: dashboardHref },
