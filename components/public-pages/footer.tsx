@@ -14,8 +14,8 @@ const footerColumns = [
   {
     heading: "Support",
     links: [
-      { name: "Donate", href: "#" },
-      { name: "Volunteer", href: "#" },
+      { name: "Donate", href: "/donate" },
+      { name: "Volunteer", href: "/volunteer" },
       { name: "Foster", href: "/foster" },
     ],
   },

@@ -49,7 +49,7 @@ const PetGallery = ({
               // as a bug. The shimmer placeholder for a beat is honest. Same
               // reasoning as the spotlight hero's portrait.
               key={selectedImage}
-              className="object-contain group-hover:opacity-90 transition-opacity"
+              className="object-cover group-hover:opacity-90 transition-opacity"
               src={selectedImage}
               fill
               sizes="(max-width: 1024px) 100vw, 50vw"

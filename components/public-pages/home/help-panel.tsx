@@ -6,14 +6,14 @@ const WAYS_TO_HELP = [
     title: "Donate",
     copy: "$75 covers a full course of vaccinations for one animal in our care.",
     linkText: "Give today →",
-    href: "#",
+    href: "/donate",
   },
   {
     number: "02",
     title: "Volunteer",
     copy: "Dog walking, cat socialising and Saturday admin. Two hours a week is plenty.",
     linkText: "Join the rota →",
-    href: "#",
+    href: "/volunteer",
   },
   {
     number: "03",
