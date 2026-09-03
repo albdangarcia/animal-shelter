@@ -290,6 +290,29 @@
   font-family: var(--font-figtree), system-ui, sans-serif;
 }
 
+/* The scope above redefines token VALUES. That is not enough for `color`,
+   which is an inherited property: `body` (outside the scope) resolves
+   `text-foreground` against html.dark, and anything in the scope that never
+   *uses* `--foreground` inherits that already-resolved colour. Redeclaring the
+   custom property cannot reach back and change it.
+
+   It bites portalled surfaces that set a background but no foreground —
+   `dialog` and `sheet` ship `bg-background` alone, while `dropdown-menu`,
+   `popover`, `select` and `command` all pair theirs with
+   `text-popover-foreground` and were never affected. Symptoms under dashboard
+   dark mode: the lightbox close button (currentColor) and LoginPromptModal's
+   title both painted near-white on cream.
+
+   `@layer base` is load-bearing. Unlayered, this rule would outrank the
+   utilities layer and silently override a `text-*` class written on the same
+   element as the scope — which two call sites do. In `base` it beats `body` on
+   specificity (0,1,0 vs 0,0,1, same layer) and still loses to any utility. */
+@layer base {
+  .theme-organic {
+    color: var(--foreground);
+  }
+}
+
 .theme-organic h1,
 .theme-organic h2,
 .theme-organic h3,

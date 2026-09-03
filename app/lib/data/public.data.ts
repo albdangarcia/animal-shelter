@@ -528,7 +528,7 @@ export type SpotlightAnimal = {
   imageUrl: string | null;
   /**
    * Whether the signed-in user has already liked this animal. Resolved here
-   * rather than in the hero because the hero's "Save to favourites" control is
+   * rather than in the hero because the hero's "Save to favorites" control is
    * `LikeButton`, which toggles: handed a hardcoded `false` it would silently
    * UNLIKE an animal the user had already saved.
    */

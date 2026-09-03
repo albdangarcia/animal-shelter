@@ -218,7 +218,7 @@ const SpotlightHero = ({
                 animalId={animal.id}
                 currentUserPersonId={currentUserPersonId}
                 isLikedByCurrentUser={animal.isLikedByCurrentUser}
-                label="Save to favourites"
+                label="Save to favorites"
               />
             </div>
           </div>

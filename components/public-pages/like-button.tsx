@@ -16,7 +16,7 @@ interface LikeButtonProps {
    * Renders the control as a labelled secondary pill instead of the icon chip
    * PetCard sits on a photo. Presentational only — the toggle logic, the
    * pending state and the login prompt are identical either way. The homepage
-   * hero uses it for "Save to favourites"; everywhere else wants the chip.
+   * hero uses it for "Save to favorites"; everywhere else wants the chip.
    */
   label?: string;
 }

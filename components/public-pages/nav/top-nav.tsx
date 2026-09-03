@@ -99,7 +99,7 @@ const TopNav = ({ userImage, showUserProfile, links }: TopNavProps) => {
                     }
                   >
                     <HeartIcon className="size-5" aria-hidden="true" />
-                    Favourites
+                    Favorites
                   </Link>
                 ) : (
                   <Link
@@ -142,7 +142,7 @@ const TopNav = ({ userImage, showUserProfile, links }: TopNavProps) => {
           {showUserProfile && (
             <Link
               href={FAVORITES_HREF}
-              aria-label="Favourites"
+              aria-label="Favorites"
               aria-current={pathname === FAVORITES_HREF ? "page" : undefined}
               className="hidden size-9 place-items-center rounded-full border border-border transition-colors hover:bg-foreground/[0.07] min-[915px]:grid"
             >

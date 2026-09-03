@@ -4019,6 +4019,70 @@ async function assertAnimalLifecycleConsistency() {
   console.log(`Verified lifecycle consistency for ${animals.length} animals.`);
 }
 
+/**
+ * Likes for the public `/pets/favorites` page.
+ *
+ * Without these the page has no demo coverage at all: every visitor sees the
+ * empty state, and the populated grid — including the greyed-out
+ * `isAvailable={false}` cards and the note that explains them — is unreachable
+ * from a fresh seed.
+ *
+ * Runs last, after every function that can move an animal's `listingStatus`,
+ * so the available/unavailable split reflects the final state rather than the
+ * one an animal happened to be in mid-seed.
+ *
+ * Deterministic on purpose: animals are drawn by stable `name, id` ordering
+ * rather than the `Math.random()` shuffles used elsewhere, so the same login
+ * shows the same favorites across reseeds and a screenshot stays comparable.
+ *
+ * Split across the two USER-role logins so both signed-in states are
+ * reachable without touching the database:
+ *   surrenderer1@example.com — a populated grid, including unavailable cards
+ *   finder1@example.com      — no likes, i.e. the empty state
+ */
+async function seedPublicFavorites() {
+  console.log("Seeding favorites for the public pages...");
+
+  const owner = await prisma.person.findFirst({
+    where: { user: { email: "surrenderer1@example.com" } },
+  });
+
+  if (!owner) {
+    throw new Error(
+      "No person found for surrenderer1@example.com. Ensure persons and users are seeded before favorites.",
+    );
+  }
+
+  const pick = (listingStatus: AnimalListingStatus, take: number) =>
+    prisma.animal.findMany({
+      where: { listingStatus },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      select: { id: true },
+      take,
+    });
+
+  // Two unavailable ones so the note below the grid is plural, as it reads.
+  const [published, pending, archived] = await Promise.all([
+    pick(AnimalListingStatus.PUBLISHED, 5),
+    pick(AnimalListingStatus.PENDING_ADOPTION, 1),
+    pick(AnimalListingStatus.ARCHIVED, 2),
+  ]);
+
+  const animals = [...published, ...pending, ...archived];
+
+  await prisma.like.createMany({
+    data: animals.map((animal) => ({
+      userId: owner.id,
+      animalId: animal.id,
+    })),
+    skipDuplicates: true,
+  });
+
+  console.log(
+    `Seeded ${animals.length} favorites for ${owner.name} (${archived.length} unavailable).`,
+  );
+}
+
 export async function main() {
   console.log("Start seeding new data...");
   await clearDatabase();
@@ -4034,6 +4098,9 @@ export async function main() {
   await seedTasks();
   await seedAiActivityLog();
   await seedAssessments();
+  // After every listingStatus mutation above, so the available/unavailable
+  // split on /pets/favorites is the real one.
+  await seedPublicFavorites();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

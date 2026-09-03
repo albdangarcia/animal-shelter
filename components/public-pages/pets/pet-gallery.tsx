@@ -2,12 +2,17 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { PhotoIcon } from "@heroicons/react/24/outline";
+import { PhotoIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import type { AnimalImageModel } from "@/prisma/generated/models/AnimalImage";
 import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
 import LikeButton from "../like-button";
 import clsx from "clsx";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface PetGalleryProps {
   images: AnimalImageModel[];
@@ -120,10 +125,26 @@ const PetGallery = ({
       {/* Lightbox Dialog using shadcn/ui */}
       <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
         {/* Portals to <body>, outside the layout's .theme-organic div, so it
-            has to re-open the token scope for itself. */}
-        <DialogContent className="theme-organic max-w-3xl border-none p-2 sm:rounded-[28px]">
+            has to re-open the token scope for itself. Note the scope alone does
+            not fix inherited `color` — see the `@layer base` rule in
+            globals.css, which is what stops the dashboard's dark foreground
+            reaching the close button below. */}
+        <DialogContent
+          className="theme-organic max-w-3xl border-none p-2 sm:rounded-[28px]"
+          // The default close button is a bare X at 70% opacity. Over an
+          // arbitrary photo that disappears against any similarly-valued
+          // region, so this one supplies its own ground instead. Opting out
+          // here rather than editing components/ui/dialog.tsx, which has ~20
+          // dashboard callers.
+          showCloseButton={false}
+        >
           {/* Visually hidden title for screen reader accessibility */}
           <DialogTitle className="sr-only">Enlarged Pet Image</DialogTitle>
+          <DialogClose className="absolute top-4 right-4 z-10 grid size-9 place-items-center rounded-full bg-background/85 shadow-organic-sm transition-colors hover:bg-background focus:ring-2 focus:ring-ring focus:outline-none">
+            <XMarkIcon className="size-[18px]" aria-hidden="true" />
+            <span className="sr-only">Close</span>
+          </DialogClose>
+
           {lightboxImageUrl && (
             <Image
               src={lightboxImageUrl}
