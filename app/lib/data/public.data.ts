@@ -517,7 +517,6 @@ export type SpotlightAnimal = {
   name: string;
   breedString: string; // joined breed names, or "Mixed breed"
   ageString: string | null;
-  speciesName: string;
   city: string | null;
   description: string | null;
   weightGrams: number | null;
@@ -579,7 +578,6 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
         // never included in what this function returns.
         microchipNumber: true,
         publishedAt: true,
-        species: { select: { name: true } },
         breeds: { where: { deletedAt: null }, select: { name: true } },
         animalImages: {
           select: { url: true },
@@ -650,7 +648,6 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
         birthDate: animal.birthDate,
         simple: true,
       }),
-      speciesName: animal.species.name,
       city: animal.city,
       description: animal.description,
       weightGrams: animal.currentWeightGrams,
