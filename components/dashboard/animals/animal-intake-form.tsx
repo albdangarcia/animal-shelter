@@ -126,6 +126,11 @@ const AnimalForm = ({
     animal?.listingStatus === AnimalListingStatus.PENDING_ADOPTION ||
     animal?.listingStatus === AnimalListingStatus.ARCHIVED;
 
+  // Narrower than isStatusLocked: a PENDING_ADOPTION animal is still physically
+  // in the shelter and keeps an editable unit. An ARCHIVED animal has left, so
+  // its placement is fixed at Unplaced (the action enforces this too).
+  const isUnitLocked = animal?.listingStatus === AnimalListingStatus.ARCHIVED;
+
   const availableStatusOptions = useMemo(() => {
     if (!isEditMode) {
       return animalListingStatusOptions.filter(
@@ -275,7 +280,7 @@ const AnimalForm = ({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="@container space-y-8">
         <Card className="w-full max-w-4xl mx-auto">
           <CardHeader>
             <CardTitle>
@@ -293,7 +298,7 @@ const AnimalForm = ({
               <h3 className="font-semibold border-b pb-2">
                 Animal Information
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-6 gap-x-4 gap-y-8">
+              <div className="grid grid-cols-1 @[662px]:grid-cols-6 gap-x-4 gap-y-8">
                 <FormField
                   control={form.control}
                   name="animalName"
@@ -780,7 +785,7 @@ const AnimalForm = ({
                     helper; only the chosen unit is persisted. */}
                 <FormItem className="col-span-3">
                   <div className="flex items-center gap-1.5">
-                    <Label>Location</Label>
+                    <Label htmlFor="animal-location">Location</Label>
                     <FieldInfo label="About location">
                       Where the animal is physically housed. Leave as Unplaced
                       if unknown.
@@ -788,6 +793,7 @@ const AnimalForm = ({
                   </div>
                   <Select
                     value={currentLocationId || UNPLACED_VALUE}
+                    disabled={isUnitLocked}
                     onValueChange={(value) => {
                       const locationId =
                         value === UNPLACED_VALUE ? "" : value;
@@ -798,6 +804,7 @@ const AnimalForm = ({
                     }}
                   >
                     <SelectTrigger
+                      id="animal-location"
                       className="w-full"
                       aria-describedby="location-hint"
                     >
@@ -829,7 +836,7 @@ const AnimalForm = ({
                       <Select
                         onValueChange={field.onChange}
                         value={field.value || ""}
-                        disabled={!currentLocationId}
+                        disabled={!currentLocationId || isUnitLocked}
                       >
                         <FormControl>
                           <SelectTrigger className="w-full">

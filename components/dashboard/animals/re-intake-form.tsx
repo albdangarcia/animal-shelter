@@ -92,7 +92,7 @@ const ReIntakeForm = ({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="@container space-y-8">
         <Card className="w-full max-w-4xl mx-auto">
           <CardHeader>
             <CardTitle>Re-Intake Animal: {animal.name}</CardTitle>
@@ -108,7 +108,7 @@ const ReIntakeForm = ({
               <h3 className="font-semibold border-b pb-2">
                 Current Health Status
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 @[662px]:grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
                   name="healthStatus"

@@ -322,17 +322,12 @@ const _updateAnimal = async (
     heightCm,
   } = validatedFields.data;
 
-  // This guard prevents archiving from the intake form.
-  if (
-    listingStatus === AnimalListingStatus.ARCHIVED ||
-    listingStatus === AnimalListingStatus.PENDING_ADOPTION
-  ) {
-    return {
-      ok: false,
-      message:
-        "Invalid Action: This status can only be set via the outcome or application approval process.",
-    };
-  }
+  // The listing status is immutable from this form for ARCHIVED and
+  // PENDING_ADOPTION animals, but the check lives inside the transaction now
+  // (see below) so it can compare the submitted value against the current one.
+  // The edit form disables the status select for those two statuses and
+  // re-submits the unchanged value, so guarding on the submitted value alone
+  // rejected every ordinary save of an archived or pending-adoption record.
 
   const mapped = toAnimalData(validatedFields.data);
 
@@ -360,33 +355,52 @@ const _updateAnimal = async (
         throw new NotFoundError("Animal not found.");
       }
 
-      if (currentAnimal.listingStatus === AnimalListingStatus.ARCHIVED) {
-        throw new ConflictError(
-          "This animal is archived. To make it available again, please use the re-intake process."
-        );
-      }
-
-      const isChangingToAvailable =
-        listingStatus === AnimalListingStatus.PUBLISHED ||
-        listingStatus === AnimalListingStatus.DRAFT;
-
-      if (
-        currentAnimal.listingStatus === AnimalListingStatus.PENDING_ADOPTION &&
-        isChangingToAvailable
-      ) {
-        const approvedApplication = await tx.adoptionApplication.findFirst({
-          where: {
-            animalId: validatedAnimalId,
-            status: ApplicationStatus.APPROVED,
-          },
-        });
-
-        if (approvedApplication) {
+      // One state check for the listing status. Staff may edit the descriptive
+      // fields of an archived or pending-adoption record; the status itself is
+      // immutable from this form. Because the form re-submits the current
+      // (disabled) value, an unchanged status is the ordinary edit case and
+      // must pass through untouched — only a real transition is rejected.
+      if (listingStatus !== currentAnimal.listingStatus) {
+        if (currentAnimal.listingStatus === AnimalListingStatus.ARCHIVED) {
           throw new ConflictError(
-            "Cannot change status. This animal has an approved adoption application. Please reject or withdraw the application first."
+            "This animal is archived. To make it available again, please use the re-intake process."
+          );
+        }
+
+        const isChangingToAvailable =
+          listingStatus === AnimalListingStatus.PUBLISHED ||
+          listingStatus === AnimalListingStatus.DRAFT;
+
+        if (
+          currentAnimal.listingStatus === AnimalListingStatus.PENDING_ADOPTION &&
+          isChangingToAvailable
+        ) {
+          const approvedApplication = await tx.adoptionApplication.findFirst({
+            where: {
+              animalId: validatedAnimalId,
+              status: ApplicationStatus.APPROVED,
+            },
+          });
+
+          if (approvedApplication) {
+            throw new ConflictError(
+              "Cannot change status. This animal has an approved adoption application. Please reject or withdraw the application first."
+            );
+          }
+        } else if (
+          listingStatus === AnimalListingStatus.ARCHIVED ||
+          listingStatus === AnimalListingStatus.PENDING_ADOPTION
+        ) {
+          // A real transition into a status this form doesn't own. The message
+          // is accurate now that it only fires on an actual change.
+          throw new ConflictError(
+            "Invalid Action: This status can only be set via the outcome or application approval process."
           );
         }
       }
+
+      const isArchived =
+        currentAnimal.listingStatus === AnimalListingStatus.ARCHIVED;
 
       const speciesRecord = await tx.species.findUnique({
         where: { id: speciesId },
@@ -415,7 +429,11 @@ const _updateAnimal = async (
         name: string;
         location: { name: string };
       } | null = null;
-      if (mapped.currentUnitId) {
+      // An archived animal has left the shelter and cannot occupy a unit. The
+      // form disables the Location/Unit cascade for archived animals; don't
+      // trust the client — coerce to Unplaced here regardless of what was
+      // submitted.
+      if (mapped.currentUnitId && !isArchived) {
         const unit = await tx.unit.findFirst({
           where: { id: mapped.currentUnitId, deletedAt: null },
           select: {

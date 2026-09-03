@@ -2272,6 +2272,7 @@ async function seedReturnAndReadoptAnimal(opts: {
       data: {
         listingStatus: AnimalListingStatus.ARCHIVED,
         archiveReason: OutcomeType.ADOPTION,
+        currentUnitId: null,
       },
     });
   } else if (reIntakeHealthStatus !== AnimalHealthStatus.HEALTHY) {
@@ -2792,6 +2793,7 @@ async function seedAnimalsAndRelations() {
           data: {
             listingStatus: AnimalListingStatus.ARCHIVED,
             archiveReason: outcomeType,
+            currentUnitId: null,
           },
         });
       }
@@ -3379,6 +3381,7 @@ async function seedFostering() {
       data: {
         listingStatus: AnimalListingStatus.ARCHIVED,
         archiveReason: OutcomeType.ADOPTION,
+        currentUnitId: null,
       },
     });
   } else {

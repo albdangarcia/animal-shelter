@@ -60,7 +60,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
     <div className="space-y-6">
       <h3 className="font-semibold border-b pb-2">Intake & Source Details</h3>
 
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-x-4 gap-y-8">
+      <div className="grid grid-cols-1 @[662px]:grid-cols-6 gap-x-4 gap-y-8">
         <FormField
           control={control}
           name={"intakeType" as Path<T>}
@@ -155,7 +155,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
         )}
 
         {intakeType === IntakeType.TRANSFER_IN && (
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-x-4 gap-y-8 p-4 border rounded-md">
+          <div className="grid grid-cols-1 @[662px]:grid-cols-6 gap-x-4 gap-y-8 p-4 border rounded-md">
             <h4 className="font-semibold col-span-full">Transfer Details</h4>
             <FormField
               control={control}
@@ -185,7 +185,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
         )}
 
         {intakeType === IntakeType.STRAY && (
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-x-4 gap-y-8 p-4 border rounded-md">
+          <div className="grid grid-cols-1 @[662px]:grid-cols-6 gap-x-4 gap-y-8 p-4 border rounded-md">
             <h4 className="font-semibold col-span-full">Location Found</h4>
             <FormField
               control={control}
@@ -247,7 +247,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
         )}
 
         {intakeType === IntakeType.OWNER_SURRENDER && (
-          <div className="grid grid-cols-1 md:grid-cols-6 gap-x-4 gap-y-8 p-4 border rounded-md">
+          <div className="grid grid-cols-1 @[662px]:grid-cols-6 gap-x-4 gap-y-8 p-4 border rounded-md">
             <h4 className="font-semibold col-span-full">
               Surrendering Person Details
             </h4>
