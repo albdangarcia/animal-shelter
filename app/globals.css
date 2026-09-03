@@ -293,7 +293,7 @@
 /* The scope above redefines token VALUES. That is not enough for `color`,
    which is an inherited property: `body` (outside the scope) resolves
    `text-foreground` against html.dark, and anything in the scope that never
-   *uses* `--foreground` inherits that already-resolved colour. Redeclaring the
+   *uses* `--foreground` inherits that already-resolved color. Redeclaring the
    custom property cannot reach back and change it.
 
    It bites portalled surfaces that set a background but no foreground —

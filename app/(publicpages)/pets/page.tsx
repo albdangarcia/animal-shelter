@@ -32,7 +32,7 @@ const SORT_OPTIONS = [
 // One pill shape for every control in the bar, so the row reads as one set.
 // `border-solid` is doing work: the faceted filter still ships the dashed
 // trigger its dashboard callers expect, and tailwind-merge keeps border-style
-// and border-colour in separate groups, so `border-border` alone won't undash
+// and border-color in separate groups, so `border-border` alone won't undash
 // it. `has-[>svg]:px-*` restates the padding past shadcn Button's icon variant,
 // which outranks a plain `px-` class.
 const TRIGGER_PILL =

@@ -196,7 +196,7 @@ const Page = async ({ params }: Props) => {
               <h2 className="mb-3 font-display text-[21px]">
                 Personality &amp; Needs
               </h2>
-              {/* .tag.tag-accent-2 — the card's slot-3 colours, at the hero
+              {/* .tag.tag-accent-2 — the card's slot-3 colors, at the hero
                   kicker's size, because these sit next to 17.5px body copy
                   rather than inside a 240px card. */}
               <div className="flex flex-wrap gap-2">

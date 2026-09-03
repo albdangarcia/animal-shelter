@@ -90,7 +90,7 @@ export function DataTableToolbar<TData extends RowData>({
               onClick={() => router.push(pathname)}
               className={cn(
                 RESET_FILTER_SHAPE, "rounded-md",
-                // Shape shared with the public pages' reset; colour supplied
+                // Shape shared with the public pages' reset; color supplied
                 // here from the dashboard's tokens at the denser h-8. --primary
                 // resolves per theme scope, so this holds in light and dark.
                 // Every state names both halves of its pairing so a background

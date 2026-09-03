@@ -23,13 +23,13 @@ export function ResetFilters({
   if (!isFiltered) return null;
 
   return (
-    // Shape from the shared constant, colour from the tokens this subtree
+    // Shape from the shared constant, color from the tokens this subtree
     // resolves — terracotta here, and whatever the dashboard's scope gives when
     // its own reset buttons pick the same device up.
     //
     // Every state names BOTH halves of its pairing, so a background can never
     // land without the foreground meant to sit on it. focus-visible previously
-    // moved only the border and ring, leaving the label on the resting colour.
+    // moved only the border and ring, leaving the label on the resting color.
     <Button
       variant="ghost"
       onClick={() => router.push(pathname)}

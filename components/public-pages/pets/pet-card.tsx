@@ -59,7 +59,7 @@ const PetCard = ({
   // the filter is what enforces that: `size` is null for any animal whose breed
   // has no typical size (the seed's "Mixed Breed" is one), so deriving the
   // variant from the filtered index instead would slide sage up into the size
-  // slot and recolour the row depending on which fields happen to be recorded.
+  // slot and recolor the row depending on which fields happen to be recorded.
   const tags = [
     {
       label: pet.breeds[0]?.name ?? pet.species.name,

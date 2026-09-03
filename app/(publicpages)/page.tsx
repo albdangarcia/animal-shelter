@@ -87,7 +87,7 @@ const SpotlightBand = async () => {
 };
 
 /**
- * Holds the band's colour and roughly its height while the spotlight query
+ * Holds the band's color and roughly its height while the spotlight query
  * resolves, so the nav doesn't sit on a cream page for a beat and then get a
  * band shoved under it.
  */

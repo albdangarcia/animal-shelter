@@ -15,7 +15,7 @@ export const GET_ANIMAL_SUMMARY_PERMISSIONS = [AppPermissions.ANIMAL_INFO_READ];
 
 export const getAnimalSummaryTool = tool({
   description:
-    "Get a detailed summary of one animal by id: species, breed, colour, " +
+    "Get a detailed summary of one animal by id: species, breed, color, " +
     "sex, birth date, size, health status, listing status, current unit, " +
     "current foster placement (if any), open tasks, and most recent intake. " +
     "Requires an animal id — resolve a name with findAnimals first. Returns " +

@@ -90,7 +90,7 @@ const SignInPage = async ({ searchParams }: Props) => {
                     className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-full border border-border bg-transparent px-4 text-[14px] transition-colors hover:bg-accent"
                   >
                     {provider.id === "google" ? (
-                      // Deliberate literal white: Google's mark is multi-colour
+                      // Deliberate literal white: Google's mark is multi-color
                       // and needs a light plate to stay legible on any surface
                       // the button lands on.
                       <span className="flex items-center justify-center rounded bg-white p-1">

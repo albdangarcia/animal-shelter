@@ -7,7 +7,7 @@
  * filter triggers used it before dropped it, so the device is no
  * longer spoken for.
  *
- * Geometry only, deliberately. Height and colour are supplied by the call site,
+ * Geometry only, deliberately. Height and color are supplied by the call site,
  * so the same device can be reused by the dashboard's reset buttons at their
  * denser size and with their own tokens — the shape is shared, the values come
  * from whichever theme scope the button renders in.

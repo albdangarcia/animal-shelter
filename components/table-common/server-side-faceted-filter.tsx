@@ -41,7 +41,7 @@ interface ServerSideFacetedFilterProps {
    * Merged into the trigger button. Opt-in for the same reason as
    * `contentClassName`: the public pages want a solid pill, every dashboard
    * caller wants the dense dashed trigger it already has. Pass `border-solid`
-   * to drop the dash — tailwind-merge treats border-style and border-colour as
+   * to drop the dash — tailwind-merge treats border-style and border-color as
    * separate groups, so `border-border` alone will not displace it.
    */
   triggerClassName?: string;
@@ -162,7 +162,7 @@ export function ServerSideFacetedFilter({
                       {/* text-primary-foreground is load-bearing, not
                           decoration: CommandItem carries
                           `[&_svg:not([class*='text-'])]:text-muted-foreground`,
-                          so an unclassed icon is recoloured by the row and the
+                          so an unclassed icon is recolored by the row and the
                           check came out dark on the filled --primary swatch.
                           Naming the token both opts out of that selector and
                           states the pairing, and it resolves per theme scope —

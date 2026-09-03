@@ -172,7 +172,7 @@ const SpotlightHero = ({
               // The mockup's `.tag.tag-accent-2`: sage-100 on sage-800, pill
               // radius, 20px below. Its 11px is sized for a one-word tag and
               // this is a full sentence, so it takes the 12.5px / 5px 14px
-              // the colours and the pill shape are exact.
+              // the colors and the pill shape are exact.
               <p className="mb-5 inline-flex rounded-full bg-organic-sage-100 px-3.5 py-[5px] text-[12.5px] tracking-[0.02em] text-organic-sage-800">
                 Waiting {animal.waitingDays}{" "}
                 {animal.waitingDays === 1 ? "day" : "days"} — the longest of
