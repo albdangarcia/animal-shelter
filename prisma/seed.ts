@@ -2137,8 +2137,6 @@ async function seedReturnAndReadoptAnimal(opts: {
       heightCm: blueprint.heightCm,
       microchipNumber: blueprint.microchipNumber,
       isSpayedNeutered: blueprint.isSpayedNeutered,
-      city: "New York",
-      state: "NY",
       description:
         blueprint.description ?? "A wonderful companion looking for a home.",
       listingStatus: AnimalListingStatus.PUBLISHED,
@@ -2660,8 +2658,6 @@ async function seedAnimalsAndRelations() {
           heightCm: blueprint.heightCm,
           microchipNumber: blueprint.microchipNumber,
           isSpayedNeutered: blueprint.isSpayedNeutered,
-          city: "New York",
-          state: "NY",
           description:
             blueprint.description ??
             "A wonderful companion looking for a home.",
@@ -3240,8 +3236,6 @@ async function seedFostering() {
         // hundred at most) and the hand-authored block (…001–…017).
         isSpayedNeutered: true,
         microchipNumber: "985141000109999",
-        city: "New York",
-        state: "NY",
         description: "A wonderful companion looking for a home.",
         listingStatus: AnimalListingStatus.PUBLISHED,
         publishedAt: intakeDate,

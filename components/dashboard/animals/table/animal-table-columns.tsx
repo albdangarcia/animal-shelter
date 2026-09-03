@@ -128,24 +128,6 @@ export const columns: ColumnDef<StockFeatures, AnimalsPayload>[] = [
     },
   },
   {
-    accessorKey: "city",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="City" />
-    ),
-    cell: ({ row }) => (
-      <span className="max-w-50 truncate">{row.getValue("city")}</span>
-    ),
-  },
-  {
-    accessorKey: "state",
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="State" />
-    ),
-    cell: ({ row }) => (
-      <span className="max-w-50 truncate">{row.getValue("state")}</span>
-    ),
-  },
-  {
     id: "actions",
     cell: ({ row }) => <AnimalTableRowActions row={row} />,
   },

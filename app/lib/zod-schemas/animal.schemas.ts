@@ -140,8 +140,6 @@ const animalFieldsShape = {
   // supplies the default in both the create and edit branches instead.
   isSpayedNeutered: z.boolean(),
   description: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
   // Optional kennel placement. Empty = Unplaced (null). Location is only a UI
   // cascade helper and is NOT persisted — the unit implies its location.
   currentUnitId: z.cuid2().optional().or(z.literal("")),

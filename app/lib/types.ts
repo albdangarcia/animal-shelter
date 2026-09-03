@@ -43,8 +43,6 @@ export type AnimalSectionCardPayload = Prisma.AnimalGetPayload<{
     microchipNumber: true;
     listingStatus: true;
     isSpayedNeutered: true;
-    city: true;
-    state: true;
     healthStatus: true;
     animalImages: {
       select: {
@@ -127,8 +125,6 @@ export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{
     size: true;
     currentWeightGrams: true;
     heightCm: true;
-    city: true;
-    state: true;
     description: true;
     listingStatus: true;
     microchipNumber: true;
@@ -229,8 +225,6 @@ export type AnimalsPayload = Prisma.AnimalGetPayload<{
     id: true;
     name: true;
     birthDate: true;
-    city: true;
-    state: true;
     listingStatus: true;
     sex: true;
     size: true;

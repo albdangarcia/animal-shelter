@@ -62,8 +62,6 @@ const _fetchAnimals = async (
     const sortableFields = new Set([
       "name",
       "birthDate",
-      "city",
-      "state",
       "listingStatus",
       "sex",
       "size",
@@ -97,8 +95,6 @@ const _fetchAnimals = async (
           id: true,
           name: true,
           birthDate: true,
-          city: true,
-          state: true,
           listingStatus: true,
           sex: true,
           size: true,
@@ -149,8 +145,6 @@ const _fetchSectionCardsAnimalData = async (
         microchipNumber: true,
         listingStatus: true,
         isSpayedNeutered: true,
-        city: true,
-        state: true,
         healthStatus: true,
         animalImages: {
           select: {
@@ -279,8 +273,6 @@ const _fetchAnimalById = async (
         size: true,
         currentWeightGrams: true,
         heightCm: true,
-        city: true,
-        state: true,
         description: true,
         listingStatus: true,
         microchipNumber: true,

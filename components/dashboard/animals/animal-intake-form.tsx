@@ -75,7 +75,6 @@ import {
   type CreateAnimalFormInput,
 } from "@/app/lib/zod-schemas/animal.schemas";
 import { sizeOptions } from "@/components/dashboard/animals/table/animal-options";
-import { US_STATES } from "@/app/lib/constants/us-states";
 import {
   AnimalIntakeFormPayload,
   ColorPayload,
@@ -192,16 +191,12 @@ const AnimalForm = ({
           microchipNumber: animal.microchipNumber || "",
           isSpayedNeutered: animal.isSpayedNeutered,
           listingStatus: animal.listingStatus,
-          city: animal.city || "",
-          state: animal.state || "",
           description: animal.description || "",
           currentUnitId: animal.currentUnitId || "",
         }
       : {
           intakeDate: new Date(),
           animalName: "",
-          city: "",
-          state: "",
           description: "",
           intakeType: undefined,
           species: "",
@@ -776,46 +771,6 @@ const AnimalForm = ({
                           application or outcome process.
                         </FormDescription>
                       )}
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="city"
-                  render={({ field }) => (
-                    <FormItem className="col-span-2">
-                      <FormLabel>City</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., Anytown" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="state"
-                  render={({ field }) => (
-                    <FormItem className="col-span-2">
-                      <FormLabel>State</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value ?? ""}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select a state" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {US_STATES.map((state) => (
-                            <SelectItem key={state.code} value={state.code}>
-                              {state.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                       <FormMessage />
                     </FormItem>
                   )}

@@ -13,7 +13,6 @@ import PetGallery from "@/components/public-pages/pets/pet-gallery";
 import { getCachedSession } from "@/app/lib/auth/session";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MapPin } from "lucide-react";
 
 interface Props {
   params: IDParamType;
@@ -78,10 +77,6 @@ const Page = async ({ params }: Props) => {
     formatWeight(animal.currentWeightGrams),
   ].filter(Boolean);
 
-  // city and state are both nullable, so the line renders whichever parts
-  // exist rather than a stray comma.
-  const locationString = [animal.city, animal.state].filter(Boolean).join(", ");
-
   // Neutered and Microchipped are facts about the animal's body, but they read
   // as reassurances rather than measurements — so they join the characteristic
   // pills instead of sitting in the facts list as Yes/No rows. Never assert the
@@ -138,16 +133,6 @@ const Page = async ({ params }: Props) => {
               </span>
             ))}
           </p>
-
-          {locationString && (
-            <p className="mb-7 flex items-center gap-2 text-[15px] text-muted-foreground">
-              <MapPin
-                className="size-4 shrink-0 text-organic-neutral-500"
-                aria-hidden="true"
-              />
-              {locationString}
-            </p>
-          )}
 
           {adoptCta}
         </div>

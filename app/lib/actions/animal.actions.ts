@@ -46,8 +46,6 @@ const toAnimalData = (data: {
   microchipNumber?: string;
   isSpayedNeutered: boolean;
   description?: string;
-  city?: string;
-  state?: string;
 }) => ({
   size: data.size || null,
   currentUnitId: data.currentUnitId || null,
@@ -62,8 +60,6 @@ const toAnimalData = (data: {
   // above; passed straight through.
   isSpayedNeutered: data.isSpayedNeutered,
   description: data.description || null,
-  city: data.city || null,
-  state: data.state || null,
 });
 
 const _createAnimal = async (
@@ -192,8 +188,6 @@ const _createAnimal = async (
           publishedAt: publishedAt,
           microchipNumber: mapped.microchipNumber,
           isSpayedNeutered: mapped.isSpayedNeutered,
-          city: mapped.city,
-          state: mapped.state,
           currentUnit: resolvedUnitId
             ? { connect: { id: resolvedUnitId } }
             : undefined,
@@ -461,8 +455,6 @@ const _updateAnimal = async (
           publishedAt: publishedAt,
           microchipNumber: mapped.microchipNumber,
           isSpayedNeutered: mapped.isSpayedNeutered,
-          city: mapped.city,
-          state: mapped.state,
           currentUnit: resolvedUnitId
             ? { connect: { id: resolvedUnitId } }
             : { disconnect: true },
