@@ -106,7 +106,7 @@ const _fetchAnimalNotes = async (
 
   try {
     const offset = (currentPage - 1) * NOTES_PER_PAGE;
-    const [totalCount, notes] = await prisma.$transaction([
+    const [totalCount, notes] = await Promise.all([
       prisma.animalNote.count({ where: whereClause }),
       prisma.animalNote.findMany({
         where: whereClause,

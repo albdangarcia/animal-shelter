@@ -63,7 +63,7 @@ const _fetchPersonNotes = async (
   };
 
   try {
-    const [totalRows, notes] = await prisma.$transaction([
+    const [totalRows, notes] = await Promise.all([
       prisma.personNote.count({ where: whereClause }),
       prisma.personNote.findMany({
         where: whereClause,

@@ -159,7 +159,7 @@ const _fetchUserAdoptionApplications = async (
   }
 
   try {
-    const [userApplications, count] = await prisma.$transaction([
+    const [userApplications, count] = await Promise.all([
       prisma.adoptionApplication.findMany({
         where: whereClause,
         select: {

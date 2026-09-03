@@ -124,7 +124,7 @@ const _fetchPeople = async (
   }
 
   try {
-    const [totalRows, people] = await prisma.$transaction([
+    const [totalRows, people] = await Promise.all([
       prisma.person.count({ where: whereClause }),
       prisma.person.findMany({
         where: whereClause,

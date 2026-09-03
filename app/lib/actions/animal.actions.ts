@@ -695,14 +695,14 @@ const _reorderAnimalImages = async (
     // loop of single-column updates in one transaction is fine — no CASE
     // expression or raw SQL. Each update is scoped by animalId as well as id.
     // Concurrent reorders are last-write-wins; no locking.
-    await prisma.$transaction(
-      submittedIds.map((id, index) =>
-        prisma.animalImage.update({
-          where: { id, animalId: validatedAnimalId },
+    await prisma.$transaction(async (tx) => {
+      for (let index = 0; index < submittedIds.length; index++) {
+        await tx.animalImage.update({
+          where: { id: submittedIds[index], animalId: validatedAnimalId },
           data: { sortOrder: index },
-        })
-      )
-    );
+        });
+      }
+    });
   } catch (error) {
     console.error("Database Error: Failed to reorder animal images.", error);
     return {

@@ -237,20 +237,20 @@ const _withdrawMyFosterApplication = async (
   }
 
   try {
-    await prisma.$transaction([
-      prisma.fosterApplication.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.fosterApplication.update({
         where: { id: validatedApplicationId },
         data: { status: ApplicationStatus.WITHDRAWN },
-      }),
-      prisma.fosterApplicationStatusHistory.create({
+      });
+      await tx.fosterApplicationStatusHistory.create({
         data: {
           applicationId: validatedApplicationId,
           status: ApplicationStatus.WITHDRAWN,
           statusChangeReason: "Application withdrawn by user.",
           changedById: user.personId,
         },
-      }),
-    ]);
+      });
+    });
   } catch (error) {
     console.error(
       `Database Error withdrawing foster application ${validatedApplicationId}:`,

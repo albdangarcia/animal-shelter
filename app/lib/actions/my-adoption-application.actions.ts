@@ -280,22 +280,22 @@ const _reactivateMyAdoptionApplication = async (
 
   // Update the application status to PENDING and create a history record
   try {
-    await prisma.$transaction([
+    await prisma.$transaction(async (tx) => {
       // Update the application's current status
-      prisma.adoptionApplication.update({
+      await tx.adoptionApplication.update({
         where: { id: validatedApplicationId },
         data: { status: ApplicationStatus.PENDING },
-      }),
+      });
       // Create the history record for the audit trail
-      prisma.applicationStatusHistory.create({
+      await tx.applicationStatusHistory.create({
         data: {
           applicationId: validatedApplicationId,
           status: ApplicationStatus.PENDING,
           statusChangeReason: "Application reactivated by user.",
           changedById: user.personId,
         },
-      }),
-    ]);
+      });
+    });
   } catch (error) {
     console.error(
       `Database Error reactivating adoption application ${validatedApplicationId}:`,

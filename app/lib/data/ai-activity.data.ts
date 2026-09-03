@@ -100,7 +100,7 @@ const _fetchAiActivityLog = async (
 
   try {
     const offset = (currentPage - 1) * pageSize;
-    const [totalRows, logs] = await prisma.$transaction([
+    const [totalRows, logs] = await Promise.all([
       prisma.aiActionLog.count({ where: whereClause }),
       prisma.aiActionLog.findMany({
         where: whereClause,

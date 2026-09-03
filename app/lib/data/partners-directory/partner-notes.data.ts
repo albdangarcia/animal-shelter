@@ -65,7 +65,7 @@ const _fetchPartnerNotes = async (
   };
 
   try {
-    const [totalRows, notes] = await prisma.$transaction([
+    const [totalRows, notes] = await Promise.all([
       prisma.partnerNote.count({ where: whereClause }),
       prisma.partnerNote.findMany({
         where: whereClause,
