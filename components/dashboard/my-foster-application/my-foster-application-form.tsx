@@ -266,6 +266,20 @@ export function MyFosterApplicationForm({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-10">
+            {/* UseFormReturn<T> is invariant in T because it contains both producers
+                and consumers of form values (e.g. watch callbacks and setValue). Even
+                though FosterApplicationFormInput includes all household fields,
+                UseFormReturn<FosterApplicationFormInput> is not assignable to
+                UseFormReturn<HouseholdProfileFormValues>.
+
+                Making HouseholdFormFields generic over T extends HouseholdProfileFormValues
+                would force Path<T> assertions across all 8 fields, the useWatch hooks,
+                and NumberField, trading 1 call-site cast for 8+ internal casts with
+                no real safety gain.
+
+                CAVEAT: The double cast through unknown erases the type relationship
+                here. If HouseholdProfileFormValues changes shape, this call site will
+                not fail at compile time and binding errors will only surface at runtime. */}
             <HouseholdFormFields
               form={
                 form as unknown as UseFormReturn<HouseholdProfileFormValues>
