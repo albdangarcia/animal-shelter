@@ -227,6 +227,18 @@ const _createUnit = async (values: UnitFormInput): Promise<UnitResult> => {
   const { name, capacity, locationId } = validatedFields.data;
 
   try {
+    const location = await prisma.location.findUnique({
+      where: { id: locationId },
+      select: { deletedAt: true },
+    });
+    if (!location || location.deletedAt) {
+      return {
+        ok: false,
+        message:
+          "Can't add a unit to a deleted location. Restore the location first.",
+      };
+    }
+
     const existing = await findDuplicateUnit(name, locationId);
     if (existing) {
       return {

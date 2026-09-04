@@ -39,6 +39,12 @@ import {
   restoreUnit,
 } from "@/app/lib/actions/locations.actions";
 import { toast } from "sonner";
+import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
+
+const locationStatusOptions = [
+  { value: "active", label: "Active" },
+  { value: "deleted", label: "Deleted" },
+];
 
 function LocationActions({ location }: { location: LocationWithUnits }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -219,7 +225,17 @@ function LocationBlock({ location }: { location: LocationWithUnits }) {
         <div className="flex items-center gap-1">
           <Dialog open={isAddUnitOpen} onOpenChange={setIsAddUnitOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="h-7">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 disabled:pointer-events-auto disabled:cursor-not-allowed"
+                disabled={!!location.deletedAt}
+                title={
+                  location.deletedAt
+                    ? "Restore this location before adding units."
+                    : undefined
+                }
+              >
                 <PlusCircle className="size-4 mr-1" />
                 Add Unit
               </Button>
@@ -270,15 +286,17 @@ function LocationBlock({ location }: { location: LocationWithUnits }) {
       ) : (
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span>No units yet.</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7"
-            onClick={() => setIsAddUnitOpen(true)}
-          >
-            <PlusCircle className="size-4 mr-1" />
-            Add Unit
-          </Button>
+          {!location.deletedAt && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7"
+              onClick={() => setIsAddUnitOpen(true)}
+            >
+              <PlusCircle className="size-4 mr-1" />
+              Add Unit
+            </Button>
+          )}
         </div>
       )}
     </div>
@@ -318,6 +336,14 @@ export const LocationsSection = ({ locations }: Props) => {
             </DialogContent>
           </Dialog>
         </CardAction>
+
+        <div className="mt-4 flex flex-row flex-wrap items-center gap-3">
+          <ServerSideFacetedFilter
+            title="Status"
+            paramKey="status"
+            options={locationStatusOptions}
+          />
+        </div>
       </CardHeader>
       <CardContent>
         {locations.length > 0 ? (

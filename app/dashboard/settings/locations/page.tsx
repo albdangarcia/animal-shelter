@@ -3,20 +3,26 @@ import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchLocationsWithUnits } from "@/app/lib/data/locations/locations.data";
+import type { SearchParamsType } from "@/app/lib/types";
 
-const Page = async () => {
+interface Props {
+  searchParams: SearchParamsType;
+}
+
+const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.MANAGE_LOCATIONS}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
-      <PageContent />
+      <PageContent searchParams={searchParams} />
     </Authorize>
   );
 };
 
-const PageContent = async () => {
-  const locations = await fetchLocationsWithUnits();
+const PageContent = async ({ searchParams }: Props) => {
+  const { status } = await searchParams;
+  const locations = await fetchLocationsWithUnits(status);
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
