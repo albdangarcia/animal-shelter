@@ -142,6 +142,17 @@ const personData = [
   },
 ];
 
+// Purpose-built fixtures (Person-form duplicate detection, the household
+// profile "no data yet" empty state) whose value is a known, stable starting
+// record. Excluded from every seeded adoption/foster applicant pool so a
+// random draw never hands one of them a HouseholdProfile — the empty state
+// needs to hold across reseeds, not just on lucky ones.
+const NON_APPLICANT_PERSON_NAMES = new Set([
+  "Alex Duplicate",
+  "Sam Duplicate",
+  "Unparseable Phone Contact",
+]);
+
 const allColors = {
   BLACK: { name: "Black" },
   WHITE: { name: "White" },
@@ -2525,7 +2536,10 @@ async function seedAnimalsAndRelations() {
   const userRolePersons = await prisma.person.findMany({
     where: { user: { role: Role.USER } },
   });
-  const applicantPool: ApplicantPerson[] = [...walkInPersons, ...userRolePersons];
+  const applicantPool: ApplicantPerson[] = [
+    ...walkInPersons.filter((p) => !NON_APPLICANT_PERSON_NAMES.has(p.name)),
+    ...userRolePersons,
+  ];
   const allPartners = await prisma.partner.findMany();
   const dbBreeds = await prisma.breed.findMany();
   const dbColors = await prisma.color.findMany();
@@ -2960,7 +2974,9 @@ async function seedFostering() {
   const rabbitSpecies = dbSpecies.find((s) => s.name === "Rabbit");
   const approver = getRandomItem(staffMembers);
 
-  const shuffledWalkIns = [...walkInPersons].sort(() => Math.random() - 0.5);
+  const shuffledWalkIns = [...walkInPersons]
+    .filter((p) => !NON_APPLICANT_PERSON_NAMES.has(p.name))
+    .sort(() => Math.random() - 0.5);
   // The roster: one volunteer, one USER account, and two walk-ins with no
   // account at all — covers "at least one on a Person with no User account".
   const fosterPeople: ApplicantPerson[] = [
@@ -3486,7 +3502,10 @@ async function seedApplicationNoise() {
   const userRolePersons = await prisma.person.findMany({
     where: { user: { role: Role.USER } },
   });
-  const applicantPool: ApplicantPerson[] = [...walkInPersons, ...userRolePersons];
+  const applicantPool: ApplicantPerson[] = [
+    ...walkInPersons.filter((p) => !NON_APPLICANT_PERSON_NAMES.has(p.name)),
+    ...userRolePersons,
+  ];
 
   const publishedAnimals = await prisma.animal.findMany({
     where: { listingStatus: AnimalListingStatus.PUBLISHED },
