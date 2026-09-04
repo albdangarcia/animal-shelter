@@ -995,6 +995,16 @@ const attentionQueueScenarioAnimalNames = [
 // what `getAnimalSummary` returns for it.
 const disambiguationScenarioAnimalNames = ["Bruno"];
 
+// The homepage hero's six long-stay animals, kept out of the random foster
+// lottery too: their `unitName` placement is part of what the hero and the
+// animal-edit/outcome E2E spec treat as stable-by-name across reseeds. A
+// random foster placement would null one's `currentUnitId` and make it look
+// unplaced. Derived from animalSeedData rather than hardcoded so the list
+// can't drift if the hero set changes.
+const heroLongStayAnimalNames = animalSeedData
+  .filter((a) => a.longStay)
+  .map((a) => a.name);
+
 // Ambient, future-dated tasks scattered across random animals. These do NOT
 // feed the attention queue (nothing here is overdue) — the deterministic
 // overdue set is `overdueTaskSeedData` below.
@@ -3098,7 +3108,9 @@ async function seedFostering() {
   // Pull real in-care, currently-housed animals so the open placement
   // faithfully seeds "currentUnitId nulled, previousUnitId set". The
   // attention-queue scenario animals are excluded — their foster state is
-  // scripted below, not drawn from this lottery.
+  // scripted below, not drawn from this lottery. The hero long-stay animals
+  // are excluded too — their kennel placement is treated as stable-by-name
+  // elsewhere (homepage hero, animal-edit/outcome E2E spec).
   const housedInCareAnimals = await prisma.animal.findMany({
     where: {
       listingStatus: {
@@ -3109,6 +3121,7 @@ async function seedFostering() {
         notIn: [
           ...attentionQueueScenarioAnimalNames,
           ...disambiguationScenarioAnimalNames,
+          ...heroLongStayAnimalNames,
         ],
       },
     },
