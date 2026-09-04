@@ -120,8 +120,12 @@ const _updateStaffHouseholdProfile = async (
     };
   }
 
-  revalidatePath(`/dashboard/people-directory/${parsedId.data}/profile`);
-  return { ok: true, message: "Household profile updated." };
+  revalidatePath(`/dashboard/people-directory/${parsedId.data}`);
+  return {
+    ok: true,
+    message: "Household profile updated.",
+    redirectTo: `/dashboard/people-directory/${parsedId.data}`,
+  };
 };
 
 export const updateStaffHouseholdProfile = RequirePermission(

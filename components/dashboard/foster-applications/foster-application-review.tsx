@@ -37,7 +37,7 @@ import { ALLOWED_APPLICATION_TRANSITIONS } from "@/app/lib/utils/application-sta
 import { FosterApplicationStatusChangeSchema } from "@/app/lib/zod-schemas/foster.schemas";
 import { MyFosterApplicationPayload } from "@/app/lib/types";
 import { formatDateOrNA } from "@/app/lib/utils/date-utils";
-import { HouseholdReadOnlyRows } from "@/components/dashboard/account/household-profile-form";
+import { HouseholdReadOnlyRows } from "@/components/dashboard/household/household-read-only";
 import {
   CapabilityReadOnlyRows,
   StatusHistoryTimeline,

@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
-import HouseholdProfileForm from "@/components/dashboard/account/household-profile-form";
+import { HouseholdProfileCard } from "@/components/dashboard/household/household-profile-card";
 
 interface Props {
   params: IDParamType;
@@ -46,7 +46,6 @@ const PageContent = async ({ params }: Props) => {
   }
 
   const hasAccount = !!person.user;
-  const householdMode = !hasAccount && canManage ? "staff-edit" : "staff-view";
 
   return (
     <div className="@container/profile-cards">
@@ -118,11 +117,11 @@ const PageContent = async ({ params }: Props) => {
         </Card>
 
         {/* Card 2 — Household & Lifestyle */}
-        <HouseholdProfileForm
+        <HouseholdProfileCard
           householdProfile={person.householdProfile}
-          mode={householdMode}
           personId={person.id}
           canManage={canManage}
+          hasAccount={hasAccount}
         />
       </div>
     </div>

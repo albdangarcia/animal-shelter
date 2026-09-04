@@ -29,7 +29,7 @@ import { withdrawMyFosterApplication } from "@/app/lib/actions/foster-applicatio
 import { MyFosterApplicationPayload } from "@/app/lib/types";
 import { formatDateOrNA, formatTimeAgo } from "@/app/lib/utils/date-utils";
 import { ApplicationStatuses } from "@/components/dashboard/my-adoption-applications/table/my-applications-options";
-import { HouseholdReadOnlyRows } from "@/components/dashboard/account/household-profile-form";
+import { HouseholdReadOnlyRows } from "@/components/dashboard/household/household-read-only";
 
 const boolDisplay = (val: boolean | null | undefined) => {
   if (val === null || val === undefined) return "N/A";

@@ -39,7 +39,7 @@ import { FosterApplicationFormSchema } from "@/app/lib/zod-schemas/foster.schema
 import {
   HouseholdFormFields,
   HouseholdProfileFormValues,
-} from "@/components/dashboard/account/household-profile-form";
+} from "@/components/dashboard/household/household-fields";
 import { FosterCapabilityFormFields } from "./foster-capability-form-fields";
 import { FosterApplicantDefaultsPayload } from "@/app/lib/data/fosters/my-foster-application.data";
 

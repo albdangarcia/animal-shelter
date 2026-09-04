@@ -1,0 +1,44 @@
+import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+
+// A single labeled field: label on top, input below.
+const FieldSkeleton = ({ className }: { className?: string }) => (
+  <div className={className}>
+    <Skeleton className="h-4 w-24 mb-2" />
+    <Skeleton className="h-9 w-full" />
+  </div>
+);
+
+const Loading = () => {
+  return (
+    <Card className="w-full max-w-3xl mx-auto">
+      <CardHeader className="space-y-2">
+        {/* Title + description */}
+        <Skeleton className="h-6 w-48" />
+        <Skeleton className="h-4 w-72" />
+      </CardHeader>
+      <CardContent className="space-y-10">
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-x-4 gap-y-8">
+          <FieldSkeleton className="md:col-span-3" />
+          <FieldSkeleton className="md:col-span-3" />
+          <FieldSkeleton className="md:col-span-2" />
+          <FieldSkeleton className="md:col-span-2" />
+          <FieldSkeleton className="md:col-span-full" />
+          <FieldSkeleton className="md:col-span-full" />
+        </div>
+      </CardContent>
+      <CardFooter className="flex justify-end space-x-4">
+        {/* Cancel + Submit buttons */}
+        <Skeleton className="h-10 w-24" />
+        <Skeleton className="h-10 w-24" />
+      </CardFooter>
+    </Card>
+  );
+};
+
+export default Loading;
