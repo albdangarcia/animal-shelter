@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -21,6 +23,13 @@ interface Props {
 
 const PersonActivityFeed = ({ activity = [] }: Props) => {
   const [showAll, setShowAll] = useState(false);
+  const params = useParams();
+  const personId =
+    typeof params?.id === "string"
+      ? params.id
+      : Array.isArray(params?.id)
+        ? params.id[0]
+        : undefined;
 
   const visibleActivity = showAll
     ? activity
@@ -32,11 +41,12 @@ const PersonActivityFeed = ({ activity = [] }: Props) => {
     <Card className="@container/card">
       <CardHeader>
         <CardTitle className="@[650px]/card:text-xl">
-          Activity
+          Staff Activity
         </CardTitle>
         <CardDescription>
-          Recent activity involving this person — tasks, notes, assessments, and
-          intake/outcome processing.
+          Actions this person performed on animals — intakes and outcomes
+          processed, tasks created or assigned, animal notes written, and
+          assessments conducted.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -64,7 +74,29 @@ const PersonActivityFeed = ({ activity = [] }: Props) => {
           <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
             <p className="font-semibold text-lg">No Activity Found</p>
             <p className="text-sm mt-1">
-              There is no recorded activity for this person yet.
+              Notes written about this person are on the{" "}
+              {personId ? (
+                <Link
+                  href={`/dashboard/people-directory/${personId}/notes`}
+                  className="font-medium underline hover:text-foreground"
+                >
+                  Notes
+                </Link>
+              ) : (
+                "Notes"
+              )}{" "}
+              tab, and their involvement with animals is on the{" "}
+              {personId ? (
+                <Link
+                  href={`/dashboard/people-directory/${personId}/history`}
+                  className="font-medium underline hover:text-foreground"
+                >
+                  Animal History
+                </Link>
+              ) : (
+                "Animal History"
+              )}{" "}
+              tab.
             </p>
           </div>
         )}
