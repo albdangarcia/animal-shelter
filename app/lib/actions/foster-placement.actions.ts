@@ -31,6 +31,8 @@ import {
 } from "../utils/errors";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
+const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
+
 type CreateFosterPlacementInput = z.input<typeof CreateFosterPlacementSchema>;
 type ReturnFromFosterInput = z.input<typeof ReturnFromFosterSchema>;
 type ConvertFosterToAdoptionInput = z.input<
@@ -521,8 +523,10 @@ const _convertFosterToAdoption = async (
   revalidatePath("/dashboard/locations");
   revalidatePath("/dashboard/outcomes");
   if (adoptionApplicationId) {
-    revalidatePath("/dashboard/applications");
-    revalidatePath(`/dashboard/applications/${adoptionApplicationId}`);
+    revalidatePath(ADOPTION_APPLICATIONS_PATH);
+    revalidatePath(
+      `${ADOPTION_APPLICATIONS_PATH}/${adoptionApplicationId}/edit`,
+    );
   }
   return {
     ok: true,

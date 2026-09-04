@@ -118,7 +118,7 @@ const _updateMyAdoptionApp = async (
 
   // Revalidate relevant paths
   revalidatePath(MY_APPLICATIONS_PATH);
-  revalidatePath(`${MY_APPLICATIONS_PATH}/${validatedApplicationId}`);
+  revalidatePath(`${MY_APPLICATIONS_PATH}/${validatedApplicationId}/edit`);
 
   return {
     ok: true,
@@ -220,7 +220,7 @@ const _withdrawMyAdoptionApplication = async (
     };
   }
 
-  revalidatePath(`/dashboard/my-adoption-applications/${validatedApplicationId}`);
+  revalidatePath(`${MY_APPLICATIONS_PATH}/${validatedApplicationId}/edit`);
 
   return { success: true, message: "Application withdrawn successfully." };
 };
