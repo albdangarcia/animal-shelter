@@ -37,6 +37,7 @@ import {
   randomInt,
 } from "@/app/lib/utils/seeding-utils";
 import { computeStays } from "@/app/lib/utils/stay-utils";
+import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { resolveDatabaseUrl } from "@/app/lib/db-url";
 import { phoneNormalizationExtension } from "@/app/lib/prisma-extensions/phone-normalization";
@@ -1760,17 +1761,22 @@ function daysFromNow(n: number): Date {
 // Generates a dated weigh-in history for one animal, using the same
 // cursor-increment idiom as the adoption-application status history
 // (addDaysClamped walking forward toward `windowEnd`). Only called for a
-// representative subset of seeded animals — most just get the single
-// currentWeightGrams value set at creation. Exercises the cache-invariant
-// traps the Vitals feature exists to handle correctly: a temperature-only
-// entry must not blank the weight, and a soft-deleted entry must not count
-// as current.
+// representative subset of seeded animals — most just get their intake
+// weigh-in. Exercises the cache-invariant traps the Vitals feature exists to
+// handle correctly: a temperature-only entry must not blank the weight, and a
+// soft-deleted entry must not count as current.
+//
+// Every generated entry falls strictly after `windowStart` (the animal's
+// intake weigh-in), so that separately-created entry stays the oldest data
+// point and this helper's currentWeightGrams recompute legitimately
+// supersedes it rather than racing or colliding with it.
 async function seedVitalsLogSeries(opts: {
   animalId: string;
   recordedById: string;
   startWeightGrams: number;
   trend: "rising" | "stable" | "falling";
   entryCount: number;
+  windowStart: Date;
   windowEnd: Date;
   includeTemperatureOnlyEntry?: boolean;
   includeSoftDeletedEntry?: boolean;
@@ -1781,22 +1787,41 @@ async function seedVitalsLogSeries(opts: {
     startWeightGrams,
     trend,
     entryCount,
+    windowStart,
     windowEnd,
     includeTemperatureOnlyEntry = false,
     includeSoftDeletedEntry = false,
   } = opts;
 
-  let cursor = addDaysClamped(
-    daysAgo(entryCount * 7),
-    randomInt(0, 3),
-    windowEnd,
-  );
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  // Common case: a weekly cadence starting `entryCount` weeks back already
+  // clears the intake (long-stay animals, older intakes) — keep it verbatim.
+  // Otherwise the intake is too recent for weekly spacing to fit, so anchor
+  // just after it and split the remaining span evenly, keeping entries
+  // strictly increasing instead of piling up on windowEnd.
+  const defaultStart = daysAgo(entryCount * 7);
+  const roomy = defaultStart >= windowStart;
+  let cursor = roomy
+    ? addDaysClamped(defaultStart, randomInt(0, 3), windowEnd)
+    : addDaysClamped(windowStart, randomInt(1, 3), windowEnd);
+  const compressedStepDays = roomy
+    ? null
+    : Math.max(
+        1,
+        Math.floor(
+          (windowEnd.getTime() - cursor.getTime()) / DAY_MS / entryCount,
+        ),
+      );
   let weight = startWeightGrams;
   let latestWeightGrams: number | null = null;
 
   for (let i = 0; i < entryCount; i++) {
     if (i > 0) {
-      cursor = addDaysClamped(cursor, randomInt(4, 8), windowEnd);
+      cursor = addDaysClamped(
+        cursor,
+        compressedStepDays ?? randomInt(4, 8),
+        windowEnd,
+      );
     }
 
     if (trend === "rising") {
@@ -2170,6 +2195,18 @@ async function seedReturnAndReadoptAnimal(opts: {
       intakeDate: stay1.intakeDate,
       staffMemberId: processingStaff.id,
       ...firstRelations,
+    },
+  });
+
+  // Intake weigh-in, mirroring `_createAnimal`. Attached to the original
+  // intake, not the later re-intake — the first data point behind the cached
+  // currentWeightGrams set at create above.
+  await prisma.vitalsLog.create({
+    data: {
+      animalId: animal.id,
+      recordedById: processingStaff.id,
+      recordedAt: stay1.intakeDate,
+      weightGrams: blueprint.weightGrams,
     },
   });
 
@@ -2701,6 +2738,20 @@ async function seedAnimalsAndRelations() {
         },
       });
 
+      // Intake weigh-in, mirroring `_createAnimal`: a dated first data point
+      // with real provenance behind `currentWeightGrams`, rather than a bare
+      // cached number with an empty vitals tab. Any seedVitalsLogSeries call
+      // below runs after this and legitimately recomputes the cache from its
+      // own later entries.
+      await prisma.vitalsLog.create({
+        data: {
+          animalId: animal.id,
+          recordedById: processingStaff.id,
+          recordedAt: stay.intakeDate,
+          weightGrams: blueprint.weightGrams,
+        },
+      });
+
       // A representative subset gets a full weigh-in history, so the Vitals
       // feature has real trend data to demo — a growing neonate, a stable
       // adult, and one animal losing weight across consecutive weighings
@@ -2726,6 +2777,7 @@ async function seedAnimalsAndRelations() {
           animalId: animal.id,
           recordedById: processingStaff.id,
           startWeightGrams: blueprint.weightGrams,
+          windowStart: stay.intakeDate,
           windowEnd: new Date(),
           ...vitalsSeriesConfig,
         });
@@ -3217,6 +3269,7 @@ async function seedFostering() {
     const startUnit = getRandomItem(dbUnits);
 
     const fosterAdopter = fosterPeople[0];
+    const winstonWeightGrams = 22000;
     const intakeDate = daysAgo(70);
     const placedAt = daysAgo(45);
     const reviewedAt = daysAgo(30);
@@ -3231,7 +3284,7 @@ async function seedFostering() {
         birthDate: getRandomDate(6, 1),
         sex: Sex.MALE,
         size: AnimalSize.LARGE,
-        currentWeightGrams: 22000,
+        currentWeightGrams: winstonWeightGrams,
         heightCm: 48,
         // Outside the blueprint system, so both flags are set explicitly. The
         // microchip sits well clear of the seeded sequence (…018 upward, a few
@@ -3261,6 +3314,17 @@ async function seedFostering() {
         intakeDate,
         staffMemberId: approver.id,
         surrenderingPersonId: surrenderer.id,
+      },
+    });
+    // Intake weigh-in, mirroring `_createAnimal` — Winston sits outside the
+    // blueprint system but still needs a dated data point behind his cached
+    // currentWeightGrams rather than an empty vitals tab.
+    await prisma.vitalsLog.create({
+      data: {
+        animalId: animal.id,
+        recordedById: approver.id,
+        recordedAt: intakeDate,
+        weightGrams: winstonWeightGrams,
       },
     });
     await prisma.animalActivityLog.create({
@@ -4027,6 +4091,42 @@ async function assertAnimalLifecycleConsistency() {
           `${label} has an ADOPTION outcome with no adoptionApplicationId.`,
         );
       }
+    }
+  }
+
+  // `currentWeightGrams` is a cache of the most recent non-deleted VitalsLog
+  // entry with a non-null weight (schema.prisma). The app's only write path
+  // for it always creates a matching VitalsLog; a seed that sets the number
+  // without the history behind it produces a state the app can't — a weight
+  // on the profile and an empty vitals tab. Assert the invariant here so that
+  // drift is a seed failure, not something found by clicking around.
+  const weightCached = await prisma.animal.findMany({
+    where: { currentWeightGrams: { not: null } },
+    select: {
+      id: true,
+      name: true,
+      currentWeightGrams: true,
+      // Same "latest entry" tiebreaker chain recomputeCurrentWeight uses.
+      vitalsLogs: {
+        where: { deletedAt: null, weightGrams: { not: null } },
+        orderBy: LATEST_ENTRY_ORDER,
+        take: 1,
+        select: { weightGrams: true },
+      },
+    },
+  });
+
+  for (const animal of weightCached) {
+    const label = `"${animal.name}" (${animal.id})`;
+    const latest = animal.vitalsLogs[0];
+    if (!latest) {
+      violations.push(
+        `${label} has currentWeightGrams=${animal.currentWeightGrams} but no non-deleted VitalsLog with a weight behind it.`,
+      );
+    } else if (latest.weightGrams !== animal.currentWeightGrams) {
+      violations.push(
+        `${label} has currentWeightGrams=${animal.currentWeightGrams} but its latest weigh-in is ${latest.weightGrams}.`,
+      );
     }
   }
 
