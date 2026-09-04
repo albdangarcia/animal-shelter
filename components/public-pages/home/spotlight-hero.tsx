@@ -312,6 +312,7 @@ const SpotlightHero = ({
                         alt=""
                         fill
                         sizes="78px"
+                        loading={isSelected ? "eager" : "lazy"} // Prevents overwriting with "lazy"
                         className="object-cover object-[50%_30%]"
                       />
                     ) : (

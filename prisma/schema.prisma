@@ -407,8 +407,6 @@ model Animal {
   /// helper (and animal intake, for the seed entry) may set it.
   currentWeightGrams Int?                @map(name: "current_weight_grams")
   heightCm           Float?              @map(name: "height_cm")
-  city               String?
-  state              String?
   description        String?
   listingStatus      AnimalListingStatus @default(DRAFT)
   microchipNumber    String?             @unique

@@ -81,6 +81,13 @@ const _createOutcome = async (
         data: {
           listingStatus: AnimalListingStatus.ARCHIVED,
           archiveReason: outcomeType,
+          // An animal that has left the shelter is not in a kennel. Without
+          // this, an adopted/transferred/deceased animal keeps occupying its
+          // unit indefinitely. OUTCOME_PROCESSED is already logged below and
+          // covers the relocation; a dedicated LOCATION_CHANGE would need an
+          // extra read just to name the vacated unit, so it is deliberately
+          // omitted here.
+          currentUnitId: null,
         },
       });
 

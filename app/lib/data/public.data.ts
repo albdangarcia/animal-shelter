@@ -12,8 +12,6 @@ export type PetsPayload = Prisma.AnimalGetPayload<{
   select: {
     id: true;
     name: true;
-    city: true;
-    state: true;
     birthDate: true;
     listingStatus: true;
     size: true;
@@ -144,7 +142,7 @@ export const fetchPublishedPets = async ({
     listingStatus: {
       in: [AnimalListingStatus.PUBLISHED, AnimalListingStatus.PENDING_ADOPTION],
     },
-    // Free-text search across name, breed, and city so adopters don't need to
+    // Free-text search across name and breed so adopters don't need to
     // know a pet's assigned name. Only applied when there's a query; combines
     // as AND with the species and color filters below.
     ...(query && {
@@ -155,7 +153,6 @@ export const fetchPublishedPets = async ({
             some: { name: { contains: query, mode: "insensitive" } },
           },
         },
-        { city: { contains: query, mode: "insensitive" } },
       ],
     }),
     ...(speciesName && {
@@ -198,8 +195,6 @@ export const fetchPublishedPets = async ({
         select: {
           id: true,
           name: true,
-          city: true,
-          state: true,
           birthDate: true,
           ...PET_CARD_TAG_SELECT,
           animalImages: {
@@ -265,7 +260,6 @@ export const fetchColors = async () => {
 export type FavoritePet = {
   id: string;
   name: string;
-  city: string | null;
   birthDate: Date;
   listingStatus: AnimalListingStatus;
   size: AnimalSize | null;
@@ -311,7 +305,6 @@ export const fetchFavoritePets = async (): Promise<{
           select: {
             id: true,
             name: true,
-            city: true,
             birthDate: true,
             listingStatus: true,
             ...PET_CARD_TAG_SELECT,
@@ -370,8 +363,6 @@ export const fetchPublicPagePetById = async (id: string) => {
         id: true,
         name: true,
         listingStatus: true,
-        city: true,
-        state: true,
         birthDate: true,
         currentWeightGrams: true,
         heightCm: true,
@@ -472,7 +463,6 @@ export const fetchLatestPublicAnimals = async (take: number = 4) => {
         id: true,
         name: true,
         birthDate: true,
-        city: true,
         ...PET_CARD_TAG_SELECT,
         animalImages: {
           select: {
@@ -517,7 +507,6 @@ export type SpotlightAnimal = {
   name: string;
   breedString: string; // joined breed names, or "Mixed breed"
   ageString: string | null;
-  city: string | null;
   description: string | null;
   weightGrams: number | null;
   isSpayedNeutered: boolean;
@@ -570,7 +559,6 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
         id: true,
         name: true,
         birthDate: true,
-        city: true,
         description: true,
         currentWeightGrams: true,
         isSpayedNeutered: true,
@@ -662,7 +650,6 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
         birthDate: animal.birthDate,
         simple: true,
       }),
-      city: animal.city,
       description: animal.description,
       weightGrams: animal.currentWeightGrams,
       isSpayedNeutered: animal.isSpayedNeutered,

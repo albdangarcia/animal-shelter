@@ -100,7 +100,7 @@ const Page = async ({ searchParams }: Props) => {
               than the viewport at 320px. */}
           <div className="w-full min-w-0 lg:w-auto lg:max-w-sm lg:flex-1">
             <Search
-              placeholder="Search by name, breed, or city"
+              placeholder="Search by name or breed"
               className="h-9 rounded-full border-border bg-card pl-11 shadow-none"
               iconClassName="left-4 h-4 w-4 text-organic-neutral-500"
             />

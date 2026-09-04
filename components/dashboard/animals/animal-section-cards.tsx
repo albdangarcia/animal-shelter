@@ -154,14 +154,6 @@ const AnimalSectionCards = async ({ params }: Props) => {
                   <CardDescription>
                     {animal.breeds.map((breed) => breed.name).join(" • ")}
                   </CardDescription>
-                  {animal.city && animal.state && (
-                    <div className="flex items-center gap-1 text-sm text-muted-foreground mt-2">
-                      <MapPin className="h-3 w-3" />
-                      <span>
-                        {animal.city}, {animal.state}
-                      </span>
-                    </div>
-                  )}
                 </div>
                 <CardAction>
                   <Badge variant="outline">
