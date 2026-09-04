@@ -39,7 +39,7 @@ const activityConfig: Record<
   },
   TASK_ASSIGNED: {
     icon: ClipboardList,
-    text: "was assigned a task for",
+    text: "is assigned a task for",
   },
   NOTE_AUTHORED: {
     icon: FileText,

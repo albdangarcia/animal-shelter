@@ -19,7 +19,7 @@ const personTabDefinitions = [
   { suffix: "/history", label: "Animal History" },
   { suffix: "/adoption-applications", label: "Adoption Applications" },
   { suffix: "/fostering", label: "Fostering", permission: "fosters" as const },
-  { suffix: "/activity", label: "Activity" },
+  { suffix: "/activity", label: "Staff Activity" },
   { suffix: "/notes", label: "Notes" },
 ];
 
