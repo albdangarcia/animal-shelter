@@ -41,9 +41,14 @@ const Page = async ({ params }: Props) => {
       <h1 className="mb-6 text-center font-display text-[clamp(32px,5vw,44px)] text-foreground">
         Adoption Application
       </h1>
+      {/* The form's Selects portal their dropdowns to <body>, outside this
+          layout's .theme-organic div. The form is shared with the dashboard,
+          so the scope is re-opened here at the call site rather than inside
+          the form. */}
       <MyApplicationForm
         animal={animalToAdopt}
         applicantDefaults={applicantDefaults}
+        selectContentClassName="theme-organic"
       />
     </main>
   );

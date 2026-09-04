@@ -61,12 +61,23 @@ interface MyApplicationFormProps {
   animal: AnimalForAdoptionApplicationPayload;
   application?: AdoptionApplicationPayload;
   applicantDefaults?: AdoptionApplicantDefaultsPayload | null;
+  /**
+   * Merged into every `SelectContent` this form renders. Select portals its
+   * content to `<body>`, so a caller that sits inside a token scope — the
+   * public pages' `.theme-organic` — has to re-open the scope here or the
+   * dropdown resolves its tokens against the dashboard's theme and renders
+   * black-on-cream under dark mode. The decision belongs at the call site:
+   * this form is shared, and the dashboard callers must keep inheriting the
+   * dashboard's theme.
+   */
+  selectContentClassName?: string;
 }
 
 export function MyApplicationForm({
   animal,
   application,
   applicantDefaults,
+  selectContentClassName,
 }: MyApplicationFormProps) {
   const isEditMode = !!application;
 
@@ -291,7 +302,7 @@ export function MyApplicationForm({
                               <SelectValue placeholder="Select a state" />
                             </SelectTrigger>
                           </FormControl>
-                          <SelectContent>
+                          <SelectContent className={selectContentClassName}>
                             {US_STATES.map((state) => (
                               <SelectItem key={state.code} value={state.code}>
                                 {state.name}
@@ -343,7 +354,7 @@ export function MyApplicationForm({
                             <SelectValue placeholder="Select your living situation" />
                           </SelectTrigger>
                         </FormControl>
-                        <SelectContent>
+                        <SelectContent className={selectContentClassName}>
                           {livingSituationOptions.map((option) => (
                             <SelectItem key={option.value} value={option.value}>
                               {option.label}
