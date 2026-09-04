@@ -37,20 +37,37 @@ const Page = async ({ params }: Props) => {
   const applicantDefaults = await fetchAdoptionApplicantDefaults();
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-5 py-10 sm:px-8 sm:py-14 lg:px-14">
-      <h1 className="mb-6 text-center font-display text-[clamp(32px,5vw,44px)] text-foreground">
-        Adoption Application
-      </h1>
-      {/* The form's Selects portal their dropdowns to <body>, outside this
-          layout's .theme-organic div. The form is shared with the dashboard,
-          so the scope is re-opened here at the call site rather than inside
-          the form. */}
-      <MyApplicationForm
-        animal={animalToAdopt}
-        applicantDefaults={applicantDefaults}
-        selectContentClassName="theme-organic"
-      />
-    </main>
+    <>
+      {/* The same accent band the nav carries, so the two read as one surface
+          (spec §4.1, phase 2 §B.1). */}
+      <section className="bg-organic-accent-100">
+        <div className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8 sm:py-20 lg:px-14">
+          <h1 className="mb-5 font-display text-[clamp(34px,5vw,56px)] leading-[1.05] tracking-[-0.02em]">
+            Adoption Application
+          </h1>
+          <p className="max-w-[52ch] text-[16px] leading-[1.65] text-pretty text-organic-neutral-800">
+            Three short sections about you and your home, so we can be sure
+            this is a good fit.
+          </p>
+        </div>
+      </section>
+
+      {/* max-w-6xl, not the 3xl this page used to run at: the form's public
+          shell is a two-column section grid and needs the same measure the
+          rest of app/(publicpages) uses. */}
+      <main className="mx-auto w-full max-w-6xl px-5 pt-10 pb-16 sm:px-8 sm:pt-12 lg:px-14 lg:pb-20">
+        {/* The form's Selects portal their dropdowns to <body>, outside this
+            layout's .theme-organic div. The form is shared with the dashboard,
+            so the scope is re-opened here at the call site rather than inside
+            the form. */}
+        <MyApplicationForm
+          animal={animalToAdopt}
+          applicantDefaults={applicantDefaults}
+          variant="public"
+          selectContentClassName="theme-organic"
+        />
+      </main>
+    </>
   );
 };
 
