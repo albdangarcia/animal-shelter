@@ -28,6 +28,7 @@ import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 const OUTCOMES_PATH = "/dashboard/outcomes";
+const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
 
 interface CreateOutcomeIds {
   animalId: string;
@@ -231,8 +232,10 @@ const _createOutcome = async (
   revalidatePath(`/dashboard/animals/${animalId}`);
 
   if (adoptionApplicationId) {
-    revalidatePath("/dashboard/applications");
-    revalidatePath(`/dashboard/applications/${adoptionApplicationId}`);
+    revalidatePath(ADOPTION_APPLICATIONS_PATH);
+    revalidatePath(
+      `${ADOPTION_APPLICATIONS_PATH}/${adoptionApplicationId}/edit`,
+    );
   }
 
   return {

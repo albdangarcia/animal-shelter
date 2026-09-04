@@ -214,7 +214,7 @@ const _staffUpdateAdoptionApp = async (
   }
 
   revalidatePath(ADOPTION_APPLICATIONS_PATH);
-  revalidatePath(`${ADOPTION_APPLICATIONS_PATH}/${validatedAdoptionAppId}`);
+  revalidatePath(`${ADOPTION_APPLICATIONS_PATH}/${validatedAdoptionAppId}/edit`);
 
   return {
     ok: true,
