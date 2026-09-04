@@ -5,5 +5,5 @@
 -- clears the stale assignments already in the table.
 UPDATE "animals"
 SET "current_unit_id" = NULL
-WHERE "listing_status" = 'ARCHIVED'
+WHERE "listingStatus" = 'ARCHIVED'
   AND "current_unit_id" IS NOT NULL;
