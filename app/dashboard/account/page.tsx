@@ -5,7 +5,7 @@ import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied"
 import { fetchMyHouseholdProfile, fetchMyProfile } from "@/app/lib/data/people-directory/people-directory.data";
 import { notFound } from "next/navigation";
 import { SearchParamsType } from "@/app/lib/types";
-import HouseholdProfileForm from "@/components/dashboard/account/household-profile-form";
+import { SelfHouseholdForm } from "@/components/dashboard/household/self-household-form";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -42,7 +42,7 @@ const PageContent = async ({ searchParams }: Props) => {
         cancelHref="/dashboard"
         returnTo={resolvedReturnTo}
       />
-      <HouseholdProfileForm
+      <SelfHouseholdForm
         householdProfile={householdProfile}
       />
     </main>
