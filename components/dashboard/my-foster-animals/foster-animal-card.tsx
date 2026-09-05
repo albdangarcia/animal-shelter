@@ -3,7 +3,11 @@ import Link from "next/link";
 import { AnimalListingStatus } from "@/prisma/generated/enums";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { calculateAgeString, formatDateOrNA } from "@/app/lib/utils/date-utils";
+import {
+  calculateAgeString,
+  formatDateOrNA,
+  isFosterPlacementOverdue,
+} from "@/app/lib/utils/date-utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { MyFosterPlacementPayload } from "@/app/lib/data/fosters/my-foster-animals.data";
 
@@ -67,7 +71,16 @@ export function FosterAnimalCard({ placement }: Props) {
           <p className="text-muted-foreground">
             Since {formatDateOrNA(placement.startDate)}
             {placement.expectedEndDate && (
-              <> · Expected return {formatDateOrNA(placement.expectedEndDate)}</>
+              <>
+                {" · "}Expected return{" "}
+                {formatDateOrNA(placement.expectedEndDate)}
+                {/* The foster's own view, not staff's: the date is an estimate
+                    the shelter set, so state the fact plainly rather than
+                    flagging a volunteer as "Overdue". */}
+                {isFosterPlacementOverdue(placement.expectedEndDate) && (
+                  <span className="text-foreground/80"> (date passed)</span>
+                )}
+              </>
             )}
           </p>
 
