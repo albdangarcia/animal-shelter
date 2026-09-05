@@ -2432,7 +2432,7 @@ async function seedPersonsAndUsers() {
   }
 
   for (const pData of personData) {
-    const person = await prisma.person.create({
+    await prisma.person.create({
       data: {
         name: pData.name,
         email: pData.email,

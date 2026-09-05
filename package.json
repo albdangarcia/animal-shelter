@@ -10,7 +10,7 @@
     "dev": "next dev",
     "build": "prisma migrate deploy && next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint --max-warnings 0",
     "e2e": "playwright test",
     "test": "tsx --test \"app/**/*.test.ts\"",
     "test:db": "tsx scripts/test-db.ts",
