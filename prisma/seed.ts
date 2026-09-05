@@ -494,7 +494,7 @@ const speciesImagePools = buildSpeciesImagePools();
 // Per-species queue of not-yet-dealt individuals, so generated animals are
 // spread across every individual before any repeats. Reshuffled (rather than
 // picked at random each time) whenever a species' queue runs dry.
-const individualDealQueues: Partial<Record<keyof typeof allSpecies, SpeciesIndividual[]>> = {};
+let individualDealQueues: Partial<Record<keyof typeof allSpecies, SpeciesIndividual[]>> = {};
 
 function dealIndividual(speciesKey: keyof typeof allSpecies): SpeciesIndividual {
   let queue = individualDealQueues[speciesKey];
@@ -4307,6 +4307,10 @@ async function seedPublicFavorites() {
 
 export async function main() {
   const restoreRandom = installDeterministicRandom();
+  // Drain any leftover deal queues so a second main() in the same process
+  // (two demo resets via app/api/reset-demo without a server restart) assigns
+  // images identically to a fresh run.
+  individualDealQueues = {};
 
   try {
     await seedAll();
