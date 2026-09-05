@@ -5,6 +5,7 @@ import {
   FosterReturnReason,
 } from "@/prisma/generated/enums";
 import { cuidSchema, requiredNumber, usStateSchema } from "./common.schemas";
+import { isFosterPlacementOverdue } from "@/app/lib/utils/date-utils";
 import {
   householdFieldsShape,
   householdSuperRefine,
@@ -138,7 +139,17 @@ export const CreateFosterPlacementSchema = z.object({
     error: (issue) =>
       issue.input === undefined ? "A placement type is required." : undefined,
   }),
-  expectedEndDate: z.date().optional(),
+  // Optional by design: a foster ends on an outcome, not a date, and
+  // LONG_TERM / FOSTER_TO_ADOPT placements are open-ended. When a date *is*
+  // set it feeds attention-queue Signal 3, so reject a past date here — the
+  // calendar only greys out past days client-side, and a placement created
+  // already overdue is never intentional.
+  expectedEndDate: z
+    .date()
+    .refine((date) => !isFosterPlacementOverdue(date), {
+      error: "An expected return date cannot be in the past.",
+    })
+    .optional(),
   notes: z.string().optional(),
 });
 

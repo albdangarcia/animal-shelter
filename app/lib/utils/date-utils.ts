@@ -6,6 +6,7 @@ import {
   differenceInDays,
   addYears,
   isPast,
+  startOfDay,
   formatDistanceToNowStrict,
 } from "date-fns";
 import { TaskStatus } from "@/prisma/generated/enums";
@@ -182,4 +183,24 @@ export const formatDueDate = (
 
   // For all other cases (done tasks, future tasks), use the standard time ago format
   return formatTimeAgo(dateInput);
+};
+
+/**
+ * True when an open foster placement's expected return date has already passed.
+ *
+ * Mirrors attention-queue Signal 3: strictly before *today*, so a placement
+ * expected back today is not yet overdue. Keep in sync with the
+ * `expectedEndDate: { lt: startOfToday }` filter in attention-queue.data.ts.
+ *
+ * Deliberately not `isPast()` — that is timestamp-based and would flag a
+ * placement due today as overdue by mid-morning, contradicting the queue.
+ *
+ * @param {Date | string | null | undefined} expectedEndDate - The expected return date.
+ * @returns {boolean} True only when a date is set and it falls before today.
+ */
+export const isFosterPlacementOverdue = (
+  expectedEndDate: Date | string | null | undefined
+): boolean => {
+  if (!expectedEndDate) return false;
+  return new Date(expectedEndDate) < startOfDay(new Date());
 };

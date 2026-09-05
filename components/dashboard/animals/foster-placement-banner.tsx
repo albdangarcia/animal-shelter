@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { Badge } from "@/components/ui/badge";
+import {
+  formatDateOrNA,
+  isFosterPlacementOverdue,
+} from "@/app/lib/utils/date-utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { AnimalSectionCardPayload } from "@/app/lib/types";
 import { FosterPlacementType } from "@/prisma/generated/enums";
@@ -25,6 +29,9 @@ export function FosterPlacementBanner({
   canManageFosters,
 }: Props) {
   const fosterName = placement.fosterProfile.person.name;
+  // Staff-facing surface: this is the same condition that puts the placement
+  // in the attention queue, so the two always agree on the same animal.
+  const isOverdue = isFosterPlacementOverdue(placement.expectedEndDate);
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/40 @xl/main:flex-row @xl/main:items-center @xl/main:justify-between">
@@ -45,7 +52,18 @@ export function FosterPlacementBanner({
           since {formatDateOrNA(placement.startDate)} ·{" "}
           {formatSingleEnumOption(placement.type)}
           {placement.expectedEndDate && (
-            <> · expected return {formatDateOrNA(placement.expectedEndDate)}</>
+            <>
+              {" · "}expected return{" "}
+              {formatDateOrNA(placement.expectedEndDate)}
+              {isOverdue && (
+                <Badge
+                  variant="outline"
+                  className="ml-1.5 border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                >
+                  Overdue
+                </Badge>
+              )}
+            </>
           )}
         </p>
       </div>
