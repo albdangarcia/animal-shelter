@@ -147,6 +147,7 @@ Typical values per environment:
 | Variable              | Required    | Description                                                                                                                                                                                                    |
 | ---------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `DEV_LINK_TEST_EMAIL` | ⚪ Optional | Local development only. When set, gives one seeded walk-in person this email address, so signing in with an OAuth account whose verified email matches will exercise the account-to-person linking rule. Leave unset in any shared or deployed environment. |
+| `SEED_RANDOM_SEED` | ⚪ Optional | Seeds the PRNG the seed script uses, so the same value produces the same fixture data on every run — which is what stops e2e specs from depending on a lucky draw. Defaults to a fixed value, so leave it unset for reproducible seeding; set it only to deliberately generate a different, still-reproducible dataset. Dates still anchor to the current date, so runs on different days differ regardless. |
 
 ### Generating `BETTER_AUTH_SECRET`
 
