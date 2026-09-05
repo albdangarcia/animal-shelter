@@ -42,6 +42,68 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { resolveDatabaseUrl } from "@/app/lib/db-url";
 import { phoneNormalizationExtension } from "@/app/lib/prisma-extensions/phone-normalization";
 
+// =================================================================//
+//                      DETERMINISTIC RANDOMNESS                     //
+// =================================================================//
+//
+// The seed is fixture data, not a simulation: variety across reseeds buys
+// nothing and costs reproducibility. `seedPublicFavorites` already draws by
+// stable `name, id` ordering for exactly this reason — see its comment — and
+// this generalises that decision to the rest of the file. Without it, the
+// walk-in applicant pool hands HouseholdProfiles to a different set of people
+// on every reseed, so an e2e spec can pass nine runs and fail the tenth with
+// `retries: 2` quietly absorbing the difference.
+//
+// `Math.random` is replaced wholesale rather than threaded through as a helper
+// so the ~30 existing call sites here and in app/lib/utils/seeding-utils.ts are
+// covered without edits — and, more importantly, so a call site added later is
+// deterministic by default instead of silently reintroducing the drift.
+//
+// Installed for the duration of main() and then restored — NOT at module load.
+// This module is not only a script: app/api/reset-demo/route.ts imports main()
+// from here, so a top-level assignment would permanently replace Math.random
+// for the whole Next.js server process on the demo deployment. Nothing here
+// relies on Math.random for unpredictability — better-auth derives tokens, ids
+// and salts from crypto, and the generated Prisma client uses crypto for cuids
+// — but a global that outlives the call that needed it is a trap regardless.
+//
+// This does NOT make the seed reproducible across days: every date helper
+// anchors to `new Date()`, and freezing that would make the demo look stale.
+// Determinism here means "same day, same data".
+
+// mulberry32: small, fast, well-distributed enough for fixture data, and no
+// dependency. Explicitly not suitable for anything security-relevant.
+const mulberry32 = (seed: number) => {
+  let a = seed >>> 0;
+
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+// Returns the restore function, so the caller decides the lifetime. Validation
+// lives here rather than at module scope so a malformed SEED_RANDOM_SEED fails
+// the seeding run instead of the server that merely imported this file.
+const installDeterministicRandom = (): (() => void) => {
+  const raw = process.env.SEED_RANDOM_SEED;
+  const seed = Number(raw ?? 20260101);
+
+  if (!Number.isFinite(seed)) {
+    throw new Error(`SEED_RANDOM_SEED must be a number (got "${raw}").`);
+  }
+
+  const original = Math.random;
+  Math.random = mulberry32(seed);
+
+  return () => {
+    Math.random = original;
+  };
+};
+
 const adapter = new PrismaPg({ connectionString: resolveDatabaseUrl("direct") });
 const prisma = new PrismaClient({ adapter }).$extends(phoneNormalizationExtension);
 
@@ -4244,6 +4306,16 @@ async function seedPublicFavorites() {
 }
 
 export async function main() {
+  const restoreRandom = installDeterministicRandom();
+
+  try {
+    await seedAll();
+  } finally {
+    restoreRandom();
+  }
+}
+
+async function seedAll() {
   console.log("Start seeding new data...");
   await clearDatabase();
   await seedPersonsAndUsers();
