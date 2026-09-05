@@ -32,6 +32,58 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  # Nothing else in CI exercises the migration files: the e2e harness builds its
+  # schema with `prisma db push`, while Vercel's build runs `prisma migrate
+  # deploy`. So a schema.prisma change committed without a generated migration
+  # passes every other check and only fails at deploy time. This job closes that
+  # gap — no seed, no browsers, no compose file, so it reports in under a minute.
+  migrations:
+    # This name is the required-status-check key in the `main` ruleset.
+    # Renaming it silently stops the check reporting and blocks every PR.
+    name: migrations
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # `direct` mode, which is what migrations require — prisma.config.ts calls
+      # resolveDatabaseUrl("direct"), and that reads this variable.
+      DATABASE_URL_UNPOOLED: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      # Replays every migration into an empty database. Fails if any of them is
+      # broken or out of order — the thing Vercel would otherwise discover first.
+      - name: Apply migrations from zero
+        run: npx prisma migrate deploy
+
+      # Then compares that materialized result against schema.prisma. Exit code 2
+      # means they disagree, i.e. the schema was edited without a migration being
+      # generated. No shadow database is needed because `migrate deploy` above
+      # already materialized the migrations into a real one.
+      - name: Check migrations match schema.prisma
+        run: |
+          npx prisma migrate diff \
+            --from-config-datasource \
+            --to-schema=./prisma/schema.prisma \
+            --exit-code
+
   e2e:
     # This name is the required-status-check key in the `main` ruleset.
     # Renaming it silently stops the check reporting and blocks every PR.
