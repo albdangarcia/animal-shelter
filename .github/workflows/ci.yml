@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to a PR cancels the run it superseded instead of queueing behind it.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    # This name is the required-status-check key in the `main` ruleset.
+    # Renaming it silently stops the check reporting and blocks every PR.
+    name: checks
+    runs-on: ubuntu-latest
+    env:
+      # prisma.config.ts resolves the datasource eagerly at module load, so the
+      # postinstall `prisma generate` throws without this even though nothing
+      # here touches a database. Never connected to.
+      DATABASE_URL_UNPOOLED: postgresql://placeholder:placeholder@127.0.0.1:5432/placeholder
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  e2e:
+    # This name is the required-status-check key in the `main` ruleset.
+    # Renaming it silently stops the check reporting and blocks every PR.
+    name: e2e
+    runs-on: ubuntu-latest
+    # Public repo: secrets are withheld from fork PRs, so skip rather than fail.
+    if: github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    env:
+      BETTER_AUTH_SECRET: ${{ secrets.BETTER_AUTH_SECRET }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      # resolveDatabaseUrl() gives this priority in both pooled and direct
+      # modes, and it matches what playwright/env.ts computes on its own.
+      PLAYWRIGHT_DATABASE_URL: postgresql://postgres:mysecretpassword@127.0.0.1:55432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Install Playwright (browser + system deps)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install Playwright system deps (browser cached)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      # The Prisma query-extension test needs a real Postgres. Run it against
+      # the throwaway container rather than `npm run test:db`, whose
+      # `dotenv -e .env.local -e ...` prefix expects env files a CI checkout
+      # does not have. global-setup re-ups this same compose project
+      # (idempotent) and drops the schema, so these rows cannot reach the seed.
+      - name: Start throwaway Postgres
+        run: docker compose -p animal-shelter-playwright -f docker-compose.playwright.yml up -d --wait
+      - name: Push schema
+        run: npx prisma db push
+      - name: Prisma extension tests
+        run: npx tsx --test "prisma/**/*.test.ts"
+
+      - name: Playwright e2e
+        run: npm run e2e
+
+      - name: Upload Playwright report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
