@@ -45,6 +45,21 @@ const buildDatabaseUrl = () => {
 export const E2E_DATABASE_URL =
   process.env.PLAYWRIGHT_DATABASE_URL ?? buildDatabaseUrl();
 
+// better-auth validates `baseURL.allowedHosts` when the instance is built, and
+// prisma/seed.ts builds one at module load — so an empty list is a hard crash
+// during seeding, not a lazy failure. Locally this arrives from .env; a CI
+// checkout has no .env, which is exactly how it slipped through. Pinned here so
+// the harness never depends on a file it does not control.
+export const E2E_ALLOWED_HOSTS = (() => {
+  let host = `127.0.0.1:${E2E_APP_PORT}`;
+  try {
+    host = new URL(E2E_BASE_URL).host;
+  } catch {
+    // Keep the derived default when PLAYWRIGHT_BASE_URL is not a valid URL.
+  }
+  return [host, "127.0.0.1:*", "localhost:*"].join(",");
+})();
+
 export const getPlaywrightEnv = (): NodeJS.ProcessEnv => {
   const authSecret = process.env.BETTER_AUTH_SECRET;
   const adminPassword = process.env.ADMIN_PASSWORD;
@@ -69,6 +84,15 @@ export const getPlaywrightEnv = (): NodeJS.ProcessEnv => {
     DATABASE_URL_UNPOOLED: E2E_DATABASE_URL,
     PLAYWRIGHT_DATABASE_URL: E2E_DATABASE_URL,
     BETTER_AUTH_URL: E2E_BASE_URL,
+    BETTER_AUTH_ALLOWED_HOSTS: E2E_ALLOWED_HOSTS,
+    // No spec exercises OAuth, but better-auth builds its provider config at
+    // init, so these have to be non-empty. Pinned unconditionally rather than
+    // defaulted, so a developer with real credentials in .env runs the same
+    // configuration CI does — and no real client id reaches a test run.
+    GITHUB_CLIENT_ID: "e2e-placeholder-client-id",
+    GITHUB_CLIENT_SECRET: "e2e-placeholder-client-secret",
+    GOOGLE_CLIENT_ID: "e2e-placeholder-client-id",
+    GOOGLE_CLIENT_SECRET: "e2e-placeholder-client-secret",
     HOSTNAME: "127.0.0.1",
     PORT: E2E_APP_PORT,
     POSTGRES_HOST: "127.0.0.1",
