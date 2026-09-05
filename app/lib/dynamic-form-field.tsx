@@ -1,19 +1,10 @@
 import { Control, ControllerRenderProps, FieldValues, Path } from "react-hook-form";
-import { format } from "date-fns";
-import { Calendar as CalendarIcon } from "lucide-react";
 
-import { cn } from "@/lib/utils";
 import { TemplateField } from "./types";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/forms/date-input";
 import { NumberInput } from "@/components/forms/number-input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   RadioGroup,
   RadioGroupItem,
@@ -144,37 +135,22 @@ export function DynamicFormField({ field, control }: DynamicFormFieldProps) {
           </div>
         );
       case FieldType.DATE:
+        // DateInput, not DateField: the FormItem and FormLabel around this
+        // switch belong to the caller, and the value arrives as a string here
+        // rather than a Date.
         return (
-          <Popover>
-            <PopoverTrigger asChild>
-              <FormControl>
-                <Button
-                  variant={"outline"}
-                  className={cn(
-                    "w-full justify-start text-left font-normal",
-                    !controllerField.value && "text-muted-foreground"
-                  )}
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {controllerField.value ? (
-                    format(new Date(controllerField.value), "PPP")
-                  ) : (
-                    <span>Pick a date</span>
-                  )}
-                </Button>
-              </FormControl>
-            </PopoverTrigger>
-            <PopoverContent className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={
-                  controllerField.value ? new Date(controllerField.value) : undefined
-                }
-                onSelect={controllerField.onChange}
-                autoFocus
-              />
-            </PopoverContent>
-          </Popover>
+          <FormControl>
+            <DateInput
+              className="w-full justify-start"
+              iconPosition="leading"
+              value={
+                controllerField.value
+                  ? new Date(controllerField.value)
+                  : undefined
+              }
+              onChange={controllerField.onChange}
+            />
+          </FormControl>
         );
       default:
         return (

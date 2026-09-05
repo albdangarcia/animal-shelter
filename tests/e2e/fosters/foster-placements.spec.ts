@@ -176,8 +176,11 @@ test("the calendar refuses a past expected return date", async ({ page }) => {
   test.skip(today.getDate() === 1, "No past day is in view on the 1st.");
 
   await openCreateFormForAvailableFoster(page);
+  // DateField composes the label with the current value into the trigger's
+  // accessible name ("Expected Return Date: No expected date"), so a screen
+  // reader announces the selected date and not just the field name.
   await page
-    .getByRole("button", { name: "Expected Return Date", exact: true })
+    .getByRole("button", { name: /^Expected Return Date:/ })
     .click();
 
   const calendar = page.getByRole("dialog");
@@ -198,8 +201,11 @@ test("a placement can record an expected return date", async ({ page }) => {
   await pickFirstEligibleAnimal(page);
   await chooseFromSelect(page, "Placement Type *", "Medical");
 
+  // DateField composes the label with the current value into the trigger's
+  // accessible name ("Expected Return Date: No expected date"), so a screen
+  // reader announces the selected date and not just the field name.
   await page
-    .getByRole("button", { name: "Expected Return Date", exact: true })
+    .getByRole("button", { name: /^Expected Return Date:/ })
     .click();
   const calendar = page.getByRole("dialog");
   // Next month's 15th is always in the future, whatever today is.

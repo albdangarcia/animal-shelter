@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
 import { z } from "zod";
-import { Calendar as CalendarIcon, Loader2, X } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -33,15 +33,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
-import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { DateField } from "@/components/forms/date-field";
+import { isFosterPlacementOverdue } from "@/app/lib/utils/date-utils";
 import { createFosterPlacement } from "@/app/lib/actions/foster-placement.actions";
 import { CreateFosterPlacementSchema } from "@/app/lib/zod-schemas/foster.schemas";
 import { fosterPlacementTypeOptions } from "@/app/lib/utils/enum-formatter";
@@ -227,61 +221,18 @@ export function PlacementCreateForm({
               )}
             />
 
-            <FormField
+            <DateField
               control={form.control}
               name="expectedEndDate"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Expected Return Date</FormLabel>
-                  <div className="flex items-center gap-2">
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            type="button"
-                            className={cn(
-                              "flex-1 justify-start text-left font-normal",
-                              !field.value && "text-muted-foreground",
-                            )}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {field.value ? (
-                              format(field.value, "PPP")
-                            ) : (
-                              <span>No expected date</span>
-                            )}
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={(date) => field.onChange(date)}
-                          disabled={(date) => {
-                            const today = new Date();
-                            today.setHours(0, 0, 0, 0);
-                            return date < today;
-                          }}
-                          autoFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    {field.value && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => field.onChange(undefined)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                  <FormMessage />
-                </FormItem>
-              )}
+              label="Expected Return Date"
+              className="flex flex-col"
+              triggerClassName="flex-1 justify-start"
+              placeholder="No expected date"
+              iconPosition="leading"
+              clearable
+              // The same rule the schema and the overdue badge use, so the
+              // picker can't offer a date the server would reject.
+              disabledDates={isFosterPlacementOverdue}
             />
 
             <FormField

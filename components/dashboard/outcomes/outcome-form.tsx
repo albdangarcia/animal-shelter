@@ -1,7 +1,7 @@
 "use client";
 
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
@@ -13,7 +13,6 @@ import {
   PartnerPayload,
 } from "@/app/lib/types";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Card,
   CardContent,
@@ -30,11 +29,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { DateField } from "@/components/forms/date-field";
 import {
   Select,
   SelectContent,
@@ -44,13 +39,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { PersonPicker } from "@/components/common/person-picker";
-import { format } from "date-fns";
 import { outcomeTypeOptions } from "@/app/lib/utils/enum-formatter";
 import {
   createOutcome,
   updateOutcome,
 } from "@/app/lib/actions/outcome.actions";
-import { cn } from "@/lib/utils";
 import {
   OutcomeFormSchema,
   type OutcomeFormInput,
@@ -199,52 +192,20 @@ export function OutcomeForm({
                   </FormItem>
                 )}
               />
-              <FormField
+              <DateField
                 control={form.control}
                 name="outcomeDate"
-                render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel>Date of Outcome *</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground",
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "PPP")
-                            ) : (
-                              <span>Pick a date</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={(date) => {
-                            if (date) {
-                              field.onChange(date);
-                            }
-                          }}
-                          disabled={(date) => {
-                            const today = new Date();
-                            today.setHours(23, 59, 59, 999);
-                            return date > today;
-                          }}
-                          autoFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                label="Date of Outcome *"
+                className="flex flex-col"
+                triggerClassName="pl-3"
+                // Required field: clicking the selected day again must not
+                // clear it.
+                keepValueOnDeselect
+                disabledDates={(date) => {
+                  const today = new Date();
+                  today.setHours(23, 59, 59, 999);
+                  return date > today;
+                }}
               />
             </div>
 

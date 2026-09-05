@@ -5,15 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
-import { format } from "date-fns";
-import {
-  Calendar as CalendarIcon,
-  Check,
-  ChevronsUpDown,
-  Loader2,
-  TriangleAlert,
-  X,
-} from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +27,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
   PopoverContent,
@@ -59,6 +50,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
+import { DateField } from "@/components/forms/date-field";
 import {
   AnimalHealthStatus,
   AnimalListingStatus,
@@ -523,51 +515,15 @@ const AnimalForm = ({
                     </FormItem>
                   )}
                 />
-                <FormField
+                <DateField
                   control={form.control}
                   name="estimatedBirthDate"
-                  render={({ field }) => {
-                    const dateValue = field.value as Date | undefined;
-
-                    return (
-                      <FormItem className="col-span-2">
-                        <FormLabel>Estimated Birth Date</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant={"outline"}
-                                className={cn(
-                                  "w-full pl-3 text-left font-normal",
-                                  !dateValue && "text-muted-foreground",
-                                )}
-                              >
-                                {dateValue ? (
-                                  format(dateValue, "PPP")
-                                ) : (
-                                  <span>Pick a date</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={dateValue}
-                              onSelect={field.onChange}
-                              disabled={(date) =>
-                                date > new Date() ||
-                                date < new Date("1900-01-01")
-                              }
-                              autoFocus
-                            />
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
+                  label="Estimated Birth Date"
+                  className="col-span-2"
+                  triggerClassName="w-full pl-3"
+                  disabledDates={(date) =>
+                    date > new Date() || date < new Date("1900-01-01")
+                  }
                 />
                 <FormField
                   control={form.control}
