@@ -29,6 +29,12 @@ const Loading = () => {
       </CardHeader>
 
       <CardContent className="space-y-10">
+        {/* Section 0 — Animal */}
+        <div className="space-y-4">
+          <Skeleton className="h-5 w-24 border-b pb-2" />
+          <Skeleton className="h-9 w-full" />
+        </div>
+
         {/* Section 1 — Applicant Information */}
         <div className="space-y-6">
           <Skeleton className="h-5 w-48 border-b pb-2" />

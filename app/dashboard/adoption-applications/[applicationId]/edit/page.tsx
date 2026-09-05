@@ -1,42 +1,44 @@
-import { Suspense } from "react";
+import { Authorize } from "@/components/auth/authorize";
+import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { fetchAdoptionApplicationForEdit } from "@/app/lib/data/people-directory/person-adoption-applications.data";
 import { notFound } from "next/navigation";
-import { fetchAdoptionApplicationById } from "@/app/lib/data/user-adoption-application.data";
-import { StaffApplicationUpdateForm } from "@/components/dashboard/adoption-applications/adoption-staff-edit-application-form";
-import { Button } from "@/components/ui/button";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import StaffAdoptionApplicationEditForm from "@/components/dashboard/people-directory/adoption-applications/staff-adoption-application-edit-form";
+import { SearchParamsType } from "@/app/lib/types";
 
 interface Props {
   params: Promise<{ applicationId: string }>;
+  searchParams: SearchParamsType;
 }
 
-const Page = async ({ params }: Props) => {
+const Page = async ({ params, searchParams }: Props) => {
+  return (
+    <Authorize
+      permission={AppPermissions.PERSONS_MANAGE}
+      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+    >
+      <PageContent params={params} searchParams={searchParams} />
+    </Authorize>
+  );
+};
+
+const PageContent = async ({ params, searchParams }: Props) => {
   const { applicationId } = await params;
+  const { returnTo } = await searchParams;
 
-  const userApplication = await fetchAdoptionApplicationById(applicationId);
+  const application = await fetchAdoptionApplicationForEdit(applicationId);
 
-  if (!userApplication) {
-    notFound();
-  }
-
-  const animal = userApplication.animal;
-  
-  if (!animal) {
+  if (!application) {
     notFound();
   }
 
   return (
-    <main className="container mx-auto">
-      <Button asChild variant="ghost" className="mb-4">
-        <Link href="/dashboard/adoption-applications">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Applications
-        </Link>
-      </Button>
-
-      <Suspense fallback={<div>Loading application...</div>}>
-        <StaffApplicationUpdateForm application={userApplication} animal={animal} />
-      </Suspense>
+    <main>
+      <StaffAdoptionApplicationEditForm
+        application={application}
+        personId={application.applicantId}
+        returnTo={returnTo}
+      />
     </main>
   );
 };

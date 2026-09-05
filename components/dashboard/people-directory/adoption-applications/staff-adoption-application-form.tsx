@@ -58,12 +58,14 @@ interface Props {
   person: PersonForApplicationFormPayload;
   animalResults: AnimalSearchResult[];
   animalSearch: string;
+  returnTo?: string;
 }
 
 const StaffAdoptionApplicationForm = ({
   person,
   animalResults,
   animalSearch,
+  returnTo,
 }: Props) => {
   const hp = person.householdProfile;
   const router = useRouter();
@@ -102,15 +104,22 @@ const StaffAdoptionApplicationForm = ({
   const [isAnimalSearchOpen, setIsAnimalSearchOpen] = useState(false);
   const [isSearchPending, startSearchTransition] = useTransition();
 
+  // The animal search re-renders the page server-side, so personId / returnTo
+  // (now query params on the standalone route, not path segments) have to be
+  // carried on every replace or the page loses the person it is filing for.
+  const buildUrl = (query: string) => {
+    const params = new URLSearchParams();
+    params.set("personId", person.id);
+    if (returnTo) params.set("returnTo", returnTo);
+    if (query.trim().length >= 2) {
+      params.set("animalSearch", query.trim());
+    }
+    return `${pathname}?${params.toString()}`;
+  };
+
   const updateSearchParam = useDebouncedCallback((query: string) => {
     startSearchTransition(() => {
-      if (query.trim().length >= 2) {
-        router.replace(
-          `${pathname}?animalSearch=${encodeURIComponent(query.trim())}`,
-        );
-      } else {
-        router.replace(pathname);
-      }
+      router.replace(buildUrl(query));
     });
   }, 300);
 
@@ -118,7 +127,11 @@ const StaffAdoptionApplicationForm = ({
   // the action, and the values go over as an object.
   const onSubmit = (values: FormValues) => {
     startSubmitTransition(async () => {
-      const result = await staffCreateAdoptionApplication(person.id, values);
+      const result = await staffCreateAdoptionApplication(
+        person.id,
+        returnTo ?? null,
+        values,
+      );
 
       if (result.ok) {
         toast.success(result.message);
@@ -175,7 +188,7 @@ const StaffAdoptionApplicationForm = ({
                             setSelectedAnimal(null);
                             setAnimalQuery("");
                             field.onChange("");
-                            router.replace(pathname);
+                            router.replace(buildUrl(""));
                           }}
                         >
                           <X className="h-4 w-4 mr-1" />
@@ -234,7 +247,7 @@ const StaffAdoptionApplicationForm = ({
                                         field.onChange(animal.id);
                                         setIsAnimalSearchOpen(false);
                                         setAnimalQuery("");
-                                        router.replace(pathname);
+                                        router.replace(buildUrl(""));
                                       }}
                                     >
                                       <span>{animal.name}</span>
@@ -270,7 +283,10 @@ const StaffAdoptionApplicationForm = ({
               disabled={isPending}
             >
               <Link
-                href={`/dashboard/people-directory/${person.id}/adoption-applications`}
+                href={
+                  returnTo ??
+                  `/dashboard/people-directory/${person.id}/adoption-applications`
+                }
               >
                 Cancel
               </Link>

@@ -42,7 +42,7 @@ export function DataTableRowActions({ row, canManage }: DataTableRowActionsProps
       <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuLabel>Actions</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <Link href={`/dashboard/adoption-applications/${userApplication.id}/edit`}>
+        <Link href={`/dashboard/adoption-applications/${userApplication.id}/review`}>
           <DropdownMenuItem>Review</DropdownMenuItem>
         </Link>
       </DropdownMenuContent>

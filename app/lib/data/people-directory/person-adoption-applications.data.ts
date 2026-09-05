@@ -9,9 +9,10 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import z from "zod";
 
-export type PersonApplicationForEditPayload =
+export type AdoptionApplicationForEditPayload =
   Prisma.AdoptionApplicationGetPayload<{
     select: {
+      applicant: { select: { user: { select: { id: true } } } };
       id: true;
       status: true;
       applicantId: true;
@@ -138,34 +139,24 @@ const _fetchPersonAdoptionApplications = async (
   }
 };
 
-const _fetchPersonApplicationForEdit = async (
+const _fetchAdoptionApplicationForEdit = async (
   applicationId: string,
-  personId: string,
-): Promise<PersonApplicationForEditPayload | null> => {
+): Promise<AdoptionApplicationForEditPayload | null> => {
   const parsedApplicationId = cuidSchema.safeParse(applicationId);
-  const parsedPersonId = cuidSchema.safeParse(personId);
 
-  if (!parsedApplicationId.success || !parsedPersonId.success) {
+  if (!parsedApplicationId.success) {
     throw new Error("Invalid ID format.");
   }
 
   try {
-    // Only walk-in contacts (no user account) can have their applications edited by staff.
-    const person = await prisma.person.findUnique({
-      where: { id: parsedPersonId.data },
-      select: { user: { select: { id: true } } },
-    });
-
-    if (!person || person.user !== null) {
-      return null;
-    }
-
     const application = await prisma.adoptionApplication.findUnique({
       where: {
         id: parsedApplicationId.data,
-        applicantId: parsedPersonId.data,
       },
       select: {
+        // Only walk-in contacts (no user account) can have their applications
+        // edited by staff — registered users manage their own.
+        applicant: { select: { user: { select: { id: true } } } },
         id: true,
         status: true,
         applicantId: true,
@@ -196,9 +187,13 @@ const _fetchPersonApplicationForEdit = async (
       },
     });
 
+    if (!application || application.applicant.user !== null) {
+      return null;
+    }
+
     return application;
   } catch (error) {
-    console.error("Error fetching person application for edit.", error);
+    console.error("Error fetching adoption application for edit.", error);
     throw new Error("Could not fetch application for editing.");
   }
 };
@@ -208,6 +203,6 @@ export const fetchPersonAdoptionApplications = RequirePermission(
   AppPermissions.PERSONS_READ,
 )(_fetchPersonAdoptionApplications);
 
-export const fetchPersonApplicationForEdit = RequirePermission(
+export const fetchAdoptionApplicationForEdit = RequirePermission(
   AppPermissions.PERSONS_MANAGE,
-)(_fetchPersonApplicationForEdit);
+)(_fetchAdoptionApplicationForEdit);

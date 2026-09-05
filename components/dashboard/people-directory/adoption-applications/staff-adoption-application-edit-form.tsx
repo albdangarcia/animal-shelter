@@ -25,7 +25,7 @@ import {
 import { toYesNo, boolToSelectValue } from "@/app/lib/utils/form-utils";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { staffEditPersonApplication } from "@/app/lib/actions/adoption-application.actions";
-import { PersonApplicationForEditPayload } from "@/app/lib/data/people-directory/person-adoption-applications.data";
+import { AdoptionApplicationForEditPayload } from "@/app/lib/data/people-directory/person-adoption-applications.data";
 import {
   ApplicantFieldsSection,
   ApplicantFieldValues,
@@ -34,15 +34,15 @@ import {
 type FormValues = MyAdoptionAppFormInput;
 
 interface Props {
-  application: PersonApplicationForEditPayload;
+  application: AdoptionApplicationForEditPayload;
   personId: string;
-  callbackUrl?: string;
+  returnTo?: string;
 }
 
 const StaffAdoptionApplicationEditForm = ({
   application,
   personId,
-  callbackUrl,
+  returnTo,
 }: Props) => {
   const [isPending, startSubmitTransition] = useTransition();
   const router = useRouter();
@@ -71,14 +71,14 @@ const StaffAdoptionApplicationEditForm = ({
   });
 
   // The three ids are ordinary leading arguments now rather than .bind()-ed
-  // onto the action. callbackUrl is still re-checked server-side before it is
+  // onto the action. returnTo is still re-checked server-side before it is
   // returned as redirectTo — this action is reachable by direct POST.
   const onSubmit = (values: FormValues) => {
     startSubmitTransition(async () => {
       const result = await staffEditPersonApplication(
         application.id,
         personId,
-        callbackUrl ?? null,
+        returnTo ?? null,
         values,
       );
 
@@ -128,12 +128,7 @@ const StaffAdoptionApplicationEditForm = ({
               type="button"
               disabled={isPending}
             >
-              <Link
-                href={
-                  callbackUrl ??
-                  `/dashboard/people-directory/${personId}/adoption-applications`
-                }
-              >
+              <Link href={returnTo ?? "/dashboard/adoption-applications"}>
                 Cancel
               </Link>
             </Button>
