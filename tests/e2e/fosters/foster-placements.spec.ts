@@ -147,7 +147,7 @@ test("an animal already in foster cannot be placed again", async ({ page }) => {
   await page.goto(`${newPlacementPath}?animalId=${animalId}`);
 
   await expect(
-    page.getByText("Already In Foster", { exact: true }),
+    page.getByRole("heading", { name: "Already In Foster" }),
   ).toBeVisible();
   await expect(
     page.getByText(`${placedAnimalName} already has an open foster placement`),
@@ -165,7 +165,7 @@ test("a general placement cannot be converted to an adoption", async ({
   );
 
   await expect(
-    page.getByText("Not a Foster-to-Adopt Placement", { exact: true }),
+    page.getByRole("heading", { name: "Not a Foster-to-Adopt Placement" }),
   ).toBeVisible();
 });
 

@@ -14,7 +14,7 @@ const ActionBlockedMessage = ({ icon: Icon, title, children }: ActionBlockedMess
         <div className="mx-auto bg-yellow-100 dark:bg-yellow-900/30 rounded-full p-3 w-fit">
           <Icon className="h-8 w-8 text-yellow-600 dark:text-yellow-400" />
         </div>
-        <CardTitle className="mt-4">{title}</CardTitle>
+        <CardTitle role="heading" aria-level={2} className="mt-4">{title}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="text-muted-foreground space-y-2">{children}</div>
