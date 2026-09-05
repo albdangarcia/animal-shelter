@@ -1834,7 +1834,6 @@ async function seedVitalsLogSeries(opts: {
         ),
       );
   let weight = startWeightGrams;
-  let latestWeightGrams: number | null = null;
 
   for (let i = 0; i < entryCount; i++) {
     if (i > 0) {
@@ -1872,16 +1871,24 @@ async function seedVitalsLogSeries(opts: {
         deletedAt: isSoftDeleted ? cursor : null,
       },
     });
-
-    if (!isTemperatureOnly && !isSoftDeleted) {
-      latestWeightGrams = Math.round(weight);
-    }
   }
 
-  if (latestWeightGrams != null) {
+  // Re-derive the cache from the database with the app's own "latest entry"
+  // tiebreak chain, rather than trusting loop order for it. A tight window
+  // (a short random stay paired with a multi-entry series) can force several
+  // of the entries above onto the same clamped `windowEnd`-adjacent instant,
+  // at which point loop order and the recordedAt/createdAt/id tiebreak chain
+  // aren't guaranteed to agree on which one is "latest" — this makes the two
+  // agree by construction instead of by avoiding the collision.
+  const latest = await prisma.vitalsLog.findFirst({
+    where: { animalId, deletedAt: null, weightGrams: { not: null } },
+    orderBy: LATEST_ENTRY_ORDER,
+    select: { weightGrams: true },
+  });
+  if (latest) {
     await prisma.animal.update({
       where: { id: animalId },
-      data: { currentWeightGrams: latestWeightGrams },
+      data: { currentWeightGrams: latest.weightGrams },
     });
   }
 }
