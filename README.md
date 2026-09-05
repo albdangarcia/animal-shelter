@@ -274,6 +274,18 @@ This method mirrors the live production environment. It's ideal for testing the 
 6.  **GitHub sign-in needs its own OAuth App per environment**, with that environment's `/api/auth/callback/github` registered on it. It will not work on preview deployments, since their URLs change per deploy; email and password sign-in is unaffected.
 7.  **Deploy**: Trigger a new deployment on Vercel. Your application will be live.
 
+## Tests
+
+| Command | What it runs | Database |
+|---|---|---|
+| `npm test` | Unit tests (`app/**/*.test.ts`) via `node:test` | None |
+| `npm run test:db` | Prisma query-extension tests (`prisma/**/*.test.ts`) via `node:test` | Throwaway `docker-compose.playwright.yml` container on port 55432 — **never** the dev database |
+| `npm run test:all` | `npm test` then `npm run test:db` | As above |
+| `npm run e2e` | Playwright suite (see [End-to-End Tests](#end-to-end-tests)) | Same throwaway container, reset and seeded |
+
+`npm run test:db` (`scripts/test-db.ts`) needs Docker with `docker compose` — the same requirement as `npm run e2e`. It brings the container up (idempotent), runs `prisma db push`, then the tests, and leaves the container running;
+`npm run e2e`'s teardown removes it. Set `PLAYWRIGHT_DATABASE_URL` to point the tests somewhere else. CI runs the equivalent steps directly in the `e2e` job.
+
 ## End-to-End Tests
 
 Playwright is configured for a Chromium-only E2E workflow that mirrors the local Prisma setup without reusing your normal development database.

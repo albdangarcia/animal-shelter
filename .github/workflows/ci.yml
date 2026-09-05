@@ -122,11 +122,12 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
-      # The Prisma query-extension test needs a real Postgres. Run it against
-      # the throwaway container rather than `npm run test:db`, whose
-      # `dotenv -e .env.local -e ...` prefix expects env files a CI checkout
-      # does not have. global-setup re-ups this same compose project
-      # (idempotent) and drops the schema, so these rows cannot reach the seed.
+      # The Prisma query-extension test needs a real Postgres. `npm run test:db`
+      # (scripts/test-db.ts) does exactly these three steps against this same
+      # throwaway container; CI keeps them as explicit steps so a failure points
+      # at the stage that broke and the container is managed as its own step.
+      # global-setup re-ups this same compose project (idempotent) and drops the
+      # schema, so these rows cannot reach the seed.
       - name: Start throwaway Postgres
         run: docker compose -p animal-shelter-playwright -f docker-compose.playwright.yml up -d --wait
       - name: Push schema
