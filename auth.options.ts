@@ -1,5 +1,5 @@
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import type { BetterAuthOptions, GenericEndpointContext, User } from "better-auth";
+import type { BetterAuthOptions, User } from "better-auth";
 import prisma from "@/app/lib/prisma";
 
 type ExtendedPrismaClient = typeof prisma;
@@ -21,7 +21,6 @@ type ExtendedPrismaClient = typeof prisma;
 function makeLinkOrCreatePerson(db: ExtendedPrismaClient, trustProvidedEmails: boolean) {
   return async function linkOrCreatePerson(
     user: User & Record<string, unknown>,
-    context: GenericEndpointContext | null,
   ) {
     const email = user.email;
     const isProviderVerified =
