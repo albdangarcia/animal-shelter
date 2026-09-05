@@ -289,7 +289,7 @@ Playwright is configured for a Chromium-only E2E workflow that mirrors the local
 ### Requirements
 
 - Docker with `docker compose`
-- A populated `.env` file with at least `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, and `ADMIN_PASSWORD`
+- A populated `.env` file with at least `BETTER_AUTH_SECRET` and `ADMIN_PASSWORD` (these are the only vars `playwright/env.ts` throws on; it pins everything else it needs — `BETTER_AUTH_URL`, `BETTER_AUTH_ALLOWED_HOSTS`, the database URLs, and the OAuth vars — so don't re-add them here)
 
 ### Install the browser once
 
