@@ -36,6 +36,7 @@ const personApplicationsPath = (personId: string) =>
 
 const _staffUpdateAdoptionApp = async (
   adoptionAppId: string,
+  returnTo: string | null,
   values: StaffUpdateAdoptionAppFormInput
 ): Promise<FormResult<StaffUpdateAdoptionAppFormInput>> => {
   const session = await getCachedSession();
@@ -214,12 +215,12 @@ const _staffUpdateAdoptionApp = async (
   }
 
   revalidatePath(ADOPTION_APPLICATIONS_PATH);
-  revalidatePath(`${ADOPTION_APPLICATIONS_PATH}/${validatedAdoptionAppId}/edit`);
+  revalidatePath(`${ADOPTION_APPLICATIONS_PATH}/${validatedAdoptionAppId}/review`);
 
   return {
     ok: true,
     message: "Application updated successfully.",
-    redirectTo: ADOPTION_APPLICATIONS_PATH,
+    redirectTo: safeInternalPath(returnTo, ADOPTION_APPLICATIONS_PATH),
   };
 };
 
@@ -229,6 +230,7 @@ export const staffUpdateAdoptionApp = RequirePermission(
 
 const _staffCreateAdoptionApplication = async (
   personId: string,
+  returnTo: string | null,
   values: StaffAdoptionApplicationFormInput
 ): Promise<FormResult<StaffAdoptionApplicationFormInput>> => {
   const session = await getCachedSession();
@@ -380,11 +382,15 @@ const _staffCreateAdoptionApplication = async (
   }
 
   revalidatePath(personApplicationsPath(validatedPersonId));
+  revalidatePath(ADOPTION_APPLICATIONS_PATH);
 
   return {
     ok: true,
     message: "Application submitted successfully.",
-    redirectTo: personApplicationsPath(validatedPersonId),
+    redirectTo: safeInternalPath(
+      returnTo,
+      personApplicationsPath(validatedPersonId)
+    ),
   };
 };
 
@@ -395,7 +401,7 @@ export const staffCreateAdoptionApplication = RequirePermission(
 const _staffEditPersonApplication = async (
   applicationId: string,
   personId: string,
-  callbackUrl: string | null,
+  returnTo: string | null,
   values: MyAdoptionAppFormInput
 ): Promise<FormResult<MyAdoptionAppFormInput>> => {
   const session = await getCachedSession();
@@ -493,11 +499,11 @@ const _staffEditPersonApplication = async (
   revalidatePath(ADOPTION_APPLICATIONS_PATH);
   revalidatePath(personApplicationsPath(validatedPersonId));
 
-  // Navigate to callbackUrl if it's a safe relative path, otherwise fall back.
+  // Navigate to returnTo if it's a safe relative path, otherwise fall back.
   // Still validated here rather than trusted from the client: the form passes
   // it through, but this action is reachable by direct POST.
   const destination = safeInternalPath(
-    callbackUrl,
+    returnTo,
     personApplicationsPath(validatedPersonId)
   );
 

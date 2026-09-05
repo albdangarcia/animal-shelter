@@ -61,7 +61,7 @@ const PageContent = async ({ searchParams, params }: Props) => {
           <CardAction>
             <Button asChild size="sm">
               <Link
-                href={`/dashboard/people-directory/${personId}/adoption-applications/new`}
+                href={`/dashboard/adoption-applications/new?personId=${personId}&returnTo=/dashboard/people-directory/${personId}/adoption-applications`}
               >
                 Add Application
               </Link>

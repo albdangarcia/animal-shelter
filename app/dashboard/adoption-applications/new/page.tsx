@@ -1,4 +1,4 @@
-import { IDParamType, SearchParamsType } from "@/app/lib/types";
+import { SearchParamsType } from "@/app/lib/types";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -8,30 +8,28 @@ import { notFound } from "next/navigation";
 import StaffAdoptionApplicationForm from "@/components/dashboard/people-directory/adoption-applications/staff-adoption-application-form";
 
 interface Props {
-  params: IDParamType;
   searchParams: SearchParamsType;
 }
 
-const Page = async ({ params, searchParams }: Props) => {
+const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.PERSONS_MANAGE}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
-      <PageContent params={params} searchParams={searchParams} />
+      <PageContent searchParams={searchParams} />
     </Authorize>
   );
 };
 
-const PageContent = async ({ params, searchParams }: Props) => {
-  const { id: personId } = await params;
-  const { animalSearch } = await searchParams;
+const PageContent = async ({ searchParams }: Props) => {
+  const { personId, returnTo, animalSearch } = await searchParams;
 
   const query = typeof animalSearch === "string" ? animalSearch.trim() : "";
 
   const [person, animalResults] = await Promise.all([
-    fetchPersonForApplicationForm(personId),
-    query.length >= 2
+    personId ? fetchPersonForApplicationForm(personId) : Promise.resolve(null),
+    query.length >= 2 && personId
       ? searchPublishedAnimals(query, personId)
       : Promise.resolve([]),
   ]);
@@ -41,11 +39,14 @@ const PageContent = async ({ params, searchParams }: Props) => {
   }
 
   return (
-    <StaffAdoptionApplicationForm
-      person={person}
-      animalResults={animalResults}
-      animalSearch={query}
-    />
+    <main>
+      <StaffAdoptionApplicationForm
+        person={person}
+        animalResults={animalResults}
+        animalSearch={query}
+        returnTo={returnTo}
+      />
+    </main>
   );
 };
 

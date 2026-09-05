@@ -47,12 +47,14 @@ export function DataTableRowActions({
       <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuLabel>Actions</DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <Link href={`/dashboard/adoption-applications/${application.id}/edit`}>
+        <Link
+          href={`/dashboard/adoption-applications/${application.id}/review?returnTo=/dashboard/people-directory/${personId}/adoption-applications`}
+        >
           <DropdownMenuItem>Review</DropdownMenuItem>
         </Link>
         {canEdit && (
           <Link
-            href={`/dashboard/people-directory/${personId}/adoption-applications/${application.id}/edit`}
+            href={`/dashboard/adoption-applications/${application.id}/edit?returnTo=/dashboard/people-directory/${personId}/adoption-applications`}
           >
             <DropdownMenuItem>Edit</DropdownMenuItem>
           </Link>

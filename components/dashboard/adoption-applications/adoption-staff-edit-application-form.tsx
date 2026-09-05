@@ -56,11 +56,13 @@ type StaffUpdateFormData = StaffUpdateAdoptionAppFormInput;
 interface StaffApplicationUpdateFormProps {
   animal: AnimalForAdoptionApplicationPayload;
   application: AdoptionApplicationWithOutcome;
+  returnTo?: string;
 }
 
 export function StaffApplicationUpdateForm({
   animal,
   application,
+  returnTo,
 }: StaffApplicationUpdateFormProps) {
   const isAdopted = application.status === "ADOPTED";
   const isApproved = application.status === "APPROVED";
@@ -90,7 +92,11 @@ export function StaffApplicationUpdateForm({
   const handleFormSubmit = (values: StaffUpdateFormData) => {
     if (isAdopted) return;
     startSubmitTransition(async () => {
-      const result = await staffUpdateAdoptionApp(application.id, values);
+      const result = await staffUpdateAdoptionApp(
+        application.id,
+        returnTo ?? null,
+        values,
+      );
 
       if (result.ok) {
         toast.success(result.message);
@@ -133,7 +139,7 @@ export function StaffApplicationUpdateForm({
               {isWalkIn && (
                 <Button asChild variant="outline" size="sm" className="mt-2 w-fit">
                   <Link
-                    href={`/dashboard/people-directory/${application.applicantId}/adoption-applications/${application.id}/edit?callbackUrl=/dashboard/adoption-applications/${application.id}/edit`}
+                    href={`/dashboard/adoption-applications/${application.id}/edit?returnTo=/dashboard/adoption-applications/${application.id}/review`}
                   >
                     <Pencil className="mr-2 h-3.5 w-3.5" />
                     Edit Application Fields
@@ -525,7 +531,9 @@ export function StaffApplicationUpdateForm({
               type="button"
               disabled={isPending}
             >
-              <Link href="/dashboard/adoption-applications">Cancel</Link>
+              <Link href={returnTo ?? "/dashboard/adoption-applications"}>
+                Cancel
+              </Link>
             </Button>
             <Button type="submit" disabled={isPending || isAdopted}>
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
