@@ -79,6 +79,13 @@ const _fetchPersonNotes = async (
               name: true,
             },
           },
+          lastEditedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          lastEditedAt: true,
           createdAt: true,
           deletedAt: true,
         },

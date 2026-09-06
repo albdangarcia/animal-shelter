@@ -62,6 +62,7 @@ export function NoteActions({ note, animalId }: NoteActionsProps) {
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="h-7 w-7">
             <MoreHorizontal className="h-4 w-4" />
+            <span className="sr-only">Note actions</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">

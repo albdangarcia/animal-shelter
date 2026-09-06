@@ -30,6 +30,13 @@ export type NotePayload = Prisma.AnimalNoteGetPayload<{
         name: true;
       };
     };
+    lastEditedBy: {
+      select: {
+        id: true;
+        name: true;
+      };
+    };
+    lastEditedAt: true;
   };
 }>;
 
@@ -122,6 +129,13 @@ const _fetchAnimalNotes = async (
               name: true,
             },
           },
+          lastEditedBy: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          lastEditedAt: true,
         },
         orderBy: orderBy,
         take: NOTES_PER_PAGE,

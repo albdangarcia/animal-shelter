@@ -559,6 +559,13 @@ export type PartnerNotePayload = Prisma.PartnerNoteGetPayload<{
         name: true;
       };
     };
+    lastEditedBy: {
+      select: {
+        id: true;
+        name: true;
+      };
+    };
+    lastEditedAt: true;
     createdAt: true;
     deletedAt: true;
   };
@@ -583,6 +590,13 @@ export type PersonNotePayload = Prisma.PersonNoteGetPayload<{
         name: true;
       };
     };
+    lastEditedBy: {
+      select: {
+        id: true;
+        name: true;
+      };
+    };
+    lastEditedAt: true;
     createdAt: true;
     deletedAt: true;
   };

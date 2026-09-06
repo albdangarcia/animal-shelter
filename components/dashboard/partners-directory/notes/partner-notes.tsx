@@ -153,6 +153,27 @@ const PartnerNotes = ({ notes, totalPages, partnerId, canManage }: Props) => {
                         </TooltipContent>
                       </Tooltip>
                     </div>
+
+                    {note.lastEditedAt && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        <span>
+                          edited by{" "}
+                          {note.lastEditedBy?.name ?? "Unknown User"}
+                        </span>{" "}
+                        &middot;{" "}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="underline decoration-dotted cursor-help">
+                              {formatTimeAgo(note.lastEditedAt)}
+                            </span>
+                          </TooltipTrigger>
+
+                          <TooltipContent>
+                            {formatDateOrNA(note.lastEditedAt)}
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
