@@ -202,17 +202,33 @@ const personData = [
     state: "NY",
     zipCode: "10017",
   },
+  {
+    // Walk-in with contact details on file but no user account — the fixture
+    // the staff "file an adoption application on behalf of a walk-in" e2e
+    // spec fills its form for. Kept out of every seeded applicant pool below
+    // so its adoption-applications tab starts empty and holds exactly the one
+    // row that spec creates through the UI.
+    name: "WalkIn TestUser",
+    email: "walkin.testuser@example.com",
+    phone: "212-555-0177",
+    address: "410 Amsterdam Ave",
+    city: "New York",
+    state: "NY",
+    zipCode: "10024",
+  },
 ];
 
 // Purpose-built fixtures (Person-form duplicate detection, the household
-// profile "no data yet" empty state) whose value is a known, stable starting
-// record. Excluded from every seeded adoption/foster applicant pool so a
-// random draw never hands one of them a HouseholdProfile — the empty state
-// needs to hold across reseeds, not just on lucky ones.
+// profile "no data yet" empty state, the staff walk-in adoption application
+// flow) whose value is a known, stable starting record. Excluded from every
+// seeded adoption/foster applicant pool so a random draw never hands one of
+// them a HouseholdProfile or application — the empty state needs to hold
+// across reseeds, not just on lucky ones.
 const NON_APPLICANT_PERSON_NAMES = new Set([
   "Alex Duplicate",
   "Sam Duplicate",
   "Unparseable Phone Contact",
+  "WalkIn TestUser",
 ]);
 
 const allColors = {
@@ -3722,6 +3738,84 @@ async function seedApplicationNoise() {
   console.log(`Seeded ${plans.length} standalone adoption applications.`);
 }
 
+// The staff standalone adoption-application routes only expose their
+// edit/review actions for applicants with NO user account (registered users
+// manage their own applications). The e2e spec for that flow needs a stable
+// *negative* case: a registered user whose application 404s on the staff edit
+// route. The random applicant-pool draws above usually hand "Jane Doe" one,
+// but the seed is only "same day, same data" — a calendar shift or an edit to
+// personData moves the RNG stream and there is no guarantee on a given run.
+// Pin exactly one down.
+async function seedRegisteredUserApplicationFixture() {
+  console.log("Seeding the registered-user adoption application fixture...");
+
+  const janeDoe = await prisma.person.findFirst({
+    where: { name: "Jane Doe", user: { role: Role.USER } },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      address: true,
+      city: true,
+      state: true,
+      zipCode: true,
+    },
+  });
+
+  if (!janeDoe) {
+    throw new Error(
+      "Expected the seeded 'Jane Doe' registered user for the adoption application fixture.",
+    );
+  }
+
+  // A random draw may already have given her one — any status is enough for
+  // the gate spec, which keys off the applicant's user account, not status.
+  const existing = await prisma.adoptionApplication.findFirst({
+    where: { applicantId: janeDoe.id },
+    select: { id: true },
+  });
+  if (existing) {
+    return;
+  }
+
+  const animal = await prisma.animal.findFirst({
+    where: {
+      listingStatus: AnimalListingStatus.PUBLISHED,
+      adoptionApplications: { none: { applicantId: janeDoe.id } },
+    },
+    orderBy: { id: "asc" },
+    select: {
+      id: true,
+      intake: {
+        select: { intakeDate: true },
+        orderBy: { intakeDate: "desc" },
+        take: 1,
+      },
+    },
+  });
+
+  if (!animal) {
+    throw new Error(
+      "No PUBLISHED animal available for the registered-user adoption application fixture.",
+    );
+  }
+
+  const now = new Date();
+  const intakeDate =
+    animal.intake[0]?.intakeDate ??
+    new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  await seedApplicationWithHistory({
+    animalId: animal.id,
+    applicant: janeDoe,
+    submittedAt: addDaysClamped(intakeDate, randomInt(1, 10), now),
+    reasonForAdoption: getRandomItem(adoptionReasonPool),
+    householdProfileData: generateHouseholdProfileData(),
+    transitions: [],
+  });
+}
+
 async function seedTasks() {
   console.log("Seeding tasks...");
   try {
@@ -4331,6 +4425,7 @@ async function seedAll() {
   await seedAnimalsAndRelations();
   await seedFostering();
   await seedApplicationNoise();
+  await seedRegisteredUserApplicationFixture();
   await seedTasks();
   await seedAiActivityLog();
   await seedAssessments();
