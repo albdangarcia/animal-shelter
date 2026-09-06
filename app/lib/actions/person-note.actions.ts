@@ -10,6 +10,12 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { PersonNoteFormSchema } from "../zod-schemas/people-directory.schemas";
+import { NoteEventAction, NoteTargetType } from "@/prisma/generated/enums";
+import {
+  isNoteEditNoOp,
+  NO_OP_EDIT_MESSAGE,
+  recordNoteMutation,
+} from "../services/note-audit";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
@@ -43,12 +49,22 @@ const _createPersonNote = async (
   }
 
   try {
-    await prisma.personNote.create({
-      data: {
-        content: validatedFields.data.content,
-        personId: parsedPersonId.data, // subject
-        authorId: user.personId, // author = session user
-      },
+    await prisma.$transaction(async (tx) => {
+      const note = await tx.personNote.create({
+        data: {
+          content: validatedFields.data.content,
+          personId: parsedPersonId.data, // subject
+          authorId: user.personId, // author = session user
+        },
+        select: { id: true },
+      });
+
+      await recordNoteMutation(tx, {
+        targetType: NoteTargetType.PERSON,
+        targetId: note.id,
+        action: NoteEventAction.CREATED,
+        actorId: user.personId,
+      });
     });
   } catch (error) {
     console.error("Database Error creating person note:", error);
@@ -60,6 +76,7 @@ const _createPersonNote = async (
 };
 
 const _updatePersonNote = async (
+  user: SessionUser,
   noteId: string,
   personId: string,
   values: PersonNoteFormInput,
@@ -81,10 +98,38 @@ const _updatePersonNote = async (
     };
   }
 
+  const { content } = validatedFields.data;
+
+  const current = await prisma.personNote.findFirst({
+    where: { id: parsedNoteId.data, personId: parsedPersonId.data },
+    select: { content: true },
+  });
+  if (!current) {
+    return { ok: false, message: "Note not found." };
+  }
+
+  // Person notes have no category, so compare content only.
+  if (isNoteEditNoOp(current, { content })) {
+    return { ok: true, message: NO_OP_EDIT_MESSAGE };
+  }
+
   try {
-    await prisma.personNote.update({
-      where: { id: parsedNoteId.data },
-      data: { content: validatedFields.data.content },
+    await prisma.$transaction(async (tx) => {
+      await tx.personNote.update({
+        where: { id: parsedNoteId.data },
+        data: {
+          content,
+          lastEditedById: user.personId,
+          lastEditedAt: new Date(),
+        },
+      });
+
+      await recordNoteMutation(tx, {
+        targetType: NoteTargetType.PERSON,
+        targetId: parsedNoteId.data,
+        action: NoteEventAction.EDITED,
+        actorId: user.personId,
+      });
     });
   } catch (error) {
     console.error("Database Error updating person note:", error);
@@ -96,6 +141,7 @@ const _updatePersonNote = async (
 };
 
 const _deletePersonNote = async (
+  user: SessionUser,
   noteId: string,
   personId: string,
 ): Promise<{ message: string }> => {
@@ -106,9 +152,22 @@ const _deletePersonNote = async (
   }
 
   try {
-    await prisma.personNote.update({
-      where: { id: parsedNoteId.data },
-      data: { deletedAt: new Date() },
+    await prisma.$transaction(async (tx) => {
+      await tx.personNote.update({
+        where: { id: parsedNoteId.data },
+        data: {
+          deletedAt: new Date(),
+          lastEditedById: user.personId,
+          lastEditedAt: new Date(),
+        },
+      });
+
+      await recordNoteMutation(tx, {
+        targetType: NoteTargetType.PERSON,
+        targetId: parsedNoteId.data,
+        action: NoteEventAction.DELETED,
+        actorId: user.personId,
+      });
     });
   } catch (error) {
     console.error("Database Error deleting person note:", error);
@@ -120,6 +179,7 @@ const _deletePersonNote = async (
 };
 
 const _restorePersonNote = async (
+  user: SessionUser,
   noteId: string,
   personId: string,
 ): Promise<{ message: string }> => {
@@ -130,9 +190,22 @@ const _restorePersonNote = async (
   }
 
   try {
-    await prisma.personNote.update({
-      where: { id: parsedNoteId.data },
-      data: { deletedAt: null },
+    await prisma.$transaction(async (tx) => {
+      await tx.personNote.update({
+        where: { id: parsedNoteId.data },
+        data: {
+          deletedAt: null,
+          lastEditedById: user.personId,
+          lastEditedAt: new Date(),
+        },
+      });
+
+      await recordNoteMutation(tx, {
+        targetType: NoteTargetType.PERSON,
+        targetId: parsedNoteId.data,
+        action: NoteEventAction.RESTORED,
+        actorId: user.personId,
+      });
     });
   } catch (error) {
     console.error("Database Error restoring person note:", error);
@@ -147,14 +220,14 @@ export const createPersonNote = withAuthenticatedUser(
   RequirePermission(AppPermissions.PERSONS_MANAGE)(_createPersonNote),
 );
 
-export const updatePersonNote = RequirePermission(
-  AppPermissions.PERSONS_MANAGE,
-)(_updatePersonNote);
+export const updatePersonNote = withAuthenticatedUser(
+  RequirePermission(AppPermissions.PERSONS_MANAGE)(_updatePersonNote),
+);
 
-export const deletePersonNote = RequirePermission(
-  AppPermissions.PERSONS_MANAGE,
-)(_deletePersonNote);
+export const deletePersonNote = withAuthenticatedUser(
+  RequirePermission(AppPermissions.PERSONS_MANAGE)(_deletePersonNote),
+);
 
-export const restorePersonNote = RequirePermission(
-  AppPermissions.PERSONS_MANAGE,
-)(_restorePersonNote);
+export const restorePersonNote = withAuthenticatedUser(
+  RequirePermission(AppPermissions.PERSONS_MANAGE)(_restorePersonNote),
+);
