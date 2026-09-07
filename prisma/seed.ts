@@ -17,6 +17,8 @@ import {
   TaskPriority,
   TaskStatus,
   AnimalActivityType,
+  NoteEventAction,
+  NoteTargetType,
   AiActionTargetType,
   CharacteristicCategory,
   AssessmentType,
@@ -37,6 +39,8 @@ import {
   randomInt,
 } from "@/app/lib/utils/seeding-utils";
 import { computeStays } from "@/app/lib/utils/stay-utils";
+import { recordNoteMutation } from "@/app/lib/services/note-audit";
+import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { resolveDatabaseUrl } from "@/app/lib/db-url";
@@ -4116,6 +4120,365 @@ async function seedAssessments() {
   console.log("Seeded assessments.");
 }
 
+// =================================================================//
+//                     NOTE AUDIT FIXTURES                          //
+// =================================================================//
+//
+// Makes the note audit trail (spec: note-audit-trail.md) exercisable from a
+// fresh seed. The base seed creates only animal notes, all GENERAL and never
+// edited — nothing there touches `lastEditedBy`, `NoteEvent`, or the
+// NOTE_EDITED / NOTE_DELETED / NOTE_RESTORED activity types. This adds:
+//
+//   - authored person notes and partner notes (the base seed creates no partner
+//     notes at all, and only authorless auto-link stubs for persons — written by
+//     better-auth's linkOrCreatePerson hook during signup, not through this
+//     helper, so they carry no NoteEvent);
+//   - one note of each type edited after creation by a *different* staffer than
+//     its author, so the "edited by …" footer line renders with a name that is
+//     not the author's;
+//   - one partner note and one animal note each deleted by one staffer and
+//     restored by another — the delete/restore attribution split that motivated
+//     `NoteEvent`: the note row only remembers the last toucher (the restorer),
+//     while the delete actor survives only in `NoteEvent`.
+//
+// Every mutation here — the fixture creations included — runs through
+// `recordNoteMutation`, the same helper the server actions and the helper tests
+// call, inside a real `prisma.$transaction`, so the seed cannot silently drift
+// from what the product writes. (The bulk intake notes elsewhere in the seed
+// pre-date this feature and stay plain inserts.) Edits always change `content`
+// (and sometimes `category`) so they clear the no-op guard.
+// Timestamps on the `NoteEvent` / `AnimalActivityLog` rows are left at the
+// helper's `now()` default, exactly as the actions leave them; only
+// `lastEditedAt` is set explicitly, mirroring `new Date()` in the actions.
+async function seedNoteAudit() {
+  console.log("Seeding note audit fixtures...");
+
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({
+      where: { user: { email: "staff1@example.com" } },
+    }),
+    prisma.person.findFirst({
+      where: { user: { email: "staff2@example.com" } },
+    }),
+  ]);
+  if (!olivia || !benjamin) {
+    throw new Error(
+      "seedNoteAudit: staff fixtures (staff1@example.com / staff2@example.com) not found.",
+    );
+  }
+
+  const [frisco, buddy] = await Promise.all([
+    prisma.animal.findFirst({ where: { name: "Frisco" } }),
+    prisma.animal.findFirst({ where: { name: "Buddy" } }),
+  ]);
+  const [janeDoe, johnSmith] = await Promise.all([
+    prisma.person.findFirst({ where: { email: "surrenderer1@example.com" } }),
+    prisma.person.findFirst({ where: { email: "finder1@example.com" } }),
+  ]);
+  const [cityAnimalControl, secondChanceRescue, downtownVet] = await Promise.all([
+    prisma.partner.findFirst({ where: { name: "City Animal Control" } }),
+    prisma.partner.findFirst({ where: { name: "Second Chance Rescue" } }),
+    prisma.partner.findFirst({ where: { name: "Downtown Veterinary Clinic" } }),
+  ]);
+  if (
+    !frisco ||
+    !buddy ||
+    !janeDoe ||
+    !johnSmith ||
+    !cityAnimalControl ||
+    !secondChanceRescue ||
+    !downtownVet
+  ) {
+    throw new Error(
+      "seedNoteAudit: expected named animal / person / partner fixtures not found.",
+    );
+  }
+
+  // --- Animal note: authored by Olivia, edited by Benjamin -------------------
+  // Category changes too (BEHAVIORAL → ADOPTION_UPDATE), so the NOTE_EDITED
+  // activity row's "Show details" expander has a category label to show.
+  const friscoNote = await seedAnimalNote({
+    animalId: frisco.id,
+    authorId: olivia.id,
+    category: NoteCategory.BEHAVIORAL,
+    content:
+      "Startles at the hose reel on A-block but recovers within a minute. No resource guarding at meals.",
+    createdAt: daysAgo(6),
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.animalNote.update({
+      where: { id: friscoNote },
+      data: {
+        category: NoteCategory.ADOPTION_UPDATE,
+        content:
+          "Meet-and-greet with an approved adopter went well. Moving to a trial adoption next week.",
+        lastEditedById: benjamin.id,
+        lastEditedAt: new Date(),
+      },
+    });
+    await recordNoteMutation(tx, {
+      targetType: NoteTargetType.ANIMAL,
+      targetId: friscoNote,
+      action: NoteEventAction.EDITED,
+      actorId: benjamin.id,
+      animalId: frisco.id,
+      categoryLabel: formatSingleEnumOption(NoteCategory.ADOPTION_UPDATE),
+    });
+  });
+
+  // --- Animal note: deleted by Olivia, restored by Benjamin -----------------
+  // Puts NOTE_DELETED + NOTE_RESTORED rows in Buddy's activity feed so all
+  // four note activity types are demonstrable from a fresh seed.
+  const buddyNote = await seedAnimalNote({
+    animalId: buddy.id,
+    authorId: olivia.id,
+    category: NoteCategory.MEDICAL,
+    content: "Kennel cough suspected — starting doxycycline, recheck in a week.",
+    createdAt: daysAgo(9),
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.animalNote.update({
+      where: { id: buddyNote },
+      data: {
+        deletedAt: new Date(),
+        lastEditedById: olivia.id,
+        lastEditedAt: new Date(),
+      },
+    });
+    await recordNoteMutation(tx, {
+      targetType: NoteTargetType.ANIMAL,
+      targetId: buddyNote,
+      action: NoteEventAction.DELETED,
+      actorId: olivia.id,
+      animalId: buddy.id,
+      categoryLabel: formatSingleEnumOption(NoteCategory.MEDICAL),
+    });
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.animalNote.update({
+      where: { id: buddyNote },
+      data: {
+        deletedAt: null,
+        lastEditedById: benjamin.id,
+        lastEditedAt: new Date(),
+      },
+    });
+    await recordNoteMutation(tx, {
+      targetType: NoteTargetType.ANIMAL,
+      targetId: buddyNote,
+      action: NoteEventAction.RESTORED,
+      actorId: benjamin.id,
+      animalId: buddy.id,
+      categoryLabel: formatSingleEnumOption(NoteCategory.MEDICAL),
+    });
+  });
+
+  // --- Person notes --------------------------------------------------------
+  await seedPersonNote({
+    personId: janeDoe.id,
+    authorId: benjamin.id,
+    content:
+      "Called about the return-to-owner paperwork for her cat. Front-desk copy mailed 6/12.",
+    createdAt: daysAgo(5),
+  });
+  await seedPersonNote({
+    personId: johnSmith.id,
+    authorId: olivia.id,
+    content:
+      "Found the stray on Court St; happy to be listed as the finder contact if the owner turns up.",
+    createdAt: daysAgo(8),
+  });
+  // Edited by a different staffer than the author (Olivia → Benjamin).
+  const janeNoteToEdit = await seedPersonNote({
+    personId: janeDoe.id,
+    authorId: olivia.id,
+    content: "Interested in fostering once her lease renews in the spring.",
+    createdAt: daysAgo(12),
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.personNote.update({
+      where: { id: janeNoteToEdit },
+      data: {
+        content:
+          "Lease renewed early — cleared to foster. Sent the foster application on 6/14.",
+        lastEditedById: benjamin.id,
+        lastEditedAt: new Date(),
+      },
+    });
+    await recordNoteMutation(tx, {
+      targetType: NoteTargetType.PERSON,
+      targetId: janeNoteToEdit,
+      action: NoteEventAction.EDITED,
+      actorId: benjamin.id,
+    });
+  });
+
+  // --- Partner notes -----------------------------------------------------
+  await seedPartnerNote({
+    partnerId: downtownVet.id,
+    authorId: olivia.id,
+    content:
+      "After-hours emergencies go to the Riverside branch, not this location — front desk confirmed.",
+    createdAt: daysAgo(7),
+  });
+  // Edited by a different staffer than the author (Olivia → Benjamin).
+  const cityNoteToEdit = await seedPartnerNote({
+    partnerId: cityAnimalControl.id,
+    authorId: olivia.id,
+    content: "Transfer intake days are Tuesday and Thursday mornings only.",
+    createdAt: daysAgo(14),
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.partnerNote.update({
+      where: { id: cityNoteToEdit },
+      data: {
+        content:
+          "Transfer intake now Monday/Wednesday/Friday mornings; email the shift lead 24h ahead.",
+        lastEditedById: benjamin.id,
+        lastEditedAt: new Date(),
+      },
+    });
+    await recordNoteMutation(tx, {
+      targetType: NoteTargetType.PARTNER,
+      targetId: cityNoteToEdit,
+      action: NoteEventAction.EDITED,
+      actorId: benjamin.id,
+    });
+  });
+  // Deleted by Olivia, restored by Benjamin — the attribution split with no
+  // activity-log backstop (partner notes only ever land in NoteEvent).
+  const rescueNote = await seedPartnerNote({
+    partnerId: secondChanceRescue.id,
+    authorId: olivia.id,
+    content: "Primary contact Sarah is on parental leave until August.",
+    createdAt: daysAgo(10),
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.partnerNote.update({
+      where: { id: rescueNote },
+      data: {
+        deletedAt: new Date(),
+        lastEditedById: olivia.id,
+        lastEditedAt: new Date(),
+      },
+    });
+    await recordNoteMutation(tx, {
+      targetType: NoteTargetType.PARTNER,
+      targetId: rescueNote,
+      action: NoteEventAction.DELETED,
+      actorId: olivia.id,
+    });
+  });
+  await prisma.$transaction(async (tx) => {
+    await tx.partnerNote.update({
+      where: { id: rescueNote },
+      data: {
+        deletedAt: null,
+        lastEditedById: benjamin.id,
+        lastEditedAt: new Date(),
+      },
+    });
+    await recordNoteMutation(tx, {
+      targetType: NoteTargetType.PARTNER,
+      targetId: rescueNote,
+      action: NoteEventAction.RESTORED,
+      actorId: benjamin.id,
+    });
+  });
+
+  console.log("Seeded note audit fixtures.");
+}
+
+// Creates one AnimalNote and its CREATED NoteEvent + NOTE_ADDED activity row
+// through the shared helper, mirroring `_createAnimalNote`. Returns the note id.
+// The bulk intake notes elsewhere in the seed pre-date this feature and are
+// left as plain inserts — only the note-audit fixtures get a full trail.
+async function seedAnimalNote(opts: {
+  animalId: string;
+  authorId: string;
+  category: NoteCategory;
+  content: string;
+  createdAt: Date;
+}): Promise<string> {
+  return prisma.$transaction(async (tx) => {
+    const note = await tx.animalNote.create({
+      data: {
+        animalId: opts.animalId,
+        authorId: opts.authorId,
+        category: opts.category,
+        content: opts.content,
+        createdAt: opts.createdAt,
+      },
+      select: { id: true },
+    });
+    await recordNoteMutation(tx, {
+      targetType: NoteTargetType.ANIMAL,
+      targetId: note.id,
+      action: NoteEventAction.CREATED,
+      actorId: opts.authorId,
+      animalId: opts.animalId,
+      categoryLabel: formatSingleEnumOption(opts.category),
+    });
+    return note.id;
+  });
+}
+
+// Creates one PersonNote and its CREATED NoteEvent through the shared helper,
+// mirroring `_createPersonNote`. Returns the note id.
+async function seedPersonNote(opts: {
+  personId: string;
+  authorId: string;
+  content: string;
+  createdAt: Date;
+}): Promise<string> {
+  return prisma.$transaction(async (tx) => {
+    const note = await tx.personNote.create({
+      data: {
+        personId: opts.personId,
+        authorId: opts.authorId,
+        content: opts.content,
+        createdAt: opts.createdAt,
+      },
+      select: { id: true },
+    });
+    await recordNoteMutation(tx, {
+      targetType: NoteTargetType.PERSON,
+      targetId: note.id,
+      action: NoteEventAction.CREATED,
+      actorId: opts.authorId,
+    });
+    return note.id;
+  });
+}
+
+// Creates one PartnerNote and its CREATED NoteEvent through the shared helper,
+// mirroring `_createPartnerNote`. Returns the note id.
+async function seedPartnerNote(opts: {
+  partnerId: string;
+  authorId: string;
+  content: string;
+  createdAt: Date;
+}): Promise<string> {
+  return prisma.$transaction(async (tx) => {
+    const note = await tx.partnerNote.create({
+      data: {
+        partnerId: opts.partnerId,
+        authorId: opts.authorId,
+        content: opts.content,
+        createdAt: opts.createdAt,
+      },
+      select: { id: true },
+    });
+    await recordNoteMutation(tx, {
+      targetType: NoteTargetType.PARTNER,
+      targetId: note.id,
+      action: NoteEventAction.CREATED,
+      actorId: opts.authorId,
+    });
+    return note.id;
+  });
+}
+
 async function clearDatabase() {
   console.log("Clearing existing data...");
 
@@ -4144,6 +4507,12 @@ async function clearDatabase() {
   await prisma.animalNote.deleteMany();
   await prisma.personNote.deleteMany();
   await prisma.partnerNote.deleteMany();
+  // NoteEvent has no FK to the notes (polymorphic targetId), so its order
+  // relative to the note deletes above doesn't matter — but `actorId` is a
+  // required FK to Person (Restrict), so it must be cleared before the
+  // `prisma.person.deleteMany()` at the end of this function or every reseed
+  // fails on that final delete.
+  await prisma.noteEvent.deleteMany();
   await prisma.partnerContact.deleteMany();
   await prisma.like.deleteMany();
 
@@ -4429,6 +4798,7 @@ async function seedAll() {
   await seedTasks();
   await seedAiActivityLog();
   await seedAssessments();
+  await seedNoteAudit();
   // After every listingStatus mutation above, so the available/unavailable
   // split on /pets/favorites is the real one.
   await seedPublicFavorites();
