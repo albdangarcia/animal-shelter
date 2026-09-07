@@ -15,6 +15,7 @@ import {
   MapPin,
   Home,
   Undo2,
+  Trash2,
   Weight,
   UserPlus,
   LucideProps,
@@ -42,6 +43,9 @@ const activityConfig: Record<
     text: "updated pet details",
   },
   [AnimalActivityType.NOTE_ADDED]: { icon: FileText, text: "added a new note" },
+  [AnimalActivityType.NOTE_EDITED]: { icon: Pencil, text: "edited a note" },
+  [AnimalActivityType.NOTE_DELETED]: { icon: Trash2, text: "deleted a note" },
+  [AnimalActivityType.NOTE_RESTORED]: { icon: Undo2, text: "restored a note" },
   [AnimalActivityType.PHOTO_UPLOADED]: {
     icon: Camera,
     text: "uploaded a new photo",

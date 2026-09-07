@@ -50,6 +50,10 @@ model Person {
   animalNotesAuthored      AnimalNote[]                     @relation("AnimalNoteAuthor")
   personNotesAuthored      PersonNote[]                     @relation("PersonNoteAuthor")
   partnerNotesAuthored     PartnerNote[]                    @relation("PartnerNoteAuthor")
+  animalNotesEdited        AnimalNote[]                     @relation("AnimalNoteLastEditor")
+  personNotesEdited        PersonNote[]                     @relation("PersonNoteLastEditor")
+  partnerNotesEdited       PartnerNote[]                    @relation("PartnerNoteLastEditor")
+  noteEvents               NoteEvent[]                      @relation("NoteEventActor")
   personNotes              PersonNote[]                     @relation("PersonNoteSubject") // notes written ABOUT this person
   partnerContacts          PartnerContact[]
   tasksAssigned            Task[]                           @relation("TasksAssignedTo")
@@ -1170,6 +1174,19 @@ enum NoteCategory {
   FOSTER_UPDATE
 }
 
+enum NoteTargetType {
+  ANIMAL
+  PERSON
+  PARTNER
+}
+
+enum NoteEventAction {
+  CREATED
+  EDITED
+  DELETED
+  RESTORED
+}
+
 model Task {
   id      String  @id @default(cuid())
   title   String
@@ -1212,6 +1229,10 @@ model AnimalNote {
   authorId String? @map(name: "author_id")
   author   Person? @relation("AnimalNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
+  lastEditedById String?   @map(name: "last_edited_by_id")
+  lastEditedBy   Person?   @relation("AnimalNoteLastEditor", fields: [lastEditedById], references: [id], onDelete: SetNull)
+  lastEditedAt   DateTime? @map(name: "last_edited_at")
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map(name: "deleted_at")
@@ -1230,6 +1251,10 @@ model PersonNote {
 
   authorId String? @map(name: "author_id")
   author   Person? @relation("PersonNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  lastEditedById String?   @map(name: "last_edited_by_id")
+  lastEditedBy   Person?   @relation("PersonNoteLastEditor", fields: [lastEditedById], references: [id], onDelete: SetNull)
+  lastEditedAt   DateTime? @map(name: "last_edited_at")
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1250,12 +1275,37 @@ model PartnerNote {
   authorId String? @map(name: "author_id")
   author   Person? @relation("PartnerNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
+  lastEditedById String?   @map(name: "last_edited_by_id")
+  lastEditedBy   Person?   @relation("PartnerNoteLastEditor", fields: [lastEditedById], references: [id], onDelete: SetNull)
+  lastEditedAt   DateTime? @map(name: "last_edited_at")
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map(name: "deleted_at")
 
   @@index([partnerId])
   @@map("partner_notes")
+}
+
+/// Append-only audit trail for note mutations across all three note types.
+/// No content snapshots — records that an action happened, by whom, when.
+/// Animal note events are ALSO written to AnimalActivityLog (the journey feed);
+/// this table is the uniform per-note record and the only record for
+/// person/partner notes.
+model NoteEvent {
+  id         String          @id @default(cuid())
+  targetType NoteTargetType
+  targetId   String          @map(name: "target_id")
+  action     NoteEventAction
+
+  actorId String @map(name: "actor_id")
+  actor   Person @relation("NoteEventActor", fields: [actorId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([targetType, targetId])
+  @@index([actorId])
+  @@map(name: "note_events")
 }
 
 // ═══════════════════════════════════════════════════
@@ -1280,6 +1330,9 @@ enum AnimalActivityType {
   LOCATION_CHANGE // The animal was moved to a different unit/location (or unplaced)
   FOSTER_PLACED // The animal was placed with a foster
   FOSTER_RETURNED // The animal was returned from a foster placement
+  NOTE_EDITED // An existing note was edited
+  NOTE_DELETED // A note was soft-deleted
+  NOTE_RESTORED // A soft-deleted note was restored
 }
 
 model AnimalActivityLog {

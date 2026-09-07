@@ -10,6 +10,12 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { PartnerNoteFormSchema } from "../zod-schemas/partners-directory.schemas";
+import { NoteEventAction, NoteTargetType } from "@/prisma/generated/enums";
+import {
+  isNoteEditNoOp,
+  NO_OP_EDIT_MESSAGE,
+  recordNoteMutation,
+} from "../services/note-audit";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
@@ -44,12 +50,22 @@ const _createPartnerNote = async (
   }
 
   try {
-    await prisma.partnerNote.create({
-      data: {
-        content: validatedFields.data.content,
-        partnerId: parsedPartnerId.data,
-        authorId: user.personId,
-      },
+    await prisma.$transaction(async (tx) => {
+      const note = await tx.partnerNote.create({
+        data: {
+          content: validatedFields.data.content,
+          partnerId: parsedPartnerId.data,
+          authorId: user.personId,
+        },
+        select: { id: true },
+      });
+
+      await recordNoteMutation(tx, {
+        targetType: NoteTargetType.PARTNER,
+        targetId: note.id,
+        action: NoteEventAction.CREATED,
+        actorId: user.personId,
+      });
     });
   } catch (error) {
     console.error("Database Error creating partner note:", error);
@@ -61,6 +77,7 @@ const _createPartnerNote = async (
 };
 
 const _updatePartnerNote = async (
+  user: SessionUser,
   noteId: string,
   partnerId: string,
   values: PartnerNoteFormInput,
@@ -82,10 +99,38 @@ const _updatePartnerNote = async (
     };
   }
 
+  const { content } = validatedFields.data;
+
+  const current = await prisma.partnerNote.findFirst({
+    where: { id: parsedNoteId.data, partnerId: parsedPartnerId.data },
+    select: { content: true },
+  });
+  if (!current) {
+    return { ok: false, message: "Note not found." };
+  }
+
+  // Partner notes have no category, so compare content only.
+  if (isNoteEditNoOp(current, { content })) {
+    return { ok: true, message: NO_OP_EDIT_MESSAGE };
+  }
+
   try {
-    await prisma.partnerNote.update({
-      where: { id: parsedNoteId.data },
-      data: { content: validatedFields.data.content },
+    await prisma.$transaction(async (tx) => {
+      await tx.partnerNote.update({
+        where: { id: parsedNoteId.data },
+        data: {
+          content,
+          lastEditedById: user.personId,
+          lastEditedAt: new Date(),
+        },
+      });
+
+      await recordNoteMutation(tx, {
+        targetType: NoteTargetType.PARTNER,
+        targetId: parsedNoteId.data,
+        action: NoteEventAction.EDITED,
+        actorId: user.personId,
+      });
     });
   } catch (error) {
     console.error("Database Error updating partner note:", error);
@@ -97,6 +142,7 @@ const _updatePartnerNote = async (
 };
 
 const _deletePartnerNote = async (
+  user: SessionUser,
   noteId: string,
   partnerId: string,
 ): Promise<{ message: string }> => {
@@ -107,9 +153,22 @@ const _deletePartnerNote = async (
   }
 
   try {
-    await prisma.partnerNote.update({
-      where: { id: parsedNoteId.data },
-      data: { deletedAt: new Date() },
+    await prisma.$transaction(async (tx) => {
+      await tx.partnerNote.update({
+        where: { id: parsedNoteId.data },
+        data: {
+          deletedAt: new Date(),
+          lastEditedById: user.personId,
+          lastEditedAt: new Date(),
+        },
+      });
+
+      await recordNoteMutation(tx, {
+        targetType: NoteTargetType.PARTNER,
+        targetId: parsedNoteId.data,
+        action: NoteEventAction.DELETED,
+        actorId: user.personId,
+      });
     });
   } catch (error) {
     console.error("Database Error deleting partner note:", error);
@@ -121,6 +180,7 @@ const _deletePartnerNote = async (
 };
 
 const _restorePartnerNote = async (
+  user: SessionUser,
   noteId: string,
   partnerId: string,
 ): Promise<{ message: string }> => {
@@ -131,9 +191,22 @@ const _restorePartnerNote = async (
   }
 
   try {
-    await prisma.partnerNote.update({
-      where: { id: parsedNoteId.data },
-      data: { deletedAt: null },
+    await prisma.$transaction(async (tx) => {
+      await tx.partnerNote.update({
+        where: { id: parsedNoteId.data },
+        data: {
+          deletedAt: null,
+          lastEditedById: user.personId,
+          lastEditedAt: new Date(),
+        },
+      });
+
+      await recordNoteMutation(tx, {
+        targetType: NoteTargetType.PARTNER,
+        targetId: parsedNoteId.data,
+        action: NoteEventAction.RESTORED,
+        actorId: user.personId,
+      });
     });
   } catch (error) {
     console.error("Database Error restoring partner note:", error);
@@ -148,14 +221,14 @@ export const createPartnerNote = withAuthenticatedUser(
   RequirePermission(AppPermissions.PARTNERS_MANAGE)(_createPartnerNote),
 );
 
-export const updatePartnerNote = RequirePermission(
-  AppPermissions.PARTNERS_MANAGE,
-)(_updatePartnerNote);
+export const updatePartnerNote = withAuthenticatedUser(
+  RequirePermission(AppPermissions.PARTNERS_MANAGE)(_updatePartnerNote),
+);
 
-export const deletePartnerNote = RequirePermission(
-  AppPermissions.PARTNERS_MANAGE,
-)(_deletePartnerNote);
+export const deletePartnerNote = withAuthenticatedUser(
+  RequirePermission(AppPermissions.PARTNERS_MANAGE)(_deletePartnerNote),
+);
 
-export const restorePartnerNote = RequirePermission(
-  AppPermissions.PARTNERS_MANAGE,
-)(_restorePartnerNote);
+export const restorePartnerNote = withAuthenticatedUser(
+  RequirePermission(AppPermissions.PARTNERS_MANAGE)(_restorePartnerNote),
+);
