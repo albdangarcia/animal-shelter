@@ -35,10 +35,27 @@ const buddyId = async (page: Page) =>
 const MEDICAL_NOTE = "Kennel cough suspected";
 const INTAKE_NOTE = "Initial intake notes";
 
+const editRows = (page: Page) =>
+  page.locator("li").filter({ hasText: "edited a note" });
+
+const gotoActivity = async (page: Page, id: string) => {
+  await page.goto(`/dashboard/animals/${id}`);
+  await expect(
+    page.getByText("most recent activity logs for this animal").first(),
+  ).toBeVisible();
+};
+
 test("no-op save writes nothing: no 'edited by' line, no new activity row", async ({
   page,
 }) => {
   const id = await buddyId(page);
+
+  // Baseline the activity feed *before* the no-op. Comparing a before/after
+  // count (rather than asserting an absolute 0) keeps this green when
+  // Playwright's serial-mode retry re-runs the group and the sibling test's
+  // real edit is still in the (once-per-run reseeded) database.
+  await gotoActivity(page, id);
+  const activityBefore = await editRows(page).count();
 
   await page.goto(`/dashboard/animals/${id}/notes`);
   const card = noteCard(page, INTAKE_NOTE);
@@ -56,17 +73,9 @@ test("no-op save writes nothing: no 'edited by' line, no new activity row", asyn
     0,
   );
 
-  // ...and the activity feed (animal index, suffix "") gained no edit row.
-  await page.goto(`/dashboard/animals/${id}`);
-  await expect(
-    page.getByText("most recent activity logs for this animal").first(),
-  ).toBeVisible();
-  await expect(
-    page
-      .locator("li")
-      .filter({ hasText: "Admin User" })
-      .filter({ hasText: "edited a note" }),
-  ).toHaveCount(0);
+  // ...and the activity feed (animal index, suffix "") gained no row.
+  await gotoActivity(page, id);
+  await expect(editRows(page)).toHaveCount(activityBefore);
 });
 
 test("editing an animal note stamps 'edited by Admin User' and feeds the activity log", async ({
@@ -90,13 +99,22 @@ test("editing an animal note stamps 'edited by Admin User' and feeds the activit
 
   // Activity feed on the animal index: "Admin User edited a note", and the
   // "Show details" expander carries the category label.
-  await page.goto(`/dashboard/animals/${id}`);
+  await gotoActivity(page, id);
   const row = page
     .locator("li")
     .filter({ hasText: "Admin User" })
     .filter({ hasText: "edited a note" })
     .first();
   await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "Show details" }).click();
-  await expect(row.getByText("Medical", { exact: true })).toBeVisible();
+
+  // The feed is server-rendered; on a slow runner the first click can land
+  // before React attaches the toggle handler. Retry until the panel sticks
+  // open (the button text flips Show/Hide, so match either).
+  const detail = row.getByText("Medical", { exact: true });
+  await expect(async () => {
+    if (!(await detail.isVisible())) {
+      await row.getByRole("button", { name: /details/i }).click();
+    }
+    await expect(detail).toBeVisible({ timeout: 3_000 });
+  }).toPass({ timeout: 30_000 });
 });
