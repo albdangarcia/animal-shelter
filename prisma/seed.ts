@@ -3795,11 +3795,20 @@ async function seedApplicationNoise() {
   console.log(`Seeded ${plans.length} standalone adoption applications.`);
 }
 
+// The hand-authored animals, which the fixture claims below stay away from.
+// They are the ones with real photos and hand-written histories, so they are
+// also the ones other e2e specs address by name — and an outcome processed on
+// one of them closes every open adoption application against it. Derived from
+// the blueprint list rather than spelled out, so a name added there is covered
+// without anyone remembering this.
+const HAND_AUTHORED_ANIMAL_NAMES = animalSeedData.map((animal) => animal.name);
+
 // One hand-written household profile for the fixture account. Every one of the
 // applications below copies these columns onto itself and upserts them onto
 // Jane's HouseholdProfile, so the read-only household rows say the same thing
 // on every application and on every reseed. `generateHouseholdProfileData`
-// would redraw nine times and leave whichever call ran last on her profile.
+// would redraw once per application and leave whichever call ran last on her
+// profile.
 const FIXTURE_HOUSEHOLD: HouseholdProfileData = {
   livingSituation: LivingSituation.RENT_HOUSE,
   hasYard: true,
@@ -3811,7 +3820,7 @@ const FIXTURE_HOUSEHOLD: HouseholdProfileData = {
   animalExperience: "Grew up with dogs and cats.",
 };
 
-// Nine adoption applications for "Jane Doe" (surrenderer1@example.com), one in
+// Ten adoption applications for "Jane Doe" (surrenderer1@example.com), one in
 // each state the applicant-facing screens have to render:
 //
 //   PENDING    / PUBLISHED         the only editable state
@@ -3823,6 +3832,13 @@ const FIXTURE_HOUSEHOLD: HouseholdProfileData = {
 //   WITHDRAWN  / ARCHIVED          reactivate is refused: the animal is gone
 //   CLOSED     / ARCHIVED          the cascade closed it, nobody judged her
 //   ADOPTED    / ARCHIVED          terminal, with the Outcome behind it
+//   CLOSED     / PUBLISHED         the animal came back — she can apply again
+//
+// The two CLOSED rows are the pair that carries the status's meaning. On the
+// archived one it is a dead end she was never judged for; on the republished
+// one it is the thing REJECTED is not — closure did not cost her the animal,
+// and the apply gate lets her back in. Without the second row the schema
+// change in phase 1 has no fixture behind the behaviour that motivated it.
 //
 // Before this, Jane's applications came out of the same random pools as
 // everyone else's, and *which* statuses she had moved whenever anything
@@ -3891,9 +3907,19 @@ async function seedRegisteredUserApplicationFixtures() {
       where: {
         ...where,
         id: { notIn: claimedAnimalIds },
+        name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
         adoptionApplications: { none: { applicantId: applicant.id } },
       },
-      orderBy: [{ name: "asc" }, { id: "asc" }],
+      // Descending, and skipping the hand-authored animals entirely. Those two
+      // choices are not the same kind of thing: the exclusion is the guarantee
+      // (other specs address `animalSeedData` animals by name — Frisco in
+      // animals/edit-and-outcome, Juniper in fosters/foster-placements — and
+      // processing an outcome on one cascades every open application on it to
+      // CLOSED, which silently deletes a fixture from this set). Descending is
+      // only separation: every other spec picks the *first* row or option of
+      // some name-ordered list, so claiming from the far end keeps the two
+      // sets apart by default rather than by luck.
+      orderBy: [{ name: "desc" }, { id: "asc" }],
       select: {
         id: true,
         name: true,
@@ -4174,8 +4200,100 @@ async function seedRegisteredUserApplicationFixtures() {
     ],
   });
 
+  // 10 — CLOSED on an animal that came back and was republished. This is the
+  // case the whole CLOSED status exists for: the adoption that closed her
+  // application fell through, the animal returned, and she is free to apply
+  // again — the one status in `BLOCKING_APPLICATION_STATUSES` leaves out.
+  //
+  // Its own animal rather than one of `seedReturnAndReadoptAnimal`'s: whether
+  // that animal ends its second stay published is a coin flip inside that
+  // function, and a fixture that depends on a draw is the exact problem this
+  // block exists to remove.
+  //
+  // The outcome floor is what keeps the second stay orderable — the re-intake
+  // has to land after the outcome that ended the first one, and an animal
+  // adopted out last week leaves no room for it.
+  const returnedAnimal = await claimAnimal("CLOSED (animal returned)", {
+    listingStatus: AnimalListingStatus.ARCHIVED,
+    archiveReason: OutcomeType.ADOPTION,
+    Outcome: { some: { outcomeDate: { lte: daysAgo(30) } } },
+  });
+  await seedApplicationWithHistory({
+    animalId: returnedAnimal.id,
+    applicant,
+    submittedAt: withinStay(returnedAnimal, 0.2),
+    reasonForAdoption:
+      "We met him at the open day and have not stopped talking about him.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
+    transitions: [
+      {
+        status: ApplicationStatus.REVIEWING,
+        reason: "Application moved to review.",
+        changedById: reviewer.id,
+        at: withinStay(returnedAnimal, 0.5),
+      },
+      {
+        status: ApplicationStatus.CLOSED,
+        reason: CLOSURE_REASON_BY_OUTCOME[OutcomeType.ADOPTION],
+        changedById: reviewer.id,
+        at: returnedAnimal.outcomeDate as Date,
+      },
+    ],
+  });
+
+  // The return itself, mirroring `_createReIntake`: a new Intake event, the
+  // archive reason cleared, and the animal back in care as a DRAFT. Written as
+  // an ordered sequence rather than a final state — the animal is ARCHIVED
+  // until the re-intake that justifies un-archiving it exists.
+  const reIntakeDate = daysAgo(20);
+  await prisma.intake.create({
+    data: {
+      animalId: returnedAnimal.id,
+      type: IntakeType.OWNER_SURRENDER,
+      intakeDate: reIntakeDate,
+      staffMemberId: reviewer.id,
+    },
+  });
+  await prisma.animal.update({
+    where: { id: returnedAnimal.id },
+    data: {
+      listingStatus: AnimalListingStatus.DRAFT,
+      archiveReason: null,
+    },
+  });
+  await prisma.animalActivityLog.create({
+    data: {
+      animalId: returnedAnimal.id,
+      activityType: AnimalActivityType.INTAKE_PROCESSED,
+      changedById: reviewer.id,
+      changedAt: reIntakeDate,
+      changeSummary: "Animal was re-intaked as owner surrender.",
+    },
+  });
+
+  // Republishing is a separate staff action from the re-intake (`_createReIntake`
+  // only ever lands on DRAFT), and it is the step that actually unblocks her:
+  // the apply gate reads the animal's listing status, not its history.
+  const rePublishDate = daysAgo(19);
+  await prisma.animal.update({
+    where: { id: returnedAnimal.id },
+    data: {
+      listingStatus: AnimalListingStatus.PUBLISHED,
+      publishedAt: rePublishDate,
+    },
+  });
+  await prisma.animalActivityLog.create({
+    data: {
+      animalId: returnedAnimal.id,
+      activityType: AnimalActivityType.STATUS_CHANGE,
+      changedById: reviewer.id,
+      changedAt: rePublishDate,
+      changeSummary: "Listing status changed from DRAFT to PUBLISHED.",
+    },
+  });
+
   console.log(
-    `Seeded 9 adoption application fixtures for ${applicant.name} (${applicant.email}).`,
+    `Seeded 10 adoption application fixtures for ${applicant.name} (${applicant.email}).`,
   );
 }
 
