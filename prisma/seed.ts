@@ -3837,8 +3837,7 @@ const FIXTURE_HOUSEHOLD: HouseholdProfileData = {
 // The two CLOSED rows are the pair that carries the status's meaning. On the
 // archived one it is a dead end she was never judged for; on the republished
 // one it is the thing REJECTED is not — closure did not cost her the animal,
-// and the apply gate lets her back in. Without the second row the schema
-// change in phase 1 has no fixture behind the behaviour that motivated it.
+// and the apply gate lets her back in.
 //
 // Before this, Jane's applications came out of the same random pools as
 // everyone else's, and *which* statuses she had moved whenever anything

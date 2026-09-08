@@ -32,7 +32,16 @@ const nonAdminPersonFilter: Prisma.PersonWhereInput = {
 
 // Shared with _fetchPeopleForPicker. Matched against name/email/phone.
 const personSearchWhereClause = (query: string): Prisma.PersonWhereInput => {
-  const digitsQuery = normalizePhoneQuery(query);
+  // Only add a phoneNormalized match when the query actually looks like a
+  // phone number: no letters (an email or name with a stray digit — e.g.
+  // "surrenderer1@example.com" — is not a phone search) and at least 4 digits.
+  // A 1-3 digit `contains` matches nearly every stored number and would swamp
+  // the name/email conditions; 4 is the floor so "last four digits" lookups
+  // still work.
+  const digitsOnly = /^[\d\s()+.-]+$/.test(query.trim())
+    ? normalizePhoneQuery(query)
+    : "";
+  const digitsQuery = digitsOnly.length >= 4 ? digitsOnly : "";
 
   return {
     AND: [

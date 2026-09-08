@@ -100,7 +100,7 @@ const _undoAiAction = async (
               "The task this change applied to no longer exists.",
             );
           }
-          // Check 4 — the point of the phase. Evaluated inside the transaction
+          // Evaluated inside the transaction
           // so nothing can slip between the check and the write.
           if (isTaskStatusStale(task.status, leftAt)) {
             throw new PreconditionFailedError(STALE_UNDO_MESSAGE);
