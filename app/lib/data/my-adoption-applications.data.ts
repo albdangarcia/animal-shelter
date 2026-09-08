@@ -152,6 +152,11 @@ const _fetchMyAdoptionAppById = async (
           select: {
             id: true,
             name: true,
+            // The reactivate action refuses unless the animal is still
+            // PUBLISHED (`my-adoption-application.actions.ts`), so the view
+            // page needs this to render that button disabled with a reason
+            // rather than letting it fail with an error toast.
+            listingStatus: true,
             breeds: {
               select: {
                 name: true,

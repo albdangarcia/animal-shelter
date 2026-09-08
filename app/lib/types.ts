@@ -194,6 +194,7 @@ export type MyAdoptionApplicationDetailPayload =
         select: {
           id: true;
           name: true;
+          listingStatus: true;
           breeds: {
             select: {
               name: true;

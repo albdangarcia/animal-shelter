@@ -82,6 +82,8 @@ export const MyAdoptionApplicationView = ({
             <MyApplicationActions
               applicationId={application.id}
               status={application.status}
+              animalName={animal.name}
+              animalListingStatus={animal.listingStatus}
             />
           </CardAction>
         </CardHeader>
