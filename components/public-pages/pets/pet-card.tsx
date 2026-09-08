@@ -1,9 +1,9 @@
-import { PhotoIcon } from "@heroicons/react/24/outline";
 import Image from "next/image";
 import Link from "next/link";
 import clsx from "clsx";
 import type { AnimalSize } from "@/prisma/generated/enums";
 import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
+import { PET_PHOTO_COMING_SOON_IMAGE } from "@/app/lib/constants/constants";
 import LikeButton from "../like-button";
 import { calculateAgeString } from "@/app/lib/utils/date-utils";
 import { formatAnimalSize } from "@/app/lib/utils/enum-formatter";
@@ -96,9 +96,19 @@ const PetCard = ({
             )}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-organic-neutral-300">
-            <PhotoIcon className="h-16 w-16 text-organic-neutral-600" />
-          </div>
+          <Image
+            src={PET_PHOTO_COMING_SOON_IMAGE}
+            alt="Photo coming soon"
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 45vw, 280px"
+            // Matches the real photo above: a non-empty placeholder both covers
+            // the decode and silences Next's lazy-LCP warning when a filtered
+            // result puts a photo-less card above the fold.
+            placeholder={`data:image/svg+xml;base64,${toBase64(
+              shimmer(280, 210),
+            )}`}
+            className={clsx("object-contain", !isAvailable && "grayscale")}
+          />
         )}
 
         {!isAvailable && (
