@@ -38,10 +38,8 @@ import { FosterApplicationStatusChangeSchema } from "@/app/lib/zod-schemas/foste
 import { MyFosterApplicationPayload } from "@/app/lib/types";
 import { formatDateOrNA } from "@/app/lib/utils/date-utils";
 import { HouseholdReadOnlyRows } from "@/components/dashboard/household/household-read-only";
-import {
-  CapabilityReadOnlyRows,
-  StatusHistoryTimeline,
-} from "@/components/dashboard/my-foster-application/foster-application-status";
+import { CapabilityReadOnlyRows } from "@/components/dashboard/my-foster-application/foster-application-status";
+import { StatusHistoryTimeline } from "@/components/dashboard/applications/status-history-timeline";
 import { FosterApplicationStatuses } from "@/components/dashboard/foster-applications/table/foster-applications-options";
 
 type StatusChangeFormValues = z.input<typeof FosterApplicationStatusChangeSchema>;

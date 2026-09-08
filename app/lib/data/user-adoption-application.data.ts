@@ -74,6 +74,14 @@ export type AdoptionApplicationWithOutcome = Prisma.AdoptionApplicationGetPayloa
         };
       };
     };
+    history: {
+      orderBy: { changedAt: "desc" };
+      include: {
+        changedBy: {
+          select: { name: true };
+        };
+      };
+    };
   };
 }>;
 
@@ -252,6 +260,10 @@ const _fetchAdoptionApplicationById = async (
               },
             },
           },
+        },
+        history: {
+          orderBy: { changedAt: "desc" },
+          include: { changedBy: { select: { name: true } } },
         },
       },
     });

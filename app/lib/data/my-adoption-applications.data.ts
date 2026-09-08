@@ -1,7 +1,7 @@
 import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
-  AdoptionApplicationPayload,
+  MyAdoptionApplicationDetailPayload,
   MyAdoptionApplicationPayload,
   AnimalForAdoptionApplicationPayload,
 } from "../types";
@@ -125,7 +125,7 @@ const _fetchMyAdoptionApplications = async (
 const _fetchMyAdoptionAppById = async (
   user: SessionUser,
   adoptionAppId: string // Adoption Application id from route params
-): Promise<AdoptionApplicationPayload | null> => {
+): Promise<MyAdoptionApplicationDetailPayload | null> => {
   const personId = user.personId;
 
   if (!personId) {
@@ -168,6 +168,10 @@ const _fetchMyAdoptionAppById = async (
               },
             },
           },
+        },
+        history: {
+          orderBy: { changedAt: "desc" },
+          include: { changedBy: { select: { name: true } } },
         },
       },
     });

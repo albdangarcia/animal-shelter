@@ -185,6 +185,43 @@ export type AdoptionApplicationPayload = Prisma.AdoptionApplicationGetPayload<{
   };
 }>;
 
+// Applicant detail view / edit form: `AdoptionApplicationPayload` plus the
+// status-history trail rendered by the shared `StatusHistoryTimeline`.
+export type MyAdoptionApplicationDetailPayload =
+  Prisma.AdoptionApplicationGetPayload<{
+    include: {
+      animal: {
+        select: {
+          id: true;
+          name: true;
+          breeds: {
+            select: {
+              name: true;
+            };
+          };
+          species: {
+            select: {
+              name: true;
+            };
+          };
+          adoptionApplications: {
+            select: {
+              id: true;
+            };
+          };
+        };
+      };
+      history: {
+        orderBy: { changedAt: "desc" };
+        include: {
+          changedBy: {
+            select: { name: true };
+          };
+        };
+      };
+    };
+  }>;
+
 export type AnimalForAdoptionApplicationPayload = Prisma.AnimalGetPayload<{
   select: {
     id: true;
