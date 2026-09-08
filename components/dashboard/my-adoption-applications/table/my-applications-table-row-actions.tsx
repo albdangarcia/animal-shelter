@@ -50,9 +50,6 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
     });
   };
 
-  // Check if the application can be edited
-  const isEditable = myApplication.status === ApplicationStatus.PENDING;
-
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -65,15 +62,14 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
-        {/* Only show Edit link if the application is in PENDING status */}
-        {isEditable && (
-          <>
-            <Link href={`/dashboard/my-adoption-applications/${myApplication.id}/edit`}>
-              <DropdownMenuItem>Edit</DropdownMenuItem>
-            </Link>
-            <DropdownMenuSeparator />
-          </>
-        )}
+        {/* The one link to an application, so it is offered at every status.
+            "Edit" used to sit here gated on PENDING, which left the applicant
+            with no way back into their own application at the other seven. The
+            view page carries the "Edit application" button when it applies. */}
+        <Link href={`/dashboard/my-adoption-applications/${myApplication.id}`}>
+          <DropdownMenuItem>View application</DropdownMenuItem>
+        </Link>
+        <DropdownMenuSeparator />
 
         {/* Conditionally render Withdraw or Reactivate */}
         {myApplication.status === ApplicationStatus.WITHDRAWN ? (

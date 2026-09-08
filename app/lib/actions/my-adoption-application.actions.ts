@@ -223,6 +223,10 @@ const _withdrawMyAdoptionApplication = async (
     };
   }
 
+  // The list, the read-only view page both actions can now be invoked from,
+  // and the edit route the status change closes off.
+  revalidatePath(MY_APPLICATIONS_PATH);
+  revalidatePath(`${MY_APPLICATIONS_PATH}/${validatedApplicationId}`);
   revalidatePath(`${MY_APPLICATIONS_PATH}/${validatedApplicationId}/edit`);
 
   return { success: true, message: "Application withdrawn successfully." };
@@ -310,7 +314,8 @@ const _reactivateMyAdoptionApplication = async (
     };
   }
 
-  revalidatePath("/dashboard/my-adoption-applications");
+  revalidatePath(MY_APPLICATIONS_PATH);
+  revalidatePath(`${MY_APPLICATIONS_PATH}/${validatedApplicationId}`);
 
   return { success: true, message: "Application reactivated successfully." };
 };

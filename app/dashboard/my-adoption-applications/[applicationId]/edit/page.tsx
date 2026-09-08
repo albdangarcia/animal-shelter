@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   Card,
   CardContent,
@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/card";
 import { MyApplicationForm } from "@/components/dashboard/my-adoption-applications/my-adoption-application-form";
 import { fetchMyAdoptionAppById } from "@/app/lib/data/my-adoption-applications.data";
+import { ApplicationStatus } from "@/prisma/generated/enums";
 
 interface Props {
   params: Promise<{ applicationId: string }>;
@@ -21,6 +22,14 @@ const Page = async ({ params }: Props) => {
 
   if (!myApplication) {
     notFound();
+  }
+
+  // PENDING is the only status `updateMyAdoptionApp` accepts. Without this the
+  // form rendered fully editable at every other status and only failed on
+  // submit, with a raw enum name in the message. The read-only view page says
+  // what the status means instead.
+  if (myApplication.status !== ApplicationStatus.PENDING) {
+    redirect(`/dashboard/my-adoption-applications/${applicationId}`);
   }
 
   const animal = myApplication.animal;
