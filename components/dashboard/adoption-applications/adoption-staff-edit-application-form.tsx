@@ -1,7 +1,7 @@
 "use client";
 
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { ArrowRight, Info, Loader2, Pencil } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, Info, Loader2, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
@@ -48,6 +48,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { StatusHistoryTimeline } from "@/components/dashboard/applications/status-history-timeline";
 import { Textarea } from "@/components/ui/textarea";
 import { US_STATES } from "@/app/lib/constants/us-states";
 
@@ -234,8 +235,10 @@ export function StaffApplicationUpdateForm({
                             {...field}
                           />
                         </FormControl>
-                        <FormDescription>
-                          This reason will be logged in the application history.
+                        <FormDescription className="flex items-center gap-1.5">
+                          <Eye className="h-3.5 w-3.5 shrink-0" />
+                          Shared with the applicant — shown on their application
+                          page and recorded in the status history below.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
@@ -257,6 +260,10 @@ export function StaffApplicationUpdateForm({
                           {...field}
                         />
                       </FormControl>
+                      <FormDescription className="flex items-center gap-1.5">
+                        <EyeOff className="h-3.5 w-3.5 shrink-0" />
+                        Staff-only. Never shown to the applicant.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -521,6 +528,15 @@ export function StaffApplicationUpdateForm({
                   />
                 </FormControl>
               </FormItem>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Status History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <StatusHistoryTimeline history={application.history} />
             </CardContent>
           </Card>
 
