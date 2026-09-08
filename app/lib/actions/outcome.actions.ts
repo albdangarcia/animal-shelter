@@ -30,6 +30,24 @@ import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 const OUTCOMES_PATH = "/dashboard/outcomes";
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
 
+// Why the other applicants' applications were closed when this animal left the
+// shelter. The cascade runs for all six outcome types, so this is keyed by
+// outcome rather than written once in adoption wording.
+//
+// These strings are read by the applicant, not by staff — they are the only
+// explanation anyone gets for a status they did not cause. DECEASED and
+// EUTHANIZED deliberately say less than they could: a bulk auto-generated
+// line is the wrong channel for that news, and staff can phone.
+const CLOSURE_REASON_BY_OUTCOME: Record<OutcomeType, string> = {
+  [OutcomeType.ADOPTION]: "This animal was adopted by another applicant.",
+  [OutcomeType.TRANSFER_OUT]:
+    "This animal was transferred to another organization.",
+  [OutcomeType.RETURN_TO_OWNER]: "This animal was reunited with their owner.",
+  [OutcomeType.DECEASED]: "This animal is no longer at the shelter.",
+  [OutcomeType.EUTHANIZED]: "This animal is no longer at the shelter.",
+  [OutcomeType.OTHER]: "This animal is no longer available for adoption.",
+};
+
 interface CreateOutcomeIds {
   animalId: string;
   adoptionApplicationId?: string;
@@ -174,8 +192,8 @@ const _createOutcome = async (
         });
       }
 
-      // Find and reject ALL other open applications for this animal
-      const otherAppsToReject = await tx.adoptionApplication.findMany({
+      // Close ALL other open applications for this animal
+      const otherAppsToClose = await tx.adoptionApplication.findMany({
         where: {
           animalId: animalId,
           // Exclude the winning application if this is an adoption
@@ -185,28 +203,25 @@ const _createOutcome = async (
               ApplicationStatus.PENDING,
               ApplicationStatus.REVIEWING,
               ApplicationStatus.WAITLISTED,
-              ApplicationStatus.APPROVED, // Also reject previously approved apps
+              ApplicationStatus.APPROVED, // Also close previously approved apps
             ],
           },
         },
         select: { id: true },
       });
 
-      const appIdsToReject = otherAppsToReject.map((app) => app.id);
+      const appIdsToClose = otherAppsToClose.map((app) => app.id);
 
-      if (appIdsToReject.length > 0) {
+      if (appIdsToClose.length > 0) {
         await tx.adoptionApplication.updateMany({
-          where: { id: { in: appIdsToReject } },
-          data: { status: ApplicationStatus.REJECTED },
+          where: { id: { in: appIdsToClose } },
+          data: { status: ApplicationStatus.CLOSED },
         });
 
-        // Use a generic reason that works for all outcomes
-        const rejectionReason =
-          "Application rejected as the animal is no longer available.";
-        const historyRecords = appIdsToReject.map((appId) => ({
+        const historyRecords = appIdsToClose.map((appId) => ({
           applicationId: appId,
-          status: ApplicationStatus.REJECTED,
-          statusChangeReason: rejectionReason,
+          status: ApplicationStatus.CLOSED,
+          statusChangeReason: CLOSURE_REASON_BY_OUTCOME[outcomeType],
           changedById: staffMemberId,
         }));
         await tx.applicationStatusHistory.createMany({

@@ -7,6 +7,7 @@ import { PublishedPetsSchema } from "../zod-schemas/animal.schemas";
 import { ANIMAL_IMAGE_ORDER } from "../utils/animal-image-order";
 import { calculateAgeString } from "../utils/date-utils";
 import { computeStays, type StayEvent } from "../utils/stay-utils";
+import { BLOCKING_APPLICATION_STATUSES } from "../utils/application-status";
 
 export type PetsPayload = Prisma.AnimalGetPayload<{
   select: {
@@ -420,16 +421,18 @@ export const fetchPublicPagePetById = async (id: string) => {
             take: 1,
           },
         }),
-        // Conditionally include adoption application status if userId is available
+        // Conditionally include this person's applications that would block
+        // them applying again. Filtered rather than fetched wholesale: a
+        // CLOSED application must not stand in the way if the animal has
+        // returned and been republished.
         ...(personId && {
           adoptionApplications: {
             where: {
               applicantId: personId,
+              status: { in: BLOCKING_APPLICATION_STATUSES },
             },
             select: {
               id: true,
-              applicantId: true,
-              status: true,
             },
             take: 1,
           },

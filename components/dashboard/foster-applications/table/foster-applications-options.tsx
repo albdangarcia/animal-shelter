@@ -3,10 +3,13 @@ import type { LucideIcon } from "lucide-react";
 import { Hourglass, FileCheck2, List, UserCheck, UserX, XCircle } from "lucide-react";
 import { buildOptions } from "@/app/lib/utils/option-utils";
 
-// Foster applications reuse ApplicationStatus, but ADOPTED is never used for
-// them — omitted here so it can't show up as a filter or
-// status-change option.
-type FosterApplicationStatus = Exclude<ApplicationStatus, "ADOPTED">;
+// Foster applications reuse ApplicationStatus, but ADOPTED and CLOSED are
+// never used for them (both belong to the adoption outcome flow) — omitted
+// here so neither can show up as a filter or status-change option.
+type FosterApplicationStatus = Exclude<
+  ApplicationStatus,
+  "ADOPTED" | "CLOSED"
+>;
 
 const fosterApplicationStatusMeta: Record<
   FosterApplicationStatus,

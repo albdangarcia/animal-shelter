@@ -11,6 +11,7 @@ import type { Prisma } from "@/prisma/generated/client";
 import { RequirePermission, SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
 import { ANIMAL_IMAGE_ORDER } from "../utils/animal-image-order";
+import { BLOCKING_APPLICATION_STATUSES } from "../utils/application-status";
 
 const _fetchMyAdoptionApplications = async (
   user: SessionUser,
@@ -163,7 +164,7 @@ const _fetchMyAdoptionAppById = async (
             },
             adoptionApplications: {
               select: {
-                applicantId: true,
+                id: true,
               },
             },
           },
@@ -216,13 +217,18 @@ const _getAnimalForAdoptionApplication = async (
             name: true,
           },
         },
+        // Only the applications that block re-applying. A CLOSED one does
+        // not: the animal left the shelter while it was open, and this query
+        // has already established the animal is PUBLISHED again.
         adoptionApplications: {
           where: {
             applicantId: personId,
+            status: { in: BLOCKING_APPLICATION_STATUSES },
           },
           select: {
-            applicantId: true,
+            id: true,
           },
+          take: 1,
         },
       },
     });

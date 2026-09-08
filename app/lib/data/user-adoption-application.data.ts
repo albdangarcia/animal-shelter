@@ -54,7 +54,7 @@ export type AdoptionApplicationWithOutcome = Prisma.AdoptionApplicationGetPayloa
         };
         adoptionApplications: {
           select: {
-            applicantId: true;
+            id: true;
           };
         };
       };
@@ -233,7 +233,7 @@ const _fetchAdoptionApplicationById = async (
             },
             adoptionApplications: {
               select: {
-                applicantId: true,
+                id: true,
               },
             },
           },

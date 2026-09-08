@@ -177,7 +177,7 @@ export type AdoptionApplicationPayload = Prisma.AdoptionApplicationGetPayload<{
         };
         adoptionApplications: {
           select: {
-            applicantId: true;
+            id: true;
           };
         };
       };
@@ -198,7 +198,7 @@ export type AnimalForAdoptionApplicationPayload = Prisma.AnimalGetPayload<{
       select: { name: true };
     };
     adoptionApplications: {
-      select: { applicantId: true };
+      select: { id: true };
     };
   };
 }>;

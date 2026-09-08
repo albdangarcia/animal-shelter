@@ -26,11 +26,14 @@ const Page = async ({ params }: Props) => {
     notFound();
   }
 
-  const currentUserHasActiveApplication =
+  // getAnimalForAdoptionApplication returns only the applications that block
+  // re-applying, so any row here means this person already has one in play.
+  // A CLOSED application is not one of them — they get the form again.
+  const currentUserHasBlockingApplication =
     animalToAdopt.adoptionApplications &&
     animalToAdopt.adoptionApplications.length > 0;
 
-  if (currentUserHasActiveApplication) {
+  if (currentUserHasBlockingApplication) {
     redirect(`/dashboard/my-adoption-applications`);
   }
 
