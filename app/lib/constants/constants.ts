@@ -9,6 +9,8 @@ export const ALLOWED_MIME_TYPES = [
 // Maximum file size for image uploads (5MB)
 export const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
+export const PET_PHOTO_COMING_SOON_IMAGE = "/images/pet-photo-coming-soon.webp";
+
 /**
  * The single IANA timezone the shelter operates in. All reporting date-range
  * boundaries are computed in this zone so that every viewer sees identical

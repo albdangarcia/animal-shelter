@@ -447,8 +447,6 @@ const generatedNamesBySpecies: Record<keyof typeof allSpecies, string[]> = {
   ],
 };
 
-const PLACEHOLDER_IMAGE = "placeholder.jpg";
-
 // One individual animal's photos within a species' library, ordered by the
 // `M` (photo number) segment of its filenames.
 interface SpeciesIndividual {
@@ -534,7 +532,12 @@ function pickSpeciesImages(speciesName: string): string[] {
   const speciesKey = (Object.keys(allSpecies) as (keyof typeof allSpecies)[]).find(
     (key) => allSpecies[key].name === speciesName,
   );
-  if (!speciesKey) return [`${baseUrl}/${PLACEHOLDER_IMAGE}`];
+  if (!speciesKey) {
+    throw new Error(
+      `pickSpeciesImages: no species in allSpecies is named "${speciesName}". ` +
+        `Every blueprint/generated animal must map to a known species image pool.`,
+    );
+  }
 
   const individual = dealIndividual(speciesKey);
   return individual.photos
@@ -3418,7 +3421,10 @@ async function seedFostering() {
         colors: { connect: [{ id: primaryColor.id }] },
         primaryColor: { connect: { id: primaryColor.id } },
         animalImages: {
-          create: [{ url: `${baseUrl}/${PLACEHOLDER_IMAGE}`, sortOrder: 0 }],
+          create: pickSpeciesImages("Dog").map((url, index) => ({
+            url,
+            sortOrder: index,
+          })),
         },
         currentUnit: { connect: { id: startUnit.id } },
       },

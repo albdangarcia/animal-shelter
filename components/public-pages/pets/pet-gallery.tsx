@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { PhotoIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { XMarkIcon } from "@heroicons/react/24/outline";
 import type { AnimalImageModel } from "@/prisma/generated/models/AnimalImage";
 import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
+import { PET_PHOTO_COMING_SOON_IMAGE } from "@/app/lib/constants/constants";
 import LikeButton from "../like-button";
 import clsx from "clsx";
 import {
@@ -77,9 +78,20 @@ const PetGallery = ({
               alt="Selected pet image, click to enlarge"
             />
           ) : (
-            <div className="flex h-full w-full rounded-[28px] bg-card">
-              <PhotoIcon className="w-8 h-8 m-auto text-muted-foreground" />
-            </div>
+            // No photos yet. `selectedImage` stays "" so the wrapper's onClick
+            // never opens the lightbox on this fallback, and the thumbnail row
+            // below stays hidden (gated on images.length > 1).
+            <Image
+              className="object-contain"
+              src={PET_PHOTO_COMING_SOON_IMAGE}
+              fill
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              // Same slot as the real photo above — the detail page's LCP
+              // element — so it loads on the same terms rather than lazily.
+              loading="eager"
+              fetchPriority="high"
+              alt="Photo coming soon"
+            />
           )}
           <div className="absolute top-3 right-3 z-10">
             <LikeButton

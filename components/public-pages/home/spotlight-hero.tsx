@@ -6,6 +6,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import { PhotoIcon } from "@heroicons/react/24/outline";
 import type { SpotlightAnimal } from "@/app/lib/data/public.data";
+import { PET_PHOTO_COMING_SOON_IMAGE } from "@/app/lib/constants/constants";
 import { formatWeight } from "@/app/lib/utils/weight-format";
 import LikeButton from "../like-button";
 
@@ -26,9 +27,11 @@ interface SpotlightHeroProps {
  * arrive with no photo, no description, no weight and no badge. That is a
  * normal state, not an error. The description is placeholdered — a fixed
  * three-line slot holds its space so swapping animals doesn't re-centre the
- * text column — but the photo, weight and badge are still omitted rather than
+ * text column — and the large portrait falls back to a "photo coming soon"
+ * image in its fixed-size disc. Weight and badge are still omitted rather than
  * placeholdered, being absolutely positioned or block-level so nothing below
- * them shifts when they are absent.
+ * them shifts when they are absent. The flick-through thumbnails keep the plain
+ * PhotoIcon — the fallback image is illegible at 78px.
  */
 const SpotlightHero = ({
   animals,
@@ -150,12 +153,17 @@ const SpotlightHero = ({
                     className="object-cover object-[50%_30%]"
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-organic-neutral-300">
-                    <PhotoIcon
-                      className="size-24 text-organic-neutral-600"
-                      aria-hidden="true"
-                    />
-                  </div>
+                  <Image
+                    src={PET_PHOTO_COMING_SOON_IMAGE}
+                    alt="Photo coming soon"
+                    fill
+                    sizes="(max-width: 640px) 72vw, (max-width: 1024px) 60vw, 440px"
+                    // Same slot as the real portrait — the page's LCP element —
+                    // so it loads eagerly rather than lazily.
+                    loading="eager"
+                    fetchPriority="high"
+                    className="object-cover"
+                  />
                 )}
               </div>
 
