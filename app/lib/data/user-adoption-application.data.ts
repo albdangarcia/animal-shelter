@@ -54,7 +54,7 @@ export type AdoptionApplicationWithOutcome = Prisma.AdoptionApplicationGetPayloa
         };
         adoptionApplications: {
           select: {
-            applicantId: true;
+            id: true;
           };
         };
       };
@@ -71,6 +71,14 @@ export type AdoptionApplicationWithOutcome = Prisma.AdoptionApplicationGetPayloa
           select: {
             id: true;
           };
+        };
+      };
+    };
+    history: {
+      orderBy: { changedAt: "desc" };
+      include: {
+        changedBy: {
+          select: { name: true };
         };
       };
     };
@@ -233,7 +241,7 @@ const _fetchAdoptionApplicationById = async (
             },
             adoptionApplications: {
               select: {
-                applicantId: true,
+                id: true,
               },
             },
           },
@@ -252,6 +260,10 @@ const _fetchAdoptionApplicationById = async (
               },
             },
           },
+        },
+        history: {
+          orderBy: { changedAt: "desc" },
+          include: { changedBy: { select: { name: true } } },
         },
       },
     });

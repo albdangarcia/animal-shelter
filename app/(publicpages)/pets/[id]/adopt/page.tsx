@@ -26,11 +26,14 @@ const Page = async ({ params }: Props) => {
     notFound();
   }
 
-  const currentUserHasActiveApplication =
+  // getAnimalForAdoptionApplication returns only the applications that block
+  // re-applying, so any row here means this person already has one in play.
+  // A CLOSED application is not one of them — they get the form again.
+  const currentUserHasBlockingApplication =
     animalToAdopt.adoptionApplications &&
     animalToAdopt.adoptionApplications.length > 0;
 
-  if (currentUserHasActiveApplication) {
+  if (currentUserHasBlockingApplication) {
     redirect(`/dashboard/my-adoption-applications`);
   }
 
@@ -38,8 +41,7 @@ const Page = async ({ params }: Props) => {
 
   return (
     <>
-      {/* The same accent band the nav carries, so the two read as one surface
-          (spec §4.1, phase 2 §B.1). */}
+      {/* The same accent band the nav carries, so the two read as one surface. */}
       <section className="bg-organic-accent-100">
         <div className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8 sm:py-20 lg:px-14">
           <h1 className="mb-5 font-display text-[clamp(34px,5vw,56px)] leading-[1.05] tracking-[-0.02em]">

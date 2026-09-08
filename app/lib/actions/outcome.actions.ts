@@ -26,6 +26,7 @@ import {
 } from "../utils/errors";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+import { CLOSURE_REASON_BY_OUTCOME } from "../utils/application-status";
 
 const OUTCOMES_PATH = "/dashboard/outcomes";
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
@@ -174,8 +175,8 @@ const _createOutcome = async (
         });
       }
 
-      // Find and reject ALL other open applications for this animal
-      const otherAppsToReject = await tx.adoptionApplication.findMany({
+      // Close ALL other open applications for this animal
+      const otherAppsToClose = await tx.adoptionApplication.findMany({
         where: {
           animalId: animalId,
           // Exclude the winning application if this is an adoption
@@ -185,28 +186,25 @@ const _createOutcome = async (
               ApplicationStatus.PENDING,
               ApplicationStatus.REVIEWING,
               ApplicationStatus.WAITLISTED,
-              ApplicationStatus.APPROVED, // Also reject previously approved apps
+              ApplicationStatus.APPROVED, // Also close previously approved apps
             ],
           },
         },
         select: { id: true },
       });
 
-      const appIdsToReject = otherAppsToReject.map((app) => app.id);
+      const appIdsToClose = otherAppsToClose.map((app) => app.id);
 
-      if (appIdsToReject.length > 0) {
+      if (appIdsToClose.length > 0) {
         await tx.adoptionApplication.updateMany({
-          where: { id: { in: appIdsToReject } },
-          data: { status: ApplicationStatus.REJECTED },
+          where: { id: { in: appIdsToClose } },
+          data: { status: ApplicationStatus.CLOSED },
         });
 
-        // Use a generic reason that works for all outcomes
-        const rejectionReason =
-          "Application rejected as the animal is no longer available.";
-        const historyRecords = appIdsToReject.map((appId) => ({
+        const historyRecords = appIdsToClose.map((appId) => ({
           applicationId: appId,
-          status: ApplicationStatus.REJECTED,
-          statusChangeReason: rejectionReason,
+          status: ApplicationStatus.CLOSED,
+          statusChangeReason: CLOSURE_REASON_BY_OUTCOME[outcomeType],
           changedById: staffMemberId,
         }));
         await tx.applicationStatusHistory.createMany({

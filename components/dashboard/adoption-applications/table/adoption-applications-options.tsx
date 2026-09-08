@@ -8,6 +8,7 @@ import {
   UserX,
   XCircle,
   Heart,
+  Archive,
 } from "lucide-react";
 import { buildOptions } from "@/app/lib/utils/option-utils";
 
@@ -22,6 +23,10 @@ const applicationStatusMeta: Record<
   REJECTED: { label: "Rejected", icon: UserX },
   WITHDRAWN: { label: "Withdrawn", icon: XCircle },
   ADOPTED: { label: "Adopted", icon: Heart },
+  // Set only by the outcome cascade, never by staff review: the animal left
+  // the shelter while this application was open. Not a rejection, and the one
+  // status that leaves the applicant free to apply again.
+  CLOSED: { label: "Closed", icon: Archive },
 };
 
 export const ApplicationStatuses = buildOptions<ApplicationStatus>(

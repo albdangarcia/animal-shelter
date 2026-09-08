@@ -48,11 +48,13 @@ const Page = async ({ params }: Props) => {
   // Format birth date for display using the utility function
   const formattedBirthDate = formatDateToLongString(animal.birthDate);
 
-  const currentUserHasActiveApplication =
-    currentUserPersonId &&
-    animal.adoptionApplications?.some(
-      (app) => app.applicantId === currentUserPersonId,
-    );
+  // The query already filtered to this person's blocking applications, so the
+  // presence of a row is the whole answer — no second applicantId check, and
+  // no status check here either. A CLOSED application is not in this list, so
+  // the applicant sees "Adopt" again rather than a link to a dead application.
+  const currentUserHasBlockingApplication = Boolean(
+    currentUserPersonId && animal.adoptionApplications?.length,
+  );
 
   const isLikedByCurrentUser = Boolean(animal.likes && animal.likes.length > 0);
 
@@ -92,7 +94,7 @@ const Page = async ({ params }: Props) => {
       <div className="inline-flex cursor-not-allowed items-center rounded-full bg-organic-accent-300 px-[26px] py-[13px] font-display text-[15px] leading-[1.2] text-organic-accent-900">
         Pending Adoption
       </div>
-    ) : currentUserHasActiveApplication ? (
+    ) : currentUserHasBlockingApplication ? (
       <Link
         href="/dashboard/my-adoption-applications"
         className="inline-flex items-center rounded-full bg-secondary px-[26px] py-[13px] font-display text-[15px] leading-[1.2] text-secondary-foreground transition-colors hover:shadow-organic-md"

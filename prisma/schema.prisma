@@ -907,6 +907,7 @@ enum ApplicationStatus {
   REJECTED // Application rejected
   WITHDRAWN // Application withdrawn by the user
   ADOPTED // animal has been adopted through this application (final state)
+  CLOSED // Closed administratively because the animal left the shelter, not a judgment on the applicant. Never set by staff review; only the outcome cascade sets it, and it is the one status that does not block re-applying.
 }
 
 /// Represents a user's application to adopt a specific animal. This is a snapshot-in-time record.

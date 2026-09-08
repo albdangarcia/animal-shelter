@@ -68,12 +68,13 @@ const _updateMyAdoptionApp = async (
     ApplicationStatus.REJECTED,
     ApplicationStatus.WITHDRAWN,
     ApplicationStatus.ADOPTED,
+    ApplicationStatus.CLOSED,
   ];
 
   if (nonEditableStatuses.includes(application.status)) {
     return {
       ok: false,
-      message: `Cannot update application. Its status is currently "${application.status}". Applications cannot be modified if their status is REVIEWING, APPROVED, REJECTED, WITHDRAWN, or ADOPTED.`,
+      message: `Cannot update application. Its status is currently "${application.status}". Applications cannot be modified if their status is REVIEWING, APPROVED, REJECTED, WITHDRAWN, ADOPTED, or CLOSED.`,
     };
   }
 
@@ -170,6 +171,8 @@ const _withdrawMyAdoptionApplication = async (
     ApplicationStatus.ADOPTED,
     ApplicationStatus.WITHDRAWN,
     ApplicationStatus.REJECTED,
+    // Nothing left to withdraw from: the animal has already left the shelter.
+    ApplicationStatus.CLOSED,
   ];
 
   if (nonWithdrawableStatuses.includes(application.status)) {
@@ -220,6 +223,10 @@ const _withdrawMyAdoptionApplication = async (
     };
   }
 
+  // The list, the read-only view page both actions can now be invoked from,
+  // and the edit route the status change closes off.
+  revalidatePath(MY_APPLICATIONS_PATH);
+  revalidatePath(`${MY_APPLICATIONS_PATH}/${validatedApplicationId}`);
   revalidatePath(`${MY_APPLICATIONS_PATH}/${validatedApplicationId}/edit`);
 
   return { success: true, message: "Application withdrawn successfully." };
@@ -307,7 +314,8 @@ const _reactivateMyAdoptionApplication = async (
     };
   }
 
-  revalidatePath("/dashboard/my-adoption-applications");
+  revalidatePath(MY_APPLICATIONS_PATH);
+  revalidatePath(`${MY_APPLICATIONS_PATH}/${validatedApplicationId}`);
 
   return { success: true, message: "Application reactivated successfully." };
 };
