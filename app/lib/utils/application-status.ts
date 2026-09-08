@@ -1,4 +1,4 @@
-import { ApplicationStatus } from "@/prisma/generated/enums";
+import { ApplicationStatus, OutcomeType } from "@/prisma/generated/enums";
 import { formatSingleEnumOption } from "./enum-formatter";
 
 // Shared by adoption and foster application status-change actions so both
@@ -69,6 +69,31 @@ export const BLOCKING_APPLICATION_STATUSES: ApplicationStatus[] = [
   ApplicationStatus.WITHDRAWN,
   ApplicationStatus.ADOPTED,
 ];
+
+// The applicant-visible reason written onto every application the outcome
+// cascade closes. Keyed by all six OutcomeTypes because the cascade runs for
+// every one of them — an animal that was transferred, reunited with its owner
+// or that died closes open applications exactly the same way an adoption does,
+// so this text can never be narrowed to adoption wording.
+//
+// DECEASED and EUTHANIZED deliberately share the non-specific line: a bulk
+// auto-generated history row is the wrong channel for that news, and staff can
+// phone the people who need to hear it properly.
+//
+// This lives here rather than next to the cascade in `outcome.actions.ts`
+// because that file is `"use server"`, where every export must be an async
+// function — a const export there is a build error. `prisma/seed.ts` mirrors
+// the cascade and reads the same map, so seeded closures and real ones cannot
+// drift apart.
+export const CLOSURE_REASON_BY_OUTCOME: Record<OutcomeType, string> = {
+  [OutcomeType.ADOPTION]: "This animal was adopted by another applicant.",
+  [OutcomeType.TRANSFER_OUT]:
+    "This animal was transferred to another organization.",
+  [OutcomeType.RETURN_TO_OWNER]: "This animal was reunited with their owner.",
+  [OutcomeType.DECEASED]: "This animal is no longer at the shelter.",
+  [OutcomeType.EUTHANIZED]: "This animal is no longer at the shelter.",
+  [OutcomeType.OTHER]: "This animal is no longer available for adoption.",
+};
 
 export const isAllowedTransition = (
   from: ApplicationStatus,

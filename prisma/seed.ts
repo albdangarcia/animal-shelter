@@ -39,6 +39,7 @@ import {
   randomInt,
 } from "@/app/lib/utils/seeding-utils";
 import { computeStays } from "@/app/lib/utils/stay-utils";
+import { CLOSURE_REASON_BY_OUTCOME } from "@/app/lib/utils/application-status";
 import { recordNoteMutation } from "@/app/lib/services/note-audit";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
@@ -234,6 +235,19 @@ const NON_APPLICANT_PERSON_NAMES = new Set([
   "Unparseable Phone Contact",
   "WalkIn TestUser",
 ]);
+
+// Registered users whose adoption applications are hand-written by
+// `seedRegisteredUserApplicationFixtures` rather than drawn at random. Keeping
+// them out of *every* random applicant pool — the adoption cascades in
+// `seedAnimalsAndRelations` as well as `seedApplicationNoise` — is what makes
+// that set exact. Both pools would otherwise hand them extra applications
+// whose statuses move whenever anything upstream shifts the random stream,
+// which is precisely the non-determinism the fixture exists to remove.
+//
+// "John Smith" (finder1@example.com) is deliberately NOT here: the applicant
+// dashboard still needs one registered user whose applications look like
+// everybody else's.
+const FIXTURE_APPLICANT_PERSON_NAMES = new Set(["Jane Doe"]);
 
 const allColors = {
   BLACK: { name: "Black" },
@@ -2035,13 +2049,21 @@ async function seedApplicationWithHistory(opts: {
   return application.id;
 }
 
-// Rejects every other open application (PENDING/REVIEWING/WAITLISTED/
-// APPROVED) on an animal, exactly as `_createOutcome` does when an adoption
-// is finalized.
-async function rejectOtherOpenApplications(opts: {
+// Closes every other open application (PENDING/REVIEWING/WAITLISTED/
+// APPROVED) on an animal, exactly as `_createOutcome` does when an outcome is
+// recorded. CLOSED, not REJECTED: nobody assessed these people, the animal
+// simply left the shelter while their application was open.
+//
+// `outcomeType` is a parameter rather than a hardcoded ADOPTION because the
+// real cascade runs for all six outcome types and picks its wording from
+// `CLOSURE_REASON_BY_OUTCOME`. Today's only caller finalizes an adoption, but
+// baking that in would rebuild exactly the single-meaning assumption the
+// CLOSED status exists to remove.
+async function closeOtherOpenApplications(opts: {
   animalId: string;
   excludeApplicationId: string;
   staffMemberId: string;
+  outcomeType: OutcomeType;
   at: Date;
 }) {
   const others = await prisma.adoptionApplication.findMany({
@@ -2064,15 +2086,14 @@ async function rejectOtherOpenApplications(opts: {
 
   await prisma.adoptionApplication.updateMany({
     where: { id: { in: others.map((o) => o.id) } },
-    data: { status: ApplicationStatus.REJECTED },
+    data: { status: ApplicationStatus.CLOSED },
   });
 
   await prisma.applicationStatusHistory.createMany({
     data: others.map((o) => ({
       applicationId: o.id,
-      status: ApplicationStatus.REJECTED,
-      statusChangeReason:
-        "Application rejected as the animal is no longer available.",
+      status: ApplicationStatus.CLOSED,
+      statusChangeReason: CLOSURE_REASON_BY_OUTCOME[opts.outcomeType],
       changedById: opts.staffMemberId,
       changedAt: opts.at,
     })),
@@ -2082,20 +2103,39 @@ async function rejectOtherOpenApplications(opts: {
 // Produces one full adoption for an animal's stay: a winning application
 // that goes PENDING → REVIEWING → APPROVED → ADOPTED, 0-2 other applicants
 // left in an open status, the ADOPTION Outcome linked to the winner, and the
-// cascade rejecting every other open application — mirroring `_createOutcome`
+// cascade closing every other open application — mirroring `_createOutcome`
 // exactly (it refuses an ADOPTION outcome without an APPROVED application).
+//
+// `winner` names the adopter and supplies their application content instead
+// of drawing both. The applicant fixture uses it to give one named account a
+// real ADOPTED application: the status on its own would be incoherent, because
+// the staff query behind that screen reads the linked Outcome, and this is the
+// only function that builds that shape. The three fields travel together
+// because a fixture that pinned the applicant but still drew random household
+// answers and a random reason would only be half-deterministic.
+//
+// A named winner brings no other applicants along: the fixture wants exactly
+// one row on that animal, not a random pair.
 async function seedAdoptionCascade(opts: {
   animalId: string;
   intakeDate: Date;
   outcomeDate: Date;
   staffMembers: { id: string }[];
   applicantPool: ApplicantPerson[];
+  winner?: {
+    applicant: ApplicantPerson;
+    reasonForAdoption: string;
+    householdProfileData: HouseholdProfileData;
+  };
 }) {
   const reviewingStaff = getRandomItem(opts.staffMembers);
   const approvingStaff = getRandomItem(opts.staffMembers);
 
-  const otherCount = randomInt(0, 2);
-  const [winner, ...others] = pickDistinct(opts.applicantPool, 1 + otherCount);
+  const drawn = opts.winner
+    ? []
+    : pickDistinct(opts.applicantPool, 1 + randomInt(0, 2));
+  const winner = opts.winner?.applicant ?? drawn[0];
+  const others = drawn.slice(1);
 
   const submittedAt = addDaysClamped(
     opts.intakeDate,
@@ -2109,8 +2149,10 @@ async function seedAdoptionCascade(opts: {
     animalId: opts.animalId,
     applicant: winner,
     submittedAt,
-    reasonForAdoption: getRandomItem(adoptionReasonPool),
-    householdProfileData: generateHouseholdProfileData(),
+    reasonForAdoption:
+      opts.winner?.reasonForAdoption ?? getRandomItem(adoptionReasonPool),
+    householdProfileData:
+      opts.winner?.householdProfileData ?? generateHouseholdProfileData(),
     transitions: [
       {
         status: ApplicationStatus.REVIEWING,
@@ -2200,10 +2242,11 @@ async function seedAdoptionCascade(opts: {
     },
   });
 
-  await rejectOtherOpenApplications({
+  await closeOtherOpenApplications({
     animalId: opts.animalId,
     excludeApplicationId: winnerAppId,
     staffMemberId: approvingStaff.id,
+    outcomeType: OutcomeType.ADOPTION,
     at: opts.outcomeDate,
   });
 }
@@ -2630,7 +2673,9 @@ async function seedAnimalsAndRelations() {
   });
   const applicantPool: ApplicantPerson[] = [
     ...walkInPersons.filter((p) => !NON_APPLICANT_PERSON_NAMES.has(p.name)),
-    ...userRolePersons,
+    ...userRolePersons.filter(
+      (p) => !FIXTURE_APPLICANT_PERSON_NAMES.has(p.name),
+    ),
   ];
   const allPartners = await prisma.partner.findMany();
   const dbBreeds = await prisma.breed.findMany();
@@ -3599,7 +3644,9 @@ async function seedApplicationNoise() {
   });
   const applicantPool: ApplicantPerson[] = [
     ...walkInPersons.filter((p) => !NON_APPLICANT_PERSON_NAMES.has(p.name)),
-    ...userRolePersons,
+    ...userRolePersons.filter(
+      (p) => !FIXTURE_APPLICANT_PERSON_NAMES.has(p.name),
+    ),
   ];
 
   const publishedAnimals = await prisma.animal.findMany({
@@ -3748,18 +3795,53 @@ async function seedApplicationNoise() {
   console.log(`Seeded ${plans.length} standalone adoption applications.`);
 }
 
-// The staff standalone adoption-application routes only expose their
-// edit/review actions for applicants with NO user account (registered users
-// manage their own applications). The e2e spec for that flow needs a stable
-// *negative* case: a registered user whose application 404s on the staff edit
-// route. The random applicant-pool draws above usually hand "Jane Doe" one,
-// but the seed is only "same day, same data" — a calendar shift or an edit to
-// personData moves the RNG stream and there is no guarantee on a given run.
-// Pin exactly one down.
-async function seedRegisteredUserApplicationFixture() {
-  console.log("Seeding the registered-user adoption application fixture...");
+// One hand-written household profile for the fixture account. Every one of the
+// applications below copies these columns onto itself and upserts them onto
+// Jane's HouseholdProfile, so the read-only household rows say the same thing
+// on every application and on every reseed. `generateHouseholdProfileData`
+// would redraw nine times and leave whichever call ran last on her profile.
+const FIXTURE_HOUSEHOLD: HouseholdProfileData = {
+  livingSituation: LivingSituation.RENT_HOUSE,
+  hasYard: true,
+  landlordPermission: true,
+  householdSize: 3,
+  hasChildren: true,
+  childrenAges: [7, 11],
+  otherAnimalsDescription: "One senior cat, indoor only.",
+  animalExperience: "Grew up with dogs and cats.",
+};
 
-  const janeDoe = await prisma.person.findFirst({
+// Nine adoption applications for "Jane Doe" (surrenderer1@example.com), one in
+// each state the applicant-facing screens have to render:
+//
+//   PENDING    / PUBLISHED         the only editable state
+//   REVIEWING  / PUBLISHED         read-only, staff are looking at it
+//   WAITLISTED / PUBLISHED         held as a backup — not the same as PENDING
+//   APPROVED   / PENDING_ADOPTION  withdrawing releases the animal again
+//   REJECTED   / PUBLISHED         a staff judgment, with a written reason
+//   WITHDRAWN  / PUBLISHED         reactivate is available
+//   WITHDRAWN  / ARCHIVED          reactivate is refused: the animal is gone
+//   CLOSED     / ARCHIVED          the cascade closed it, nobody judged her
+//   ADOPTED    / ARCHIVED          terminal, with the Outcome behind it
+//
+// Before this, Jane's applications came out of the same random pools as
+// everyone else's, and *which* statuses she had moved whenever anything
+// upstream shifted the seeded random stream. A run that gave her no PENDING
+// application left the applicant edit form unreachable altogether, and a run
+// that gave her no WITHDRAWN one hid both action states. Verifying a screen
+// against that means hand-editing rows first, every time.
+// `FIXTURE_APPLICANT_PERSON_NAMES` keeps her out of those pools, so this list
+// is the whole of what she has.
+//
+// This also carries the narrower guarantee it grew out of: the staff
+// standalone adoption-application routes only expose their edit/review actions
+// for applicants with NO user account, and
+// tests/e2e/people-directory/staff-walk-in-adoption-application.spec.ts needs a
+// registered user with at least one application as its negative case.
+async function seedRegisteredUserApplicationFixtures() {
+  console.log("Seeding the registered-user adoption application fixtures...");
+
+  const applicant = await prisma.person.findFirst({
     where: { name: "Jane Doe", user: { role: Role.USER } },
     select: {
       id: true,
@@ -3773,57 +3855,328 @@ async function seedRegisteredUserApplicationFixture() {
     },
   });
 
-  if (!janeDoe) {
+  if (!applicant) {
     throw new Error(
-      "Expected the seeded 'Jane Doe' registered user for the adoption application fixture.",
+      "Expected the seeded 'Jane Doe' registered user for the adoption application fixtures.",
     );
   }
 
-  // A random draw may already have given her one — any status is enough for
-  // the gate spec, which keys off the applicant's user account, not status.
-  const existing = await prisma.adoptionApplication.findFirst({
-    where: { applicantId: janeDoe.id },
-    select: { id: true },
+  const staffMembers = await prisma.person.findMany({
+    where: { user: { role: Role.STAFF } },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    select: { id: true, email: true },
   });
-  if (existing) {
-    return;
+  if (staffMembers.length === 0) {
+    throw new Error(
+      "No staff members found for the adoption application fixtures.",
+    );
   }
+  // Named rather than drawn: the timeline prints who made each change, so a
+  // random staff member would put a different name on the fixture every run.
+  const reviewer =
+    staffMembers.find((s) => s.email === "staff1@example.com") ??
+    staffMembers[0];
 
-  const animal = await prisma.animal.findFirst({
-    where: {
-      listingStatus: AnimalListingStatus.PUBLISHED,
-      adoptionApplications: { none: { applicantId: janeDoe.id } },
-    },
-    orderBy: { id: "asc" },
-    select: {
-      id: true,
-      intake: {
-        select: { intakeDate: true },
-        orderBy: { intakeDate: "desc" },
-        take: 1,
+  // Animal names repeat in this seed (four "Winston", three "Simba"), so these
+  // fixtures claim animals by precondition and stable ordering instead of by
+  // name. Each claim is removed from the pool: the app allows one application
+  // per person per animal, and two fixtures on one animal would also make the
+  // dashboard rows indistinguishable.
+  const claimedAnimalIds: string[] = [];
+  const claimAnimal = async (
+    label: string,
+    where: Prisma.AnimalWhereInput,
+  ) => {
+    const animal = await prisma.animal.findFirst({
+      where: {
+        ...where,
+        id: { notIn: claimedAnimalIds },
+        adoptionApplications: { none: { applicantId: applicant.id } },
       },
+      orderBy: [{ name: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        intake: {
+          select: { intakeDate: true },
+          orderBy: { intakeDate: "desc" },
+          take: 1,
+        },
+        Outcome: {
+          select: { outcomeDate: true },
+          orderBy: { outcomeDate: "desc" },
+          take: 1,
+        },
+      },
+    });
+    if (!animal?.intake[0]) {
+      throw new Error(
+        `No animal available for the "${label}" adoption application fixture.`,
+      );
+    }
+    claimedAnimalIds.push(animal.id);
+    return {
+      id: animal.id,
+      name: animal.name,
+      intakeDate: animal.intake[0].intakeDate,
+      outcomeDate: animal.Outcome[0]?.outcomeDate ?? null,
+    };
+  };
+
+  // A still-open stay long enough to hang a multi-step history off. Without
+  // the age floor an animal admitted yesterday would have every transition
+  // clamped onto the same instant and the timeline would render with no
+  // visible order. `every` rather than `some` because a re-intaken animal's
+  // *latest* intake is the one these dates have to sit after.
+  const publishedWhere: Prisma.AnimalWhereInput = {
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    intake: { some: {}, every: { intakeDate: { lte: daysAgo(45) } } },
+  };
+
+  // Dates run backwards from today rather than forwards from intake, so every
+  // fixture has the same readable spacing regardless of when its animal came
+  // in.
+  const openStayDates = [daysAgo(30), daysAgo(21), daysAgo(12)];
+
+  // Closed stays are placed as fractions of the stay instead, since the whole
+  // history has to fit between that animal's intake and the outcome that ended
+  // its time here.
+  const withinStay = (stay: { intakeDate: Date; outcomeDate: Date | null }, fraction: number) => {
+    if (!stay.outcomeDate) {
+      throw new Error("Expected a closed stay for an archived fixture animal.");
+    }
+    const span = stay.outcomeDate.getTime() - stay.intakeDate.getTime();
+    return new Date(stay.intakeDate.getTime() + span * fraction);
+  };
+
+  // 9 — ADOPTED. First, because it is the one fixture that runs a real
+  // cascade: that writes the Outcome the staff review screen reads, and it has
+  // to archive the animal afterwards the way `seedReturnAndReadoptAnimal` does
+  // (state must never precede its events).
+  const adoptedAnimal = await claimAnimal("ADOPTED", publishedWhere);
+  await seedAdoptionCascade({
+    animalId: adoptedAnimal.id,
+    // The cascade reads `intakeDate` only as the floor its application dates
+    // walk forward from, so this passes the same 30-day window the open-stay
+    // fixtures use rather than the animal's real intake — which, on an animal
+    // admitted months ago, would leave the application approved in spring and
+    // adopted in autumn with nothing in between.
+    intakeDate: openStayDates[0],
+    outcomeDate: daysAgo(6),
+    staffMembers,
+    applicantPool: [],
+    winner: {
+      applicant,
+      reasonForAdoption:
+        "We have been visiting for weeks and the whole family agrees.",
+      householdProfileData: FIXTURE_HOUSEHOLD,
+    },
+  });
+  await prisma.animal.update({
+    where: { id: adoptedAnimal.id },
+    data: {
+      listingStatus: AnimalListingStatus.ARCHIVED,
+      archiveReason: OutcomeType.ADOPTION,
+      currentUnitId: null,
     },
   });
 
-  if (!animal) {
-    throw new Error(
-      "No PUBLISHED animal available for the registered-user adoption application fixture.",
-    );
-  }
-
-  const now = new Date();
-  const intakeDate =
-    animal.intake[0]?.intakeDate ??
-    new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
+  // 1 — PENDING. The only status the edit form is reachable at.
+  const pendingAnimal = await claimAnimal("PENDING", publishedWhere);
   await seedApplicationWithHistory({
-    animalId: animal.id,
-    applicant: janeDoe,
-    submittedAt: addDaysClamped(intakeDate, randomInt(1, 10), now),
-    reasonForAdoption: getRandomItem(adoptionReasonPool),
-    householdProfileData: generateHouseholdProfileData(),
+    animalId: pendingAnimal.id,
+    applicant,
+    submittedAt: openStayDates[2],
+    reasonForAdoption: "Looking for a calm companion for a quiet household.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
     transitions: [],
   });
+
+  // 2 — REVIEWING. Read-only from here on; the edit route has to redirect.
+  const reviewingAnimal = await claimAnimal("REVIEWING", publishedWhere);
+  await seedApplicationWithHistory({
+    animalId: reviewingAnimal.id,
+    applicant,
+    submittedAt: openStayDates[0],
+    reasonForAdoption:
+      "Our last dog passed last year and the house is too quiet.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
+    transitions: [
+      {
+        status: ApplicationStatus.REVIEWING,
+        reason: "References received. Scheduling a home visit next week.",
+        changedById: reviewer.id,
+        at: openStayDates[1],
+      },
+    ],
+  });
+
+  // 3 — WAITLISTED. Distinct from PENDING: assessed and held, not unread.
+  const waitlistedAnimal = await claimAnimal("WAITLISTED", publishedWhere);
+  await seedApplicationWithHistory({
+    animalId: waitlistedAnimal.id,
+    applicant,
+    submittedAt: openStayDates[0],
+    reasonForAdoption: "We have the space and the time for an active dog.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
+    transitions: [
+      {
+        status: ApplicationStatus.REVIEWING,
+        reason: "Application moved to review.",
+        changedById: reviewer.id,
+        at: openStayDates[1],
+      },
+      {
+        status: ApplicationStatus.WAITLISTED,
+        reason:
+          "A strong application. Held as our backup while the first-choice adopter completes their home visit.",
+        changedById: reviewer.id,
+        at: openStayDates[2],
+      },
+    ],
+  });
+
+  // 4 — APPROVED. Withdrawing this one releases the animal back to PUBLISHED,
+  // which is the consequence the withdraw dialog has to name — so the animal
+  // is left coupled to it at PENDING_ADOPTION, exactly as an approval does.
+  const approvedAnimal = await claimAnimal("APPROVED", publishedWhere);
+  await seedApplicationWithHistory({
+    animalId: approvedAnimal.id,
+    applicant,
+    submittedAt: openStayDates[0],
+    reasonForAdoption:
+      "Working from home now and ready for a companion during the day.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
+    transitions: [
+      {
+        status: ApplicationStatus.REVIEWING,
+        reason: "Application moved to review.",
+        changedById: reviewer.id,
+        at: openStayDates[1],
+      },
+      {
+        status: ApplicationStatus.APPROVED,
+        reason:
+          "Approved after a successful home visit. Please call us to arrange pickup.",
+        changedById: reviewer.id,
+        at: openStayDates[2],
+      },
+    ],
+  });
+  await prisma.animal.update({
+    where: { id: approvedAnimal.id },
+    data: { listingStatus: AnimalListingStatus.PENDING_ADOPTION },
+  });
+
+  // 5 — REJECTED. A judgment with a reason, and the contrast that gives CLOSED
+  // its point: this one has to read as a decision about the applicant, and the
+  // CLOSED one below must not.
+  const rejectedAnimal = await claimAnimal("REJECTED", publishedWhere);
+  await seedApplicationWithHistory({
+    animalId: rejectedAnimal.id,
+    applicant,
+    submittedAt: openStayDates[0],
+    reasonForAdoption: "The kids have been asking and we are ready.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
+    transitions: [
+      {
+        status: ApplicationStatus.REVIEWING,
+        reason: "Application moved to review.",
+        changedById: reviewer.id,
+        at: openStayDates[1],
+      },
+      {
+        status: ApplicationStatus.REJECTED,
+        reason:
+          "This dog needs a home without young children. We would be glad to talk about our older cats.",
+        changedById: reviewer.id,
+        at: openStayDates[2],
+      },
+    ],
+  });
+
+  // 6 — WITHDRAWN on a still-published animal: reactivate is available, and
+  // taking it puts the application back to PENDING.
+  const withdrawnAnimal = await claimAnimal(
+    "WITHDRAWN (reactivatable)",
+    publishedWhere,
+  );
+  await seedApplicationWithHistory({
+    animalId: withdrawnAnimal.id,
+    applicant,
+    submittedAt: openStayDates[0],
+    reasonForAdoption: "Retired and looking for a companion to keep us active.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
+    transitions: [
+      {
+        // The applicant's own action writes this exact string — the fixture
+        // mirrors it rather than inventing prettier copy.
+        status: ApplicationStatus.WITHDRAWN,
+        reason: "Application withdrawn by user.",
+        changedById: applicant.id,
+        at: openStayDates[1],
+      },
+    ],
+  });
+
+  // 7 — WITHDRAWN on an animal that has since left the shelter. Reactivate is
+  // offered on every WITHDRAWN row today but the action refuses unless the
+  // animal is still PUBLISHED, so this is the row that has to render it
+  // disabled. Transferred out rather than adopted: she withdrew before the
+  // animal left, so no cascade ever touched this application.
+  const goneAnimal = await claimAnimal("WITHDRAWN (animal gone)", {
+    listingStatus: AnimalListingStatus.ARCHIVED,
+    archiveReason: OutcomeType.TRANSFER_OUT,
+  });
+  await seedApplicationWithHistory({
+    animalId: goneAnimal.id,
+    applicant,
+    submittedAt: withinStay(goneAnimal, 0.2),
+    reasonForAdoption: "A friend fostered him and spoke very highly of him.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
+    transitions: [
+      {
+        status: ApplicationStatus.WITHDRAWN,
+        reason: "Application withdrawn by user.",
+        changedById: applicant.id,
+        at: withinStay(goneAnimal, 0.6),
+      },
+    ],
+  });
+
+  // 8 — CLOSED. What the outcome cascade leaves behind: she was mid-review
+  // when somebody else adopted the animal. Nobody assessed her, and the reason
+  // comes from the same map `_createOutcome` writes from, so this row says
+  // exactly what a real closure would.
+  const closedAnimal = await claimAnimal("CLOSED", {
+    listingStatus: AnimalListingStatus.ARCHIVED,
+    archiveReason: OutcomeType.ADOPTION,
+  });
+  await seedApplicationWithHistory({
+    animalId: closedAnimal.id,
+    applicant,
+    submittedAt: withinStay(closedAnimal, 0.2),
+    reasonForAdoption: "We have wanted a cat for a long time and finally can.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
+    transitions: [
+      {
+        status: ApplicationStatus.REVIEWING,
+        reason: "Application moved to review.",
+        changedById: reviewer.id,
+        at: withinStay(closedAnimal, 0.5),
+      },
+      {
+        status: ApplicationStatus.CLOSED,
+        reason: CLOSURE_REASON_BY_OUTCOME[OutcomeType.ADOPTION],
+        changedById: reviewer.id,
+        at: closedAnimal.outcomeDate as Date,
+      },
+    ],
+  });
+
+  console.log(
+    `Seeded 9 adoption application fixtures for ${applicant.name} (${applicant.email}).`,
+  );
 }
 
 async function seedTasks() {
@@ -4800,7 +5153,7 @@ async function seedAll() {
   await seedAnimalsAndRelations();
   await seedFostering();
   await seedApplicationNoise();
-  await seedRegisteredUserApplicationFixture();
+  await seedRegisteredUserApplicationFixtures();
   await seedTasks();
   await seedAiActivityLog();
   await seedAssessments();

@@ -26,27 +26,10 @@ import {
 } from "../utils/errors";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+import { CLOSURE_REASON_BY_OUTCOME } from "../utils/application-status";
 
 const OUTCOMES_PATH = "/dashboard/outcomes";
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
-
-// Why the other applicants' applications were closed when this animal left the
-// shelter. The cascade runs for all six outcome types, so this is keyed by
-// outcome rather than written once in adoption wording.
-//
-// These strings are read by the applicant, not by staff — they are the only
-// explanation anyone gets for a status they did not cause. DECEASED and
-// EUTHANIZED deliberately say less than they could: a bulk auto-generated
-// line is the wrong channel for that news, and staff can phone.
-const CLOSURE_REASON_BY_OUTCOME: Record<OutcomeType, string> = {
-  [OutcomeType.ADOPTION]: "This animal was adopted by another applicant.",
-  [OutcomeType.TRANSFER_OUT]:
-    "This animal was transferred to another organization.",
-  [OutcomeType.RETURN_TO_OWNER]: "This animal was reunited with their owner.",
-  [OutcomeType.DECEASED]: "This animal is no longer at the shelter.",
-  [OutcomeType.EUTHANIZED]: "This animal is no longer at the shelter.",
-  [OutcomeType.OTHER]: "This animal is no longer available for adoption.",
-};
 
 interface CreateOutcomeIds {
   animalId: string;
