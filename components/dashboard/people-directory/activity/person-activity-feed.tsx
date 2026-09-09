@@ -45,8 +45,7 @@ const PersonActivityFeed = ({ activity = [] }: Props) => {
         </CardTitle>
         <CardDescription>
           Actions this person performed on animals — intakes and outcomes
-          processed, tasks created or assigned, animal notes written, and
-          assessments conducted.
+          processed, tasks created or assigned, and animal notes written.
         </CardDescription>
       </CardHeader>
       <CardContent>

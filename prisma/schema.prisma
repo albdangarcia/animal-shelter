@@ -71,7 +71,6 @@ model Person {
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   MedicationLog     MedicationLog[]
-  Assessment        Assessment[]
   AnimalActivityLog AnimalActivityLog[]
   aiActionLogs      AiActionLog[]
   vitalsLogs        VitalsLog[]
@@ -453,7 +452,6 @@ model Animal {
 
   MedicationSchedule MedicationSchedule[]
   MedicationLog      MedicationLog[]
-  assessments        Assessment[]
 
   createdAt   DateTime  @default(now()) @map(name: "created_at")
   updatedAt   DateTime  @updatedAt @map(name: "updated_at")
@@ -777,122 +775,6 @@ model MedicationLog {
   @@index([animalId])
   @@index([scheduleId])
   @@map("medication_logs")
-}
-
-// ═══════════════════════════════════════════════════
-// ASSESSMENTS
-// ═══════════════════════════════════════════════════
-
-enum AssessmentType {
-  INTAKE_MEDICAL
-  INTAKE_BEHAVIORAL
-  DAILY_MONITORING
-  PLAYGROUP_EVALUATION
-  CAT_TEST
-  DOG_TEST
-  HANDLING_SENSITIVITY
-  LEASH_MANNER
-  QUARANTINE_CHECK
-  POST_ADOPTION_FOLLOWUP
-  OTHER
-}
-
-enum AssessmentOutcome {
-  EXCELLENT
-  GOOD
-  FAIR
-  POOR
-  NEEDS_ATTENTION
-  MONITOR
-  NOT_APPLICABLE
-}
-
-enum FieldType {
-  TEXT // Single-line text input
-  TEXTAREA // Multi-line text area
-  NUMBER // Numerical input
-  SELECT // Dropdown list from options
-  CHECKBOX // A single checkbox (for boolean true/false)
-  RADIO // Radio buttons for single selection
-  DATE // A date picker
-}
-
-model Assessment {
-  id             String             @id @default(cuid())
-  animalId       String
-  animal         Animal             @relation(fields: [animalId], references: [id], onDelete: Cascade)
-  assessorId     String
-  assessor       Person             @relation(fields: [assessorId], references: [id])
-  date           DateTime           @default(now())
-  overallOutcome AssessmentOutcome?
-  summary        String? // A text summary of the findings, e.g., "Ready for adoption"
-
-  templateId String?
-  template   AssessmentTemplate? @relation(fields: [templateId], references: [id])
-
-  // Link to a list of specific answers/findings
-  fields AssessmentField[]
-
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime? @map(name: "deleted_at")
-
-  @@index([animalId])
-  @@map("assessments")
-}
-
-// A model for each individual question/field within an assessment
-model AssessmentField {
-  id           String     @id @default(cuid())
-  assessmentId String
-  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-
-  // What was being assessed?
-  // e.g., "Reaction to handling", "Food guarding", "Heart murmur"
-  fieldName String
-
-  // The result of the assessment for that field
-  // e.g., "Tolerant", "Severe", "Grade 2/6 Systolic"
-  fieldValue String
-
-  // Optional longer notes for this specific field
-  notes String?
-
-  createdAt DateTime @default(now())
-
-  @@map("assessment_fields")
-}
-
-// To define a type of assessment, like "Intake Behavioral"
-model AssessmentTemplate {
-  id          String         @id @default(cuid())
-  name        String         @unique // e.g., "Intake Behavioral", "Daily Monitoring"
-  description String?
-  type        AssessmentType
-
-  allowCustomFields Boolean         @default(true) // Controls if staff can add ad-hoc fields during assessment
-  templateFields    TemplateField[]
-  Assessment        Assessment[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@map("assessment_templates")
-}
-
-model TemplateField {
-  id         String             @id @default(cuid())
-  templateId String
-  template   AssessmentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
-
-  label       String // e.g., "Kennel Presence"
-  fieldType   FieldType // e.g., "SELECT", "TEXT", "NUMBER"
-  placeholder String?
-  options     String[] // For SELECT, stores ["Quiet", "Anxious", "Barking"]
-  isRequired  Boolean   @default(true)
-  order       Int // To control the display order in the form
-
-  @@map("assessment_template_fields")
 }
 
 // ═══════════════════════════════════════════════════

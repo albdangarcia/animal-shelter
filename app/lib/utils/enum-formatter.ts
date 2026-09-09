@@ -8,8 +8,6 @@ import {
   TaskStatus,
   TaskPriority,
   NoteCategory,
-  AssessmentOutcome,
-  AssessmentType,
   ApplicationStatus,
   LivingSituation,
   OutcomeType,
@@ -105,9 +103,6 @@ export const TaskStatusOptions = formatEnumAsOptions(TaskStatus);
 export const TaskPriorityOptions = formatEnumAsOptions(TaskPriority);
 
 export const noteCategoryOptions = formatEnumAsOptions(NoteCategory);
-
-export const assessmentOutcomeOptions = formatEnumAsOptions(AssessmentOutcome);
-export const assessmentTypeOptions = formatEnumAsOptions(AssessmentType);
 
 export const livingSituationOptions = formatEnumAsOptions(LivingSituation);
 export const myApplicationStatusOptions = formatEnumAsOptions(ApplicationStatus);

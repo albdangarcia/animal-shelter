@@ -69,7 +69,6 @@ export const SETTINGS_PERMISSIONS: readonly AppPermission[] = [
   AppPermissions.MANAGE_ROLES,
   AppPermissions.MANAGE_CHARACTERISTICS_CATALOG,
   AppPermissions.MANAGE_ANIMAL_TAXONOMY,
-  AppPermissions.MANAGE_ASSESSMENT_TEMPLATES,
   AppPermissions.MANAGE_LOCATIONS,
   AppPermissions.AI_ACTIVITY_READ,
 ] as const;
