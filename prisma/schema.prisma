@@ -74,6 +74,7 @@ model Person {
   AnimalActivityLog AnimalActivityLog[]
   aiActionLogs      AiActionLog[]
   vitalsLogs        VitalsLog[]
+  assessments       Assessment[]
 
   @@index([phoneNormalized])
   @@map("persons")
@@ -452,6 +453,7 @@ model Animal {
 
   MedicationSchedule MedicationSchedule[]
   MedicationLog      MedicationLog[]
+  assessments        Assessment[]
 
   createdAt   DateTime  @default(now()) @map(name: "created_at")
   updatedAt   DateTime  @updatedAt @map(name: "updated_at")
@@ -775,6 +777,165 @@ model MedicationLog {
   @@index([animalId])
   @@index([scheduleId])
   @@map("medication_logs")
+}
+
+// ═══════════════════════════════════════════════════
+// ASSESSMENTS
+// ═══════════════════════════════════════════════════
+//
+// Templates are code-defined: the source of truth is the typed registry in
+// app/lib/assessments/templates.ts, mirrored into these tables by the seed so
+// that assessments can hold a real foreign key. Template rows are
+// NEVER edited in place — an admin edit writes a new row with `version + 1`
+// under the same stable `key`, and the old row is retained and marked
+// superseded. Answers carry both a field FK (for diffing/aggregation) and a
+// frozen label+value snapshot (for history that cannot rot).
+
+/// Triage signal for an assessment — says what to DO, not a grade.
+/// Values are ordered least → most urgent so code can compare and escalate.
+enum AssessmentSignal {
+  NO_CONCERNS
+  MONITOR
+  FOLLOW_UP
+  ESCALATE
+}
+
+/// The input control a template field renders as. Deliberately small — this is
+/// structured staff data capture, not a form builder. `NUMBER`
+/// answers are additionally stored in AssessmentAnswer.valueNumber for charting.
+enum FieldType {
+  SHORT_TEXT
+  LONG_TEXT
+  NUMBER
+  SINGLE_SELECT
+  MULTI_SELECT
+  BOOLEAN
+}
+
+model AssessmentTemplate {
+  id          String  @id @default(cuid())
+  /// Stable identifier shared across every version of a template (e.g.
+  /// "CAT_TEST"). `(key, version)` is the natural key the registry sync is
+  /// idempotent on.
+  key         String
+  version     Int     @default(1)
+  name        String
+  description String?
+
+  /// Species this template applies to, by `Species.name`. Null = all species.
+  /// A plain string rather than a Species FK: the registry is code-defined and
+  /// species-agnostic templates are the common case, so a nullable scalar keeps
+  /// the sync a pure upsert with no lookup.
+  species String?
+  /// Optional free-text lifecycle-stage hint ("intake", "adoption-prep").
+  /// Stage-based gating logic lives in the readiness code, not here.
+  stage   String?
+
+  isActive Boolean @default(true)
+
+  /// Set when a newer version supersedes this row.
+  /// The old row is retained, never edited or deleted — assessments point at
+  /// the exact version they were recorded against.
+  supersededById String?             @unique
+  supersededBy   AssessmentTemplate? @relation("TemplateVersionChain", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes     AssessmentTemplate? @relation("TemplateVersionChain")
+
+  fields      AssessmentTemplateField[]
+  assessments Assessment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([key, version])
+  @@map("assessment_templates")
+}
+
+model AssessmentTemplateField {
+  id         String             @id @default(cuid())
+  templateId String
+  template   AssessmentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  /// Stable identifier within the template. Answers match on this (via the FK
+  /// below), so a label rename in a later version never orphans history.
+  key              String
+  label            String
+  fieldType        FieldType
+  /// Allowed values for SINGLE_SELECT / MULTI_SELECT, in display order. Empty
+  /// for the free-text and numeric types.
+  options          String[]
+  /// Values drawn from `options` that raise the assessment's signal when
+  /// selected. Empty where no single answer is inherently concerning.
+  concerningValues String[]
+  isRequired       Boolean   @default(false)
+  order            Int
+
+  answers AssessmentAnswer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([templateId, key])
+  @@index([templateId])
+  @@map("assessment_template_fields")
+}
+
+model Assessment {
+  id String @id @default(cuid())
+
+  animalId String
+  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+
+  templateId String
+  template   AssessmentTemplate @relation(fields: [templateId], references: [id])
+
+  assessorId String
+  assessor   Person @relation(fields: [assessorId], references: [id])
+
+  /// When the observation was MADE (backdatable — same convention as
+  /// VitalsLog.recordedAt and MedicalRecord.dateOfRecord). Distinct from
+  /// createdAt, which is when the row was written.
+  observedAt DateTime @default(now()) @map(name: "observed_at")
+
+  signal  AssessmentSignal @default(NO_CONCERNS)
+  summary String?
+
+  answers AssessmentAnswer[]
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? @map(name: "deleted_at")
+
+  @@index([animalId, observedAt])
+  @@index([templateId])
+  @@map("assessments")
+}
+
+model AssessmentAnswer {
+  id String @id @default(cuid())
+
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+
+  /// FK for diffing and cross-animal aggregation. Restrict, not SetNull: fields
+  /// are never hard-deleted (a template edit is copy-on-write), so a
+  /// dangling answer should never occur — enforce that rather than absorb it.
+  templateFieldId String
+  templateField   AssessmentTemplateField @relation(fields: [templateFieldId], references: [id])
+
+  /// Frozen snapshot, written once and never rewritten. `questionLabel` is the
+  /// field label as it read when recorded; `value` is the answer as recorded.
+  questionLabel String
+  value         String
+  /// Parallel numeric column for charting NUMBER answers. Null for every other
+  /// field type.
+  valueNumber   Float?
+  notes         String?
+
+  createdAt DateTime @default(now())
+
+  @@index([assessmentId])
+  @@index([templateFieldId])
+  @@map("assessment_answers")
 }
 
 // ═══════════════════════════════════════════════════

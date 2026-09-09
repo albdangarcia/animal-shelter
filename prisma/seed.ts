@@ -28,6 +28,7 @@ import {
   FosterStatus,
   FosterPlacementType,
   FosterReturnReason,
+  AssessmentSignal,
 } from "@/prisma/generated/enums";
 import {
   getRandomDate,
@@ -43,6 +44,11 @@ import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { resolveDatabaseUrl } from "@/app/lib/db-url";
 import { phoneNormalizationExtension } from "@/app/lib/prisma-extensions/phone-normalization";
+import {
+  syncTemplateRegistry,
+  type TemplateRegistryStore,
+} from "@/app/lib/assessments/sync-templates";
+import { getActiveTemplate } from "@/app/lib/assessments/templates";
 
 // =================================================================//
 //                      DETERMINISTIC RANDOMNESS                     //
@@ -4739,6 +4745,13 @@ async function clearDatabase() {
 
   await prisma.medicationLog.deleteMany();
   await prisma.medicationSchedule.deleteMany();
+
+  // Assessments before persons (assessorId is Restrict) and before the
+  // template rows they FK to. Answers -> assessments -> fields -> templates.
+  await prisma.assessmentAnswer.deleteMany();
+  await prisma.assessment.deleteMany();
+  await prisma.assessmentTemplateField.deleteMany();
+  await prisma.assessmentTemplate.deleteMany();
   // AiActionLog only FKs to Person (RESTRICT); no relation to Task, so order
   // relative to the task delete below doesn't matter — it just has to precede
   // the person delete.
@@ -5019,6 +5032,354 @@ async function seedPublicFavorites() {
   );
 }
 
+// Mirror the code-defined template registry (app/lib/assessments/templates.ts)
+// into the AssessmentTemplate / AssessmentTemplateField tables via the shared,
+// idempotent sync helper. This is the DB side of spec D1 — assessments hold a
+// real FK to a specific template version.
+async function seedAssessmentTemplates() {
+  console.log("Seeding assessment templates from the registry...");
+
+  const store: TemplateRegistryStore = {
+    async upsertTemplate(input) {
+      return prisma.assessmentTemplate.upsert({
+        where: { key_version: { key: input.key, version: input.version } },
+        create: {
+          key: input.key,
+          version: input.version,
+          name: input.name,
+          description: input.description,
+          species: input.species,
+          stage: input.stage,
+          isActive: input.isActive,
+        },
+        update: {
+          name: input.name,
+          description: input.description,
+          species: input.species,
+          stage: input.stage,
+          isActive: input.isActive,
+        },
+        select: { id: true },
+      });
+    },
+    async upsertField(input) {
+      await prisma.assessmentTemplateField.upsert({
+        where: {
+          templateId_key: { templateId: input.templateId, key: input.key },
+        },
+        create: {
+          templateId: input.templateId,
+          key: input.key,
+          label: input.label,
+          fieldType: input.fieldType,
+          options: input.options,
+          concerningValues: input.concerningValues,
+          isRequired: input.isRequired,
+          order: input.order,
+        },
+        update: {
+          label: input.label,
+          fieldType: input.fieldType,
+          options: input.options,
+          concerningValues: input.concerningValues,
+          isRequired: input.isRequired,
+          order: input.order,
+        },
+      });
+    },
+  };
+
+  const result = await syncTemplateRegistry(store);
+  console.log(
+    `Seeded ${result.templates} assessment templates (${result.fields} fields).`,
+  );
+}
+
+// One recorded answer for a seeded assessment. `fieldKey` matches a field key
+// in the registry template; `value` is the answer as recorded (snapshotted
+// alongside the field FK — spec D2).
+interface SeedAnswer {
+  fieldKey: string;
+  value: string;
+  valueNumber?: number;
+  notes?: string;
+}
+
+interface SeedAssessment {
+  animalName: string;
+  templateKey: string;
+  signal: AssessmentSignal;
+  observedAt: Date;
+  summary: string;
+  answers: SeedAnswer[];
+}
+
+// Deterministic assessments spread across the hand-seeded IN_CARE animals so
+// later steps (readiness board, findings -> characteristics, the AI tool) have
+// something real to render. Anchored to named animals, not the RNG-drawn
+// generated pool, so it is stable across reseeds. Includes the two cases the
+// spec calls out: at least one ESCALATE (Frisco's cat test) and at least one
+// stale record (Buddy's daily rounds, ~12 days old — DAILY_ROUNDS goes stale
+// after a day).
+const assessmentSeedData: SeedAssessment[] = [
+  {
+    animalName: "Frisco",
+    templateKey: "INTAKE_MEDICAL",
+    signal: AssessmentSignal.NO_CONCERNS,
+    observedAt: daysAgo(38),
+    summary: "Healthy adult dog, no findings on the intake exam.",
+    answers: [
+      { fieldKey: "body_condition", value: "Ideal" },
+      { fieldKey: "dental", value: "Mild tartar" },
+      { fieldKey: "parasites", value: "None seen" },
+      { fieldKey: "heart_lungs", value: "Clear" },
+      {
+        fieldKey: "intake_weight_grams",
+        value: "30000",
+        valueNumber: 30000,
+      },
+    ],
+  },
+  {
+    animalName: "Frisco",
+    templateKey: "INTAKE_BEHAVIORAL",
+    signal: AssessmentSignal.NO_CONCERNS,
+    observedAt: daysAgo(36),
+    summary:
+      "Social, soft, no resource guarding. Solicits attention from handlers.",
+    answers: [
+      { fieldKey: "kennel_presence", value: "Alert" },
+      { fieldKey: "handler_sociability", value: "Solicits attention" },
+      { fieldKey: "food_guarding", value: "None" },
+      { fieldKey: "body_handling", value: "Tolerates all" },
+      { fieldKey: "arousal_recovery", value: "Quick" },
+    ],
+  },
+  {
+    animalName: "Frisco",
+    templateKey: "CAT_TEST",
+    signal: AssessmentSignal.ESCALATE,
+    observedAt: daysAgo(9),
+    summary:
+      "Hard fixation and sustained lunging at the barrier; could not be redirected. Not safe to place with cats — flag before any listing claims 'good with cats'.",
+    answers: [
+      { fieldKey: "visual_response", value: "Lunges or barks" },
+      {
+        fieldKey: "proximity_response",
+        value: "Predatory (stalk, hard stare, lunge)",
+        notes: "Whale eye, stiff tail, would not take food.",
+      },
+      { fieldKey: "recovery", value: "Cannot redirect" },
+      { fieldKey: "recommendation", value: "Not cat-safe" },
+    ],
+  },
+  {
+    animalName: "Buddy",
+    templateKey: "INTAKE_BEHAVIORAL",
+    signal: AssessmentSignal.MONITOR,
+    observedAt: daysAgo(30),
+    summary:
+      "Mild food guarding — stiffens over a high-value chew but disengages when asked. Worth watching, not a placement blocker.",
+    answers: [
+      { fieldKey: "kennel_presence", value: "Relaxed" },
+      { fieldKey: "handler_sociability", value: "Solicits attention" },
+      {
+        fieldKey: "food_guarding",
+        value: "Stiffens",
+        notes: "Freezes for ~2s over a bully stick, then releases.",
+      },
+      { fieldKey: "body_handling", value: "Tolerates all" },
+      { fieldKey: "arousal_recovery", value: "Moderate" },
+    ],
+  },
+  {
+    animalName: "Buddy",
+    templateKey: "DAILY_ROUNDS",
+    signal: AssessmentSignal.NO_CONCERNS,
+    observedAt: daysAgo(12),
+    summary: "Bright, eating well, no concerns on rounds.",
+    answers: [
+      { fieldKey: "appetite", value: "Normal" },
+      { fieldKey: "stool", value: "Normal" },
+      { fieldKey: "energy", value: "Bright" },
+      { fieldKey: "respiratory", value: "Normal" },
+      { fieldKey: "demeanor", value: "Comfortable" },
+    ],
+  },
+  {
+    animalName: "Whiskers",
+    templateKey: "INTAKE_MEDICAL",
+    signal: AssessmentSignal.NO_CONCERNS,
+    observedAt: daysAgo(50),
+    summary: "Healthy senior-ish cat, good body condition.",
+    answers: [
+      { fieldKey: "body_condition", value: "Ideal" },
+      { fieldKey: "dental", value: "Moderate disease" },
+      { fieldKey: "parasites", value: "Treated" },
+      { fieldKey: "heart_lungs", value: "Clear" },
+      { fieldKey: "intake_weight_grams", value: "3500", valueNumber: 3500 },
+    ],
+  },
+  {
+    animalName: "Whiskers",
+    templateKey: "HANDLING",
+    signal: AssessmentSignal.NO_CONCERNS,
+    observedAt: daysAgo(48),
+    summary: "Easy to handle all over; no restraint issues.",
+    answers: [
+      { fieldKey: "collar_leash", value: "Accepts readily" },
+      { fieldKey: "restraint", value: "Relaxed" },
+      { fieldKey: "paws_nails", value: "No concern" },
+      { fieldKey: "ears_mouth", value: "No concern" },
+      { fieldKey: "overall_sensitivity", value: "Low" },
+    ],
+  },
+  {
+    animalName: "Leo",
+    templateKey: "INTAKE_MEDICAL",
+    signal: AssessmentSignal.FOLLOW_UP,
+    observedAt: daysAgo(20),
+    summary:
+      "Severe dental disease — needs a dental before the profile goes public.",
+    answers: [
+      { fieldKey: "body_condition", value: "Thin" },
+      {
+        fieldKey: "dental",
+        value: "Severe disease",
+        notes: "Multiple fractured teeth, gingival recession.",
+      },
+      { fieldKey: "parasites", value: "Ear mites" },
+      { fieldKey: "heart_lungs", value: "Clear" },
+      { fieldKey: "intake_weight_grams", value: "3200", valueNumber: 3200 },
+    ],
+  },
+  {
+    animalName: "Daisy",
+    templateKey: "DOG_INTRO",
+    signal: AssessmentSignal.MONITOR,
+    observedAt: daysAgo(15),
+    summary:
+      "Social but rude — bulldozes greetings and misses cut-off signals. Fine with a tolerant playmate, needs slow intros otherwise.",
+    answers: [
+      { fieldKey: "greeting_style", value: "Over-the-top but not aggressive" },
+      { fieldKey: "play_style", value: "Rude but recovers" },
+      { fieldKey: "correction_response", value: "Defers appropriately" },
+      { fieldKey: "resource_around_dogs", value: "Neutral" },
+      { fieldKey: "recommendation", value: "Needs slow introductions" },
+    ],
+  },
+];
+
+async function seedAssessments() {
+  console.log("Seeding assessments...");
+
+  const staff = await prisma.person.findMany({
+    where: { user: { role: Role.STAFF } },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    select: { id: true, user: { select: { email: true } } },
+  });
+  if (staff.length === 0) {
+    console.log("No staff found, skipping assessment seeding.");
+    return;
+  }
+  const assessor =
+    staff.find((s) => s.user?.email === "staff1@example.com") ?? staff[0];
+
+  const animalNames = [...new Set(assessmentSeedData.map((a) => a.animalName))];
+  const animals = await prisma.animal.findMany({
+    where: { name: { in: animalNames } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, name: true, species: { select: { name: true } } },
+  });
+  const animalByName = new Map<string, (typeof animals)[number]>();
+  for (const animal of animals) {
+    if (!animalByName.has(animal.name)) animalByName.set(animal.name, animal);
+  }
+
+  const templates = await prisma.assessmentTemplate.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      key: true,
+      name: true,
+      version: true,
+      species: true,
+      fields: { select: { id: true, key: true, label: true } },
+    },
+  });
+  const templateByKey = new Map(templates.map((t) => [t.key, t]));
+
+  let created = 0;
+  for (const spec of assessmentSeedData) {
+    const animal = animalByName.get(spec.animalName);
+    const template = templateByKey.get(spec.templateKey);
+    if (!animal || !template) {
+      throw new Error(
+        `assessmentSeedData references ${spec.animalName}/${spec.templateKey}, which was not seeded.`,
+      );
+    }
+    const registryDef = getActiveTemplate(spec.templateKey);
+    if (
+      registryDef?.species &&
+      animal.species.name !== registryDef.species
+    ) {
+      throw new Error(
+        `${spec.templateKey} is a ${registryDef.species} template but ${spec.animalName} is a ${animal.species.name}.`,
+      );
+    }
+
+    const fieldByKey = new Map(template.fields.map((f) => [f.key, f]));
+
+    await prisma.$transaction(async (tx) => {
+      const assessment = await tx.assessment.create({
+        data: {
+          animalId: animal.id,
+          templateId: template.id,
+          assessorId: assessor.id,
+          observedAt: spec.observedAt,
+          signal: spec.signal,
+          summary: spec.summary,
+        },
+        select: { id: true },
+      });
+
+      for (const answer of spec.answers) {
+        const field = fieldByKey.get(answer.fieldKey);
+        if (!field) {
+          throw new Error(
+            `${spec.templateKey} has no field "${answer.fieldKey}".`,
+          );
+        }
+        await tx.assessmentAnswer.create({
+          data: {
+            assessmentId: assessment.id,
+            templateFieldId: field.id,
+            questionLabel: field.label,
+            value: answer.value,
+            valueNumber: answer.valueNumber ?? null,
+            notes: answer.notes ?? null,
+          },
+        });
+      }
+
+      await tx.animalActivityLog.create({
+        data: {
+          animalId: animal.id,
+          activityType: AnimalActivityType.ASSESSMENT_COMPLETED,
+          changedById: assessor.id,
+          changedAt: spec.observedAt,
+          changeSummary: `${template.name} assessment recorded — ${formatSingleEnumOption(
+            spec.signal,
+          )}.`,
+        },
+      });
+    });
+    created += 1;
+  }
+
+  console.log(`Seeded ${created} assessments across ${animalByName.size} animals.`);
+}
+
 export async function main() {
   const restoreRandom = installDeterministicRandom();
   // Drain any leftover deal queues so a second main() in the same process
@@ -5051,6 +5412,12 @@ async function seedAll() {
   // After every listingStatus mutation above, so the available/unavailable
   // split on /pets/favorites is the real one.
   await seedPublicFavorites();
+  // After the animal/intake/outcome seeding is fully spent: these add
+  // prisma.create() calls whose cuid()s draw from the shared mulberry32
+  // stream, so keeping them last leaves every earlier system's RNG draw
+  // (and the lifecycle assertion below) byte-for-byte unchanged.
+  await seedAssessmentTemplates();
+  await seedAssessments();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }
