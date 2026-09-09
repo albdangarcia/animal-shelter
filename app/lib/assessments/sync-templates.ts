@@ -56,7 +56,7 @@ export interface SyncResult {
  * declaration order is the only source of `order`, so running it twice against
  * the same registry converges on the same rows with no duplicates. It does not
  * delete rows for templates/fields that have left the registry — a removed
- * template is retired via `isActive: false` in the registry (spec D1), and a
+ * template is retired via `isActive: false` in the registry, and a
  * removed field would only ever happen through a version bump.
  */
 export async function syncTemplateRegistry(

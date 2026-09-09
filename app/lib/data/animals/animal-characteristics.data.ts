@@ -4,8 +4,18 @@ import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 
+/** Provenance for one active characteristic assignment. */
+export type CharacteristicAssignment = {
+  assignedByName: string | null;
+  assignedAt: Date;
+  /** Set once the assignment is sourced from an assessment finding. */
+  sourceAssessmentId: string | null;
+};
+
 export type CharacteristicWithAssignment = Prisma.CharacteristicGetPayload<object> & {
   isAssigned: boolean;
+  /** The active assignment's provenance, or null when the trait isn't assigned. */
+  assignment: CharacteristicAssignment | null;
 };
 
 const _fetchAnimalCharacteristics = async (
@@ -26,9 +36,15 @@ const _fetchAnimalCharacteristics = async (
       prisma.animal.findUnique({
         where: { id: animalId },
         select: {
-          characteristics: {
+          animalCharacteristics: {
+            // Active assignments only — a soft-removed row is kept for its
+            // history but the tab treats the trait as unassigned.
+            where: { removedAt: null },
             select: {
-              id: true,
+              characteristicId: true,
+              assignedAt: true,
+              sourceAssessmentId: true,
+              assignedBy: { select: { name: true } },
             },
           },
         },
@@ -40,11 +56,21 @@ const _fetchAnimalCharacteristics = async (
       throw new Error("Animal not found.");
     }
 
-    const assignedCharIds = new Set(animal.characteristics.map((c) => c.id));
+    const assignmentByCharId = new Map(
+      animal.animalCharacteristics.map((ac) => [
+        ac.characteristicId,
+        {
+          assignedByName: ac.assignedBy?.name ?? null,
+          assignedAt: ac.assignedAt,
+          sourceAssessmentId: ac.sourceAssessmentId,
+        } satisfies CharacteristicAssignment,
+      ])
+    );
 
     const result = allCharacteristics.map((characteristic) => ({
       ...characteristic,
-      isAssigned: assignedCharIds.has(characteristic.id),
+      isAssigned: assignmentByCharId.has(characteristic.id),
+      assignment: assignmentByCharId.get(characteristic.id) ?? null,
     }));
 
     return result;
