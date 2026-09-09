@@ -4,7 +4,6 @@ import type {
   OutcomeType,
   TaskStatus,
   NoteCategory,
-  AssessmentOutcome,
 } from "@/prisma/generated/enums";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -57,13 +56,6 @@ export type PersonActivityEntry =
       animal: AnimalRef;
       category: NoteCategory;
       content: string;
-    }
-  | {
-      kind: "ASSESSMENT_CONDUCTED";
-      date: Date;
-      animal: AnimalRef;
-      overallOutcome: AssessmentOutcome | null;
-      summary: string | null;
     };
 
 const _fetchPersonActivity = async (
@@ -130,17 +122,6 @@ const _fetchPersonActivity = async (
           orderBy: { createdAt: "desc" },
           take: PER_SOURCE_LIMIT,
         },
-        Assessment: {
-          where: { deletedAt: null },
-          select: {
-            date: true,
-            overallOutcome: true,
-            summary: true,
-            animal: { select: animalSelect },
-          },
-          orderBy: { date: "desc" },
-          take: PER_SOURCE_LIMIT,
-        },
       },
     });
 
@@ -181,13 +162,6 @@ const _fetchPersonActivity = async (
         animal: note.animal,
         category: note.category,
         content: note.content,
-      })),
-      ...person.Assessment.map((assessment) => ({
-        kind: "ASSESSMENT_CONDUCTED" as const,
-        date: assessment.date,
-        animal: assessment.animal,
-        overallOutcome: assessment.overallOutcome,
-        summary: assessment.summary,
       })),
     ];
 

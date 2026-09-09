@@ -279,7 +279,6 @@ const _fetchSectionCardsPersonData = async (
             animalNotesAuthored: true,
             processedIntakes: true,
             processedOutcomes: true,
-            Assessment: true,
           },
         },
       },

@@ -21,9 +21,6 @@ import {
   NoteTargetType,
   AiActionTargetType,
   CharacteristicCategory,
-  AssessmentType,
-  AssessmentOutcome,
-  FieldType,
   OutcomeType,
   LocationType,
   ApplicationStatus,
@@ -1229,158 +1226,6 @@ const overdueTaskSeedData: {
     priority: TaskPriority.MEDIUM,
     category: TaskCategory.ADMINISTRATIVE,
     daysOverdue: 6,
-  },
-];
-
-interface SeedTemplateField {
-  label: string;
-  fieldType: FieldType;
-  placeholder?: string;
-  options?: string[];
-  order: number;
-}
-
-interface SeedAssessmentTemplate {
-  name: string;
-  type: AssessmentType;
-  description: string;
-  allowCustomFields: boolean;
-  fields: SeedTemplateField[];
-}
-
-const assessmentTemplateSeedData: SeedAssessmentTemplate[] = [
-  {
-    name: "Intake Behavioral",
-    type: AssessmentType.INTAKE_BEHAVIORAL,
-    description: "Standard behavioral checklist for all incoming dogs.",
-    allowCustomFields: true,
-    fields: [
-      {
-        label: "Kennel Presence",
-        fieldType: "SELECT",
-        options: ["Quiet", "Anxious", "Barking", "Alert"],
-        order: 1,
-      },
-      {
-        label: "Leash Manners",
-        fieldType: "SELECT",
-        options: [
-          "Pulls Heavily",
-          "Pulls Moderately",
-          "Loose Leash",
-          "Walks Politely",
-        ],
-        order: 2,
-      },
-      {
-        label: "Food Guarding (High Value)",
-        fieldType: "SELECT",
-        options: ["None", "Stiffens", "Growls", "Snaps"],
-        order: 3,
-      },
-    ],
-  },
-  {
-    name: "Intake Medical",
-    type: AssessmentType.INTAKE_MEDICAL,
-    description: "Standard medical checklist for all incoming animals.",
-    allowCustomFields: true,
-    fields: [
-      {
-        label: "Body Condition Score",
-        fieldType: "TEXT",
-        placeholder: "e.g., 5/9",
-        order: 1,
-      },
-      {
-        label: "Dental Health",
-        fieldType: "TEXT",
-        placeholder: "e.g., Mild Tartar",
-        order: 2,
-      },
-      {
-        label: "Fleas Present",
-        fieldType: "SELECT",
-        options: ["Yes", "No", "Treated"],
-        order: 3,
-      },
-    ],
-  },
-  {
-    name: "Daily Monitoring",
-    type: AssessmentType.DAILY_MONITORING,
-    description: "For animals under observation for mild illness or behavior.",
-    allowCustomFields: true,
-    fields: [
-      {
-        label: "Appetite",
-        fieldType: "SELECT",
-        options: ["Normal", "Decreased", "Not Eaten"],
-        order: 1,
-      },
-      {
-        label: "Energy Level",
-        fieldType: "SELECT",
-        options: ["Normal", "Lethargic", "Hyperactive"],
-        order: 2,
-      },
-    ],
-  },
-];
-
-const assessmentSeedData = [
-  {
-    templateName: "Intake Behavioral",
-    overallOutcome: AssessmentOutcome.GOOD,
-    summary:
-      "Animal is friendly and energetic. Showed no signs of aggression and was curious about the new environment. Pulls a bit on the leash but is responsive to commands.",
-    fields: [
-      {
-        fieldName: "Reaction to Handling",
-        fieldValue: "Tolerant",
-        notes: "Allowed petting all over, including paws and ears.",
-      },
-      { fieldName: "Food Guarding", fieldValue: "None Observed", notes: "" },
-      {
-        fieldName: "Leash Manners",
-        fieldValue: "Pulls Heavily",
-        notes: "Responds to corrections but gets easily excited.",
-      },
-    ],
-  },
-  {
-    templateName: "Intake Medical",
-    overallOutcome: AssessmentOutcome.NEEDS_ATTENTION,
-    summary:
-      "Animal is slightly underweight with mild dental tartar. No other major concerns noted on initial physical exam. Recommend a dental cleaning in the near future.",
-    fields: [
-      {
-        fieldName: "Body Condition Score",
-        fieldValue: "4/9 (Slightly Underweight)",
-        notes: "Ribs are easily palpable.",
-      },
-      {
-        fieldName: "Dental Health",
-        fieldValue: "Mild Tartar",
-        notes: "Grade 2/4 dental disease.",
-      },
-      { fieldName: "Heart & Lungs", fieldValue: "Clear", notes: "" },
-    ],
-  },
-  {
-    templateName: "Daily Monitoring",
-    overallOutcome: AssessmentOutcome.MONITOR,
-    summary:
-      "Noticed some coughing after exertion. Will continue to monitor. Appetite and energy levels are otherwise normal.",
-    fields: [
-      { fieldName: "Appetite", fieldValue: "Normal", notes: "" },
-      { fieldName: "Energy Level", fieldValue: "Normal", notes: "" },
-      {
-        fieldName: "Coughing/Sneezing",
-        fieldValue: "Present (Mild)",
-        notes: "Observed a dry cough after a short walk.",
-      },
-    ],
   },
 ];
 
@@ -2604,30 +2449,6 @@ async function seedPartners() {
     throw error;
   }
   console.log("Seeded partners.");
-}
-
-async function seedAssessmentTemplates() {
-  console.log("Seeding assessment templates...");
-  try {
-    for (const templateData of assessmentTemplateSeedData) {
-      await prisma.assessmentTemplate.create({
-        data: {
-          name: templateData.name,
-          type: templateData.type,
-          description: templateData.description,
-          allowCustomFields: templateData.allowCustomFields,
-          // Use a nested create to add all related fields at once
-          templateFields: {
-            create: templateData.fields,
-          },
-        },
-      });
-    }
-  } catch (error) {
-    console.error("Error seeding assessment templates:", error);
-    throw error;
-  }
-  console.log("Seeded assessment templates.");
 }
 
 async function seedLocationsAndUnits() {
@@ -4211,11 +4032,15 @@ async function seedRegisteredUserApplicationFixtures() {
   //
   // The outcome floor is what keeps the second stay orderable — the re-intake
   // has to land after the outcome that ended the first one, and an animal
-  // adopted out last week leaves no room for it.
+  // adopted out last week leaves no room for it. `every`, not `some`: a
+  // return-and-re-adopt animal carries an old first-stay outcome *and* a recent
+  // second-stay one, and `some` would happily match on the old one and then
+  // strand the re-intake below (daysAgo(20)) before the latest outcome.
   const returnedAnimal = await claimAnimal("CLOSED (animal returned)", {
     listingStatus: AnimalListingStatus.ARCHIVED,
     archiveReason: OutcomeType.ADOPTION,
-    Outcome: { some: { outcomeDate: { lte: daysAgo(30) } } },
+    intake: { every: { intakeDate: { lte: daysAgo(30) } } },
+    Outcome: { every: { outcomeDate: { lte: daysAgo(30) } } },
   });
   await seedApplicationWithHistory({
     animalId: returnedAnimal.id,
@@ -4548,52 +4373,6 @@ async function seedAiActivityLog() {
     throw error;
   }
   console.log("Seeded AI activity log.");
-}
-
-async function seedAssessments() {
-  console.log("Seeding assessments...");
-  try {
-    const staffMembers = await prisma.person.findMany({
-      where: { user: { role: Role.STAFF } },
-    });
-    const animals = await prisma.animal.findMany();
-    const templates = await prisma.assessmentTemplate.findMany();
-
-    if (!staffMembers.length || !animals.length || !templates.length) {
-      console.log(
-        "No staff, animals, or templates found, skipping assessment seeding.",
-      );
-      return;
-    }
-
-    for (const assessmentData of assessmentSeedData) {
-      // Find the template that matches the assessment's template name
-      const relatedTemplate = templates.find(
-        (t) => t.name === assessmentData.templateName,
-      );
-
-      await prisma.assessment.create({
-        data: {
-          // `type` is no longer a field on the Assessment model
-          overallOutcome: assessmentData.overallOutcome,
-          summary: assessmentData.summary,
-          date: getRandomDate(),
-          animalId: getRandomItem(animals).id,
-          assessorId: getRandomItem(staffMembers).id,
-          // Connect to the template ID
-          templateId: relatedTemplate?.id,
-          // Use a nested create to add all related fields at once
-          fields: {
-            create: assessmentData.fields,
-          },
-        },
-      });
-    }
-  } catch (error) {
-    console.error("Error seeding assessments:", error);
-    throw error;
-  }
-  console.log("Seeded assessments.");
 }
 
 // =================================================================//
@@ -4960,8 +4739,6 @@ async function clearDatabase() {
 
   await prisma.medicationLog.deleteMany();
   await prisma.medicationSchedule.deleteMany();
-  await prisma.assessmentField.deleteMany();
-  await prisma.assessment.deleteMany();
   // AiActionLog only FKs to Person (RESTRICT); no relation to Task, so order
   // relative to the task delete below doesn't matter — it just has to precede
   // the person delete.
@@ -5003,8 +4780,6 @@ async function clearDatabase() {
   // already cleared above, so units then locations can be removed safely.
   await prisma.unit.deleteMany();
   await prisma.location.deleteMany();
-
-  await prisma.assessmentTemplate.deleteMany();
 
   await prisma.partner.deleteMany();
 
@@ -5265,7 +5040,6 @@ async function seedAll() {
   await seedWalkInPersons();
   await seedLookupTables();
   await seedPartners();
-  await seedAssessmentTemplates();
   await seedLocationsAndUnits();
   await seedAnimalsAndRelations();
   await seedFostering();
@@ -5273,7 +5047,6 @@ async function seedAll() {
   await seedRegisteredUserApplicationFixtures();
   await seedTasks();
   await seedAiActivityLog();
-  await seedAssessments();
   await seedNoteAudit();
   // After every listingStatus mutation above, so the available/unavailable
   // split on /pets/favorites is the real one.

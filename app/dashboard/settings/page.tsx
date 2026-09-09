@@ -43,13 +43,6 @@ const settingsCards: readonly SettingsCard[] = [
         permission: AppPermissions.MANAGE_ANIMAL_TAXONOMY,
     },
     {
-        title: "Assessment Templates",
-        description:
-            "Create and edit the templates staff use to assess animals.",
-        url: "/dashboard/settings/assessment-templates",
-        permission: AppPermissions.MANAGE_ASSESSMENT_TEMPLATES,
-    },
-    {
         title: "Locations",
         description:
             "Manage kennel locations and the units within each one.",

@@ -1,4 +1,3 @@
-import type { FieldType } from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
 
 export type SearchParamsType = Promise<{ [key: string]: string | undefined }>;
@@ -371,18 +370,6 @@ export type AnimalReIntakeFormPayload = Prisma.AnimalGetPayload<{
   };
 }>;
 
-export type FieldOption = string | { value: string; label: string };
-
-export interface TemplateField {
-  id: string;
-  label: string;
-  fieldType: FieldType;
-  placeholder: string | null;
-  options: FieldOption[];
-  isRequired: boolean;
-  order: number;
-}
-
 export type PeopleDirectoryPayload = Prisma.PersonGetPayload<{
   select: {
     id: true;
@@ -428,7 +415,6 @@ export type PersonSectionCardPayload = Prisma.PersonGetPayload<{
         animalNotesAuthored: true;
         processedIntakes: true;
         processedOutcomes: true;
-        Assessment: true;
       };
     };
   };

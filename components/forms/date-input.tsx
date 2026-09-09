@@ -42,8 +42,7 @@ export interface DateInputProps {
  * The date trigger on its own — a button that opens a single-date calendar.
  *
  * Pair it with DateField inside a react-hook-form form; use it directly only
- * where the surrounding FormItem/FormLabel are supplied by something else
- * (see app/lib/dynamic-form-field.tsx).
+ * where the surrounding FormItem/FormLabel are supplied by something else.
  */
 export function DateInput({
   value,

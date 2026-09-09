@@ -239,10 +239,4 @@ export const NoteFormSchema = z.object({
   }),
 });
 
-export const assessmentFieldSchema = z.object({
-  fieldName: z.string().min(1, { error: "Field name cannot be empty." }),
-  fieldValue: z.string().min(1, { error: "Field value cannot be empty." }),
-  notes: z.string().optional(),
-});
-
 export type TaskFormInput = z.input<typeof TaskFormSchema>;

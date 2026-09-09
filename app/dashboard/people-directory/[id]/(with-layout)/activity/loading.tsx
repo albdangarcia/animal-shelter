@@ -17,7 +17,7 @@ const Loading = () => {
           Activity
         </CardTitle>
         <CardDescription>
-          Recent activity involving this person — tasks, notes, assessments, and
+          Recent activity involving this person — tasks, notes, and
           intake/outcome processing.
         </CardDescription>
       </CardHeader>

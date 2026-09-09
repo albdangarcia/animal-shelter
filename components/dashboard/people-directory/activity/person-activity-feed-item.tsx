@@ -7,7 +7,6 @@ import {
   LogIn,
   LogOut,
   ClipboardList,
-  ClipboardCheck,
   LucideProps,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -45,10 +44,6 @@ const activityConfig: Record<
     icon: FileText,
     text: "added a note for",
   },
-  ASSESSMENT_CONDUCTED: {
-    icon: ClipboardCheck,
-    text: "conducted an assessment for",
-  },
 };
 
 interface Props {
@@ -63,7 +58,6 @@ export default function PersonActivityFeedItem({ entry }: Props) {
 
   const canExpand =
     entry.kind === "NOTE_AUTHORED" ||
-    entry.kind === "ASSESSMENT_CONDUCTED" ||
     entry.kind === "INTAKE_PROCESSED" ||
     entry.kind === "OUTCOME_PROCESSED";
 
@@ -139,24 +133,6 @@ export default function PersonActivityFeedItem({ entry }: Props) {
                   </>
                 )}
 
-                {entry.kind === "ASSESSMENT_CONDUCTED" && (
-                  <>
-                    {entry.overallOutcome && (
-                      <p className="mb-1 font-medium">
-                        Outcome: {formatSingleEnumOption(entry.overallOutcome)}
-                      </p>
-                    )}
-                    {entry.summary ? (
-                      <pre className="whitespace-pre-wrap font-sans">
-                        {entry.summary}
-                      </pre>
-                    ) : (
-                      <p className="text-muted-foreground">
-                        No summary provided.
-                      </p>
-                    )}
-                  </>
-                )}
               </div>
             )}
           </div>
