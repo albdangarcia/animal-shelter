@@ -141,8 +141,24 @@ const resolveClosedFixtures = async (page: Page) => {
 
   for (const candidate of candidates) {
     await page.goto(candidate.animal);
+
+    // The two CLOSED fixtures land on different pages: the archived animal is
+    // gone from the public site and renders the "Pet Not Found" page
+    // (PageNotFoundOrAccessDenied), the returned one was republished and — a
+    // CLOSED application never blocks — offers the Adopt call to action.
     const adoptCta = page.getByRole("link", { name: /^Adopt / });
-    if ((await adoptCta.count()) > 0) {
+    const notFoundHeading = page.getByRole("heading", {
+      name: "Pet Not Found",
+      exact: true,
+    });
+
+    // Wait for whichever of the two terminal states this navigation settles
+    // into. `locator.count()` used here was an immediate read with no
+    // auto-wait, so a page still compiling on a cold dev server read as 0
+    // matches and silently misclassified the returned animal as archived.
+    await expect(adoptCta.or(notFoundHeading)).toBeVisible();
+
+    if (await adoptCta.isVisible()) {
       returned = candidate;
     } else {
       archived = candidate;
