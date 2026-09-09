@@ -75,6 +75,8 @@ model Person {
   aiActionLogs      AiActionLog[]
   vitalsLogs        VitalsLog[]
   assessments       Assessment[]
+  characteristicsAssigned AnimalCharacteristic[] @relation("CharacteristicAssignedBy")
+  characteristicsRemoved  AnimalCharacteristic[] @relation("CharacteristicRemovedBy")
 
   @@index([phoneNormalized])
   @@map("persons")
@@ -424,7 +426,11 @@ model Animal {
   colors               Color[] // all colors, including the primary
   primaryColorId       String                @map("primary_color_id")
   primaryColor         Color                 @relation("PrimaryColor", fields: [primaryColorId], references: [id])
-  characteristics      Characteristic[]
+  // Explicit join with provenance (who assigned the trait, when, and — from
+  // which assessment it was sourced from). Replaces the former
+  // implicit `Characteristic[]` many-to-many, which claimed traits on a public
+  // profile with no record of who claimed them.
+  animalCharacteristics AnimalCharacteristic[]
   animalImages         AnimalImage[]
   medicalRecords       MedicalRecord[]
   vitalsLogs           VitalsLog[]
@@ -517,14 +523,58 @@ model Characteristic {
   name     String                 @unique // Globally unique; a trait is identified by name alone, regardless of category
   category CharacteristicCategory // The group this tag belongs to (BEHAVIOR, MEDICAL, etc.)
 
-  // A list of all animals that have this characteristic
-  animals Animal[]
+  // Every assignment of this trait to an animal, active or soft-removed.
+  animalCharacteristics AnimalCharacteristic[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map(name: "deleted_at")
 
   @@map("characteristics")
+}
+
+/// Explicit animal ↔ characteristic join carrying provenance. Every
+/// assignment records who made it and when; an assessment-sourced assignment
+/// additionally links the observation via `sourceAssessmentId`.
+///
+/// Soft-removed via `removedAt` rather than deleted, so "removed by X on date Y"
+/// survives. The unique key is `(animalId, characteristicId)` — one row per pair
+/// for the life of the animal — and re-adding a removed trait clears `removedAt`
+/// on that same row (a new `assignedBy`/`assignedAt`, source reset to null).
+model AnimalCharacteristic {
+  id String @id @default(cuid())
+
+  animalId String
+  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+
+  characteristicId String
+  characteristic   Characteristic @relation(fields: [characteristicId], references: [id], onDelete: Cascade)
+
+  assignedById String
+  assignedBy   Person   @relation("CharacteristicAssignedBy", fields: [assignedById], references: [id])
+  assignedAt   DateTime @default(now()) @map(name: "assigned_at")
+
+  /// Set when this assignment was confirmed from an assessment finding;
+  /// null for a manual assignment. SetNull, not Cascade — losing the source
+  /// assessment must not silently drop a trait staff have vouched for.
+  sourceAssessmentId String?
+  sourceAssessment   Assessment? @relation(fields: [sourceAssessmentId], references: [id], onDelete: SetNull)
+
+  note String?
+
+  /// Soft removal. A non-null `removedAt` marks an inactive assignment kept for
+  /// its history; the default characteristics view filters these out.
+  removedAt   DateTime? @map(name: "removed_at")
+  removedById String?
+  removedBy   Person?   @relation("CharacteristicRemovedBy", fields: [removedById], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([animalId, characteristicId])
+  @@index([characteristicId])
+  @@index([sourceAssessmentId])
+  @@map("animal_characteristics")
 }
 
 model AnimalImage {
@@ -900,6 +950,9 @@ model Assessment {
   summary String?
 
   answers AssessmentAnswer[]
+
+  /// Characteristic assignments sourced from this assessment's findings.
+  sourcedCharacteristics AnimalCharacteristic[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt

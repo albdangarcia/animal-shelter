@@ -26,11 +26,6 @@ export type PetsPayload = Prisma.AnimalGetPayload<{
         name: true;
       };
     };
-    characteristics: {
-      select: {
-        name: true;
-      };
-    };
     animalImages: {
       select: {
         url: true;
@@ -44,7 +39,11 @@ export type PetsPayload = Prisma.AnimalGetPayload<{
       take: 1;
     };
   };
-}>;
+}> & {
+  // Flattened from the `AnimalCharacteristic` join by `flattenCharacteristics`
+  // so PetCard keeps reading a plain `{ name }[]`.
+  characteristics: { name: string }[];
+};
 
 // What PetCard turns into tags: first breed (or the species name, for the
 // species pickBreeds() leaves breedless), size, first characteristic. Shared so
@@ -52,13 +51,47 @@ export type PetsPayload = Prisma.AnimalGetPayload<{
 // one renders a card with a missing tag, and one that skips `species` renders a
 // breedless card that never says what kind of animal it is.
 // Soft-deleted breeds and characteristics are excluded: they are still attached
-// to the animal but must never be shown publicly.
+// to the animal but must never be shown publicly. Characteristics now come
+// through the `AnimalCharacteristic` join — active assignments only — and are
+// flattened back to a `{ name }[]` by `flattenCharacteristics` before a card
+// ever sees them.
+const PUBLIC_CHARACTERISTIC_SELECT = {
+  // Active assignments only. The soft-deleted-trait check is done in JS by
+  // `flattenCharacteristics` rather than as a nested relation filter here, so
+  // this stays a single-level include like the `breeds` one above.
+  where: { removedAt: null },
+  select: { characteristic: { select: { name: true, deletedAt: true } } },
+} satisfies Prisma.Animal$animalCharacteristicsArgs;
+
+// What PetCard turns into tags — shared so every fetcher that feeds a card
+// selects the same set.
 const PET_CARD_TAG_SELECT = {
   size: true,
   species: { select: { name: true } },
   breeds: { where: { deletedAt: null }, select: { name: true } },
-  characteristics: { where: { deletedAt: null }, select: { name: true } },
+  animalCharacteristics: PUBLIC_CHARACTERISTIC_SELECT,
 } satisfies Prisma.AnimalSelect;
+
+// Collapse the `AnimalCharacteristic` join rows selected by
+// `PUBLIC_CHARACTERISTIC_SELECT` back to the flat `characteristics: { name }[]`
+// shape the public cards and detail page expect, dropping soft-deleted traits.
+function flattenCharacteristics<
+  T extends {
+    animalCharacteristics: {
+      characteristic: { name: string; deletedAt: Date | null };
+    }[];
+  },
+>(animal: T): Omit<T, "animalCharacteristics"> & {
+  characteristics: { name: string }[];
+} {
+  const { animalCharacteristics, ...rest } = animal;
+  return {
+    ...rest,
+    characteristics: animalCharacteristics
+      .filter((ac) => ac.characteristic.deletedAt === null)
+      .map((ac) => ({ name: ac.characteristic.name })),
+  };
+}
 
 const ITEMS_PER_PAGE = 10
 
@@ -225,7 +258,7 @@ export const fetchPublishedPets = async ({
     ]);
 
     const totalPages = Math.ceil(totalCount / ITEMS_PER_PAGE);
-    return { pets, totalPages };
+    return { pets: pets.map(flattenCharacteristics), totalPages };
   } catch (error) {
     console.error("Error fetching pets.", error);
     throw new Error("Error fetching pets.");
@@ -320,7 +353,7 @@ export const fetchFavoritePets = async (): Promise<{
     });
 
     const pets: FavoritePet[] = likes.map((like) => ({
-      ...like.animal,
+      ...flattenCharacteristics(like.animal),
       // This is the user's own like list, so every pet is liked by them.
       likes: [{ userId: personId }],
       isAvailable: AVAILABLE_STATUSES.includes(like.animal.listingStatus),
@@ -401,14 +434,7 @@ export const fetchPublicPagePetById = async (id: string) => {
             name: true,
           },
         },
-        characteristics: {
-          where: {
-            deletedAt: null,
-          },
-          select: {
-            name: true,
-          },
-        },
+        animalCharacteristics: PUBLIC_CHARACTERISTIC_SELECT,
         // Conditionally include likes if userId is available
         ...(personId && {
           likes: {
@@ -445,7 +471,10 @@ export const fetchPublicPagePetById = async (id: string) => {
     }
 
     const { microchipNumber, ...rest } = pet;
-    return { ...rest, hasMicrochip: microchipNumber !== null };
+    return {
+      ...flattenCharacteristics(rest),
+      hasMicrochip: microchipNumber !== null,
+    };
   } catch (error) {
     console.error("Error fetching pet.", error);
     throw new Error("Error fetching pet.");
@@ -491,7 +520,7 @@ export const fetchLatestPublicAnimals = async (take: number = 4) => {
       },
       take,
     });
-    return latestPets;
+    return latestPets.map(flattenCharacteristics);
   } catch (error) {
     console.error("Error fetching latest pets.", error);
     throw new Error("Error fetching latest pets.");

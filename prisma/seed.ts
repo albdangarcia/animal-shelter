@@ -531,6 +531,17 @@ const speciesImagePools = buildSpeciesImagePools();
 // picked at random each time) whenever a species' queue runs dry.
 let individualDealQueues: Partial<Record<keyof typeof allSpecies, SpeciesIndividual[]>> = {};
 
+// Characteristic assignments collected while animals are created, then drained
+// by seedAnimalCharacteristics() in the tail of seedAll(). Kept OUT of the
+// animal.create() call itself: an `AnimalCharacteristic` nested-create would
+// draw cuid()s from the shared mulberry32 stream and shift every downstream
+// RNG draw the lifecycle assertion depends on. A plain array push is inert.
+let pendingCharacteristicAssignments: {
+  animalId: string;
+  assignedAt: Date;
+  characteristicIds: string[];
+}[] = [];
+
 function dealIndividual(speciesKey: keyof typeof allSpecies): SpeciesIndividual {
   let queue = individualDealQueues[speciesKey];
   if (!queue || queue.length === 0) {
@@ -2178,7 +2189,6 @@ async function seedReturnAndReadoptAnimal(opts: {
       breeds: { connect: connectedBreeds },
       colors: { connect: connectedColors },
       primaryColor: { connect: { id: primaryColor.id } },
-      characteristics: { connect: connectedChars },
       animalImages: {
         create: blueprint.images.map((imageUrl, index) => ({
           url: imageUrl,
@@ -2188,6 +2198,17 @@ async function seedReturnAndReadoptAnimal(opts: {
       ...(currentUnit ? { currentUnit: { connect: { id: currentUnit.id } } } : {}),
     },
   });
+
+  // Characteristic assignments are written in the tail (see the module-level
+  // note on pendingCharacteristicAssignments) so their cuid()s don't shift the
+  // RNG stream. assignedAt is anchored to intake — "recorded when we took her in".
+  if (connectedChars.length > 0) {
+    pendingCharacteristicAssignments.push({
+      animalId: animal.id,
+      assignedAt: stay1.intakeDate,
+      characteristicIds: connectedChars.map((c) => c.id),
+    });
+  }
 
   // Stay 1: the animal's original intake, ending in its first adoption.
   const firstRelations = buildIntakeRelations(
@@ -2694,7 +2715,6 @@ async function seedAnimalsAndRelations() {
           breeds: { connect: connectedBreeds },
           colors: { connect: connectedColors },
           primaryColor: { connect: { id: primaryColor.id } },
-          characteristics: { connect: connectedChars },
           animalImages: {
             create: blueprint.images.map((imageUrl, index) => ({
               url: imageUrl,
@@ -2706,6 +2726,16 @@ async function seedAnimalsAndRelations() {
             : {}),
         },
       });
+
+      // Deferred to the tail so AnimalCharacteristic cuid()s don't shift the
+      // shared RNG stream (see pendingCharacteristicAssignments).
+      if (connectedChars.length > 0) {
+        pendingCharacteristicAssignments.push({
+          animalId: animal.id,
+          assignedAt: stay.intakeDate,
+          characteristicIds: connectedChars.map((c) => c.id),
+        });
+      }
 
       // Create the intake with its type-appropriate relation, mirroring the
       // real intake write paths: an existing pool person is connected, never
@@ -4749,6 +4779,9 @@ async function clearDatabase() {
   // Assessments before persons (assessorId is Restrict) and before the
   // template rows they FK to. Answers -> assessments -> fields -> templates.
   await prisma.assessmentAnswer.deleteMany();
+  // AnimalCharacteristic before assessments (sourceAssessmentId) and before
+  // persons (assignedById is Restrict).
+  await prisma.animalCharacteristic.deleteMany();
   await prisma.assessment.deleteMany();
   await prisma.assessmentTemplateField.deleteMany();
   await prisma.assessmentTemplate.deleteMany();
@@ -5032,9 +5065,55 @@ async function seedPublicFavorites() {
   );
 }
 
+// Drain the characteristic assignments collected during animal creation into
+// explicit AnimalCharacteristic rows with provenance. Runs in the tail of
+// seedAll() — its cuid()s draw from the shared RNG stream, so it must land
+// after every animal/intake/outcome draw the lifecycle assertion depends on.
+// Every seeded assignment is a manual one (staff-attributed, no source
+// assessment).
+async function seedAnimalCharacteristics() {
+  console.log("Seeding animal characteristics with provenance...");
+
+  if (pendingCharacteristicAssignments.length === 0) {
+    console.log("No characteristic assignments to seed.");
+    return;
+  }
+
+  const staff = await prisma.person.findMany({
+    where: { user: { role: Role.STAFF } },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    select: { id: true, user: { select: { email: true } } },
+  });
+  if (staff.length === 0) {
+    console.log("No staff found, skipping characteristic provenance seeding.");
+    return;
+  }
+  const assigner =
+    staff.find((s) => s.user?.email === "staff1@example.com") ?? staff[0];
+
+  let rows = 0;
+  for (const assignment of pendingCharacteristicAssignments) {
+    for (const characteristicId of assignment.characteristicIds) {
+      await prisma.animalCharacteristic.create({
+        data: {
+          animalId: assignment.animalId,
+          characteristicId,
+          assignedById: assigner.id,
+          assignedAt: assignment.assignedAt,
+        },
+      });
+      rows += 1;
+    }
+  }
+
+  console.log(
+    `Seeded ${rows} characteristic assignments across ${pendingCharacteristicAssignments.length} animals.`,
+  );
+}
+
 // Mirror the code-defined template registry (app/lib/assessments/templates.ts)
 // into the AssessmentTemplate / AssessmentTemplateField tables via the shared,
-// idempotent sync helper. This is the DB side of spec D1 — assessments hold a
+// idempotent sync helper. Assessments hold a
 // real FK to a specific template version.
 async function seedAssessmentTemplates() {
   console.log("Seeding assessment templates from the registry...");
@@ -5097,7 +5176,7 @@ async function seedAssessmentTemplates() {
 
 // One recorded answer for a seeded assessment. `fieldKey` matches a field key
 // in the registry template; `value` is the answer as recorded (snapshotted
-// alongside the field FK — spec D2).
+// alongside the field FK).
 interface SeedAnswer {
   fieldKey: string;
   value: string;
@@ -5117,8 +5196,7 @@ interface SeedAssessment {
 // Deterministic assessments spread across the hand-seeded IN_CARE animals so
 // later steps (readiness board, findings -> characteristics, the AI tool) have
 // something real to render. Anchored to named animals, not the RNG-drawn
-// generated pool, so it is stable across reseeds. Includes the two cases the
-// spec calls out: at least one ESCALATE (Frisco's cat test) and at least one
+// generated pool, so it is stable across reseeds.
 // stale record (Buddy's daily rounds, ~12 days old — DAILY_ROUNDS goes stale
 // after a day).
 const assessmentSeedData: SeedAssessment[] = [
@@ -5386,6 +5464,7 @@ export async function main() {
   // (two demo resets via app/api/reset-demo without a server restart) assigns
   // images identically to a fresh run.
   individualDealQueues = {};
+  pendingCharacteristicAssignments = [];
 
   try {
     await seedAll();
@@ -5416,6 +5495,7 @@ async function seedAll() {
   // prisma.create() calls whose cuid()s draw from the shared mulberry32
   // stream, so keeping them last leaves every earlier system's RNG draw
   // (and the lifecycle assertion below) byte-for-byte unchanged.
+  await seedAnimalCharacteristics();
   await seedAssessmentTemplates();
   await seedAssessments();
   await assertAnimalLifecycleConsistency();

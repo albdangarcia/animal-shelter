@@ -46,6 +46,7 @@ import { CharacteristicWithAssignment } from "@/app/lib/data/animals/animal-char
 import { updateAnimalCharacteristics } from "@/app/lib/actions/animal-characteristics.actions";
 import { toast } from "sonner";
 import { CATEGORIES } from "@/app/lib/constants/characteristic-categories";
+import { formatDateToLongString } from "@/app/lib/utils/date-utils";
 
 const CATEGORY_KEYS = Object.values(CharacteristicCategory);
 
@@ -121,7 +122,7 @@ const AnimalCharacteristicsManager = ({
         characteristicIds: Array.from(stagedChanges),
       });
 
-      if (result.success) {
+      if (result.ok) {
         toast.success(
           result.message || "Characteristics updated successfully!",
         );
@@ -197,18 +198,32 @@ const AnimalCharacteristicsManager = ({
                       <Icon className="h-5 w-5 text-muted-foreground" />
                       {CATEGORIES[key].label}
                     </h4>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-col gap-2">
                       {characteristicsForCategory.map((char) => (
-                        <Badge
+                        <div
                           key={char.id}
-                          variant="secondary"
-                          className={clsx(
-                            "font-medium text-sm py-1 px-2.5",
-                            CATEGORIES[char.category]?.color,
-                          )}
+                          className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
                         >
-                          {char.name}
-                        </Badge>
+                          <Badge
+                            variant="secondary"
+                            className={clsx(
+                              "font-medium text-sm py-1 px-2.5",
+                              CATEGORIES[char.category]?.color,
+                            )}
+                          >
+                            {char.name}
+                          </Badge>
+                          {char.assignment && (
+                            <span className="text-xs text-muted-foreground">
+                              Added by{" "}
+                              {char.assignment.assignedByName ?? "a staff member"}{" "}
+                              on{" "}
+                              {formatDateToLongString(
+                                new Date(char.assignment.assignedAt),
+                              )}
+                            </span>
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
