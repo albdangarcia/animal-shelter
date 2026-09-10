@@ -5207,15 +5207,9 @@ const assessmentSeedData: SeedAssessment[] = [
     observedAt: daysAgo(38),
     summary: "Healthy adult dog, no findings on the intake exam.",
     answers: [
-      { fieldKey: "body_condition", value: "Ideal" },
       { fieldKey: "dental", value: "Mild tartar" },
       { fieldKey: "parasites", value: "None seen" },
       { fieldKey: "heart_lungs", value: "Clear" },
-      {
-        fieldKey: "intake_weight_grams",
-        value: "30000",
-        valueNumber: 30000,
-      },
     ],
   },
   {
@@ -5289,13 +5283,11 @@ const assessmentSeedData: SeedAssessment[] = [
     templateKey: "INTAKE_MEDICAL",
     signal: AssessmentSignal.NO_CONCERNS,
     observedAt: daysAgo(50),
-    summary: "Healthy senior-ish cat, good body condition.",
+    summary: "Healthy senior-ish cat; moderate dental disease noted.",
     answers: [
-      { fieldKey: "body_condition", value: "Ideal" },
       { fieldKey: "dental", value: "Moderate disease" },
       { fieldKey: "parasites", value: "Treated" },
       { fieldKey: "heart_lungs", value: "Clear" },
-      { fieldKey: "intake_weight_grams", value: "3500", valueNumber: 3500 },
     ],
   },
   {
@@ -5320,7 +5312,6 @@ const assessmentSeedData: SeedAssessment[] = [
     summary:
       "Severe dental disease — needs a dental before the profile goes public.",
     answers: [
-      { fieldKey: "body_condition", value: "Thin" },
       {
         fieldKey: "dental",
         value: "Severe disease",
@@ -5328,7 +5319,6 @@ const assessmentSeedData: SeedAssessment[] = [
       },
       { fieldKey: "parasites", value: "Ear mites" },
       { fieldKey: "heart_lungs", value: "Clear" },
-      { fieldKey: "intake_weight_grams", value: "3200", valueNumber: 3200 },
     ],
   },
   {
