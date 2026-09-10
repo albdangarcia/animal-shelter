@@ -23,6 +23,7 @@ const animalTabDefinitions = [
   { suffix: "/journey", label: "Journey" },
   { suffix: "/notes", label: "Notes" },
   { suffix: "/vitals", label: "Vitals" },
+  { suffix: "/assessments", label: "Assessments" },
   { suffix: "/adoption-applications", label: "Applications" },
   { suffix: "/photos", label: "Photos" },
 ];

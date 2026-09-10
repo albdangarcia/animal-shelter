@@ -60,15 +60,11 @@ export const ASSESSMENT_TEMPLATES: AssessmentTemplateDef[] = [
     description:
       "First-pass physical check performed at or shortly after intake for every animal.",
     stage: "intake",
+    // Weight and body condition are deliberately absent — they live on
+    // VitalsLog (weightGrams feeds Animal.currentWeightGrams and the chart;
+    // bodyConditionScore is the 1-9 ordinal). A second copy here would drift
+    // from the real entry with no way to reconcile the two.
     fields: [
-      {
-        key: "body_condition",
-        label: "Body condition",
-        fieldType: FieldType.SINGLE_SELECT,
-        options: ["Emaciated", "Thin", "Ideal", "Overweight", "Obese"],
-        concerningValues: ["Emaciated", "Obese"],
-        isRequired: true,
-      },
       {
         key: "dental",
         label: "Dental",
@@ -80,6 +76,7 @@ export const ASSESSMENT_TEMPLATES: AssessmentTemplateDef[] = [
           "Severe disease",
         ],
         concerningValues: ["Severe disease"],
+        isRequired: true,
       },
       {
         key: "parasites",
@@ -94,11 +91,6 @@ export const ASSESSMENT_TEMPLATES: AssessmentTemplateDef[] = [
         fieldType: FieldType.SINGLE_SELECT,
         options: ["Clear", "Murmur", "Increased respiratory effort"],
         concerningValues: ["Murmur", "Increased respiratory effort"],
-      },
-      {
-        key: "intake_weight_grams",
-        label: "Weight at intake (grams)",
-        fieldType: FieldType.NUMBER,
         isRequired: true,
       },
       notes,
