@@ -14,9 +14,16 @@ import { FieldType } from "@/prisma/generated/enums";
  *    point at the exact version they were recorded against.
  *  - within a template, field `key`s are unique and stable. Rename the `label`
  *    freely across versions; never reuse or repurpose a `key`.
- *  - `concerningValues` and the eventual proposal mappings may only reference
- *    strings that appear in that field's `options`.
+ *  - `concerningValues` and `proposesOnValues` may only reference strings that
+ *    appear in that field's `options`.
  *  - only `SINGLE_SELECT` / `MULTI_SELECT` fields carry `options`.
+ *  - `proposesCharacteristic` names a `Characteristic` by its catalog name; the
+ *    registry sync resolves it to an id when it first writes the field row and
+ *    fails loudly if no such trait exists. From then on the row's foreign key
+ *    is what recorded answers are matched on, so renaming the trait in the
+ *    catalog is safe. `proposesOnValues` must be set alongside it and vice
+ *    versa, only a `SINGLE_SELECT` field can propose, and no two fields of
+ *    one template propose the same trait.
  */
 
 export interface AssessmentTemplateFieldDef {
@@ -29,6 +36,15 @@ export interface AssessmentTemplateFieldDef {
   /** Subset of `options` that raises the assessment signal when selected. */
   concerningValues?: string[];
   isRequired?: boolean;
+  /**
+   * Catalog name of a `Characteristic` this field's findings can source. An
+   * answer of one of `proposesOnValues` proposes the trait for staff to
+   * confirm; a concerning answer on the same field instead contradicts it.
+   * Single-select fields only: a stored answer is then exactly one option.
+   */
+  proposesCharacteristic?: string;
+  /** The answers that trigger the proposal. Required with `proposesCharacteristic`. */
+  proposesOnValues?: string[];
 }
 
 export interface AssessmentTemplateDef {
@@ -209,6 +225,8 @@ export const ASSESSMENT_TEMPLATES: AssessmentTemplateDef[] = [
           "Inconclusive — retest",
         ],
         concerningValues: ["Not cat-safe"],
+        proposesCharacteristic: "Good with cats",
+        proposesOnValues: ["Cat-safe"],
         isRequired: true,
       },
       notes,
@@ -273,6 +291,8 @@ export const ASSESSMENT_TEMPLATES: AssessmentTemplateDef[] = [
           "Solo-dog home",
         ],
         concerningValues: ["Solo-dog home"],
+        proposesCharacteristic: "Good with other dogs",
+        proposesOnValues: ["Dog-social"],
         isRequired: true,
       },
       notes,
@@ -427,12 +447,27 @@ export function validateRegistry(
     }
 
     const seenFieldKeys = new Set<string>();
+    // One field per trait: two answers on one assessment could otherwise
+    // propose and contradict the same trait at once, and the review shows a
+    // single finding per trait.
+    const proposerByTrait = new Map<string, string>();
     for (const field of template.fields) {
       const ref = `${kv} field "${field.key}"`;
       if (seenFieldKeys.has(field.key)) {
         errors.push(`${ref}: duplicate field key`);
       }
       seenFieldKeys.add(field.key);
+
+      if (field.proposesCharacteristic) {
+        const other = proposerByTrait.get(field.proposesCharacteristic);
+        if (other !== undefined) {
+          errors.push(
+            `${ref}: proposes "${field.proposesCharacteristic}", which field "${other}" already proposes`,
+          );
+        } else {
+          proposerByTrait.set(field.proposesCharacteristic, field.key);
+        }
+      }
 
       const isSelect = SELECT_TYPES.includes(field.fieldType);
       const options = field.options ?? [];
@@ -451,6 +486,38 @@ export function validateRegistry(
         if (!options.includes(value)) {
           errors.push(
             `${ref}: concerningValue "${value}" is not one of the field's options`,
+          );
+        }
+      }
+
+      const proposesOn = field.proposesOnValues ?? [];
+      if (field.proposesCharacteristic && proposesOn.length === 0) {
+        errors.push(
+          `${ref}: proposesCharacteristic is set but proposesOnValues is empty`,
+        );
+      }
+      if (!field.proposesCharacteristic && proposesOn.length > 0) {
+        errors.push(
+          `${ref}: proposesOnValues is set without a proposesCharacteristic`,
+        );
+      }
+      if (
+        field.proposesCharacteristic &&
+        field.fieldType !== FieldType.SINGLE_SELECT
+      ) {
+        errors.push(
+          `${ref}: only SINGLE_SELECT fields can propose a characteristic`,
+        );
+      }
+      for (const value of proposesOn) {
+        if (!options.includes(value)) {
+          errors.push(
+            `${ref}: proposesOnValue "${value}" is not one of the field's options`,
+          );
+        }
+        if ((field.concerningValues ?? []).includes(value)) {
+          errors.push(
+            `${ref}: proposesOnValue "${value}" is also a concerningValue — a finding cannot both affirm and contradict a trait`,
           );
         }
       }

@@ -139,6 +139,24 @@ const _deleteCharacteristic = async (
   }
 
   try {
+    // An assessment template field that proposes this trait needs it: its
+    // recorded findings source and argue against it. Retire the field in the
+    // template registry first. (A rename is fine — findings match by id.)
+    const proposingField = await prisma.assessmentTemplateField.findFirst({
+      where: { proposesCharacteristicId: parsedId.data },
+      orderBy: { template: { version: "desc" } },
+      select: {
+        template: { select: { name: true } },
+        proposesCharacteristic: { select: { name: true } },
+      },
+    });
+    if (proposingField) {
+      return {
+        success: false,
+        message: `${proposingField.proposesCharacteristic?.name ?? "This characteristic"} is proposed by the ${proposingField.template.name} assessment template, so it can't be deleted.`,
+      };
+    }
+
     await prisma.characteristic.update({
       where: { id: parsedId.data },
       data: { deletedAt: new Date() },

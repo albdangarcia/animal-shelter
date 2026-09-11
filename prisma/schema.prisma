@@ -526,6 +526,9 @@ model Characteristic {
   // Every assignment of this trait to an animal, active or soft-removed.
   animalCharacteristics AnimalCharacteristic[]
 
+  // Template fields whose findings propose this trait for staff confirmation.
+  proposedByFields AssessmentTemplateField[] @relation("CharacteristicProposedByFields")
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map(name: "deleted_at")
@@ -560,6 +563,8 @@ model AnimalCharacteristic {
   sourceAssessmentId String?
   sourceAssessment   Assessment? @relation(fields: [sourceAssessmentId], references: [id], onDelete: SetNull)
 
+  /// Free-text note on the assignment. Predates the findings-sourcing work
+  /// (added for general use); nothing currently writes to it.
   note String?
 
   /// Soft removal. A non-null `removedAt` marks an inactive assignment kept for
@@ -919,6 +924,20 @@ model AssessmentTemplateField {
   isRequired       Boolean   @default(false)
   order            Int
 
+  /// When set, an answer of one of `proposesOnValues` on this field suggests
+  /// assigning this characteristic to the animal — staff add or cite it from
+  /// the assessment's own page, and a sourced assignment links back here via
+  /// `AnimalCharacteristic.sourceAssessmentId`. Null for a field that sources
+  /// no trait. Recorded answers are judged against this row, so the trait is
+  /// matched by this id — renaming it in the catalog changes nothing.
+  /// SetNull, not Cascade: retiring a catalog trait must not delete template
+  /// history.
+  proposesCharacteristicId String?
+  proposesCharacteristic   Characteristic? @relation("CharacteristicProposedByFields", fields: [proposesCharacteristicId], references: [id], onDelete: SetNull)
+  /// Subset of `options` that triggers the proposal above. Empty when nothing
+  /// is proposed.
+  proposesOnValues         String[]
+
   answers AssessmentAnswer[]
 
   createdAt DateTime @default(now())
@@ -926,6 +945,7 @@ model AssessmentTemplateField {
 
   @@unique([templateId, key])
   @@index([templateId])
+  @@index([proposesCharacteristicId])
   @@map("assessment_template_fields")
 }
 

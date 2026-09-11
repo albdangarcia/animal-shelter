@@ -19,10 +19,10 @@ import { Menu } from "lucide-react";
 const animalTabDefinitions = [
   { suffix: "", label: "Activity" },
   { suffix: "/tasks", label: "Tasks" },
-  { suffix: "/characteristics", label: "Characteristics" },
   { suffix: "/journey", label: "Journey" },
   { suffix: "/notes", label: "Notes" },
   { suffix: "/vitals", label: "Vitals" },
+  { suffix: "/characteristics", label: "Characteristics" },
   { suffix: "/assessments", label: "Assessments" },
   { suffix: "/adoption-applications", label: "Applications" },
   { suffix: "/photos", label: "Photos" },

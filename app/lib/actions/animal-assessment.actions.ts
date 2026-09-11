@@ -23,7 +23,10 @@ import {
   concerningFieldKeys,
   normalizeAnswerValue,
 } from "../assessments/answers";
+import { proposalsOf, suggestionActionFor } from "../assessments/proposals";
+import { fetchRecordedAssessment } from "../data/animals/assessment-characteristic-review";
 import { deriveSignal, formatSignal } from "../assessments/signal";
+import { formatDateToLongString } from "../utils/date-utils";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 type AssessmentResult = FormResult<AssessmentFormValues>;
@@ -143,6 +146,11 @@ const logActivity = (
 
 const revalidate = (animalId: string) => {
   revalidatePath(`/dashboard/animals/${animalId}/assessments`);
+  // Findings are measured against the animal's traits and all of its live
+  // assessments, so any change here can change what another assessment's
+  // page suggests and what the Characteristics tab warns about.
+  revalidatePath("/dashboard/animals/[id]/assessments/[assessmentId]", "page");
+  revalidatePath(`/dashboard/animals/${animalId}/characteristics`);
   revalidatePath(`/dashboard/animals/${animalId}`);
 };
 
@@ -160,6 +168,22 @@ const _createAssessment = async (
     return { ok: false, message: resolved.error };
   }
   const { def, row } = resolved;
+
+  // The picker only offers templates for the animal's species; a submission
+  // can still name any key.
+  const animal = await prisma.animal.findUnique({
+    where: { id: animalId },
+    select: { name: true, species: { select: { name: true } } },
+  });
+  if (!animal) {
+    return { ok: false, message: "Animal not found." };
+  }
+  if (def.species && animal.species.name !== def.species) {
+    return {
+      ok: false,
+      message: `The ${def.name} is a ${def.species} assessment, but ${animal.name} is a ${animal.species.name}.`,
+    };
+  }
 
   const parsed = buildAssessmentSchema(def).safeParse(rawValues);
   if (!parsed.success) {
@@ -183,7 +207,7 @@ const _createAssessment = async (
       });
       if (!animal) throw new Error("Animal not found.");
 
-      const assessment = await tx.assessment.create({
+      await tx.assessment.create({
         data: {
           animalId,
           templateId: row.id,
@@ -193,7 +217,6 @@ const _createAssessment = async (
           summary: values.summary?.trim() || null,
           answers: { create: answers },
         },
-        select: { id: true },
       });
 
       await logActivity(tx, {
@@ -203,8 +226,6 @@ const _createAssessment = async (
         changeSummary: `${row.name} assessment recorded — ${formatSignal(signal)}.`,
         changedAt: values.observedAt,
       });
-
-      return assessment;
     });
   } catch (error) {
     console.error("Database Error creating assessment:", error);
@@ -238,7 +259,8 @@ const _updateAssessment = async (
   const existing = await prisma.assessment.findFirst({
     where: { id: assessmentId, animalId, deletedAt: null },
     select: {
-      template: { select: { key: true, version: true } },
+      observedAt: true,
+      template: { select: { key: true, version: true, name: true } },
       answers: {
         select: {
           id: true,
@@ -338,11 +360,19 @@ const _updateAssessment = async (
         });
       }
 
+      const observedBefore = formatDateToLongString(existing.observedAt);
+      const observedNow = formatDateToLongString(values.observedAt);
       await logActivity(tx, {
         animalId,
         personId: user.personId,
         activityType: AnimalActivityType.FIELD_UPDATE,
-        changeSummary: `An assessment was updated — ${formatSignal(signal)}.`,
+        changeSummary: [
+          `The ${existing.template.name} of ${observedNow} was updated — ${formatSignal(signal)}.`,
+          observedBefore !== observedNow &&
+            `Observed date changed from ${observedBefore}.`,
+        ]
+          .filter(Boolean)
+          .join(" "),
       });
     });
   } catch (error) {
@@ -361,19 +391,25 @@ const _updateAssessment = async (
   };
 };
 
+type AssessmentStateResult = FormResult<{
+  assessmentId: string;
+  animalId: string;
+}>;
+
 const _setAssessmentDeleted = async (
   user: SessionUser,
   assessmentId: string,
   animalId: string,
   deleted: boolean,
-): Promise<{ message: string }> => {
+): Promise<AssessmentStateResult> => {
   if (
     !cuidSchema.safeParse(assessmentId).success ||
     !cuidSchema.safeParse(animalId).success
   ) {
-    return { message: "Invalid ID format." };
+    return { ok: false, message: "Invalid ID format." };
   }
 
+  let citingTraits: string[] = [];
   try {
     await prisma.$transaction(async (tx) => {
       const updated = await tx.assessment.updateMany({
@@ -381,6 +417,18 @@ const _setAssessmentDeleted = async (
         data: { deletedAt: deleted ? new Date() : null },
       });
       if (updated.count === 0) throw new Error("Assessment not found.");
+
+      // Deleting an assessment leaves the characteristics it sourced in place —
+      // the observation was withdrawn, not contradicted — so they keep citing
+      // it. Name them in the confirmation so the delete isn't silent about
+      // that.
+      if (deleted) {
+        const citing = await tx.animalCharacteristic.findMany({
+          where: { animalId, sourceAssessmentId: assessmentId, removedAt: null },
+          select: { characteristic: { select: { name: true } } },
+        });
+        citingTraits = citing.map((c) => c.characteristic.name);
+      }
 
       await logActivity(tx, {
         animalId,
@@ -392,14 +440,140 @@ const _setAssessmentDeleted = async (
   } catch (error) {
     console.error("Database Error changing assessment state:", error);
     return {
+      ok: false,
       message: `Database Error: Failed to ${deleted ? "delete" : "restore"} the assessment.`,
     };
   }
 
   revalidate(animalId);
+  if (!deleted) return { ok: true, message: "Assessment restored." };
+  if (citingTraits.length === 0) {
+    return { ok: true, message: "Assessment deleted." };
+  }
+  const one = citingTraits.length === 1;
   return {
-    message: `Assessment ${deleted ? "deleted" : "restored"}.`,
+    ok: true,
+    message: `Assessment deleted. ${citingTraits.join(", ")} ${
+      one ? "stays" : "stay"
+    } on the animal, citing the deleted assessment.`,
   };
+};
+
+const applySuggestionSchema = z.object({
+  assessmentId: cuidSchema,
+  animalId: cuidSchema,
+  characteristicId: cuidSchema,
+});
+
+type ApplySuggestionInput = z.infer<typeof applySuggestionSchema>;
+type ApplySuggestionResult = FormResult<ApplySuggestionInput>;
+
+/** How an assessment is named in an activity-log entry. */
+const assessmentLabel = (a: { templateName: string; observedAt: Date }) =>
+  `the ${a.templateName} of ${formatDateToLongString(a.observedAt)}`;
+
+/**
+ * Act on one of an assessment's suggestions: assign the trait if it isn't on
+ * the animal, or move its citation here if it is assigned from anywhere else.
+ * Re-derives, inside the transaction, that the assessment still proposes the
+ * trait — the client's request is only a selection, never trusted past that.
+ */
+const _applyCharacteristicSuggestion = async (
+  user: SessionUser,
+  input: ApplySuggestionInput,
+): Promise<ApplySuggestionResult> => {
+  const parsed = applySuggestionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: "Invalid input." };
+  }
+  const { assessmentId, animalId, characteristicId } = parsed.data;
+  const now = new Date();
+
+  let outcome: { ok: true; message: string } | { ok: false; message: string };
+  try {
+    outcome = await prisma.$transaction(async (tx) => {
+      const found = await fetchRecordedAssessment(tx, animalId, assessmentId);
+      if (!found) return { ok: false, message: "Assessment not found." };
+      if (found.deletedAt) {
+        return {
+          ok: false,
+          message: "A deleted assessment can't source characteristics.",
+        };
+      }
+
+      const proposal = proposalsOf(found.recorded).find(
+        (p) => p.characteristicId === characteristicId,
+      );
+      if (!proposal) {
+        return {
+          ok: false,
+          message: "This assessment no longer proposes that characteristic.",
+        };
+      }
+
+      const existing = await tx.animalCharacteristic.findUnique({
+        where: { animalId_characteristicId: { animalId, characteristicId } },
+        select: { removedAt: true, sourceAssessmentId: true },
+      });
+      const action = suggestionActionFor(
+        existing?.removedAt === null ? existing : undefined,
+        assessmentId,
+      );
+      if (action === null) {
+        return {
+          ok: true,
+          message: `${proposal.characteristicName} already cites this assessment.`,
+        };
+      }
+      const wasActive = action === "CITE";
+
+      await tx.animalCharacteristic.upsert({
+        where: { animalId_characteristicId: { animalId, characteristicId } },
+        create: {
+          animalId,
+          characteristicId,
+          assignedById: user.personId,
+          assignedAt: now,
+          sourceAssessmentId: assessmentId,
+        },
+        update: {
+          assignedById: user.personId,
+          assignedAt: now,
+          sourceAssessmentId: assessmentId,
+          removedAt: null,
+          removedById: null,
+        },
+      });
+
+      const against = assessmentLabel(found.recorded);
+      await logActivity(tx, {
+        animalId,
+        personId: user.personId,
+        activityType: AnimalActivityType.FIELD_UPDATE,
+        changeSummary: wasActive
+          ? `${proposal.characteristicName} re-cited to ${against}.`
+          : `${proposal.characteristicName} added, citing ${against}.`,
+      });
+
+      return {
+        ok: true,
+        message: wasActive
+          ? `${proposal.characteristicName} re-cited to this assessment.`
+          : `${proposal.characteristicName} added to the animal.`,
+      };
+    });
+  } catch (error) {
+    console.error("Database Error applying characteristic suggestion:", error);
+    return {
+      ok: false,
+      message: "Database Error: Failed to apply the suggestion.",
+    };
+  }
+  if (!outcome.ok) return outcome;
+
+  revalidate(animalId);
+  revalidatePath(`/pets/${animalId}`);
+  return { ok: true, message: outcome.message };
 };
 
 export const createAssessment = withAuthenticatedUser(
@@ -421,5 +595,11 @@ export const restoreAssessment = withAuthenticatedUser(
   RequirePermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE)(
     (user: SessionUser, assessmentId: string, animalId: string) =>
       _setAssessmentDeleted(user, assessmentId, animalId, false),
+  ),
+);
+
+export const applyCharacteristicSuggestion = withAuthenticatedUser(
+  RequirePermission(AppPermissions.ANIMAL_CHARACTERISTICS_MANAGE)(
+    _applyCharacteristicSuggestion,
   ),
 );

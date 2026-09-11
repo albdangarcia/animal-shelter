@@ -49,6 +49,7 @@ import {
   type TemplateRegistryStore,
 } from "@/app/lib/assessments/sync-templates";
 import { getActiveTemplate } from "@/app/lib/assessments/templates";
+import { formatDateToLongString } from "@/app/lib/utils/date-utils";
 
 // =================================================================//
 //                      DETERMINISTIC RANDOMNESS                     //
@@ -5155,6 +5156,8 @@ async function seedAssessmentTemplates() {
           concerningValues: input.concerningValues,
           isRequired: input.isRequired,
           order: input.order,
+          proposesCharacteristicId: input.proposesCharacteristicId,
+          proposesOnValues: input.proposesOnValues,
         },
         update: {
           label: input.label,
@@ -5163,8 +5166,24 @@ async function seedAssessmentTemplates() {
           concerningValues: input.concerningValues,
           isRequired: input.isRequired,
           order: input.order,
+          proposesCharacteristicId: input.proposesCharacteristicId,
+          proposesOnValues: input.proposesOnValues,
         },
       });
+    },
+    async findProposedCharacteristicId(templateId, key) {
+      const row = await prisma.assessmentTemplateField.findUnique({
+        where: { templateId_key: { templateId, key } },
+        select: { proposesCharacteristicId: true },
+      });
+      return row?.proposesCharacteristicId ?? null;
+    },
+    async resolveCharacteristicId(name) {
+      const row = await prisma.characteristic.findFirst({
+        where: { name, deletedAt: null },
+        select: { id: true },
+      });
+      return row?.id ?? null;
     },
   };
 
@@ -5191,7 +5210,63 @@ interface SeedAssessment {
   observedAt: Date;
   summary: string;
   answers: SeedAnswer[];
+  // Catalog names of characteristics already cited by this assessment's
+  // findings — assigned with `sourceAssessmentId` pointing back at it, as if
+  // staff had already acted on the suggestion.
+  sourcesCharacteristics?: string[];
+  // Soft-deleted on this date. A trait it sources keeps citing it, warned
+  // "(deleted)" on the Characteristics tab.
+  deletedAt?: Date;
 }
+
+// A trait assigned by hand, independent of any assessment. Written in this
+// tail (not the earlier per-animal characteristic pass) so it can't shift the
+// shared RNG stream. Combined with a live assessment that separately
+// proposes or contradicts the same trait, this is what exercises "Cite this
+// assessment" (Buddy) and a live contradiction warning with no gate (Frisco,
+// Rocket) — order between the hand assignment and the assessment doesn't
+// matter, since both are read fresh every time.
+interface HandAssignedCharacteristic {
+  animalName: string;
+  characteristic: string;
+  assignedAt: Date;
+}
+
+// Named animals also draw from the general random characteristic pool
+// (`connectedChars`, seeded earlier), so a trait meant to demonstrate
+// "unassigned" can't just be assumed absent. Force it off in this tail —
+// after the random pass and safe from the shared RNG stream — for the pairs
+// a fixture below depends on reading as genuinely unassigned.
+interface ClearedCharacteristic {
+  animalName: string;
+  characteristic: string;
+}
+
+const clearedCharacteristics: ClearedCharacteristic[] = [
+  // Frisco's Dog-to-Dog Introduction is meant to find this trait unassigned.
+  { animalName: "Frisco", characteristic: "Good with other dogs" },
+  // A fresh Cat Test recorded on Buddy through the UI is meant to find this
+  // trait unassigned.
+  { animalName: "Buddy", characteristic: "Good with cats" },
+];
+
+const handAssignedCharacteristics: HandAssignedCharacteristic[] = [
+  {
+    animalName: "Frisco",
+    characteristic: "Good with cats",
+    assignedAt: daysAgo(35),
+  },
+  {
+    animalName: "Rocket",
+    characteristic: "Good with other dogs",
+    assignedAt: daysAgo(3),
+  },
+  {
+    animalName: "Buddy",
+    characteristic: "Good with other dogs",
+    assignedAt: daysAgo(15),
+  },
+];
 
 // Deterministic assessments spread across the hand-seeded IN_CARE animals so
 // later steps (readiness board, findings -> characteristics, the AI tool) have
@@ -5228,6 +5303,9 @@ const assessmentSeedData: SeedAssessment[] = [
     ],
   },
   {
+    // Contradicts the hand-assigned "Good with cats" above: a live warning on
+    // the Characteristics tab, with no gate and nothing stored but the
+    // finding itself.
     animalName: "Frisco",
     templateKey: "CAT_TEST",
     signal: AssessmentSignal.ESCALATE,
@@ -5243,6 +5321,23 @@ const assessmentSeedData: SeedAssessment[] = [
       },
       { fieldKey: "recovery", value: "Cannot redirect" },
       { fieldKey: "recommendation", value: "Not cat-safe" },
+    ],
+  },
+  {
+    // Proposes "Good with other dogs"; nothing is assigned yet — the
+    // assessment's own page offers "Add to animal".
+    animalName: "Frisco",
+    templateKey: "DOG_INTRO",
+    signal: AssessmentSignal.NO_CONCERNS,
+    observedAt: daysAgo(6),
+    summary:
+      "Loose, social greetings with the helper dog; appropriate play with good breaks. Reads as dog-social.",
+    answers: [
+      { fieldKey: "greeting_style", value: "Loose and social" },
+      { fieldKey: "play_style", value: "Appropriate, takes breaks" },
+      { fieldKey: "correction_response", value: "Defers appropriately" },
+      { fieldKey: "resource_around_dogs", value: "Neutral" },
+      { fieldKey: "recommendation", value: "Dog-social" },
     ],
   },
   {
@@ -5276,6 +5371,23 @@ const assessmentSeedData: SeedAssessment[] = [
       { fieldKey: "energy", value: "Bright" },
       { fieldKey: "respiratory", value: "Normal" },
       { fieldKey: "demeanor", value: "Comfortable" },
+    ],
+  },
+  {
+    // Proposes the trait hand-assigned to Buddy above, from a different
+    // citation (none) — its own page offers "Cite this assessment".
+    animalName: "Buddy",
+    templateKey: "DOG_INTRO",
+    signal: AssessmentSignal.NO_CONCERNS,
+    observedAt: daysAgo(5),
+    summary:
+      "Loose greetings, took a natural play break, easy recall off the helper dog. Reads as dog-social.",
+    answers: [
+      { fieldKey: "greeting_style", value: "Loose and social" },
+      { fieldKey: "play_style", value: "Appropriate, takes breaks" },
+      { fieldKey: "correction_response", value: "Defers appropriately" },
+      { fieldKey: "resource_around_dogs", value: "Neutral" },
+      { fieldKey: "recommendation", value: "Dog-social" },
     ],
   },
   {
@@ -5322,6 +5434,37 @@ const assessmentSeedData: SeedAssessment[] = [
     ],
   },
   {
+    // Daisy's first cat test, overtaken by the Cat-safe retest below: it no
+    // longer counts against "Good with cats", and its page says so.
+    animalName: "Daisy",
+    templateKey: "CAT_TEST",
+    signal: AssessmentSignal.ESCALATE,
+    observedAt: daysAgo(24),
+    summary:
+      "Fixated at the barrier a week after surgery and couldn't be called off — she can't hear the cue. Not safe with cats as she is now; retest once she's off pain medication and on hand signals.",
+    answers: [
+      { fieldKey: "visual_response", value: "Fixated" },
+      { fieldKey: "proximity_response", value: "Overstimulated" },
+      { fieldKey: "recovery", value: "Cannot redirect" },
+      { fieldKey: "recommendation", value: "Not cat-safe" },
+    ],
+  },
+  {
+    animalName: "Daisy",
+    templateKey: "CAT_TEST",
+    signal: AssessmentSignal.NO_CONCERNS,
+    observedAt: daysAgo(10),
+    summary:
+      "Calm and disengaged behind the barrier and at proximity; glanced at the cat and looked away. Safe to list as good with cats.",
+    answers: [
+      { fieldKey: "visual_response", value: "Curious and calm" },
+      { fieldKey: "proximity_response", value: "Mild interest" },
+      { fieldKey: "recovery", value: "Redirects easily" },
+      { fieldKey: "recommendation", value: "Cat-safe" },
+    ],
+    sourcesCharacteristics: ["Good with cats"],
+  },
+  {
     animalName: "Daisy",
     templateKey: "DOG_INTRO",
     signal: AssessmentSignal.MONITOR,
@@ -5335,6 +5478,44 @@ const assessmentSeedData: SeedAssessment[] = [
       { fieldKey: "resource_around_dogs", value: "Neutral" },
       { fieldKey: "recommendation", value: "Needs slow introductions" },
     ],
+  },
+  {
+    // Contradicts the hand-assigned "Good with other dogs" above: a live
+    // warning, with no gate.
+    animalName: "Rocket",
+    templateKey: "DOG_INTRO",
+    signal: AssessmentSignal.MONITOR,
+    observedAt: daysAgo(21),
+    summary:
+      "Stiff and shut down on his second day in; froze when the helper dog sniffed him and never offered play. Recommend a solo-dog home for now.",
+    answers: [
+      { fieldKey: "greeting_style", value: "Tense" },
+      { fieldKey: "play_style", value: "No interest in play" },
+      { fieldKey: "correction_response", value: "Freezes" },
+      { fieldKey: "resource_around_dogs", value: "Neutral" },
+      { fieldKey: "recommendation", value: "Solo-dog home" },
+    ],
+  },
+  {
+    // Recorded on Daisy by mistake — it describes another dog's intro — and
+    // deleted two days later. "Good with other dogs" had already been cited
+    // from it, so the trait still cites the deleted intro and the tab warns
+    // "(deleted)" until someone re-sources or removes it.
+    animalName: "Daisy",
+    templateKey: "DOG_INTRO",
+    signal: AssessmentSignal.NO_CONCERNS,
+    observedAt: daysAgo(8),
+    summary:
+      "Easy, loose greeting with the helper dog and polite play with plenty of breaks. Dog-social.",
+    answers: [
+      { fieldKey: "greeting_style", value: "Loose and social" },
+      { fieldKey: "play_style", value: "Appropriate, takes breaks" },
+      { fieldKey: "correction_response", value: "Defers appropriately" },
+      { fieldKey: "resource_around_dogs", value: "Neutral" },
+      { fieldKey: "recommendation", value: "Dog-social" },
+    ],
+    sourcesCharacteristics: ["Good with other dogs"],
+    deletedAt: daysAgo(6),
   },
 ];
 
@@ -5353,7 +5534,13 @@ async function seedAssessments() {
   const assessor =
     staff.find((s) => s.user?.email === "staff1@example.com") ?? staff[0];
 
-  const animalNames = [...new Set(assessmentSeedData.map((a) => a.animalName))];
+  const animalNames = [
+    ...new Set([
+      ...assessmentSeedData.map((a) => a.animalName),
+      ...handAssignedCharacteristics.map((h) => h.animalName),
+      ...clearedCharacteristics.map((c) => c.animalName),
+    ]),
+  ];
   const animals = await prisma.animal.findMany({
     where: { name: { in: animalNames } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -5372,10 +5559,34 @@ async function seedAssessments() {
       name: true,
       version: true,
       species: true,
-      fields: { select: { id: true, key: true, label: true } },
+      fields: {
+        select: {
+          id: true,
+          key: true,
+          label: true,
+          concerningValues: true,
+          proposesCharacteristicId: true,
+        },
+      },
     },
   });
   const templateByKey = new Map(templates.map((t) => [t.key, t]));
+
+  const sourcedNames = [
+    ...new Set([
+      ...assessmentSeedData.flatMap((a) => a.sourcesCharacteristics ?? []),
+      ...handAssignedCharacteristics.map((h) => h.characteristic),
+      ...clearedCharacteristics.map((c) => c.characteristic),
+    ]),
+  ];
+  const characteristicIdByName = new Map(
+    (
+      await prisma.characteristic.findMany({
+        where: { name: { in: sourcedNames } },
+        select: { id: true, name: true },
+      })
+    ).map((c) => [c.name, c.id]),
+  );
 
   let created = 0;
   for (const spec of assessmentSeedData) {
@@ -5407,6 +5618,7 @@ async function seedAssessments() {
           observedAt: spec.observedAt,
           signal: spec.signal,
           summary: spec.summary,
+          deletedAt: spec.deletedAt ?? null,
         },
         select: { id: true },
       });
@@ -5441,8 +5653,130 @@ async function seedAssessments() {
           )}.`,
         },
       });
+      if (spec.deletedAt) {
+        await tx.animalActivityLog.create({
+          data: {
+            animalId: animal.id,
+            activityType: AnimalActivityType.FIELD_UPDATE,
+            changedById: assessor.id,
+            changedAt: spec.deletedAt,
+            changeSummary: "An assessment was deleted.",
+          },
+        });
+      }
+
+      // Characteristics already cited by this assessment's findings, as if
+      // staff had already acted on the "Add to animal" / "Cite this
+      // assessment" suggestion.
+      for (const name of spec.sourcesCharacteristics ?? []) {
+        const characteristicId = characteristicIdByName.get(name);
+        if (!characteristicId) {
+          throw new Error(
+            `assessmentSeedData sources "${name}", which is not in the characteristic catalog.`,
+          );
+        }
+        await tx.animalCharacteristic.upsert({
+          where: {
+            animalId_characteristicId: {
+              animalId: animal.id,
+              characteristicId,
+            },
+          },
+          create: {
+            animalId: animal.id,
+            characteristicId,
+            assignedById: assessor.id,
+            assignedAt: spec.observedAt,
+            sourceAssessmentId: assessment.id,
+          },
+          update: {
+            assignedById: assessor.id,
+            assignedAt: spec.observedAt,
+            sourceAssessmentId: assessment.id,
+            removedAt: null,
+            removedById: null,
+          },
+        });
+        await tx.animalActivityLog.create({
+          data: {
+            animalId: animal.id,
+            activityType: AnimalActivityType.FIELD_UPDATE,
+            changedById: assessor.id,
+            changedAt: spec.observedAt,
+            changeSummary: `${name} added, citing the ${template.name} of ${formatDateToLongString(
+              spec.observedAt,
+            )}.`,
+          },
+        });
+      }
     });
     created += 1;
+  }
+
+  // Traits assigned by hand — no source, independent of any assessment.
+  for (const hand of handAssignedCharacteristics) {
+    const animal = animalByName.get(hand.animalName);
+    if (!animal) {
+      throw new Error(
+        `handAssignedCharacteristics references ${hand.animalName}, which was not seeded.`,
+      );
+    }
+    const characteristicId = characteristicIdByName.get(hand.characteristic);
+    if (!characteristicId) {
+      throw new Error(
+        `handAssignedCharacteristics references "${hand.characteristic}", which is not in the characteristic catalog.`,
+      );
+    }
+    await prisma.$transaction(async (tx) => {
+      await tx.animalCharacteristic.upsert({
+        where: {
+          animalId_characteristicId: { animalId: animal.id, characteristicId },
+        },
+        create: {
+          animalId: animal.id,
+          characteristicId,
+          assignedById: assessor.id,
+          assignedAt: hand.assignedAt,
+        },
+        update: {
+          assignedById: assessor.id,
+          assignedAt: hand.assignedAt,
+          sourceAssessmentId: null,
+          removedAt: null,
+          removedById: null,
+        },
+      });
+      await tx.animalActivityLog.create({
+        data: {
+          animalId: animal.id,
+          activityType: AnimalActivityType.FIELD_UPDATE,
+          changedById: assessor.id,
+          changedAt: hand.assignedAt,
+          changeSummary: `Characteristics updated: added ${hand.characteristic}.`,
+        },
+      });
+    });
+  }
+
+  // A trait a fixture above needs to read as genuinely unassigned, whatever
+  // the earlier random pool gave the animal.
+  for (const cleared of clearedCharacteristics) {
+    const animal = animalByName.get(cleared.animalName);
+    if (!animal) {
+      throw new Error(
+        `clearedCharacteristics references ${cleared.animalName}, which was not seeded.`,
+      );
+    }
+    const characteristicId = characteristicIdByName.get(cleared.characteristic);
+    if (!characteristicId) {
+      throw new Error(
+        `clearedCharacteristics references "${cleared.characteristic}", which is not in the characteristic catalog.`,
+      );
+    }
+    await prisma.animalCharacteristic.updateMany({
+      where: { animalId: animal.id, characteristicId, removedAt: null },
+      data: { removedAt: new Date(), removedById: assessor.id },
+    });
   }
 
   console.log(`Seeded ${created} assessments across ${animalByName.size} animals.`);

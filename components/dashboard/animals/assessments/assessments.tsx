@@ -3,14 +3,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import { SimplePagination } from "@/components/simple-pagination";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
 import {
   Card,
   CardAction,
@@ -105,86 +98,48 @@ const AnimalAssessmentsTab = ({
 
       <CardContent>
         {assessments.length > 0 ? (
-          <Accordion type="single" collapsible className="w-full">
+          <ul aria-label="Assessments" className="divide-y">
             {assessments.map((assessment) => (
-              <AccordionItem value={assessment.id} key={assessment.id}>
-                <div className="flex w-full items-center justify-between">
-                  <AccordionTrigger className="flex-1 text-left hover:no-underline">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-semibold text-primary">
-                        {assessment.template.name}
-                      </span>
-                      <span className="text-sm whitespace-nowrap text-muted-foreground">
-                        on {formatDateToLongString(assessment.observedAt)}
-                      </span>
-                      <span className="text-sm whitespace-nowrap text-muted-foreground">
-                        by {assessment.assessor.name}
-                      </span>
-                      <SignalBadge signal={assessment.signal} />
-                      {assessment.deletedAt && (
-                        <Badge variant="destructive">Deleted</Badge>
-                      )}
-                    </div>
-                  </AccordionTrigger>
-                  <div className="mt-2 self-start pl-2">
-                    <AssessmentActions
-                      assessmentId={assessment.id}
-                      animalId={animalId}
-                      isDeleted={!!assessment.deletedAt}
-                      canManage={canManage}
-                    />
-                  </div>
-                </div>
-
-                <AccordionContent>
-                  <div className="space-y-4 pt-2">
-                    {assessment.summary && (
-                      <div>
-                        <h4 className="font-semibold">Summary</h4>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          {assessment.summary}
-                        </p>
-                      </div>
+              <li
+                key={assessment.id}
+                className="flex items-start justify-between gap-2"
+              >
+                <Link
+                  href={`/dashboard/animals/${animalId}/assessments/${assessment.id}`}
+                  className="group min-w-0 flex-1 rounded-md py-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="font-semibold text-primary group-hover:underline">
+                      {assessment.template.name}
+                    </span>
+                    <span className="text-sm whitespace-nowrap text-muted-foreground">
+                      on {formatDateToLongString(assessment.observedAt)}
+                    </span>
+                    <span className="text-sm whitespace-nowrap text-muted-foreground">
+                      by {assessment.assessor.name}
+                    </span>
+                    <SignalBadge signal={assessment.signal} />
+                    {assessment.deletedAt && (
+                      <Badge variant="destructive">Deleted</Badge>
                     )}
-
-                    <Separator />
-
-                    <div>
-                      <h4 className="font-semibold">Findings</h4>
-                      {assessment.answers.length > 0 ? (
-                        <ul className="mt-2 space-y-2">
-                          {assessment.answers.map((answer) => (
-                            <li
-                              key={answer.id}
-                              className="grid grid-cols-3 gap-4 text-sm"
-                            >
-                              <span className="col-span-1 text-muted-foreground">
-                                {answer.questionLabel}
-                              </span>
-                              <div className="col-span-2">
-                                <p className="font-medium text-foreground">
-                                  {answer.value || "—"}
-                                </p>
-                                {answer.notes && (
-                                  <p className="mt-1 text-xs italic text-muted-foreground">
-                                    Note: {answer.notes}
-                                  </p>
-                                )}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          No individual answers were recorded.
-                        </p>
-                      )}
-                    </div>
                   </div>
-                </AccordionContent>
-              </AccordionItem>
+                  {assessment.summary && (
+                    <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">
+                      {assessment.summary}
+                    </p>
+                  )}
+                </Link>
+                <div className="pt-3">
+                  <AssessmentActions
+                    assessmentId={assessment.id}
+                    animalId={animalId}
+                    isDeleted={!!assessment.deletedAt}
+                    canManage={canManage}
+                  />
+                </div>
+              </li>
             ))}
-          </Accordion>
+          </ul>
         ) : (
           <div className="rounded-lg border-2 border-dashed py-12 text-center">
             <p className="text-lg font-semibold">No Matching Assessments Found</p>

@@ -12,6 +12,15 @@ import {
   ASSESSMENT_TEMPLATES,
   type AssessmentTemplateDef,
 } from "../../assessments/templates";
+import {
+  summarizeAssessmentCharacteristics,
+  type AssessmentCharacteristicsSummary,
+} from "../../assessments/proposals";
+import {
+  fetchAnimalFindings,
+  RECORDED_FINDINGS_SELECT,
+  toRecordedAssessment,
+} from "./assessment-characteristic-review";
 
 const ASSESSMENTS_PER_PAGE = 5;
 
@@ -33,7 +42,6 @@ export type AnimalAssessmentListItem = Prisma.AssessmentGetPayload<{
     deletedAt: true;
     assessor: { select: { name: true } };
     template: { select: { key: true; name: true; version: true } };
-    answers: { select: typeof ANSWER_SELECT };
   };
 }>;
 
@@ -117,10 +125,6 @@ const _fetchAnimalAssessments = async (
           deletedAt: true,
           assessor: { select: { name: true } },
           template: { select: { key: true, name: true, version: true } },
-          answers: {
-            select: ANSWER_SELECT,
-            orderBy: { templateField: { order: "asc" } },
-          },
         },
         orderBy,
         take: ASSESSMENTS_PER_PAGE,
@@ -231,9 +235,76 @@ const _fetchAssessmentAnimalContext = async (
   }
 };
 
+const DETAIL_SELECT = {
+  id: true,
+  observedAt: true,
+  signal: true,
+  summary: true,
+  deletedAt: true,
+  animal: { select: { name: true } },
+  assessor: { select: { name: true } },
+  template: {
+    select: {
+      key: true,
+      name: true,
+      version: true,
+      fields: RECORDED_FINDINGS_SELECT.template.select.fields,
+    },
+  },
+  answers: {
+    select: ANSWER_SELECT,
+    orderBy: { templateField: { order: "asc" } },
+  },
+} satisfies Prisma.AssessmentSelect;
+
+export type AssessmentDetail = Prisma.AssessmentGetPayload<{
+  select: typeof DETAIL_SELECT;
+}> &
+  AssessmentCharacteristicsSummary;
+
+/**
+ * One assessment as its own record: the read-only findings plus what its
+ * findings suggest about the animal's characteristics. Deleted assessments
+ * are returned too — a characteristic can still cite one, and the page is
+ * where staff restore it.
+ */
+const _fetchAssessmentDetail = async (
+  animalId: string,
+  assessmentId: string,
+): Promise<AssessmentDetail | null> => {
+  if (
+    !cuidSchema.safeParse(animalId).success ||
+    !cuidSchema.safeParse(assessmentId).success
+  ) {
+    return null;
+  }
+
+  try {
+    const assessment = await prisma.assessment.findFirst({
+      where: { id: assessmentId, animalId },
+      select: DETAIL_SELECT,
+    });
+    if (!assessment) return null;
+
+    const summary = summarizeAssessmentCharacteristics({
+      assessment: toRecordedAssessment(assessment),
+      deleted: assessment.deletedAt !== null,
+      ...(await fetchAnimalFindings(prisma, animalId)),
+    });
+    return { ...assessment, ...summary };
+  } catch (error) {
+    console.error(`Error fetching assessment ${assessmentId}:`, error);
+    throw new Error("Error fetching assessment.");
+  }
+};
+
 export const fetchAnimalAssessments = RequirePermission(
   AppPermissions.ANIMAL_ASSESSMENT_READ,
 )(_fetchAnimalAssessments);
+
+export const fetchAssessmentDetail = RequirePermission(
+  AppPermissions.ANIMAL_ASSESSMENT_READ,
+)(_fetchAssessmentDetail);
 
 export const fetchAnimalAssessmentById = RequirePermission(
   AppPermissions.ANIMAL_ASSESSMENT_READ,
