@@ -6,7 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { DataTableColumnHeader } from "../../../table-common/data-table-column-header";
 import { PersonAdoptionApplicationPayload } from "@/app/lib/data/people-directory/person-adoption-applications.data";
-import { formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { TimeAgo } from "@/components/common/time-ago";
 import { userApplicationStatusOptions } from "@/app/lib/utils/enum-formatter";
 import { DataTableRowActions } from "./person-adoption-applications-table-row-actions";
 
@@ -101,7 +101,7 @@ export const getColumns = ({
     },
     cell: ({ row }) => {
       const date = row.getValue("submittedAt") as string | Date | null;
-      return <span>{formatTimeAgo(date)}</span>;
+      return <TimeAgo date={date} />;
     },
   },
   {
@@ -114,7 +114,7 @@ export const getColumns = ({
     },
     cell: ({ row }) => {
       const date = row.getValue("updatedAt") as string | Date | null;
-      return <span>{formatTimeAgo(date)}</span>;
+      return <TimeAgo date={date} />;
     },
   },
   {

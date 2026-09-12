@@ -8,7 +8,7 @@ import { FosterApplicationStatuses } from "./foster-applications-options";
 import { DataTableColumnHeader } from "@/components/table-common/data-table-column-header";
 import { DataTableRowActions } from "./foster-applications-table-row-actions";
 import { FosterApplicationListItem } from "@/app/lib/data/fosters/foster-applications.data";
-import { formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { TimeAgo } from "@/components/common/time-ago";
 
 export interface GetColumnsProps {
   canManage: boolean;
@@ -133,7 +133,7 @@ export const getColumns = ({
     },
     cell: ({ row }) => {
       const date = row.getValue("submittedAt") as string | Date | null;
-      return <span>{formatTimeAgo(date)}</span>;
+      return <TimeAgo date={date} />;
     },
   },
   {

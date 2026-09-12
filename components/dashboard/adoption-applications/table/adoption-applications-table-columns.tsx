@@ -7,7 +7,7 @@ import { ApplicationStatuses } from "./adoption-applications-options";
 import { DataTableColumnHeader } from "../../../table-common/data-table-column-header";
 import { DataTableRowActions } from "./adoption-applications-table-row-actions";
 import { AdoptionApplicationWithAnimal } from "@/app/lib/data/user-adoption-application.data";
-import { formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { TimeAgo } from "@/components/common/time-ago";
 import Link from "next/link";
 
 export interface GetColumnsProps {
@@ -167,7 +167,7 @@ export const getColumns = ({
     },
     cell: ({ row }) => {
       const date = row.getValue("submittedAt") as string | Date | null;
-      return <span>{formatTimeAgo(date)}</span>;
+      return <TimeAgo date={date} />;
     },
   },
   {

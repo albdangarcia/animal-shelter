@@ -29,7 +29,8 @@ import {
 import { NoteCategory } from "@/prisma/generated/enums";
 import { NotePayload } from "@/app/lib/data/animals/animal-note.data";
 import { noteCategoryOptions } from "@/app/lib/utils/enum-formatter";
-import { formatDateOrNA, formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { TimeAgo } from "@/components/common/time-ago";
 import { NoteForm } from "./note-form";
 import { NoteActions } from "./note-actions";
 import { SimplePagination } from "../../../simple-pagination";
@@ -177,9 +178,10 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
                         &middot;{" "}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="underline decoration-dotted cursor-help">
-                              {formatTimeAgo(note.createdAt)}
-                            </span>
+                            <TimeAgo
+                              date={note.createdAt}
+                              className="underline decoration-dotted cursor-help"
+                            />
                           </TooltipTrigger>
 
                           <TooltipContent>
@@ -197,9 +199,10 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
                           &middot;{" "}
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="underline decoration-dotted cursor-help">
-                                {formatTimeAgo(note.lastEditedAt)}
-                              </span>
+                              <TimeAgo
+                                date={note.lastEditedAt}
+                                className="underline decoration-dotted cursor-help"
+                              />
                             </TooltipTrigger>
 
                             <TooltipContent>

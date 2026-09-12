@@ -7,7 +7,7 @@ import { ApplicationStatuses } from "./my-applications-options";
 import { DataTableColumnHeader } from "../../../table-common/data-table-column-header";
 import { DataTableRowActions } from "./my-applications-table-row-actions";
 import { MyAdoptionApplicationPayload } from "@/app/lib/types";
-import { formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { TimeAgo } from "@/components/common/time-ago";
 import Link from "next/link";
 
 export const columns: ColumnDef<StockFeatures, MyAdoptionApplicationPayload>[] = [
@@ -133,7 +133,7 @@ export const columns: ColumnDef<StockFeatures, MyAdoptionApplicationPayload>[] =
     },
     cell: ({ row }) => {
       const date = row.getValue("submittedAt") as string | Date | null;
-      return <span>{formatTimeAgo(date)}</span>;
+      return <TimeAgo date={date} />;
     },
   },
   {

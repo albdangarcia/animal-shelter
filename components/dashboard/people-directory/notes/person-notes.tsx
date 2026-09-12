@@ -27,7 +27,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { PersonNotePayload } from "@/app/lib/types";
-import { formatDateOrNA, formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { TimeAgo } from "@/components/common/time-ago";
 import { SimplePagination } from "../../../simple-pagination";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { ServerSideSort } from "@/components/table-common/server-side-sort";
@@ -145,9 +146,10 @@ const PersonNotes = ({ notes, totalPages, personId, canManage }: Props) => {
                       &middot;{" "}
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <span className="underline decoration-dotted cursor-help">
-                            {formatTimeAgo(note.createdAt)}
-                          </span>
+                          <TimeAgo
+                            date={note.createdAt}
+                            className="underline decoration-dotted cursor-help"
+                          />
                         </TooltipTrigger>
 
                         <TooltipContent>
@@ -165,9 +167,10 @@ const PersonNotes = ({ notes, totalPages, personId, canManage }: Props) => {
                         &middot;{" "}
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="underline decoration-dotted cursor-help">
-                              {formatTimeAgo(note.lastEditedAt)}
-                            </span>
+                            <TimeAgo
+                              date={note.lastEditedAt}
+                              className="underline decoration-dotted cursor-help"
+                            />
                           </TooltipTrigger>
 
                           <TooltipContent>

@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PersonActivityEntry } from "@/app/lib/data/people-directory/person-activity.data";
-import { formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { TimeAgo } from "@/components/common/time-ago";
 import {
   formatSingleEnumOption,
   noteCategoryOptions,
@@ -85,7 +85,7 @@ export default function PersonActivityFeedItem({ entry }: Props) {
           </p>
 
           <span className="ml-2 text-muted-foreground/70 whitespace-nowrap">
-            &bull; {formatTimeAgo(entry.date)}
+            &bull; <TimeAgo date={entry.date} />
           </span>
         </div>
 
