@@ -17,7 +17,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { formatDateOrNA, formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { TimeAgo } from "@/components/common/time-ago";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import Link from "next/link";
 import Image from "next/image";
@@ -131,9 +132,10 @@ const PersonAnimalHistory = ({ history }: Props) => {
                         {entry.date ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="underline decoration-dotted cursor-help">
-                                {formatTimeAgo(entry.date)}
-                              </span>
+                              <TimeAgo
+                                date={entry.date}
+                                className="underline decoration-dotted cursor-help"
+                              />
                             </TooltipTrigger>
 
                             <TooltipContent>

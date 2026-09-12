@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { AnimalActivityType } from "@/prisma/generated/enums";
 import { AnimalActivityLogPayload } from "@/app/lib/data/animals/animal-activity.data";
-import { formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { TimeAgo } from "@/components/common/time-ago";
 
 const getInitials = (name: string) => {
   if (!name) return "?";
@@ -170,7 +170,7 @@ export default function ActivityFeedItem({ activity }: ActivityFeedItemProps) {
           </p>
 
           <span className="ml-2 text-muted-foreground/70 whitespace-nowrap">
-            &bull; {formatTimeAgo(activity.changedAt)}
+            &bull; <TimeAgo date={activity.changedAt} />
           </span>
         </div>
 
