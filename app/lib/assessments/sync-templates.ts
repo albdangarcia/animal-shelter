@@ -19,6 +19,20 @@ export interface TemplateRegistryStore {
   upsertTemplate(input: TemplateUpsert): Promise<{ id: string }>;
   /** Upsert one field row, keyed on `(templateId, key)`. */
   upsertField(input: FieldUpsert): Promise<void>;
+  /**
+   * The trait an existing field row already proposes, or null when the row
+   * doesn't exist yet or proposes nothing.
+   */
+  findProposedCharacteristicId(
+    templateId: string,
+    key: string,
+  ): Promise<string | null>;
+  /**
+   * Resolve a `Characteristic` catalog name to its row id, or null when no
+   * such trait exists. Used to turn a registry field's `proposesCharacteristic`
+   * name into the foreign key the row stores.
+   */
+  resolveCharacteristicId(name: string): Promise<string | null>;
 }
 
 export interface TemplateUpsert {
@@ -41,6 +55,9 @@ export interface FieldUpsert {
   isRequired: boolean;
   /** Position within the template, taken from registry declaration order. */
   order: number;
+  /** Resolved from the registry's `proposesCharacteristic` name; null if unset. */
+  proposesCharacteristicId: string | null;
+  proposesOnValues: string[];
 }
 
 export interface SyncResult {
@@ -58,6 +75,12 @@ export interface SyncResult {
  * delete rows for templates/fields that have left the registry — a removed
  * template is retired via `isActive: false` in the registry, and a
  * removed field would only ever happen through a version bump.
+ *
+ * A field row keeps the trait it already proposes: the registry's name is
+ * resolved only when the row has no proposal yet. Recorded answers are matched
+ * on that foreign key, so a trait renamed in the catalog since the row was
+ * written stays linked, and the stale name in the registry doesn't abort the
+ * sync.
  */
 export async function syncTemplateRegistry(
   store: TemplateRegistryStore,
@@ -84,6 +107,18 @@ export async function syncTemplateRegistry(
     });
 
     for (const [order, field] of template.fields.entries()) {
+      let proposesCharacteristicId: string | null = null;
+      if (field.proposesCharacteristic) {
+        proposesCharacteristicId =
+          (await store.findProposedCharacteristicId(id, field.key)) ??
+          (await store.resolveCharacteristicId(field.proposesCharacteristic));
+        if (!proposesCharacteristicId) {
+          throw new Error(
+            `Assessment template "${template.key}@${template.version}" field "${field.key}" proposes characteristic "${field.proposesCharacteristic}", which is not in the catalog.`,
+          );
+        }
+      }
+
       await store.upsertField({
         templateId: id,
         key: field.key,
@@ -93,6 +128,8 @@ export async function syncTemplateRegistry(
         concerningValues: field.concerningValues ?? [],
         isRequired: field.isRequired ?? false,
         order,
+        proposesCharacteristicId,
+        proposesOnValues: field.proposesOnValues ?? [],
       });
       fieldCount += 1;
     }

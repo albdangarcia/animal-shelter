@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import {
   adminStatePath,
   bootstrapAdminAuth,
@@ -32,25 +32,23 @@ const pickOption = async (page: Page, label: string, option: string) => {
   await page.getByRole("option", { name: option, exact: true }).click();
 };
 
-const firstItem = (page: Page) =>
-  page.locator('[data-slot="accordion-item"]').first();
-
-const expandFirst = async (page: Page) => {
-  const item = firstItem(page);
-  const trigger = item.locator('[data-slot="accordion-trigger"]');
-  await expect(async () => {
-    if ((await trigger.getAttribute("data-state")) !== "open") {
-      await trigger.click();
-    }
-    await expect(
-      item.locator('[data-slot="accordion-content"]'),
-    ).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 20_000 });
-  return item;
+// The newest record is first in the default sort; open its own page.
+const openNewest = async (page: Page) => {
+  await page
+    .getByRole("list", { name: "Assessments" })
+    .getByRole("listitem")
+    .first()
+    .getByRole("link")
+    .click();
+  await page.waitForURL(/\/assessments\/[^/]+$/);
+  return {
+    findings: page.getByRole("region", { name: "Findings" }),
+    summary: page.getByRole("region", { name: "Summary" }),
+  };
 };
 
-const findingValue = (item: ReturnType<typeof firstItem>, question: string) =>
-  item.locator("li", { hasText: question }).locator("p").first();
+const findingValue = (findings: Locator, question: string) =>
+  findings.locator("li", { hasText: question }).locator("p").first();
 
 test("record an assessment, then edit it without losing answers", async ({
   page,
@@ -76,17 +74,17 @@ test("record an assessment, then edit it without losing answers", async ({
   await expect(page.getByText("Assessment recorded.")).toBeVisible();
   await page.waitForURL(`**/dashboard/animals/${id}/assessments`);
 
-  // The new record is newest, so first in the default sort.
-  let item = await expandFirst(page);
-  await expect(item).toContainText("Handling Sensitivity");
+  let detail = await openNewest(page);
   await expect(
-    findingValue(item, "Collar and leash application"),
+    page.getByRole("heading", { level: 1, name: "Handling Sensitivity" }),
+  ).toBeVisible();
+  await expect(
+    findingValue(detail.findings, "Collar and leash application"),
   ).toHaveText("Accepts readily");
-  await expect(item).toContainText("Calm for the collar");
+  await expect(detail.findings).toContainText("Calm for the collar");
 
   // Edit: change one answer, leave the rest alone.
-  await item.getByRole("button", { name: "Assessment actions" }).click();
-  await page.getByRole("menuitem", { name: "Edit" }).click();
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
   await page.waitForURL(/\/assessments\/[^/]+\/edit$/);
 
   // The template picker is locked to what was recorded (plain text, no combobox).
@@ -98,20 +96,20 @@ test("record an assessment, then edit it without losing answers", async ({
   await expect(page.getByText("Assessment updated.")).toBeVisible();
   await page.waitForURL(`**/dashboard/animals/${id}/assessments`);
 
-  item = await expandFirst(page);
+  detail = await openNewest(page);
   // The changed answer took...
   await expect(
-    findingValue(item, "Overall handling sensitivity"),
+    findingValue(detail.findings, "Overall handling sensitivity"),
   ).toHaveText("Moderate");
   // ...and every untouched answer, plus the note, survived the edit.
   await expect(
-    findingValue(item, "Collar and leash application"),
+    findingValue(detail.findings, "Collar and leash application"),
   ).toHaveText("Accepts readily");
   await expect(
-    findingValue(item, "Gentle restraint for exam"),
+    findingValue(detail.findings, "Gentle restraint for exam"),
   ).toHaveText("Tolerates");
-  await expect(item).toContainText("Calm for the collar");
-  await expect(item).toContainText(summary);
+  await expect(detail.findings).toContainText("Calm for the collar");
+  await expect(detail.summary).toContainText(summary);
 });
 
 test("a blank assessment cannot be submitted", async ({ page }) => {

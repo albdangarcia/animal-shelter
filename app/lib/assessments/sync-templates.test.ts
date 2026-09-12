@@ -17,13 +17,22 @@ import { ASSESSMENT_TEMPLATES, type AssessmentTemplateDef } from "./templates";
  * `(key, version)`, fields on `(templateId, key)`, ids handed out once and
  * reused on re-upsert.
  */
-function makeFakeStore() {
+function makeFakeStore(
+  options: { knownCharacteristics?: "all" | string[] } = {},
+) {
   const templates = new Map<string, { id: string } & TemplateUpsert>();
   const fields = new Map<string, FieldUpsert>();
   let seq = 0;
   const calls = { upsertTemplate: 0, upsertField: 0, created: 0 };
+  const known = options.knownCharacteristics ?? "all";
 
   const store: TemplateRegistryStore = {
+    async resolveCharacteristicId(name) {
+      if (known === "all" || known.includes(name)) {
+        return `char_${name.replace(/\W+/g, "_")}`;
+      }
+      return null;
+    },
     async upsertTemplate(input) {
       calls.upsertTemplate += 1;
       const naturalKey = `${input.key}@${input.version}`;
@@ -40,6 +49,9 @@ function makeFakeStore() {
     async upsertField(input) {
       calls.upsertField += 1;
       fields.set(`${input.templateId}::${input.key}`, input);
+    },
+    async findProposedCharacteristicId(templateId, key) {
+      return fields.get(`${templateId}::${key}`)?.proposesCharacteristicId ?? null;
     },
   };
 
@@ -156,4 +168,90 @@ test("an invalid registry aborts the sync before any write", async () => {
   await assert.rejects(() => syncTemplateRegistry(store, [bad]), /invalid/i);
   assert.equal(templates.size, 0);
   assert.equal(calls.upsertTemplate, 0);
+});
+
+test("a field's proposesCharacteristic name is resolved to an id and stored", async () => {
+  const { store, templates, fields } = makeFakeStore();
+  const def: AssessmentTemplateDef = {
+    key: "P",
+    version: 1,
+    name: "P",
+    description: "d",
+    fields: [
+      {
+        key: "rec",
+        label: "Recommendation",
+        fieldType: FieldType.SINGLE_SELECT,
+        options: ["Yes", "No"],
+        concerningValues: ["No"],
+        proposesCharacteristic: "Good with cats",
+        proposesOnValues: ["Yes"],
+      },
+    ],
+  };
+
+  await syncTemplateRegistry(store, [def]);
+  const templateId = [...templates.values()][0].id;
+  const stored = fields.get(`${templateId}::rec`);
+  assert.equal(stored?.proposesCharacteristicId, "char_Good_with_cats");
+  assert.deepEqual(stored?.proposesOnValues, ["Yes"]);
+});
+
+test("a proposesCharacteristic naming an unknown trait aborts the sync", async () => {
+  const { store } = makeFakeStore({ knownCharacteristics: [] });
+  const def: AssessmentTemplateDef = {
+    key: "P",
+    version: 1,
+    name: "P",
+    description: "d",
+    fields: [
+      {
+        key: "rec",
+        label: "Recommendation",
+        fieldType: FieldType.SINGLE_SELECT,
+        options: ["Yes", "No"],
+        proposesCharacteristic: "Nonexistent Trait",
+        proposesOnValues: ["Yes"],
+      },
+    ],
+  };
+
+  await assert.rejects(
+    () => syncTemplateRegistry(store, [def]),
+    /not in the catalog/i,
+  );
+});
+
+test("a field row keeps the trait it proposes when the catalog name changes", async () => {
+  const def: AssessmentTemplateDef = {
+    key: "P",
+    version: 1,
+    name: "P",
+    description: "d",
+    fields: [
+      {
+        key: "rec",
+        label: "Recommendation",
+        fieldType: FieldType.SINGLE_SELECT,
+        options: ["Yes", "No"],
+        proposesCharacteristic: "Good with cats",
+        proposesOnValues: ["Yes"],
+      },
+    ],
+  };
+  const known = ["Good with cats"];
+  const { store, templates, fields } = makeFakeStore({
+    knownCharacteristics: known,
+  });
+  await syncTemplateRegistry(store, [def]);
+
+  // Renamed in Settings: the registry's name no longer resolves.
+  known.length = 0;
+  await syncTemplateRegistry(store, [def]);
+
+  const templateId = [...templates.values()][0].id;
+  assert.equal(
+    fields.get(`${templateId}::rec`)?.proposesCharacteristicId,
+    "char_Good_with_cats",
+  );
 });

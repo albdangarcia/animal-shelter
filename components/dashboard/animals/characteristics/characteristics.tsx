@@ -1,14 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useMemo, useTransition, useCallback } from "react";
 import { CharacteristicCategory } from "@/prisma/generated/enums";
 import { clsx } from "clsx";
-import {
-  X,
-  PlusCircle,
-  ChevronsUpDown,
-  Loader2,
-} from "lucide-react";
+import { X, PlusCircle, ChevronsUpDown, Loader2 } from "lucide-react";
 import {
   Card,
   CardAction,
@@ -47,6 +43,7 @@ import { updateAnimalCharacteristics } from "@/app/lib/actions/animal-characteri
 import { toast } from "sonner";
 import { CATEGORIES } from "@/app/lib/constants/characteristic-categories";
 import { formatDateToLongString } from "@/app/lib/utils/date-utils";
+import { FindingsAgainst } from "./findings-against";
 
 const CATEGORY_KEYS = Object.values(CharacteristicCategory);
 
@@ -213,16 +210,10 @@ const AnimalCharacteristicsManager = ({
                           >
                             {char.name}
                           </Badge>
-                          {char.assignment && (
-                            <span className="text-xs text-muted-foreground">
-                              Added by{" "}
-                              {char.assignment.assignedByName ?? "a staff member"}{" "}
-                              on{" "}
-                              {formatDateToLongString(
-                                new Date(char.assignment.assignedAt),
-                              )}
-                            </span>
-                          )}
+                          <AssignmentProvenance
+                            animalId={animalId}
+                            char={char}
+                          />
                         </div>
                       ))}
                     </div>
@@ -275,6 +266,7 @@ const AnimalCharacteristicsManager = ({
                 >
                   <span>{char.name}</span>
                   <button
+                    aria-label={`Remove ${char.name}`}
                     onClick={() => handleTagRemove(char.id)}
                     className="rounded-full hover:bg-black/10 dark:hover:bg-white/10 p-0.5"
                   >
@@ -343,6 +335,57 @@ const AnimalCharacteristicsManager = ({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+};
+
+/**
+ * Who put a trait on the animal and on what basis, plus any live finding
+ * arguing against it — a warning, computed fresh on every load, never a gate.
+ */
+const AssignmentProvenance = ({
+  animalId,
+  char,
+}: {
+  animalId: string;
+  char: CharacteristicWithAssignment;
+}) => {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      {char.assignment && (
+        <span className="text-xs text-muted-foreground">
+          Added by {char.assignment.assignedByName ?? "a staff member"} on{" "}
+          {formatDateToLongString(new Date(char.assignment.assignedAt))}
+          {char.assignment.sourceAssessment && (
+            <>
+              {" — from the "}
+              <Link
+                href={`/dashboard/animals/${animalId}/assessments/${char.assignment.sourceAssessment.id}`}
+                className="font-medium underline underline-offset-2 hover:text-foreground"
+              >
+                {char.assignment.sourceAssessment.templateName} assessment of{" "}
+                {formatDateToLongString(
+                  new Date(char.assignment.sourceAssessment.observedAt),
+                )}
+              </Link>
+              {char.assignment.sourceAssessment.deletedAt ? (
+                <span className="text-destructive"> (deleted)</span>
+              ) : (
+                !char.assignment.sourceAssessment.stillSupports && (
+                  <span className="text-destructive">
+                    {" (no longer supports it)"}
+                  </span>
+                )
+              )}
+            </>
+          )}
+        </span>
+      )}
+      {char.contradictedBy.length > 0 && (
+        <span className="text-xs text-destructive">
+          <FindingsAgainst animalId={animalId} findings={char.contradictedBy} />
+        </span>
+      )}
+    </div>
   );
 };
 

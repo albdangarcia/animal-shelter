@@ -19,8 +19,10 @@ const updateCharacteristicsSchema = z.object({
   characteristicIds: z.array(cuidSchema),
 });
 
-type CharacteristicsInput = z.infer<typeof updateCharacteristicsSchema>;
+type CharacteristicsInput = z.input<typeof updateCharacteristicsSchema>;
 type CharacteristicsResult = FormResult<CharacteristicsInput>;
+
+const listNames = (names: string[]) => names.join(", ");
 
 /**
  * Reconciles an animal's assigned characteristics against a target set.
@@ -33,9 +35,12 @@ type CharacteristicsResult = FormResult<CharacteristicsInput>;
  * `removedById`) rather than deleted, so "removed by X on date Y" survives.
  * Re-assigning a previously-removed trait clears the removal on the same row —
  * the `(animalId, characteristicId)` unique key means there is only ever one.
+ * A trait whose catalog entry has been retired is never removed here (the tab
+ * doesn't show it, so it's never in the submitted set).
  *
  * `sourceAssessmentId` is always reset to null here: this action is the manual
- * path.
+ * path. A live finding arguing against a trait added here shows as a warning
+ * on the Characteristics tab; it never blocks the save.
  */
 const _updateAnimalCharacteristics = async (
   user: SessionUser, // Injected by withAuthenticatedUser
@@ -52,47 +57,61 @@ const _updateAnimalCharacteristics = async (
   }
 
   const { animalId, characteristicIds } = validation.data;
-  const targetIds = new Set(characteristicIds);
   const now = new Date();
 
   try {
-    // Reject soft-deleted catalog entries before touching anything.
-    const deletedCount = await prisma.characteristic.count({
-      where: {
-        id: { in: characteristicIds },
-        deletedAt: { not: null },
-      },
-    });
-
-    if (deletedCount > 0) {
-      return {
-        ok: false,
-        message:
-          "One or more characteristics are no longer available and cannot be assigned.",
-      };
-    }
-
-    await prisma.$transaction(async (tx) => {
-      const animal = await tx.animal.findUnique({
-        where: { id: animalId },
-        select: {
-          animalCharacteristics: {
-            where: { removedAt: null },
-            select: { characteristicId: true },
+    const outcome = await prisma.$transaction(async (tx) => {
+      const [animal, catalog] = await Promise.all([
+        tx.animal.findUnique({
+          where: { id: animalId },
+          select: {
+            animalCharacteristics: {
+              where: { removedAt: null },
+              select: {
+                characteristicId: true,
+                characteristic: { select: { name: true, deletedAt: true } },
+              },
+            },
           },
-        },
-      });
+        }),
+        tx.characteristic.findMany({
+          where: { id: { in: characteristicIds } },
+          select: { id: true, name: true, deletedAt: true },
+        }),
+      ]);
       if (!animal) {
         throw new Error("Animal not found.");
+      }
+
+      const catalogById = new Map(catalog.map((c) => [c.id, c]));
+      if (characteristicIds.some((id) => catalogById.get(id)?.deletedAt !== null)) {
+        return {
+          ok: false as const,
+          message:
+            "One or more characteristics are no longer available and cannot be assigned.",
+        };
       }
 
       const activeIds = new Set(
         animal.animalCharacteristics.map((ac) => ac.characteristicId),
       );
-      const toAdd = characteristicIds.filter((id) => !activeIds.has(id));
-      const toRemove = [...activeIds].filter((id) => !targetIds.has(id));
+      const target = new Set(characteristicIds);
+      const toAdd = characteristicIds
+        .filter((id) => !activeIds.has(id))
+        .map((id) => ({
+          characteristicId: id,
+          characteristicName: catalogById.get(id)!.name,
+        }));
+      const toRemove = animal.animalCharacteristics
+        .filter(
+          (ac) => !ac.characteristic.deletedAt && !target.has(ac.characteristicId),
+        )
+        .map((ac) => ({
+          characteristicId: ac.characteristicId,
+          characteristicName: ac.characteristic.name,
+        }));
 
-      for (const characteristicId of toAdd) {
+      for (const { characteristicId } of toAdd) {
         await tx.animalCharacteristic.upsert({
           where: {
             animalId_characteristicId: { animalId, characteristicId },
@@ -109,7 +128,6 @@ const _updateAnimalCharacteristics = async (
             assignedById: user.personId,
             assignedAt: now,
             sourceAssessmentId: null,
-            note: null,
             removedAt: null,
             removedById: null,
           },
@@ -120,7 +138,7 @@ const _updateAnimalCharacteristics = async (
         await tx.animalCharacteristic.updateMany({
           where: {
             animalId,
-            characteristicId: { in: toRemove },
+            characteristicId: { in: toRemove.map((t) => t.characteristicId) },
             removedAt: null,
           },
           data: { removedAt: now, removedById: user.personId },
@@ -128,24 +146,36 @@ const _updateAnimalCharacteristics = async (
       }
 
       if (toAdd.length === 0 && toRemove.length === 0) {
-        return;
+        return { ok: true as const };
       }
 
-      const parts: string[] = [];
-      if (toAdd.length > 0) parts.push(`${toAdd.length} added`);
-      if (toRemove.length > 0) parts.push(`${toRemove.length} removed`);
+      const names = (traits: { characteristicName: string }[]) =>
+        listNames(traits.map((t) => t.characteristicName));
+      const parts = [
+        toAdd.length > 0 && `added ${names(toAdd)}`,
+        toRemove.length > 0 && `removed ${names(toRemove)}`,
+      ].filter(Boolean);
 
       await tx.animalActivityLog.create({
         data: {
           animalId,
           activityType: AnimalActivityType.FIELD_UPDATE,
           changedById: user.personId,
-          changeSummary: `Characteristics updated (${parts.join(", ")}).`,
+          changeSummary: `Characteristics updated: ${parts.join("; ")}.`,
         },
       });
+      return { ok: true as const };
     });
 
+    if (!outcome.ok) {
+      return { ok: false, message: outcome.message };
+    }
+
     revalidatePath(`/dashboard/animals/${animalId}/characteristics`);
+    // What each assessment's own page suggests depends on the animal's
+    // traits: an added one can be cited, a removed one can be re-suggested.
+    revalidatePath(`/dashboard/animals/${animalId}/assessments`);
+    revalidatePath("/dashboard/animals/[id]/assessments/[assessmentId]", "page");
     revalidatePath(`/dashboard/animals/${animalId}`);
     revalidatePath(`/pets/${animalId}`);
     return {

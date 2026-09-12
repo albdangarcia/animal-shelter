@@ -136,6 +136,117 @@ test("validateRegistry flags a duplicate field key within a template", () => {
   assert.ok(errors.some((e) => e.includes("duplicate field key")));
 });
 
+test("validateRegistry flags proposesOnValues without a proposesCharacteristic", () => {
+  const errors = validateRegistry([
+    { ...base, fields: [{ ...base.fields[0], proposesOnValues: ["a"] }] },
+  ]);
+  assert.ok(errors.some((e) => e.includes("without a proposesCharacteristic")));
+});
+
+test("validateRegistry flags a proposesCharacteristic with no proposesOnValues", () => {
+  const errors = validateRegistry([
+    {
+      ...base,
+      fields: [{ ...base.fields[0], proposesCharacteristic: "Good with cats" }],
+    },
+  ]);
+  assert.ok(errors.some((e) => e.includes("proposesOnValues is empty")));
+});
+
+test("validateRegistry flags a proposesOnValue that is not an option", () => {
+  const errors = validateRegistry([
+    {
+      ...base,
+      fields: [
+        {
+          ...base.fields[0],
+          proposesCharacteristic: "Good with cats",
+          proposesOnValues: ["z"],
+        },
+      ],
+    },
+  ]);
+  assert.ok(errors.some((e) => e.includes('proposesOnValue "z"')));
+});
+
+test("validateRegistry flags a multi-select field that proposes a trait", () => {
+  const errors = validateRegistry([
+    {
+      ...base,
+      fields: [
+        {
+          ...base.fields[0],
+          fieldType: FieldType.MULTI_SELECT,
+          proposesCharacteristic: "Good with cats",
+          proposesOnValues: ["a"],
+        },
+      ],
+    },
+  ]);
+  assert.ok(
+    errors.some((e) =>
+      e.includes("only SINGLE_SELECT fields can propose a characteristic"),
+    ),
+  );
+});
+
+test("validateRegistry flags two fields of one template proposing the same trait", () => {
+  const proposer = {
+    ...base.fields[0],
+    proposesCharacteristic: "Good with cats",
+    proposesOnValues: ["a"],
+  };
+  const errors = validateRegistry([
+    { ...base, fields: [proposer, { ...proposer, key: "g", label: "G" }] },
+  ]);
+  assert.ok(
+    errors.some((e) =>
+      e.includes(
+        'field "g": proposes "Good with cats", which field "f" already proposes',
+      ),
+    ),
+  );
+  // Different templates proposing the same trait is the normal case.
+  assert.deepEqual(
+    validateRegistry([
+      { ...base, fields: [proposer] },
+      { ...base, key: "U", fields: [proposer] },
+    ]),
+    [],
+  );
+});
+
+test("validateRegistry flags a value that both affirms and contradicts a trait", () => {
+  const errors = validateRegistry([
+    {
+      ...base,
+      fields: [
+        {
+          ...base.fields[0],
+          concerningValues: ["b"],
+          proposesCharacteristic: "Good with cats",
+          proposesOnValues: ["b"],
+        },
+      ],
+    },
+  ]);
+  assert.ok(errors.some((e) => e.includes("both affirm and contradict")));
+});
+
+test("CAT_TEST and DOG_INTRO recommendations propose the expected traits", () => {
+  const cat = getActiveTemplate("CAT_TEST")!.fields.find(
+    (f) => f.key === "recommendation",
+  );
+  assert.equal(cat?.proposesCharacteristic, "Good with cats");
+  assert.deepEqual(cat?.proposesOnValues, ["Cat-safe"]);
+
+  const dog = getActiveTemplate("DOG_INTRO")!.fields.find(
+    (f) => f.key === "recommendation",
+  );
+  assert.equal(dog?.proposesCharacteristic, "Good with other dogs");
+  assert.deepEqual(dog?.proposesOnValues, ["Dog-social"]);
+});
+
 test("getActiveTemplate returns the highest active version for a key", () => {
   const v1 = { ...base, version: 1 };
   const v2 = { ...base, version: 2, name: "T v2" };
