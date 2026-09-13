@@ -55,6 +55,8 @@ interface Props {
   animalId: string;
   templates: AssessmentTemplateDef[];
   assessment?: AnimalAssessmentFormData;
+  /** Create mode: the template to start on, when it applies to the animal. */
+  defaultTemplateKey?: string;
 }
 
 const emptyValueFor = (field: AssessmentTemplateFieldDef) => {
@@ -107,7 +109,12 @@ const buildDefaults = (
   };
 };
 
-export function AssessmentForm({ animalId, templates, assessment }: Props) {
+export function AssessmentForm({
+  animalId,
+  templates,
+  assessment,
+  defaultTemplateKey,
+}: Props) {
   const isEditMode = !!assessment;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -118,8 +125,10 @@ export function AssessmentForm({ animalId, templates, assessment }: Props) {
         templates.find((t) => t.key === assessment.template.key) ?? templates[0]
       );
     }
-    return templates[0];
-  }, [templates, assessment, isEditMode]);
+    return (
+      templates.find((t) => t.key === defaultTemplateKey) ?? templates[0]
+    );
+  }, [templates, assessment, isEditMode, defaultTemplateKey]);
 
   const [templateKey, setTemplateKey] = useState(initialTemplate?.key ?? "");
   const template = useMemo(

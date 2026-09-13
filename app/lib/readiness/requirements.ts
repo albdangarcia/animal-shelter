@@ -1,9 +1,11 @@
 /**
- * Which assessment templates an animal needs on file, and how often. Derived
- * from the code-defined template registry rather than duplicated here: a
- * template's `species` scopes who needs it, and `stage` marks it as a real
- * prerequisite rather than a purely informational check (e.g. `HANDLING`,
- * which has no `stage`, never blocks readiness).
+ * Which assessment templates an animal needs on file. Derived from the
+ * code-defined template registry rather than duplicated here: a template's
+ * `species` scopes who needs it, and its `stage` decides whether it is a
+ * readiness prerequisite at all. Only `intake` and `adoption-prep` stages
+ * gate readiness — an `in-care` check like Daily Rounds is ongoing husbandry,
+ * not something that stands between an animal and being adoptable, and a
+ * template with no `stage` (e.g. `HANDLING`) is purely informational.
  *
  * Every requirement is evaluated independently — none are hidden behind an
  * earlier one being unmet. A manager scanning the readiness board wants the
@@ -17,21 +19,11 @@ import {
   type AssessmentTemplateDef,
 } from "../assessments/templates";
 
-/**
- * Recurring checks go stale after this many days and need a fresh one; a
- * template absent from this map only needs to have been done once, ever.
- * Daily Rounds is the one recurring check today — the seed's ~12-day-old
- * record exists specifically to exercise it going stale after a single day.
- */
-const RECURRING_MAX_AGE_DAYS: Partial<Record<string, number>> = {
-  DAILY_ROUNDS: 1,
-};
+const READINESS_STAGES = new Set(["intake", "adoption-prep"]);
 
 export interface ReadinessRequirement {
   templateKey: string;
   templateName: string;
-  /** Set only for a recurring check; a one-time check has no staleness. */
-  maxAgeDays?: number;
 }
 
 const activeStageGatedTemplates = (): AssessmentTemplateDef[] => {
@@ -39,7 +31,7 @@ const activeStageGatedTemplates = (): AssessmentTemplateDef[] => {
   const active: AssessmentTemplateDef[] = [];
   for (const key of keys) {
     const template = getActiveTemplate(key);
-    if (template && template.stage !== undefined) {
+    if (template?.stage !== undefined && READINESS_STAGES.has(template.stage)) {
       active.push(template);
     }
   }
@@ -60,6 +52,5 @@ export function readinessRequirementsFor(
     .map((t) => ({
       templateKey: t.key,
       templateName: t.name,
-      maxAgeDays: RECURRING_MAX_AGE_DAYS[t.key],
     }));
 }

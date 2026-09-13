@@ -1,6 +1,10 @@
 import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import { AnimalListingStatus } from "@/prisma/generated/enums";
+import type {
+  AnimalReadiness,
+  ReadinessAnimal,
+} from "../../readiness/board";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequireAllPermissions } from "../../auth/protected-actions";
 import {
@@ -35,11 +39,14 @@ const READINESS_ASSESSMENT_SELECT = {
 
 // The animal's active characteristic assignments, with enough of the sourcing
 // assessment to tell whether it's been deleted or has stopped proposing the
-// trait — the same provenance the Characteristics tab reads.
+// trait — the same provenance the Characteristics tab reads — and when.
 const READINESS_CLAIM_SELECT = {
   characteristicId: true,
+  assignedAt: true,
   characteristic: { select: { name: true } },
-  sourceAssessment: { select: { ...RECORDED_FINDINGS_SELECT, deletedAt: true } },
+  sourceAssessment: {
+    select: { ...RECORDED_FINDINGS_SELECT, deletedAt: true, updatedAt: true },
+  },
 } satisfies Prisma.AnimalCharacteristicSelect;
 
 type ReadinessAssessmentRow = Prisma.AssessmentGetPayload<{
@@ -57,8 +64,16 @@ const ANIMAL_IDENTITY_SELECT = {
   id: true,
   isSpayedNeutered: true,
   healthStatus: true,
+  createdAt: true,
   species: { select: { name: true } },
   _count: { select: { animalImages: true } },
+  // The latest intake starts the current stay; a returned animal's clock
+  // restarts with its new intake.
+  intake: {
+    select: { intakeDate: true },
+    orderBy: { intakeDate: "desc" },
+    take: 1,
+  },
 } satisfies Prisma.AnimalSelect;
 
 type AnimalIdentityRow = Prisma.AnimalGetPayload<{
@@ -86,19 +101,29 @@ function readinessFor(
   }));
 
   const claims: ReadinessCharacteristicClaim[] = claimRows.map((row) => {
-    const sourceDeleted = row.sourceAssessment?.deletedAt != null;
+    const source = row.sourceAssessment;
+    const sourceDeletedAt = source?.deletedAt ?? null;
     const noLongerSupports =
-      row.sourceAssessment !== null &&
-      !sourceDeleted &&
-      !proposalsOf(toRecordedAssessment(row.sourceAssessment)).some(
+      source !== null &&
+      !sourceDeletedAt &&
+      !proposalsOf(toRecordedAssessment(source)).some(
         (p) => p.characteristicId === row.characteristicId,
       );
+    const againstIt = contradictions.live.get(row.characteristicId) ?? [];
+    const contradictedAt = againstIt.reduce<Date | null>(
+      (earliest, { assessment }) =>
+        !earliest || assessment.observedAt < earliest
+          ? assessment.observedAt
+          : earliest,
+      null,
+    );
     return {
       characteristicId: row.characteristicId,
       characteristicName: row.characteristic.name,
-      contradicted: contradictions.live.has(row.characteristicId),
-      sourceDeleted,
-      noLongerSupports,
+      assignedAt: row.assignedAt,
+      contradictedAt,
+      sourceDeletedAt,
+      supportLostAt: noLongerSupports ? source.updatedAt : null,
     };
   });
 
@@ -109,6 +134,7 @@ function readinessFor(
     isSpayedNeutered: animal.isSpayedNeutered,
     hasPhoto: animal._count.animalImages > 0,
     healthStatus: animal.healthStatus,
+    inCareSince: animal.intake[0]?.intakeDate ?? animal.createdAt,
   });
 }
 
@@ -147,13 +173,47 @@ export const fetchAnimalReadiness = RequireAllPermissions(
   AppPermissions.ANIMAL_CHARACTERISTICS_READ,
 )(_fetchAnimalReadiness);
 
-export interface AnimalReadiness {
-  animalId: string;
-  blockers: ReadinessBlocker[];
-}
+// What the board shows and filters an animal by, on top of what readiness
+// itself reads.
+const BOARD_ANIMAL_SELECT = {
+  ...ANIMAL_IDENTITY_SELECT,
+  name: true,
+  listingStatus: true,
+  currentUnit: {
+    select: { name: true, location: { select: { id: true, name: true } } },
+  },
+  // "In foster" is an open placement, never a stored flag.
+  fosterPlacements: {
+    where: { endDate: null },
+    select: { id: true },
+    take: 1,
+  },
+} satisfies Prisma.AnimalSelect;
+
+type BoardAnimalRow = Prisma.AnimalGetPayload<{
+  select: typeof BOARD_ANIMAL_SELECT;
+}>;
+
+const toReadinessAnimal = (row: BoardAnimalRow): ReadinessAnimal => ({
+  id: row.id,
+  name: row.name,
+  species: row.species.name,
+  listingStatus: row.listingStatus,
+  placement: row.currentUnit
+    ? {
+        kind: "UNIT",
+        locationId: row.currentUnit.location.id,
+        locationName: row.currentUnit.location.name,
+        unitName: row.currentUnit.name,
+      }
+    : row.fosterPlacements.length > 0
+      ? { kind: "FOSTER" }
+      : { kind: "UNPLACED" },
+});
 
 /**
- * Every non-archived animal's blockers, for the readiness board. Archived
+ * Every non-archived animal's blockers, for the readiness board — including
+ * animals with none, so the board can say how many are ready. Archived
  * animals (adopted, transferred, deceased) are frozen history — nothing
  * about them can still be "blocked" from adoption.
  */
@@ -161,7 +221,7 @@ const _fetchReadinessForAnimals = async (): Promise<AnimalReadiness[]> => {
   const [animals, assessmentRows, claimRows] = await Promise.all([
     prisma.animal.findMany({
       where: notArchived,
-      select: ANIMAL_IDENTITY_SELECT,
+      select: BOARD_ANIMAL_SELECT,
     }),
     prisma.assessment.findMany({
       where: { deletedAt: null, animal: notArchived },
@@ -192,7 +252,7 @@ const _fetchReadinessForAnimals = async (): Promise<AnimalReadiness[]> => {
   }
 
   return animals.map((animal) => ({
-    animalId: animal.id,
+    animal: toReadinessAnimal(animal),
     blockers: readinessFor(
       animal,
       assessmentsByAnimal.get(animal.id) ?? [],

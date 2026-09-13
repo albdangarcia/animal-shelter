@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { fetchAssessmentAnimalContext } from "@/app/lib/data/animals/animal-assessment.data";
-import { IDParamType } from "@/app/lib/types";
+import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import { AssessmentForm } from "@/components/dashboard/animals/assessments/assessment-form";
 import { Authorize } from "@/components/auth/authorize";
 import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
@@ -18,21 +18,25 @@ import {
 
 interface Props {
   params: IDParamType;
+  searchParams: SearchParamsType;
 }
 
-const Page = async ({ params }: Props) => {
+const Page = async ({ params, searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.ANIMAL_ASSESSMENT_MANAGE}
       fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
     >
-      <PageContent params={params} />
+      <PageContent params={params} searchParams={searchParams} />
     </Authorize>
   );
 };
 
-const PageContent = async ({ params }: Props) => {
+const PageContent = async ({ params, searchParams }: Props) => {
   const { id: animalId } = await params;
+  // `?template=CAT_TEST` starts the form on that template — how the readiness
+  // board links a missing check straight to recording it.
+  const { template } = await searchParams;
   const context = await fetchAssessmentAnimalContext(animalId);
   if (!context) notFound();
 
@@ -53,7 +57,11 @@ const PageContent = async ({ params }: Props) => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <AssessmentForm animalId={animalId} templates={context.templates} />
+          <AssessmentForm
+            animalId={animalId}
+            templates={context.templates}
+            defaultTemplateKey={template}
+          />
         </CardContent>
       </Card>
     </main>
