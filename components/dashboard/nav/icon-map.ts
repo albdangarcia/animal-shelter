@@ -24,6 +24,7 @@ import {
   IconHomeHeart,
   IconClipboardHeart,
   IconDog,
+  IconClipboardCheck,
 } from "@tabler/icons-react";
 import type { TablerIcon } from "@tabler/icons-react";
 import type { IconName } from "./nav-links.config";
@@ -54,6 +55,7 @@ export const iconMap: Record<IconName, TablerIcon> = {
   IconHomeHeart,
   IconClipboardHeart,
   IconDog,
+  IconClipboardCheck,
 };
 
 // Helper function to get icon component from string name

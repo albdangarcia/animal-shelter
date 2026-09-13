@@ -5266,14 +5266,20 @@ const handAssignedCharacteristics: HandAssignedCharacteristic[] = [
     characteristic: "Good with other dogs",
     assignedAt: daysAgo(15),
   },
+  {
+    // Contradicted by Flash's "Solo-dog home" intro below. Flash and Fido
+    // are the readiness board's own fixtures: no other e2e spec touches them,
+    // so the board reads the same after the whole suite has run.
+    animalName: "Flash",
+    characteristic: "Good with other dogs",
+    assignedAt: daysAgo(20),
+  },
 ];
 
 // Deterministic assessments spread across the hand-seeded IN_CARE animals so
 // later steps (readiness board, findings -> characteristics, the AI tool) have
 // something real to render. Anchored to named animals, not the RNG-drawn
 // generated pool, so it is stable across reseeds.
-// stale record (Buddy's daily rounds, ~12 days old — DAILY_ROUNDS goes stale
-// after a day).
 const assessmentSeedData: SeedAssessment[] = [
   {
     animalName: "Frisco",
@@ -5516,6 +5522,38 @@ const assessmentSeedData: SeedAssessment[] = [
     ],
     sourcesCharacteristics: ["Good with other dogs"],
     deletedAt: daysAgo(6),
+  },
+  {
+    // An escalated finding on the readiness board.
+    animalName: "Fido",
+    templateKey: "DAILY_ROUNDS",
+    signal: AssessmentSignal.ESCALATE,
+    observedAt: daysAgo(2),
+    summary:
+      "Off his food for a second day and flat in the kennel. Escalated to the vet team.",
+    answers: [
+      { fieldKey: "appetite", value: "Not eating" },
+      { fieldKey: "stool", value: "Normal" },
+      { fieldKey: "energy", value: "Lethargic" },
+      { fieldKey: "respiratory", value: "Normal" },
+      { fieldKey: "demeanor", value: "High stress" },
+    ],
+  },
+  {
+    // Contradicts the "Good with other dogs" hand-assigned to Flash above.
+    animalName: "Flash",
+    templateKey: "DOG_INTRO",
+    signal: AssessmentSignal.MONITOR,
+    observedAt: daysAgo(14),
+    summary:
+      "Hard stare and a stiff approach; went over the top of the helper dog twice. Solo-dog home.",
+    answers: [
+      { fieldKey: "greeting_style", value: "Tense" },
+      { fieldKey: "play_style", value: "Bullying" },
+      { fieldKey: "correction_response", value: "Escalates" },
+      { fieldKey: "resource_around_dogs", value: "Neutral" },
+      { fieldKey: "recommendation", value: "Solo-dog home" },
+    ],
   },
 ];
 
@@ -5782,6 +5820,38 @@ async function seedAssessments() {
   console.log(`Seeded ${created} assessments across ${animalByName.size} animals.`);
 }
 
+// Every other seeded animal has a photo, so the readiness board's "No photo"
+// group would never show. Leo is a draft profile still being prepared — the
+// realistic animal to be missing one. His image rows are removed here in the
+// tail rather than dropped from his definition above: creating fewer images
+// there would shift the shared RNG stream for every animal after him.
+const animalsWithoutPhotos = ["Leo"];
+
+async function seedReadinessFixtures() {
+  console.log("Seeding readiness fixtures...");
+
+  for (const name of animalsWithoutPhotos) {
+    const animal = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, listingStatus: true },
+    });
+    if (!animal) {
+      throw new Error(
+        `animalsWithoutPhotos references ${name}, which was not seeded.`,
+      );
+    }
+    if (animal.listingStatus !== AnimalListingStatus.DRAFT) {
+      throw new Error(
+        `${name} must be a draft to go without a photo — a public profile needs one.`,
+      );
+    }
+    await prisma.animalImage.deleteMany({ where: { animalId: animal.id } });
+  }
+
+  console.log(`Removed photos from ${animalsWithoutPhotos.join(", ")}.`);
+}
+
 export async function main() {
   const restoreRandom = installDeterministicRandom();
   // Drain any leftover deal queues so a second main() in the same process
@@ -5822,6 +5892,7 @@ async function seedAll() {
   await seedAnimalCharacteristics();
   await seedAssessmentTemplates();
   await seedAssessments();
+  await seedReadinessFixtures();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

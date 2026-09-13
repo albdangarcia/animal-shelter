@@ -4,9 +4,10 @@
  * fresh whenever the answer is needed, mirroring the attention-queue
  * projection.
  *
- * `now` is a parameter rather than a `new Date()` inside, so "is this check
- * stale" is a pure function of its inputs and testable without freezing a
- * clock.
+ * Every blocker carries `since`: when the recorded evidence says it began.
+ * Nothing about a blocker is stored, so this is read off dates the evidence
+ * already has — the start of the current stay, an observation, a deletion,
+ * an edit. `null` means nothing in the app dates the onset at all.
  */
 
 import type { AssessmentSignal, AnimalHealthStatus } from "@/prisma/generated/enums";
@@ -23,29 +24,44 @@ export type CharacteristicClaimIssue =
   | "NO_LONGER_SUPPORTED";
 
 export type ReadinessBlocker =
-  | { kind: "MISSING_ASSESSMENT"; templateKey: string; templateName: string }
   | {
-      kind: "STALE_ASSESSMENT";
+      kind: "MISSING_ASSESSMENT";
       templateKey: string;
       templateName: string;
-      lastObservedAt: Date;
-      maxAgeDays: number;
+      /** The start of the current stay — the check was due from arrival. */
+      since: Date;
     }
   | {
       kind: "ESCALATED_FINDING";
       assessmentId: string;
       templateName: string;
       observedAt: Date;
+      since: Date;
     }
   | {
       kind: "UNSUPPORTED_CHARACTERISTIC";
       characteristicId: string;
       characteristicName: string;
       issue: CharacteristicClaimIssue;
+      /** The later of the assignment and the evidence against it — a claim
+       *  can't be undermined before it was made. */
+      since: Date;
     }
-  | { kind: "NOT_SPAYED_NEUTERED" }
-  | { kind: "NO_PHOTO" }
-  | { kind: "ACUTE_HEALTH"; healthStatus: AnimalHealthStatus };
+  | { kind: "NOT_SPAYED_NEUTERED"; since: Date }
+  | {
+      kind: "NO_PHOTO";
+      /** The start of the current stay. Removing a photo isn't dated, so an
+       *  animal whose photos were all removed mid-stay reads as having had
+       *  none since arrival. */
+      since: Date;
+    }
+  | {
+      kind: "ACUTE_HEALTH";
+      healthStatus: AnimalHealthStatus;
+      /** Health status changes aren't dated anywhere, so there is no honest
+       *  onset to report. */
+      since: null;
+    };
 
 /** One recorded, non-deleted assessment, as far as readiness cares. */
 export interface ReadinessAssessment {
@@ -61,16 +77,22 @@ export interface ReadinessAssessment {
  * live evidence has with it — the same three states the Characteristics tab
  * warns about, computed fresh from the same live data. A trait can carry
  * more than one at once (e.g. a deleted source AND a separate live
- * contradiction are different problems, asked about separately).
+ * contradiction are different problems, asked about separately). Each
+ * problem is a date rather than a flag: null when it doesn't apply.
  */
 export interface ReadinessCharacteristicClaim {
   characteristicId: string;
   characteristicName: string;
-  contradicted: boolean;
-  sourceDeleted: boolean;
-  /** Ignored when `sourceDeleted` is true — a deleted source's current
-   *  answers aren't a separate thing to report. */
-  noLongerSupports: boolean;
+  assignedAt: Date;
+  /** Observed date of the earliest live finding against the trait. */
+  contradictedAt: Date | null;
+  /** When the citing assessment was deleted. */
+  sourceDeletedAt: Date | null;
+  /** When the citing assessment was last changed, if its current answers no
+   *  longer propose the trait — the edit that took support away can't be
+   *  later than that. Ignored when `sourceDeletedAt` is set: a deleted
+   *  source's current answers aren't a separate thing to report. */
+  supportLostAt: Date | null;
 }
 
 export interface ComputeReadinessInputs {
@@ -83,49 +105,29 @@ export interface ComputeReadinessInputs {
   isSpayedNeutered: boolean;
   hasPhoto: boolean;
   healthStatus: AnimalHealthStatus | null;
+  /** When the animal's current stay began (its latest intake). What it needs
+   *  from arrival — required checks, a photo, spay/neuter — is due from here. */
+  inCareSince: Date;
 }
 
-/** Deterministic "most recent" pick: later `observedAt` wins, an exact tie
- *  breaks on `id` so the result never depends on input order. */
-function latestOf<T extends { id: string; observedAt: Date }>(rows: T[]): T {
-  return rows.reduce((latest, row) => {
-    const byDate = row.observedAt.getTime() - latest.observedAt.getTime();
-    if (byDate > 0 || (byDate === 0 && row.id > latest.id)) return row;
-    return latest;
-  });
-}
+const laterOf = (a: Date, b: Date): Date => (a > b ? a : b);
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-function missingOrStaleBlockers(
+function missingAssessmentBlockers(
   requirements: ReadinessRequirement[],
   assessments: ReadinessAssessment[],
-  now: Date,
+  inCareSince: Date,
 ): ReadinessBlocker[] {
   const blockers: ReadinessBlocker[] = [];
   for (const requirement of requirements) {
-    const matches = assessments.filter(
+    const hasMatch = assessments.some(
       (a) => a.templateKey === requirement.templateKey,
     );
-    if (matches.length === 0) {
+    if (!hasMatch) {
       blockers.push({
         kind: "MISSING_ASSESSMENT",
         templateKey: requirement.templateKey,
         templateName: requirement.templateName,
-      });
-      continue;
-    }
-    if (requirement.maxAgeDays === undefined) continue;
-
-    const latest = latestOf(matches);
-    const ageDays = (now.getTime() - latest.observedAt.getTime()) / MS_PER_DAY;
-    if (ageDays > requirement.maxAgeDays) {
-      blockers.push({
-        kind: "STALE_ASSESSMENT",
-        templateKey: requirement.templateKey,
-        templateName: requirement.templateName,
-        lastObservedAt: latest.observedAt,
-        maxAgeDays: requirement.maxAgeDays,
+        since: inCareSince,
       });
     }
   }
@@ -157,6 +159,7 @@ function escalatedFindingBlockers(
       assessmentId: a.id,
       templateName: a.templateName,
       observedAt: a.observedAt,
+      since: a.observedAt,
     }));
 }
 
@@ -165,28 +168,22 @@ function characteristicClaimBlockers(
 ): ReadinessBlocker[] {
   const blockers: ReadinessBlocker[] = [];
   for (const claim of claims) {
-    if (claim.sourceDeleted) {
+    const blocker = (issue: CharacteristicClaimIssue, evidenceAt: Date) =>
       blockers.push({
         kind: "UNSUPPORTED_CHARACTERISTIC",
         characteristicId: claim.characteristicId,
         characteristicName: claim.characteristicName,
-        issue: "SOURCE_DELETED",
+        issue,
+        since: laterOf(claim.assignedAt, evidenceAt),
       });
-    } else if (claim.noLongerSupports) {
-      blockers.push({
-        kind: "UNSUPPORTED_CHARACTERISTIC",
-        characteristicId: claim.characteristicId,
-        characteristicName: claim.characteristicName,
-        issue: "NO_LONGER_SUPPORTED",
-      });
+
+    if (claim.sourceDeletedAt) {
+      blocker("SOURCE_DELETED", claim.sourceDeletedAt);
+    } else if (claim.supportLostAt) {
+      blocker("NO_LONGER_SUPPORTED", claim.supportLostAt);
     }
-    if (claim.contradicted) {
-      blockers.push({
-        kind: "UNSUPPORTED_CHARACTERISTIC",
-        characteristicId: claim.characteristicId,
-        characteristicName: claim.characteristicName,
-        issue: "CONTRADICTED",
-      });
+    if (claim.contradictedAt) {
+      blocker("CONTRADICTED", claim.contradictedAt);
     }
   }
   return blockers;
@@ -194,23 +191,34 @@ function characteristicClaimBlockers(
 
 export function computeReadiness(
   inputs: ComputeReadinessInputs,
-  now: Date = new Date(),
 ): ReadinessBlocker[] {
   const blockers: ReadinessBlocker[] = [
-    ...missingOrStaleBlockers(inputs.requirements, inputs.assessments, now),
+    ...missingAssessmentBlockers(
+      inputs.requirements,
+      inputs.assessments,
+      inputs.inCareSince,
+    ),
     ...escalatedFindingBlockers(inputs.assessments),
     ...characteristicClaimBlockers(inputs.claims),
   ];
 
-  if (!inputs.isSpayedNeutered) blockers.push({ kind: "NOT_SPAYED_NEUTERED" });
-  if (!inputs.hasPhoto) blockers.push({ kind: "NO_PHOTO" });
+  if (!inputs.isSpayedNeutered) {
+    blockers.push({ kind: "NOT_SPAYED_NEUTERED", since: inputs.inCareSince });
+  }
+  if (!inputs.hasPhoto) {
+    blockers.push({ kind: "NO_PHOTO", since: inputs.inCareSince });
+  }
   if (
     inputs.healthStatus &&
     (ACUTE_HEALTH_STATUSES as readonly AnimalHealthStatus[]).includes(
       inputs.healthStatus,
     )
   ) {
-    blockers.push({ kind: "ACUTE_HEALTH", healthStatus: inputs.healthStatus });
+    blockers.push({
+      kind: "ACUTE_HEALTH",
+      healthStatus: inputs.healthStatus,
+      since: null,
+    });
   }
 
   return blockers;

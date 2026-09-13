@@ -25,14 +25,7 @@ test("a template with no stage is not a requirement", () => {
   assert.ok(!keys.includes("HANDLING"));
 });
 
-test("only Daily Rounds carries a staleness threshold", () => {
-  const requirements = readinessRequirementsFor("Dog");
-  const dailyRounds = requirements.find((r) => r.templateKey === "DAILY_ROUNDS");
-  assert.equal(dailyRounds?.maxAgeDays, 1);
-
-  const oneTime = requirements.filter((r) => r.templateKey !== "DAILY_ROUNDS");
-  assert.ok(oneTime.length > 0);
-  for (const requirement of oneTime) {
-    assert.equal(requirement.maxAgeDays, undefined);
-  }
+test("an in-care stage template is not a readiness requirement", () => {
+  const keys = readinessRequirementsFor("Dog").map((r) => r.templateKey);
+  assert.ok(!keys.includes("DAILY_ROUNDS"));
 });
