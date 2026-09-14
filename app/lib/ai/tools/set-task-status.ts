@@ -1,11 +1,13 @@
 import { tool } from "ai";
 import type { ModelMessage, ToolApprovalStatus } from "ai";
 import { z } from "zod";
+import { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { requireFor, type Actor } from "@/app/lib/auth/actor";
 import { AiActionTargetType, TaskStatus } from "@/prisma/generated/enums";
 import { applyTaskStatusChange } from "@/app/lib/tasks/apply-task-status-change";
+import { ConflictError, PreconditionFailedError } from "@/app/lib/utils/errors";
 import { actorContextSchema } from "../context";
 import {
   buildApprovalReason,
@@ -162,52 +164,77 @@ export async function setTaskStatusApproval(
  * `AiActionLog` row carrying before/after for the undo path. A task
  * never changes without both log rows.
  *
+ * `approvalId` is required, not nullable: the caller (`execute`) refuses to
+ * reach this function without one. `AiActionLog.approvalId` is `@unique`, so a
+ * second call with the same approval hits a P2002 on the insert and the whole
+ * transaction — including the task update — rolls back. That's what makes an
+ * approval single-use: the constraint, not a read-then-write check that a
+ * concurrent replay could race.
+ *
  * No `revalidatePath` — the client calls `router.refresh()`.
  */
-async function writeTaskStatus(
+export async function writeTaskStatus(
   actor: Actor,
   params: {
     input: SetTaskStatusInput;
     toolCallId: string;
-    approvalId: string | null;
+    approvalId: string;
   },
 ): Promise<SetTaskStatusOk> {
   const { input, toolCallId, approvalId } = params;
 
-  return prisma.$transaction(async (tx) => {
-    const result = await applyTaskStatusChange(tx, {
-      taskId: input.taskId,
-      status: input.status,
-      changedById: actor.personId,
-    });
-
-    // The approval policy already denies a no-op, so `changed` is defense in
-    // depth against a status that matched only by the time this ran. A no-op
-    // writes no rows.
-    if (result.changed) {
-      await tx.aiActionLog.create({
-        data: {
-          toolName: "setTaskStatus",
-          toolCallId,
-          approvalId,
-          targetType: AiActionTargetType.TASK,
-          targetId: input.taskId,
-          input,
-          before: { status: result.previousStatus },
-          after: { status: input.status },
-          actorId: actor.personId,
-        },
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const result = await applyTaskStatusChange(tx, {
+        taskId: input.taskId,
+        status: input.status,
+        changedById: actor.personId,
       });
-    }
 
-    return {
-      taskId: input.taskId,
-      title: result.title,
-      previousStatus: result.previousStatus,
-      newStatus: input.status,
-      changed: result.changed,
-    };
-  });
+      // The approval policy already denies a no-op, so `changed` is defense in
+      // depth against a status that matched only by the time this ran. A no-op
+      // writes no rows.
+      if (result.changed) {
+        await tx.aiActionLog.create({
+          data: {
+            toolName: "setTaskStatus",
+            toolCallId,
+            approvalId,
+            targetType: AiActionTargetType.TASK,
+            targetId: input.taskId,
+            input,
+            before: { status: result.previousStatus },
+            after: { status: input.status },
+            actorId: actor.personId,
+          },
+        });
+      }
+
+      return {
+        taskId: input.taskId,
+        title: result.title,
+        previousStatus: result.previousStatus,
+        newStatus: input.status,
+        changed: result.changed,
+      };
+    });
+  } catch (error) {
+    // Only the approvalId unique constraint can raise P2002 here — the rest of
+    // the transaction touches cuid primary keys. That makes the code alone
+    // enough to identify a replay; `error.meta.target` is not read because
+    // under Prisma 7 with the pg driver adapter it doesn't reliably name the
+    // constraint (checked directly against this transaction in
+    // prisma/ai-action-log-approval.test.ts).
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      throw new ConflictError(
+        "This approval has already been used, so nothing was changed.",
+      );
+    }
+    throw error;
+  }
 }
 
 export const setTaskStatusTool = tool({
@@ -230,10 +257,21 @@ export const setTaskStatusTool = tool({
       for (const permission of SET_TASK_STATUS_PERMISSIONS) {
         requireFor(context, permission);
       }
+      const approvalId = findApprovalId(messages, toolCallId);
+      if (approvalId === null) {
+        // The legitimate flow only reaches `execute` through an approved
+        // `tool-approval-request` in the message history. A missing id means
+        // a crafted request hid it — writing `approvalId: null` would slip
+        // past the unique constraint, since Postgres treats every NULL as
+        // distinct.
+        throw new PreconditionFailedError(
+          "No approval was found for this action, so nothing was changed.",
+        );
+      }
       const result = await writeTaskStatus(context, {
         input,
         toolCallId,
-        approvalId: findApprovalId(messages, toolCallId),
+        approvalId,
       });
       return { ok: true, result };
     } catch (error) {

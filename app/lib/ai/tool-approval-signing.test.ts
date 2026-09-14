@@ -151,6 +151,9 @@ function clone(messages: ModelMessage[]): ModelMessage[] {
   return JSON.parse(JSON.stringify(messages)) as ModelMessage[];
 }
 
+// Still true: the SDK does not enforce single use, only signature validity.
+// Single use is enforced one layer down, by the `AiActionLog.approvalId`
+// unique constraint (prisma/ai-action-log-approval.test.ts).
 test("a verbatim approval replay executes the tool", async () => {
   const { responseMessages } = await requestApproval({
     taskId: TASK_ID,

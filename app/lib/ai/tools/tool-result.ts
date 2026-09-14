@@ -1,4 +1,5 @@
 import {
+  ConflictError,
   ForbiddenError,
   NotFoundError,
   PreconditionFailedError,
@@ -33,6 +34,9 @@ export function describeToolError(error: unknown): string {
     return "The requested record could not be found.";
   }
   if (error instanceof PreconditionFailedError) {
+    return error.message;
+  }
+  if (error instanceof ConflictError) {
     return error.message;
   }
   console.error("Unexpected error inside an AI tool.", error);

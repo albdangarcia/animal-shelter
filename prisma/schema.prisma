@@ -1482,9 +1482,11 @@ model AiActionLog {
   // The AI SDK's tool-call id and approval id. Conversations are ephemeral,
   // so there is no conversationId/messageId to correlate against — these are.
   // approvalId is nullable: a mutation reached through a non-approval path (none
-  // in v1) would have no approval to record.
+  // in v1) would have no approval to record. The unique constraint is what
+  // makes an approval single-use: a replayed approval's insert hits it and the
+  // whole transaction rolls back.
   toolCallId String
-  approvalId String?
+  approvalId String? @unique
 
   targetType AiActionTargetType
   targetId   String
