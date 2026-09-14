@@ -19,7 +19,7 @@ import {
  * is roughly four conversations before a 24-hour lockout, which is not a
  * development environment.
  *
- * Why this model of the ones Groq serves: the behaviour that decides this
+ * Why this model of the ones Groq serves: the behavior that decides this
  * feature is refusing to guess between two animals with the same name, which
  * is instruction-following under ambiguity rather than throughput.
  * `gpt-oss-120b` is the largest reasoning-trained general model available

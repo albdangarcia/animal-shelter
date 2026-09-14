@@ -7,7 +7,8 @@ import type { AiToolName } from "./tool-names";
  * empty state has to teach the tool set. These are drawn from what the seed can
  * actually answer, which makes the empty state double as the demo path: the
  * attention queue, the deliberate two-Bruno collision, an animal in an acute
- * health status, a summary with open tasks attached, and — staff only — a task
+ * health status, what's still outstanding before an animal is ready for
+ * adoption, a summary with open tasks attached, and — staff only — a task
  * status change behind the approval card (Daisy's overdue post-op recheck).
  *
  * Because the animal names are seed fixtures, they change when the seed does —
@@ -21,7 +22,7 @@ export type ChatExample = {
   /**
    * The tools an answer needs. Filtered against the caller's own tool set, so
    * role-awareness comes from the same `can()` decisions the registry makes and
-   * there is no second copy of the role matrix to drift (D4).
+   * there is no second copy of the role matrix to drift.
    */
   requiresTools: readonly AiToolName[];
 };
@@ -41,6 +42,11 @@ const CHAT_EXAMPLES: readonly ChatExample[] = [
     label: "What's going on with Fern?",
     prompt: "What's going on with Fern? Is anyone looking after her?",
     requiresTools: ["findAnimals", "getAnimalSummary"],
+  },
+  {
+    label: "Is Buddy ready for adoption?",
+    prompt: "Is Buddy ready for adoption?",
+    requiresTools: ["findAnimals", "getAnimalReadiness"],
   },
   {
     label: "Does Juniper have open tasks?",

@@ -11,6 +11,7 @@
  */
 export type AiToolName =
   | "findAnimals"
+  | "getAnimalReadiness"
   | "getAnimalSummary"
   | "getAttentionQueue"
   | "setTaskStatus";

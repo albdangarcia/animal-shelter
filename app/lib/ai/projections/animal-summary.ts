@@ -10,6 +10,7 @@ import type {
   TaskStatus,
 } from "@/prisma/generated/enums";
 import type { AiAnimalSummaryRow } from "@/app/lib/data/animals/animal.data";
+import type { ReadinessLine } from "./animal-readiness";
 
 /**
  * `getAnimalSummary`'s result. Hand-written, not `Prisma.AnimalGetPayload`
@@ -40,6 +41,9 @@ export type AnimalSummary = {
   } | null;
   openTasks: AnimalSummaryTask[];
   latestIntake: { date: string; type: IntakeType } | null;
+  /** Null when the viewer can't read readiness (it needs the assessment and
+   *  characteristic reads on top of the animal record). */
+  readiness: ReadinessLine | null;
 };
 
 export type AnimalSummaryTask = {
@@ -57,7 +61,10 @@ function formatUnit(
   return unit ? `${unit.location.name} · ${unit.name}` : null;
 }
 
-export function toAnimalSummary(row: AiAnimalSummaryRow): AnimalSummary {
+export function toAnimalSummary(
+  row: AiAnimalSummaryRow,
+  readiness: ReadinessLine | null,
+): AnimalSummary {
   const foster = row.fosterPlacements[0] ?? null;
 
   return {
@@ -95,5 +102,6 @@ export function toAnimalSummary(row: AiAnimalSummaryRow): AnimalSummary {
           type: row.intake[0].type,
         }
       : null,
+    readiness,
   };
 }

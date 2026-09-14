@@ -13,6 +13,7 @@ import { differenceInCalendarDays, parseISO } from "date-fns";
 import { formatInTimeZone } from "date-fns-tz";
 import type { AnimalListingStatus } from "@/prisma/generated/enums";
 import { SHELTER_TIMEZONE } from "../constants/constants";
+import { formatSingleEnumOption } from "../utils/enum-formatter";
 import type { ReadinessBlocker } from "./compute-readiness";
 
 /** Where an animal is right now. Fostered and unplaced animals have no unit. */
@@ -58,6 +59,13 @@ export const UNPLACED_LOCATION = "unplaced";
 export const READINESS_PREVIEW_LIMIT = 5;
 /** Rows per page once a group is opened full-screen via `?kind=`. */
 export const READINESS_KIND_PAGE_SIZE = 10;
+
+/** One animal's blockers in board order, flattened into one list — a single
+ *  animal has too few blockers to need the board's per-kind sections. */
+export const orderBlockers = (
+  blockers: readonly ReadinessBlocker[],
+): ReadinessBlocker[] =>
+  BLOCKER_KIND_ORDER.flatMap((kind) => blockers.filter((b) => b.kind === kind));
 
 const isBlockerKind = (value: string): value is ReadinessBlockerKind =>
   (BLOCKER_KIND_ORDER as readonly string[]).includes(value);
@@ -228,11 +236,18 @@ export type ReadinessBoard = ReadinessBoardOverview | ReadinessBoardDetail;
 const shelterDay = (date: Date) =>
   parseISO(formatInTimeZone(date, SHELTER_TIMEZONE, "yyyy-MM-dd"));
 
+/** A date as it reads on the shelter's calendar, e.g. "Sep 1, 2026". */
+export const formatShelterDate = (date: Date): string =>
+  formatInTimeZone(date, SHELTER_TIMEZONE, "MMM d, yyyy");
+
 /** Whole days between two instants on the shelter's calendar, never negative. */
 export const shelterDaysBetween = (since: Date, now: Date): number =>
   Math.max(0, differenceInCalendarDays(shelterDay(now), shelterDay(since)));
 
-const earliestSince = (blockers: ReadinessBlocker[]): Date | null =>
+/** When the oldest of these blockers began; null when none of them is dated. */
+export const earliestSince = (
+  blockers: readonly ReadinessBlocker[],
+): Date | null =>
   blockers.reduce<Date | null>(
     (earliest, { since }) =>
       since && (!earliest || since < earliest) ? since : earliest,
@@ -323,6 +338,30 @@ export function buildReadinessBoard(
 
   return { view: "overview", groups, animalCount, blockedCount };
 }
+
+const CLAIM_ISSUE_TEXT = {
+  CONTRADICTED: "contradicted by a live finding",
+  SOURCE_DELETED: "cites a deleted assessment",
+  NO_LONGER_SUPPORTED: "its assessment no longer supports it",
+} as const;
+
+/** What a blocker is, in the words the board and the panel show it in. */
+export const describeBlocker = (blocker: ReadinessBlocker): string => {
+  switch (blocker.kind) {
+    case "MISSING_ASSESSMENT":
+      return blocker.templateName;
+    case "ESCALATED_FINDING":
+      return `${blocker.templateName} of ${formatShelterDate(blocker.observedAt)}`;
+    case "UNSUPPORTED_CHARACTERISTIC":
+      return `${blocker.characteristicName} — ${CLAIM_ISSUE_TEXT[blocker.issue]}`;
+    case "NOT_SPAYED_NEUTERED":
+      return "Not spayed or neutered";
+    case "NO_PHOTO":
+      return "No photo on the profile";
+    case "ACUTE_HEALTH":
+      return formatSingleEnumOption(blocker.healthStatus);
+  }
+};
 
 export interface BlockerAction {
   label: string;

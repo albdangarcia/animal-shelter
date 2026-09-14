@@ -13,8 +13,9 @@ const Loading = () => {
       <CardHeader>
         <CardTitle className="@[650px]/main:text-xl">Readiness Board</CardTitle>
         <CardDescription>
-          What is keeping each animal from being adoptable, and what clears it.
-          Longest-blocked first within each group.
+          What&apos;s still outstanding before each animal is fully ready for
+          adoption, and what clears it.
+          Longest-outstanding first within each group.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 md:gap-6">

@@ -25,6 +25,7 @@ import {
 import { buildToolsForActor } from "@/app/lib/ai/registry";
 import { buildSystemPrompt } from "@/app/lib/ai/prompt";
 import type { Actor } from "@/app/lib/auth/actor";
+import { getAnimalReadinessTool } from "@/app/lib/ai/tools/get-animal-readiness";
 import { getAnimalSummaryTool } from "@/app/lib/ai/tools/get-animal-summary";
 
 const rule = "=".repeat(72);
@@ -243,6 +244,67 @@ async function main() {
     );
     assert.equal(child.status, 7, "provider.ts should refuse to load at import");
     return { answer: `provider.ts import (free tier + Neon URL) → exit ${child.status}` };
+  });
+
+  const buddy = await prisma.animal.findFirstOrThrow({
+    where: {
+      name: "Buddy",
+      listingStatus: { not: AnimalListingStatus.ARCHIVED },
+    },
+    select: { id: true },
+  });
+
+  await check(9, "is Buddy ready for adoption (STAFF)", async () => {
+    const q = "Is Buddy ready for adoption?";
+    const r = await ask(staff, q);
+    assert(
+      r.toolCalls.some(
+        (c) =>
+          c.name === "getAnimalReadiness" &&
+          (c.input as { animalId?: string }).animalId === buddy.id,
+      ),
+      "expected getAnimalReadiness to be called with Buddy's id",
+    );
+    return { question: q, answer: r.text, toolCalls: r.toolCalls };
+  });
+
+  await check(10, "is Buddy ready for adoption (VOLUNTEER)", async () => {
+    const q = "Is Buddy ready for adoption?";
+    const r = await ask(volunteer, q);
+    assert(
+      r.toolCalls.some((c) => c.name === "getAnimalReadiness"),
+      "volunteer should be able to call getAnimalReadiness",
+    );
+    return { question: q, answer: r.text, toolCalls: r.toolCalls };
+  });
+
+  await check(11, "readiness line on the summary, no model call", async () => {
+    const result = await getAnimalSummaryTool.execute!(
+      { animalId: buddy.id },
+      { toolCallId: "scratch", messages: [], context: staff.actor },
+    );
+    assert(
+      "ok" in result && result.ok === true,
+      "expected getAnimalSummary to succeed for Buddy",
+    );
+    assert.notEqual(
+      result.animal.readiness,
+      null,
+      "staff should get a readiness line on the summary",
+    );
+    return { answer: JSON.stringify(result.animal.readiness) };
+  });
+
+  await check(12, "readiness failure path (structured, not thrown)", async () => {
+    const failure = await getAnimalReadinessTool.execute!(
+      { animalId: "zzzzzzzzzzzzzzzzzzzzzzzz" },
+      { toolCallId: "scratch", messages: [], context: staff.actor },
+    );
+    assert(
+      "ok" in failure && failure.ok === false,
+      "expected a structured { ok: false } result",
+    );
+    return { answer: JSON.stringify(failure) };
   });
 
   out(`\n${rule}\nSUMMARY\n${rule}`);
