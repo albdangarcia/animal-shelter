@@ -48,7 +48,7 @@ import { ReadinessBoardToolbar } from "./readiness-board-toolbar";
 // request's clock and the shelter's timezone, so nothing re-renders them in
 // the browser with a different "now".
 
-const KIND_META: Record<
+export const KIND_META: Record<
   ReadinessBlockerKind,
   { title: string; description: string; icon: TablerIcon; urgent?: boolean }
 > = {
@@ -112,7 +112,7 @@ const CLAIM_ISSUE_TEXT = {
   NO_LONGER_SUPPORTED: "its assessment no longer supports it",
 } as const;
 
-const describeBlocker = (blocker: ReadinessBlocker): string => {
+export const describeBlocker = (blocker: ReadinessBlocker): string => {
   switch (blocker.kind) {
     case "MISSING_ASSESSMENT":
       return blocker.templateName;
@@ -131,7 +131,7 @@ const describeBlocker = (blocker: ReadinessBlocker): string => {
 
 // A blocker's identity within its row: enough to keep React keys unique when
 // one animal carries several of the same kind.
-const blockerKey = (blocker: ReadinessBlocker): string => {
+export const blockerKey = (blocker: ReadinessBlocker): string => {
   switch (blocker.kind) {
     case "MISSING_ASSESSMENT":
       return blocker.templateKey;
