@@ -7,6 +7,10 @@ import {
   findAnimalsTool,
 } from "./tools/find-animals";
 import {
+  GET_ANIMAL_READINESS_PERMISSIONS,
+  getAnimalReadinessTool,
+} from "./tools/get-animal-readiness";
+import {
   GET_ANIMAL_SUMMARY_PERMISSIONS,
   getAnimalSummaryTool,
 } from "./tools/get-animal-summary";
@@ -27,6 +31,7 @@ export type { AiToolName };
 // direction.
 const AI_TOOLS = {
   findAnimals: findAnimalsTool,
+  getAnimalReadiness: getAnimalReadinessTool,
   getAnimalSummary: getAnimalSummaryTool,
   getAttentionQueue: getAttentionQueueTool,
   setTaskStatus: setTaskStatusTool,
@@ -39,6 +44,7 @@ export type AiToolSet = typeof AI_TOOLS;
 // `requireFor` cannot drift.
 const TOOL_PERMISSIONS: Record<AiToolName, readonly AppPermission[]> = {
   findAnimals: FIND_ANIMALS_PERMISSIONS,
+  getAnimalReadiness: GET_ANIMAL_READINESS_PERMISSIONS,
   getAnimalSummary: GET_ANIMAL_SUMMARY_PERMISSIONS,
   getAttentionQueue: GET_ATTENTION_QUEUE_PERMISSIONS,
   setTaskStatus: SET_TASK_STATUS_PERMISSIONS,

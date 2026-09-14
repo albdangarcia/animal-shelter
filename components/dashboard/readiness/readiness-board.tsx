@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { formatInTimeZone } from "date-fns-tz";
 import {
   IconAlertTriangle,
   IconArrowRight,
@@ -11,10 +10,11 @@ import {
   IconTagOff,
   type TablerIcon,
 } from "@tabler/icons-react";
-import { SHELTER_TIMEZONE } from "@/app/lib/constants/constants";
 import type { ReadinessBlocker } from "@/app/lib/readiness/compute-readiness";
 import {
   blockerAction,
+  describeBlocker,
+  formatShelterDate,
   stageLabel,
   type ReadinessBlockerKind,
   type ReadinessBoard as ReadinessBoardData,
@@ -23,7 +23,6 @@ import {
   type ReadinessPlacement,
   type ReadinessViewerCan,
 } from "@/app/lib/readiness/board";
-import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { SimplePagination } from "@/components/simple-pagination";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -79,7 +78,7 @@ export const KIND_META: Record<
   },
   NOT_SPAYED_NEUTERED: {
     title: "Not spayed or neutered",
-    description: "Needs the procedure recorded on the profile before listing.",
+    description: "The procedure isn't recorded on the profile yet.",
     icon: IconMedicalCross,
   },
   NO_PHOTO: {
@@ -92,9 +91,6 @@ export const KIND_META: Record<
 const groupAnchor = (kind: ReadinessBlockerKind) =>
   `readiness-${kind.toLowerCase().replace(/_/g, "-")}`;
 
-const shelterDate = (date: Date) =>
-  formatInTimeZone(date, SHELTER_TIMEZONE, "MMM d, yyyy");
-
 const placementLabel = (placement: ReadinessPlacement): string => {
   switch (placement.kind) {
     case "UNIT":
@@ -103,29 +99,6 @@ const placementLabel = (placement: ReadinessPlacement): string => {
       return "In foster";
     case "UNPLACED":
       return "Unplaced";
-  }
-};
-
-const CLAIM_ISSUE_TEXT = {
-  CONTRADICTED: "contradicted by a live finding",
-  SOURCE_DELETED: "cites a deleted assessment",
-  NO_LONGER_SUPPORTED: "its assessment no longer supports it",
-} as const;
-
-export const describeBlocker = (blocker: ReadinessBlocker): string => {
-  switch (blocker.kind) {
-    case "MISSING_ASSESSMENT":
-      return blocker.templateName;
-    case "ESCALATED_FINDING":
-      return `${blocker.templateName} of ${shelterDate(blocker.observedAt)}`;
-    case "UNSUPPORTED_CHARACTERISTIC":
-      return `${blocker.characteristicName} — ${CLAIM_ISSUE_TEXT[blocker.issue]}`;
-    case "NOT_SPAYED_NEUTERED":
-      return "Not spayed or neutered";
-    case "NO_PHOTO":
-      return "No photo on the profile";
-    case "ACUTE_HEALTH":
-      return formatSingleEnumOption(blocker.healthStatus);
   }
 };
 
@@ -185,7 +158,7 @@ function BlockedFor({ row }: { row: ReadinessBoardRow }) {
         dateTime={row.since.toISOString()}
         className="text-xs text-muted-foreground"
       >
-        since {shelterDate(row.since)}
+        since {formatShelterDate(row.since)}
       </time>
     </div>
   );
@@ -246,7 +219,7 @@ function GroupSection({
                 <TableHead className="pl-4">Animal</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Stage</TableHead>
-                <TableHead>Blocked for</TableHead>
+                <TableHead>Outstanding for</TableHead>
                 <TableHead className="pr-4">What clears it</TableHead>
               </TableRow>
             </TableHeader>
@@ -327,7 +300,7 @@ function KindSummary({
   filterParams: ReadinessFilterParams;
 }) {
   return (
-    <nav aria-label="Blockers by kind">
+    <nav aria-label="Outstanding items by kind">
       <ul className="grid grid-cols-2 gap-2 @xl/main:grid-cols-4 @5xl/main:grid-cols-6">
         {board.groups.map((group) => {
           const meta = KIND_META[group.kind];
@@ -413,7 +386,7 @@ function OverviewGroups({
           <p className="text-sm text-muted-foreground">
             {board.animalCount === 0
               ? "No animals match these filters."
-              : "Nothing is blocking any animal that matches these filters."}
+              : "Every animal that matches these filters is ready."}
           </p>
         </div>
       )}
@@ -462,8 +435,9 @@ export function ReadinessBoard({ board, filterOptions, can, filterParams }: Prop
           <h1>Readiness Board</h1>
         </CardTitle>
         <CardDescription>
-          What is keeping each animal from being adoptable, and what clears it.
-          Longest-blocked first within each group.
+          What&apos;s still outstanding before each animal is fully ready for
+          adoption, and what clears it.
+          Longest-outstanding first within each group.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 md:gap-6">
@@ -474,7 +448,7 @@ export function ReadinessBoard({ board, filterOptions, can, filterParams }: Prop
               {board.blockedCount}
             </span>{" "}
             of {board.animalCount}{" "}
-            {board.animalCount === 1 ? "animal" : "animals"} blocked ·{" "}
+            {board.animalCount === 1 ? "animal" : "animals"} not ready ·{" "}
             <span className="tabular-nums">{ready}</span> ready
           </p>
         </div>

@@ -45,7 +45,7 @@ test.use({ storageState: storageStatePath });
 // `@[662px]:grid-cols-6`. So the layout follows the *form's* width, not the
 // window's. These tests drive that width directly and assert on geometry —
 // bounding boxes, never class names — so a future refactor of the utilities
-// that keeps the behaviour keeps the tests.
+// that keeps the behavior keeps the tests.
 
 type Box = { x: number; y: number; width: number; height: number };
 

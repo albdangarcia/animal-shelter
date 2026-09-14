@@ -42,8 +42,8 @@ export function buildSystemPrompt(input: {
     "- Animals are referred to by name, but names are not unique. When a name",
     "  matches more than one animal, present the candidates (birth date, unit)",
     "  and ask which one the user means. Never pick one yourself.",
-    "- You need an animal's id before calling getAnimalSummary. Resolve names",
-    "  with findAnimals first.",
+    "- You need an animal's id before calling getAnimalSummary or",
+    "  getAnimalReadiness. Resolve names with findAnimals first.",
     ...(canSetTaskStatus
       ? [
           "- To change a task's status, call setTaskStatus with the task's id from",

@@ -5,7 +5,7 @@ import type { ShelterUIMessage } from "./ui-message";
 type ChatPart = ShelterUIMessage["parts"][number];
 
 /**
- * Only the *static* tool parts — the three tools this app declares. AI SDK's
+ * Only the *static* tool parts — the tools this app declares. AI SDK's
  * `isToolUIPart` also admits `dynamic-tool` parts, whose `input` and `output`
  * are `unknown`; nothing here produces one, and accepting them would throw away
  * the typing that makes reading an animal's name out of a prior step safe.
@@ -32,6 +32,7 @@ const STEP_LABELS: Record<AiToolName, string> = {
   getAttentionQueue: "Checking today's attention queue",
   findAnimals: "Looking up animals",
   getAnimalSummary: "Reading the record",
+  getAnimalReadiness: "Checking adoption readiness",
   setTaskStatus: "Updating the task",
 };
 
@@ -74,6 +75,11 @@ export function resolveAnimalNames(parts: readonly ChatPart[]): Map<string, stri
           names.set(part.output.animal.animalId, part.output.animal.name);
         }
         break;
+      case "tool-getAnimalReadiness":
+        if (part.state === "output-available" && part.output.ok) {
+          names.set(part.output.readiness.animalId, part.output.readiness.name);
+        }
+        break;
     }
   }
 
@@ -90,6 +96,10 @@ function labelForToolPart(
   if (part.type === "tool-getAnimalSummary" && part.input?.animalId) {
     const name = animalNames.get(part.input.animalId);
     if (name) return `Reading ${name}'s record`;
+  }
+  if (part.type === "tool-getAnimalReadiness" && part.input?.animalId) {
+    const name = animalNames.get(part.input.animalId);
+    if (name) return `Checking ${name}'s readiness`;
   }
 
   return STEP_LABELS[getToolName(part) as AiToolName] ?? "Working";

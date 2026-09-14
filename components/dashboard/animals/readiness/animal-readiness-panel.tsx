@@ -2,13 +2,13 @@ import Link from "next/link";
 import { IconArrowRight, IconCircleCheck } from "@tabler/icons-react";
 import type { ReadinessBlocker } from "@/app/lib/readiness/compute-readiness";
 import {
-  BLOCKER_KIND_ORDER,
   blockerAction,
+  describeBlocker,
+  orderBlockers,
   type ReadinessViewerCan,
 } from "@/app/lib/readiness/board";
 import {
   blockerKey,
-  describeBlocker,
   KIND_META,
 } from "@/components/dashboard/readiness/readiness-board";
 import {
@@ -26,30 +26,23 @@ interface Props {
   can: ReadinessViewerCan;
 }
 
-// Same grouping order as the board, flattened into one list — a single
-// animal has too few blockers to need the board's per-kind sections.
-function orderedBlockers(blockers: ReadinessBlocker[]): ReadinessBlocker[] {
-  return BLOCKER_KIND_ORDER.flatMap((kind) =>
-    blockers.filter((b) => b.kind === kind),
-  );
-}
-
 export function AnimalReadinessPanel({ animalId, blockers, can }: Props) {
-  const ordered = orderedBlockers(blockers);
+  const ordered = orderBlockers(blockers);
 
   return (
     <Card className="@container/card">
       <CardHeader>
         <CardTitle className="@[650px]/card:text-xl">Readiness</CardTitle>
         <CardDescription>
-          What is keeping this animal from being adoptable.
+          What&apos;s still outstanding before this animal is fully ready for
+          adoption.
         </CardDescription>
       </CardHeader>
       <CardContent>
         {ordered.length === 0 ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <IconCircleCheck className="size-4 text-green-600 dark:text-green-400" />
-            Nothing is blocking this animal right now.
+            This animal is ready for adoption.
           </p>
         ) : (
           <ul className="flex flex-col gap-3">

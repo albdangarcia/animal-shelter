@@ -7,6 +7,7 @@ import type {
 } from "../../readiness/board";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequireAllPermissions } from "../../auth/protected-actions";
+import { cuidSchema } from "../../zod-schemas/common.schemas";
 import {
   contradictionsByCharacteristic,
   proposalsOf,
@@ -80,6 +81,44 @@ type AnimalIdentityRow = Prisma.AnimalGetPayload<{
   select: typeof ANIMAL_IDENTITY_SELECT;
 }>;
 
+// What the board shows and filters an animal by, on top of what readiness
+// itself reads.
+const BOARD_ANIMAL_SELECT = {
+  ...ANIMAL_IDENTITY_SELECT,
+  name: true,
+  listingStatus: true,
+  currentUnit: {
+    select: { name: true, location: { select: { id: true, name: true } } },
+  },
+  // "In foster" is an open placement, never a stored flag.
+  fosterPlacements: {
+    where: { endDate: null },
+    select: { id: true },
+    take: 1,
+  },
+} satisfies Prisma.AnimalSelect;
+
+type BoardAnimalRow = Prisma.AnimalGetPayload<{
+  select: typeof BOARD_ANIMAL_SELECT;
+}>;
+
+const toReadinessAnimal = (row: BoardAnimalRow): ReadinessAnimal => ({
+  id: row.id,
+  name: row.name,
+  species: row.species.name,
+  listingStatus: row.listingStatus,
+  placement: row.currentUnit
+    ? {
+        kind: "UNIT",
+        locationId: row.currentUnit.location.id,
+        locationName: row.currentUnit.location.name,
+        unitName: row.currentUnit.name,
+      }
+    : row.fosterPlacements.length > 0
+      ? { kind: "FOSTER" }
+      : { kind: "UNPLACED" },
+});
+
 /**
  * Turns one animal's raw rows into its readiness blockers. Shared by the
  * single-animal and the all-animals fetch so the two can never disagree.
@@ -138,13 +177,14 @@ function readinessFor(
   });
 }
 
-const _fetchAnimalReadiness = async (
+/** One animal's identity and blockers; null when no animal has that id. */
+const readinessOfAnimal = async (
   animalId: string,
-): Promise<ReadinessBlocker[]> => {
+): Promise<AnimalReadiness | null> => {
   const [animal, assessmentRows, claimRows] = await Promise.all([
     prisma.animal.findUnique({
       where: { id: animalId },
-      select: ANIMAL_IDENTITY_SELECT,
+      select: BOARD_ANIMAL_SELECT,
     }),
     prisma.assessment.findMany({
       where: { animalId, deletedAt: null },
@@ -160,11 +200,22 @@ const _fetchAnimalReadiness = async (
     }),
   ]);
 
-  if (!animal) {
+  if (!animal) return null;
+
+  return {
+    animal: toReadinessAnimal(animal),
+    blockers: readinessFor(animal, assessmentRows, claimRows),
+  };
+};
+
+const _fetchAnimalReadiness = async (
+  animalId: string,
+): Promise<ReadinessBlocker[]> => {
+  const readiness = await readinessOfAnimal(animalId);
+  if (!readiness) {
     throw new Error("Animal not found.");
   }
-
-  return readinessFor(animal, assessmentRows, claimRows);
+  return readiness.blockers;
 };
 
 export const fetchAnimalReadiness = RequireAllPermissions(
@@ -173,43 +224,20 @@ export const fetchAnimalReadiness = RequireAllPermissions(
   AppPermissions.ANIMAL_CHARACTERISTICS_READ,
 )(_fetchAnimalReadiness);
 
-// What the board shows and filters an animal by, on top of what readiness
-// itself reads.
-const BOARD_ANIMAL_SELECT = {
-  ...ANIMAL_IDENTITY_SELECT,
-  name: true,
-  listingStatus: true,
-  currentUnit: {
-    select: { name: true, location: { select: { id: true, name: true } } },
-  },
-  // "In foster" is an open placement, never a stored flag.
-  fosterPlacements: {
-    where: { endDate: null },
-    select: { id: true },
-    take: 1,
-  },
-} satisfies Prisma.AnimalSelect;
-
-type BoardAnimalRow = Prisma.AnimalGetPayload<{
-  select: typeof BOARD_ANIMAL_SELECT;
-}>;
-
-const toReadinessAnimal = (row: BoardAnimalRow): ReadinessAnimal => ({
-  id: row.id,
-  name: row.name,
-  species: row.species.name,
-  listingStatus: row.listingStatus,
-  placement: row.currentUnit
-    ? {
-        kind: "UNIT",
-        locationId: row.currentUnit.location.id,
-        locationName: row.currentUnit.location.name,
-        unitName: row.currentUnit.name,
-      }
-    : row.fosterPlacements.length > 0
-      ? { kind: "FOSTER" }
-      : { kind: "UNPLACED" },
-});
+// Exported unwrapped for the AI tool layer: a tool's `execute` runs
+// mid-stream where `RequirePermission`'s ambient session read is unreliable.
+// `getAnimalReadiness` (and `getAnimalSummary`, for its readiness line) calls
+// `requireFor` / `can` for all three reads itself before calling this.
+// Carries the animal's identity alongside its blockers, so the tool can tell
+// an archived animal from a blocked one. Returns `null` for an unknown or
+// malformed id — the tool turns that into a structured failure.
+export const _fetchAnimalReadinessForAssistant = async (
+  animalId: string,
+): Promise<AnimalReadiness | null> => {
+  const parsedId = cuidSchema.safeParse(animalId);
+  if (!parsedId.success) return null;
+  return readinessOfAnimal(parsedId.data);
+};
 
 /**
  * Every non-archived animal's blockers, for the readiness board — including

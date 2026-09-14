@@ -123,6 +123,33 @@ test("a name resolved in an earlier turn still labels a later lookup", () => {
   assert.equal(step?.label, "Reading Bruno's record");
 });
 
+test("a readiness lookup is labelled with the animal's name", () => {
+  const readinessPending = (animalId: string): Part => ({
+    type: "tool-getAnimalReadiness",
+    toolCallId: "call-readiness",
+    state: "input-available",
+    input: { animalId },
+  });
+
+  const named = describeActiveStep({
+    status: "streaming",
+    messages: [
+      assistant(
+        findAnimalsDone([{ animalId: "a1", name: "Buddy" }]),
+        { type: "step-start" },
+        readinessPending("a1"),
+      ),
+    ],
+  });
+  assert.equal(named?.label, "Checking Buddy's readiness");
+
+  const unnamed = describeActiveStep({
+    status: "streaming",
+    messages: [assistant(readinessPending("never-seen"))],
+  });
+  assert.equal(unnamed?.label, "Checking adoption readiness");
+});
+
 test("an unresolved id falls back to a generic label instead of guessing", () => {
   const step = describeActiveStep({
     status: "streaming",

@@ -45,7 +45,7 @@ const REAL_BETTER_AUTH_ID = "MRaM1HgFyo99l6YHkVlNRBC5YumDmEtU";
 const PRISMA_CUID = "cjld2cjxh0000qzrmn831i7rn";
 
 // ──────────────────────────────────────────────────────────────
-// Schema behaviour
+// Schema behavior
 // ──────────────────────────────────────────────────────────────
 
 describe("authIdSchema", () => {
