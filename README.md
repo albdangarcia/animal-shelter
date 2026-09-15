@@ -1,64 +1,55 @@
 <p align="center">
-  <img src="./docs/assets/repoimage.png" alt="Repo Image" width="1200"/>
+  <img src="./docs/assets/repoimage.png" alt="Repo Image" />
 </p>
 
 <p align="center">
   <b><a href="https://animal-shelter-zeta.vercel.app/">🌐 Live Demo</a></b> | 
-  <b><a href="docs/screenshots.md">📸 Screenshots</a></b> | 
+  <b><a href="#-ai-staff-assistant">🤖 AI Assistant</a></b> | 
   <b><a href="#getting-started">📖 Setup</a></b> | 
   <b><a href="contributing.md">🤝 Contributing</a></b>
 </p>
 
 ---
 
-This is an open-source, full-featured web application designed to be a comprehensive, end-to-end platform for animal shelters and rescue organizations. It moves beyond a simple pet listing site to provide a robust operational backbone for managing the entire lifecycle of an animal, from intake to outcome.
+An open-source, end-to-end platform for animal shelters and rescue organizations — covering the full animal lifecycle from intake to outcome. A public portal lets adopters browse and apply; a permission-controlled staff dashboard handles day-to-day operations, backed by a built-in AI assistant.
 
-The platform features a public-facing portal for potential adopters and a powerful, permission-controlled dashboard for staff and volunteers to manage all aspects of shelter operations with a focus on data integrity and workflow automation.
+## 🤖 AI Staff Assistant
+
+A chat assistant in the staff dashboard that answers from **live shelter data**.
+
+- **Ask naturally**: "What needs attention today?", "Is Buddy ready for adoption?", "Does Juniper have open tasks?"
+- **Grounded, not hallucinated**: every answer comes from a real lookup — animal summaries, adoption-readiness blockers, the attention queue — never invented.
+- **Can act, not just answer**: staff can ask it to update a task (e.g. "Mark Daisy's post-op recheck done"), gated behind an approval step before anything changes.
+- **Fully auditable**: every AI-initiated change is logged with before/after values and an approval ID, so nothing happens silently.
+- **Stateless by design**: nothing is saved between sessions — refreshing clears the conversation.
 
 ## Core Features
 
-The application is built around distinct, interconnected modules that handle the complex needs of a modern animal shelter.
-
 ### Animal Lifecycle Management
 
-The system meticulously tracks an animal's entire journey through the shelter.
-
-- **Intake Processing**: Handles various intake scenarios, including **owner surrenders**, **strays**, and **transfers** from partner organizations. It captures detailed information about the animal's origin and the people involved.
-- **Re-Intake Workflow**: Provides a dedicated process for animals returning to the shelter. It automatically reactivates archived animal profiles, resets their status to `DRAFT`, and logs a new intake event, preserving the animal's complete history.
-- **Outcome Management**: Manages all possible outcomes, including **adoptions**, **transfers out**, and **return-to-owner**. The system ensures data consistency with atomic operations. For example, processing an adoption:
-  1.  Archives the animal's public profile.
-  2.  Sets the appropriate `archiveReason` (e.g., `ADOPTED_INTERNAL`).
-  3.  Updates the winning adoption application's status to `ADOPTED`.
-  4.  **Automatically rejects all other open applications** for that animal, preventing conflicts and saving administrative time.
+- **Intake**: Owner surrenders, strays, and partner transfers, each capturing the relevant origin details.
+- **Re-Intake**: A returning animal reactivates its archived profile and keeps its full prior history instead of starting fresh.
+- **Outcomes**: Adoptions, transfers, and returns-to-owner are processed atomically — approving one application automatically rejects the animal's other open applications.
 
 ### Comprehensive Animal Profiles
 
-Each animal has a rich, detailed profile that serves as the central hub for all its information. Staff can manage:
-
-- **Core Details**: Update fundamental information like name, species, breed, age, weight, photos, and microchip number.
-- **Characteristics Tagging**: Assign filterable tags (e.g., "Good with Kids," "Housebroken," "Heartworm Positive") to help match animals with suitable adopters. The system intelligently handles adding and removing tags in a single operation.
-- **Dynamic Assessments**: Conduct standardized assessments (e.g., behavioral evaluations, medical intake exams) using **customizable templates**. The application dynamically generates forms and validation based on the selected template, ensuring consistent data collection.
-- **Notes & History**: Add categorized notes (`BEHAVIORAL`, `MEDICAL`, `GENERAL`) to an animal's record. A full history of an animal's journey, status changes, and key events is logged automatically.
-- **Task Management**: Create, assign, and track tasks related to a specific animal, such as "Administer medication," "Schedule vet visit," or "Behavioral follow-up." Tasks have statuses, priorities, and optional due dates.
+- **Core details**: name, species, breed, age, weight, photos, microchip number, and more.
+- **Characteristics tagging**: filterable tags (e.g. "Good with Kids," "Heartworm Positive") to help match animals with suitable adopters.
+- **Dynamic assessments**: standardized, template-driven evaluations (behavioral, medical intake, etc.) with consistent data capture.
+- **Notes & history**: categorized notes plus an automatic log of an animal's status changes and key events.
+- **Task management**: create, assign, and track animal-specific tasks with status, priority, and due dates.
 
 ### Adoption Application Workflow
 
-The platform includes a complete system for managing adoption applications for both applicants and staff.
-
-- **Public Application Portal**: Potential adopters can browse published animals, "like" their favorites, and submit detailed adoption applications directly through the platform.
-- **Applicant Dashboard**: Applicants can view their submitted applications, edit them (if still pending), or withdraw them. They can also reactivate a previously withdrawn application if the animal becomes available again.
-- **Staff Review & Management**: Staff have a dedicated dashboard to review and manage all incoming applications. Key features include:
-  - **Status Management**: Update an application's status (`REVIEWING`, `APPROVED`, `REJECTED`, etc.) with a required reason for the change, creating a clear audit trail.
-  - **Atomic Status Changes**: Approving an application automatically changes the animal's listing status to `PENDING_ADOPTION`, making it unavailable for new applications and preventing double-adoptions. If that application is later withdrawn or rejected, the system automatically makes the animal available again by setting its status back to `PUBLISHED`.
-  - **Internal Notes**: Staff can add private notes to an application during the review process.
+- **Public portal**: browse published animals, like favorites, and apply directly.
+- **Applicant dashboard**: view, edit, or withdraw an application, or reactivate one if the animal becomes available again.
+- **Staff review**: change an application's status with a required reason for a clear audit trail. Approving one reserves the animal and auto-rejects its other open applications; rejecting or withdrawing makes the animal available again automatically. Staff can also add internal notes during review.
 
 ### User & Data Integrity
 
-The system is built with security and data consistency as top priorities.
-
-- **Role-Based Access Control (RBAC)**: Actions are protected by a permission system (`RequirePermission`). This ensures that only authorized users (e.g., `STAFF`, `ADMIN`) can perform sensitive operations like updating animal records or managing applications.
-- **Transactional Integrity**: Critical multi-step database operations are wrapped in **Prisma transactions**. This guarantees that all steps in a process (like an adoption or intake) either complete successfully or fail together, preventing the database from ever being left in an inconsistent state.
-- **Soft Deletes**: Important records like notes and assessments are soft-deleted rather than being permanently erased, preserving historical data for auditing and potential restoration.
+- **Role-based access control**: sensitive actions (updating animal records, managing applications) are gated by a permission system, not just role.
+- **Transactional integrity**: multi-step operations like adoption and intake run in database transactions — all steps succeed or none do.
+- **Soft deletes**: notes and assessments are archived rather than erased, preserving history for auditing.
 
 ## Tech Stack
 
@@ -322,11 +313,8 @@ npm run e2e:headed
 npm run e2e:ui
 ```
 
-
 ## Credits
 
 Credit for the royalty-free images used in this project is given below:
 
-- **Homepage dog image:** by [Brett Sayles](https://www.pexels.com/@brett-sayles/) (via Pexels)
-- **All other pet images:** by [Pixabay](https://pixabay.com/)
-- **Project logo (engraved rabbit):** Designed by macrovector / Freepik
+- **All pet images:** from [Unsplash](https://unsplash.com/) (used under the [Unsplash License](https://unsplash.com/license)), [Pixabay](https://pixabay.com/), and [Pexels](https://www.pexels.com/)
