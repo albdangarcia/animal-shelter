@@ -16,7 +16,7 @@ const AnimalsDataTableToolbar = ({ table }: AnimalsDataTableToolbarProps) => {
     <DataTableToolbar
       table={table}
       searchId="animal-search"
-      searchPlaceholder="Filter Animals..."
+      searchPlaceholder="Filter by animal name..."
       filterParamKeys={["listingStatus", "sex"]}
       filters={
         <>

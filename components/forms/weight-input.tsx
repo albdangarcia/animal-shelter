@@ -61,7 +61,7 @@ export function WeightInput({
             type="button"
             size="sm"
             variant={u === unit ? "default" : "ghost"}
-            className="rounded-none px-2"
+            className="h-full rounded-none px-2"
             onClick={() => setUnit(u)}
           >
             {u}

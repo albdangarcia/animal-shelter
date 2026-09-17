@@ -78,7 +78,7 @@ export function DataTableToolbar<TData extends RowData>({
               placeholder={searchPlaceholder}
               onChange={(e) => handleSearch(e.target.value)}
               defaultValue={currentQuery}
-              className="h-8 w-50 @[736px]/toolbar:w-full"
+              className="h-8 w-64 @[736px]/toolbar:w-full"
             />
           </div>
         )}

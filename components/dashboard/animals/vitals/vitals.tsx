@@ -178,7 +178,7 @@ const AnimalVitalsTab = ({
             ))}
           </div>
         ) : (
-          <div className="text-center py-12 border-2 border-dashed rounded-lg">
+          <div className="text-center py-12 px-6 border-2 border-dashed rounded-lg">
             <p className="font-semibold text-lg">No Matching Vitals Found</p>
             <p className="text-sm mt-1 text-muted-foreground">
               Try adjusting your filters or recording a new vitals entry.

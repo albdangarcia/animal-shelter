@@ -70,9 +70,9 @@ const PersonActivityFeed = ({ activity = [] }: Props) => {
             </ul>
           </div>
         ) : (
-          <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
+          <div className="text-center text-muted-foreground py-12 px-6 border-2 border-dashed rounded-lg">
             <p className="font-semibold text-lg">No Activity Found</p>
-            <p className="text-sm mt-1">
+            <p className="text-sm mt-1 mx-auto max-w-md">
               Notes written about this person are on the{" "}
               {personId ? (
                 <Link

@@ -382,7 +382,7 @@ function OverviewGroups({
           />
         ))
       ) : (
-        <div className="rounded-lg border-2 border-dashed py-12 text-center">
+        <div className="rounded-lg border-2 border-dashed py-12 px-6 text-center">
           <p className="text-sm text-muted-foreground">
             {board.animalCount === 0
               ? "No animals match these filters."

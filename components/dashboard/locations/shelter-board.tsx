@@ -573,7 +573,7 @@ export const ShelterBoard = ({ data, canReadFosters }: Props) => {
                 <LocationGroup key={location.id} location={location} />
               ))
             ) : (
-              <div className="rounded-lg border-2 border-dashed py-12 text-center">
+              <div className="rounded-lg border-2 border-dashed py-12 px-6 text-center">
                 <p className="text-sm text-muted-foreground">
                   No locations have been created yet.
                 </p>

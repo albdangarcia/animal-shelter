@@ -15,7 +15,7 @@ const MyAppTableToolbar = ({ table }: MyAppTableToolbarProps) => {
     <DataTableToolbar
       table={table}
       searchId="applications-search"
-      searchPlaceholder="Filter Applications..."
+      searchPlaceholder="Filter by animal name..."
       filterParamKeys={["status"]}
       filters={
         <ServerSideFacetedFilter

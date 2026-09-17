@@ -43,7 +43,7 @@ const PageContent = async () => {
         </CardHeader>
         <CardContent>
           {!hasFosterProfile ? (
-            <div className="flex flex-col items-center gap-4 py-12 text-center">
+            <div className="flex flex-col items-center gap-4 py-12 px-6 text-center border-2 border-dashed rounded-lg">
               <PawPrint className="h-10 w-10 text-muted-foreground" />
               <p className="text-muted-foreground text-sm max-w-sm">
                 You&apos;re not on the foster roster yet. Submit a foster

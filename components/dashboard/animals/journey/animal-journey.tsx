@@ -32,7 +32,7 @@ const AnimalJourney = async ({ animalId }: { animalId: string }) => {
   // If no significant events are found
   if (visibleJourneyItems.length === 0) {
     return (
-      <div className="text-center py-12 border-2 border-dashed rounded-lg">
+      <div className="text-center py-12 px-6 border-2 border-dashed rounded-lg">
         <p className="font-semibold text-lg">No Journey Events Found</p>
         <p className="text-sm mt-1 text-muted-foreground">
           Significant events like intake, status changes, and adoption will

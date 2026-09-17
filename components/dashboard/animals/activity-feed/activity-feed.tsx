@@ -49,7 +49,7 @@ const ActivityFeed = ({ activityLogs = [], totalPages }: Props) => {
             </ul>
           </div>
         ) : (
-          <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
+          <div className="text-center text-muted-foreground py-12 px-6 border-2 border-dashed rounded-lg">
             <p className="font-semibold text-lg">No Activity Found</p>
             <p className="text-sm mt-1">
               There is no activity history for this animal yet.

@@ -141,7 +141,7 @@ const AnimalAssessmentsTab = ({
             ))}
           </ul>
         ) : (
-          <div className="rounded-lg border-2 border-dashed py-12 text-center">
+          <div className="rounded-lg border-2 border-dashed py-12 px-6 text-center">
             <p className="text-lg font-semibold">No Matching Assessments Found</p>
             <p className="mt-1 text-sm text-muted-foreground">
               Try adjusting your filters or recording a new assessment.
