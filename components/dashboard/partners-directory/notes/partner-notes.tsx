@@ -182,7 +182,7 @@ const PartnerNotes = ({ notes, totalPages, partnerId, canManage }: Props) => {
               </div>
             ))
           ) : (
-            <div className="text-center text-muted-foreground py-12 border-2 border-dashed rounded-lg">
+            <div className="text-center text-muted-foreground py-12 px-6 border-2 border-dashed rounded-lg">
               <p className="font-semibold text-lg">No Notes Found</p>
 
               <p className="text-sm mt-1">
