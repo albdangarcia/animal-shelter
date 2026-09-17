@@ -18,7 +18,7 @@
     "e2e:headed": "playwright test --headed",
     "e2e:ui": "playwright test --ui",
     "e2e:install": "playwright install chromium",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "db": "prisma generate && prisma db push && prisma db seed",
     "//db:reset": "Prisma 7 removed migrate reset's auto-seed (and --skip-seed, nothing left to skip) — chain prisma db seed explicitly or this won't reseed.",
     "db:reset": "prisma migrate reset --force && prisma db seed",
