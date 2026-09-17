@@ -40,7 +40,7 @@ const TasksDataTableToolbar = ({
     <DataTableToolbar
       table={table}
       searchId="task-search"
-      searchPlaceholder="Filter Tasks..."
+      searchPlaceholder="Filter by task title..."
       filterParamKeys={["category", "status"]}
       filters={
         <>

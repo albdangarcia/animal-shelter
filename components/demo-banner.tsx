@@ -60,7 +60,6 @@ const DemoBanner = () => {
           <Button asChild size="sm" className="bg-black">
             <Link
               href={GITHUB_REPO_URL}
-              target="_blank"
               rel="noopener noreferrer"
               className="whitespace-nowrap"
             >
