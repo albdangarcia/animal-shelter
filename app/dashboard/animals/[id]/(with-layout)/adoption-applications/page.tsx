@@ -9,7 +9,7 @@ import {
 import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import DataTable from "@/components/table-common/data-table";
 import { getColumns } from "@/components/dashboard/adoption-applications/table/adoption-applications-table-columns";
-import UserAppTableToolbar from "@/components/dashboard/adoption-applications/table/adoption-applications-table-toolbar";
+import AnimalAppTableToolbar from "@/components/dashboard/animals/adoption-applications/table/adoption-applications-table-toolbar";
 import { fetchAnimalApplications } from "@/app/lib/data/animals/animal-adoption-application.data";
 import { notFound } from "next/navigation";
 import { Authorize } from "@/components/auth/authorize";
@@ -82,7 +82,7 @@ const PageContent = async ({ searchParams, params }: Props) => {
                 data={applications}
                 getColumns={getColumns}
                 columnProps={{ canManage }}
-                ToolbarComponent={UserAppTableToolbar}
+                ToolbarComponent={AnimalAppTableToolbar}
                 totalPages={totalPages}
                 totalRows={totalRows}
               />

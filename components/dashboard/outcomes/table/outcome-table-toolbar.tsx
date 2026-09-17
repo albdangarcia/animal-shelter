@@ -16,7 +16,7 @@ const OutcomeTableToolbar = ({ table }: OutcomeTableToolbarProps) => {
     <DataTableToolbar
       table={table}
       searchId="outcome-search"
-      searchPlaceholder="Filter Outcomes..."
+      searchPlaceholder="Filter by animal, applicant, owner, staff, or partner name..."
       filterParamKeys={["type"]}
       filters={
         <>

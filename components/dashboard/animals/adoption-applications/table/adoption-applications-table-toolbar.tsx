@@ -6,16 +6,16 @@ import { ServerSideFacetedFilter } from "@/components/table-common/server-side-f
 import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
 import { AdoptionApplicationWithAnimal } from "@/app/lib/data/user-adoption-application.data";
 
-interface UserAppTableToolbarProps {
+interface AnimalAppTableToolbarProps {
   table: Table<StockFeatures, AdoptionApplicationWithAnimal>;
 }
 
-const UserAppTableToolbar = ({ table }: UserAppTableToolbarProps) => {
+const AnimalAppTableToolbar = ({ table }: AnimalAppTableToolbarProps) => {
   return (
     <DataTableToolbar
       table={table}
       searchId="applications-search"
-      searchPlaceholder="Filter by applicant or animal name..."
+      searchPlaceholder="Filter by applicant name..."
       filterParamKeys={["status"]}
       filters={
         <ServerSideFacetedFilter
@@ -28,4 +28,4 @@ const UserAppTableToolbar = ({ table }: UserAppTableToolbarProps) => {
   );
 };
 
-export default UserAppTableToolbar;
+export default AnimalAppTableToolbar;

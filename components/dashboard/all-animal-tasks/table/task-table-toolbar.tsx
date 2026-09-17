@@ -18,7 +18,7 @@ const TasksDataTableToolbar = ({ table }: TasksDataTableToolbarProps) => {
     <DataTableToolbar
       table={table}
       searchId="task-search"
-      searchPlaceholder="Filter Tasks..."
+      searchPlaceholder="Filter by task title..."
       filterParamKeys={["category", "status"]}
       filters={
         <>
