@@ -1,4 +1,5 @@
 import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
+import type { GlobalSearchPermission } from "@/app/lib/data/search/global-search";
 
 export type IconName =
   | "IconDashboard"
@@ -8,7 +9,6 @@ export type IconName =
   | "IconClipboardList"
   | "IconFileAi"
   | "IconSettings"
-  | "IconSearch"
   | "IconReport"
   | "IconFileWord"
   | "IconCirclePlus"
@@ -70,6 +70,21 @@ export const SETTINGS_PERMISSIONS: readonly AppPermission[] = [
   AppPermissions.MANAGE_LOCATIONS,
   AppPermissions.AI_ACTIVITY_READ,
 ] as const;
+
+/**
+ * Every permission that unlocks a global-search group. Mirrors
+ * `GLOBAL_SEARCH_GROUP_PERMISSIONS` — `satisfies` keeps a permission the search
+ * doesn't actually use out of the list, so the sidebar can't offer the palette
+ * to someone it would return nothing for. The server still decides which groups
+ * a caller really gets; this only decides whether the ⌘K entry points exist.
+ */
+export const SEARCH_PERMISSIONS = [
+  AppPermissions.ANIMAL_INFO_READ,
+  AppPermissions.PERSONS_READ,
+  AppPermissions.PARTNERS_READ,
+  AppPermissions.APPLICATIONS_READ,
+  AppPermissions.FOSTERS_READ,
+] as const satisfies readonly GlobalSearchPermission[];
 
 export interface NavDocument {
   name: string;
@@ -185,11 +200,6 @@ export const navSecondaryItems: readonly NavItem[] = [
     url: "/dashboard/settings",
     icon: "IconSettings",
     anyPermissions: SETTINGS_PERMISSIONS,
-  },
-  {
-    title: "Search",
-    url: "#",
-    icon: "IconSearch",
   },
 ] as const;
 

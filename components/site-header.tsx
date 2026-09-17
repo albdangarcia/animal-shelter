@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { SearchTrigger } from "@/components/dashboard/search/search-trigger";
 import { ThemeToggle } from "./light-dark-theme/theme-toggle";
 
 // Slugs whose per-word capitalisation reads wrong. The rule below works for
@@ -52,6 +53,7 @@ export function SiteHeader() {
         />
         <h1 className="text-base font-medium">{title}</h1>
         <div className="ml-auto flex items-center gap-2">
+          <SearchTrigger />
           <ThemeToggle />
         </div>
       </div>

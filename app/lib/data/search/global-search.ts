@@ -29,6 +29,12 @@ export const GLOBAL_SEARCH_GROUP_PERMISSIONS = {
 
 export type GlobalSearchGroup = keyof typeof GLOBAL_SEARCH_GROUP_PERMISSIONS;
 
+// The five permissions above as a union. `SEARCH_PERMISSIONS` in
+// `nav-links.config.ts` is checked against it, so the sidebar can't offer the
+// palette on a permission this file doesn't actually search.
+export type GlobalSearchPermission =
+  (typeof GLOBAL_SEARCH_GROUP_PERMISSIONS)[GlobalSearchGroup];
+
 export const GLOBAL_SEARCH_GROUPS = Object.keys(
   GLOBAL_SEARCH_GROUP_PERMISSIONS,
 ) as GlobalSearchGroup[];
