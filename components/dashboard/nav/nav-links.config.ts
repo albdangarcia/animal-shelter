@@ -6,11 +6,8 @@ export type IconName =
   | "IconUsers"
   | "IconFolder"
   | "IconClipboardList"
-  | "IconCamera"
-  | "IconFileDescription"
   | "IconFileAi"
   | "IconSettings"
-  | "IconHelp"
   | "IconSearch"
   | "IconReport"
   | "IconFileWord"
@@ -181,41 +178,6 @@ export const aiAssistantItem = {
   permission: AppPermissions.AI_CHAT_USE,
 } as const;
 
-// Navigation with collapsible sub-items
-export const navCollapsibleItems: readonly NavItem[] = [
-  {
-    title: "Capture",
-    icon: "IconCamera",
-    isActive: true,
-    url: "#",
-    items: [
-      {
-        title: "Active Proposals",
-        url: "#",
-      },
-      {
-        title: "Archived",
-        url: "#",
-      },
-    ],
-  },
-  {
-    title: "Proposal",
-    icon: "IconFileDescription",
-    url: "#",
-    items: [
-      {
-        title: "Active Proposals",
-        url: "#",
-      },
-      {
-        title: "Archived",
-        url: "#",
-      },
-    ],
-  },
-] as const;
-
 // Secondary navigation items
 export const navSecondaryItems: readonly NavItem[] = [
   {
@@ -223,11 +185,6 @@ export const navSecondaryItems: readonly NavItem[] = [
     url: "/dashboard/settings",
     icon: "IconSettings",
     anyPermissions: SETTINGS_PERMISSIONS,
-  },
-  {
-    title: "Get Help",
-    url: "#",
-    icon: "IconHelp",
   },
   {
     title: "Search",
