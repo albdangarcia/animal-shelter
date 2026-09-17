@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Suspense } from "react";
 import { fetchAvailableAnimalCount } from "@/app/lib/data/public.data";
+import aboutClosingBand from "./about-closing-band.webp";
 
 /**
  * Static apart from the live count. That one line sits in its own Suspense
@@ -66,8 +67,9 @@ const Page = () => (
     <section className="mx-auto w-full max-w-6xl px-5 pb-16 sm:px-8 lg:px-14 lg:pb-20">
       <div className="relative aspect-[16/7] w-full overflow-hidden rounded-[28px]">
         <Image
-          src="/about-closing-band.webp"
+          src={aboutClosingBand}
           alt="A merle puppy in a blue harness sitting on grass."
+          placeholder="blur"
           fill
           sizes="(max-width: 1152px) 100vw, 1152px"
           className="object-cover"
