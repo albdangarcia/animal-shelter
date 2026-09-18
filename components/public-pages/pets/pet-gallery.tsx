@@ -6,7 +6,7 @@ import { X as XMarkIcon } from "lucide-react";
 import type { AnimalImageModel } from "@/prisma/generated/models/AnimalImage";
 import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
 import { PET_PHOTO_COMING_SOON_IMAGE } from "@/app/lib/constants/constants";
-import LikeButton from "../like-button";
+import FavoriteButton from "../favorite-button";
 import clsx from "clsx";
 import {
   Dialog,
@@ -19,14 +19,14 @@ interface PetGalleryProps {
   images: AnimalImageModel[];
   currentUserPersonId: string | undefined;
   animalId: string;
-  isLikedByCurrentUser: boolean;
+  isFavoritedByCurrentUser: boolean;
 }
 
 const PetGallery = ({
   images,
   currentUserPersonId,
   animalId,
-  isLikedByCurrentUser,
+  isFavoritedByCurrentUser,
 }: PetGalleryProps) => {
   const [selectedImage, setSelectedImage] = useState(
     images.length > 0 ? images[0].url : "",
@@ -94,10 +94,10 @@ const PetGallery = ({
             />
           )}
           <div className="absolute top-3 right-3 z-10">
-            <LikeButton
+            <FavoriteButton
               animalId={animalId}
               currentUserPersonId={currentUserPersonId}
-              isLikedByCurrentUser={isLikedByCurrentUser}
+              isFavoritedByCurrentUser={isFavoritedByCurrentUser}
             />
           </div>
         </div>

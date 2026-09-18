@@ -34,7 +34,7 @@ test("signing in from the login modal returns to the same pets URL, query string
   await page.goto(petsUrlWithQuery);
 
   await page
-    .getByRole("button", { name: "Like this pet" })
+    .getByRole("button", { name: "Add to favorites" })
     .first()
     .click();
 
@@ -59,7 +59,7 @@ test("the login modal's link encodes the current path and query string", async (
   await page.goto(petsUrlWithQuery);
 
   await page
-    .getByRole("button", { name: "Like this pet" })
+    .getByRole("button", { name: "Add to favorites" })
     .first()
     .click();
 

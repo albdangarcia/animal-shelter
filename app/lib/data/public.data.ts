@@ -32,7 +32,7 @@ export type PetsPayload = Prisma.AnimalGetPayload<{
       };
       take: 1;
     };
-    likes: {
+    favorites: {
       select: {
         userId: true;
       };
@@ -239,7 +239,7 @@ export const fetchPublishedPets = async ({
             take: 1,
           },
           ...(personId && {
-            likes: {
+            favorites: {
               select: {
                 userId: true,
               },
@@ -301,8 +301,8 @@ export type FavoritePet = {
   breeds: { name: string }[];
   characteristics: { name: string }[];
   animalImages: { url: string }[];
-  // Always present (these are the user's own likes), kept for PetCard's heart state.
-  likes: { userId: string }[];
+  // Always present (these are the user's own favorites), kept for PetCard's heart state.
+  favorites: { userId: string }[];
   isAvailable: boolean;
 };
 
@@ -312,13 +312,14 @@ const AVAILABLE_STATUSES: AnimalListingStatus[] = [
 ];
 
 /**
- * Fetches the signed-in user's liked pets, including ones that are no longer
- * available. Unavailable pets are flagged via `isAvailable` so the UI can grey
- * them out — we never expose WHY a pet is unavailable (archiveReason is never
- * selected), so adopted/transferred/deceased all read as a neutral "unavailable".
+ * Fetches the signed-in user's favorited pets, including ones that are no
+ * longer available. Unavailable pets are flagged via `isAvailable` so the UI
+ * can grey them out — we never expose WHY a pet is unavailable (archiveReason
+ * is never selected), so adopted/transferred/deceased all read as a neutral
+ * "unavailable".
  *
- * Ordering: most recently liked first, but unavailable pets are always pushed to
- * the end (recency preserved within each group).
+ * Ordering: most recently favorited first, but unavailable pets are always
+ * pushed to the end (recency preserved within each group).
  */
 export const fetchFavoritePets = async (): Promise<{
   pets: FavoritePet[];
@@ -331,9 +332,9 @@ export const fetchFavoritePets = async (): Promise<{
   }
 
   try {
-    const likes = await prisma.like.findMany({
+    const favorites = await prisma.favorite.findMany({
       where: { userId: personId },
-      orderBy: { createdAt: "desc" }, // most recently liked first
+      orderBy: { createdAt: "desc" }, // most recently favorited first
       select: {
         animal: {
           select: {
@@ -352,11 +353,11 @@ export const fetchFavoritePets = async (): Promise<{
       },
     });
 
-    const pets: FavoritePet[] = likes.map((like) => ({
-      ...flattenCharacteristics(like.animal),
-      // This is the user's own like list, so every pet is liked by them.
-      likes: [{ userId: personId }],
-      isAvailable: AVAILABLE_STATUSES.includes(like.animal.listingStatus),
+    const pets: FavoritePet[] = favorites.map((favorite) => ({
+      ...flattenCharacteristics(favorite.animal),
+      // This is the user's own favorites list, so every pet is favorited by them.
+      favorites: [{ userId: personId }],
+      isAvailable: AVAILABLE_STATUSES.includes(favorite.animal.listingStatus),
     }));
 
     // Available first (recency preserved), then unavailable (recency preserved).
@@ -435,9 +436,9 @@ export const fetchPublicPagePetById = async (id: string) => {
           },
         },
         animalCharacteristics: PUBLIC_CHARACTERISTIC_SELECT,
-        // Conditionally include likes if userId is available
+        // Conditionally include favorites if userId is available
         ...(personId && {
-          likes: {
+          favorites: {
             where: {
               userId: personId,
             },
@@ -504,7 +505,7 @@ export const fetchLatestPublicAnimals = async (take: number = 4) => {
           take: 1,
         },
         ...(personId && {
-          likes: {
+          favorites: {
             select: {
               userId: true,
             },
@@ -548,12 +549,12 @@ export type SpotlightAnimal = {
   waitingDays: number | null;
   imageUrl: string | null;
   /**
-   * Whether the signed-in user has already liked this animal. Resolved here
-   * rather than in the hero because the hero's "Save to favorites" control is
-   * `LikeButton`, which toggles: handed a hardcoded `false` it would silently
-   * UNLIKE an animal the user had already saved.
+   * Whether the signed-in user has already favorited this animal. Resolved
+   * here rather than in the hero because the hero's "Save to favorites"
+   * control is `FavoriteButton`, which toggles: handed a hardcoded `false` it
+   * would silently REMOVE an animal the user had already saved.
    */
-  isLikedByCurrentUser: boolean;
+  isFavoritedByCurrentUser: boolean;
 };
 
 /** Hero plus its five thumbnails. */
@@ -607,7 +608,7 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
         intake: { select: { intakeDate: true } },
         Outcome: { select: { outcomeDate: true } },
         ...(personId && {
-          likes: {
+          favorites: {
             select: { userId: true },
             where: { userId: personId },
             take: 1,
@@ -688,7 +689,7 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
       hasMicrochip: animal.microchipNumber !== null,
       waitingDays: currentStayDays,
       imageUrl: animal.animalImages[0]?.url ?? null,
-      isLikedByCurrentUser: (animal.likes?.length ?? 0) > 0,
+      isFavoritedByCurrentUser: (animal.favorites?.length ?? 0) > 0,
     }));
   } catch (error) {
     console.error("Error fetching spotlight animals.", error);

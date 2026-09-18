@@ -56,7 +56,9 @@ const Page = async ({ params }: Props) => {
     currentUserPersonId && animal.adoptionApplications?.length,
   );
 
-  const isLikedByCurrentUser = Boolean(animal.likes && animal.likes.length > 0);
+  const isFavoritedByCurrentUser = Boolean(
+    animal.favorites && animal.favorites.length > 0,
+  );
 
   // Prepare array data for display
   const breedString =
@@ -145,7 +147,7 @@ const Page = async ({ params }: Props) => {
           images={animal.animalImages}
           currentUserPersonId={currentUserPersonId}
           animalId={animal.id}
-          isLikedByCurrentUser={isLikedByCurrentUser}
+          isFavoritedByCurrentUser={isFavoritedByCurrentUser}
         />
 
         <div className="flex flex-col gap-9">

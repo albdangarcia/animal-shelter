@@ -91,7 +91,7 @@ const AnimalSectionCards = async ({ params }: Props) => {
     : null;
 
   const firstImage = animal.animalImages?.[0]?.url;
-  const likesCount = animal._count.likes;
+  const favoritesCount = animal._count.favorites;
   const pendingTasksCount = animal._count.tasks;
 
   // Trend, not just a bare number — the two most recent weigh-ins, e.g.
@@ -216,8 +216,8 @@ const AnimalSectionCards = async ({ params }: Props) => {
               <div className="flex flex-wrap items-center gap-4 border-t pt-4 text-sm @[400px]/card:flex-nowrap">
                 <div className="flex items-center gap-1.5">
                   <Heart className="h-4 w-4 text-red-500" />
-                  <span className="font-medium">{likesCount}</span>
-                  <span className="text-muted-foreground">likes</span>
+                  <span className="font-medium">{favoritesCount}</span>
+                  <span className="text-muted-foreground">favorites</span>
                 </div>
                 {daysSinceIntake && (
                   <div className="flex items-center gap-1.5">

@@ -26,7 +26,7 @@ const Page = async () => {
       <section className="bg-organic-accent-100">
         <div className="mx-auto w-full max-w-6xl px-5 py-14 sm:px-8 sm:py-20 lg:px-14">
           {/* "favorites", matching the nav link that brings you here and
-              LikeButton's "Save to favorites". The route keeps its US spelling
+              FavoriteButton's "Save to favorites". The route keeps its US spelling
               — it's linked from the nav and the avatar menu, and renaming a URL
               over spelling isn't worth a redirect. */}
           <h1 className="mb-4 font-display text-[clamp(34px,5vw,56px)] leading-[1.05] tracking-[-0.02em]">

@@ -104,7 +104,7 @@ export type AnimalSectionCardPayload = Prisma.AnimalGetPayload<{
     };
     _count: {
       select: {
-        likes: true;
+        favorites: true;
         tasks: {
           where: {
             status: { in: ["TODO", "IN_PROGRESS"] };

@@ -4814,7 +4814,7 @@ async function clearDatabase() {
   // fails on that final delete.
   await prisma.noteEvent.deleteMany();
   await prisma.partnerContact.deleteMany();
-  await prisma.like.deleteMany();
+  await prisma.favorite.deleteMany();
 
   await prisma.fosterProfile.deleteMany();
   await prisma.householdProfile.deleteMany();
@@ -5003,7 +5003,7 @@ async function assertAnimalLifecycleConsistency() {
 }
 
 /**
- * Likes for the public `/pets/favorites` page.
+ * Favorites for the public `/pets/favorites` page.
  *
  * Without these the page has no demo coverage at all: every visitor sees the
  * empty state, and the populated grid — including the greyed-out
@@ -5021,7 +5021,7 @@ async function assertAnimalLifecycleConsistency() {
  * Split across the two USER-role logins so both signed-in states are
  * reachable without touching the database:
  *   surrenderer1@example.com — a populated grid, including unavailable cards
- *   finder1@example.com      — no likes, i.e. the empty state
+ *   finder1@example.com      — no favorites, i.e. the empty state
  */
 async function seedPublicFavorites() {
   console.log("Seeding favorites for the public pages...");
@@ -5053,7 +5053,7 @@ async function seedPublicFavorites() {
 
   const animals = [...published, ...pending, ...archived];
 
-  await prisma.like.createMany({
+  await prisma.favorite.createMany({
     data: animals.map((animal) => ({
       userId: owner.id,
       animalId: animal.id,

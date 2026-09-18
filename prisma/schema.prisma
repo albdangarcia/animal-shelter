@@ -46,7 +46,7 @@ model Person {
   fosterApplicationHistory FosterApplicationStatusHistory[]
   fosterPlacementsPlaced   FosterPlacement[]                @relation("FosterPlacementPlacedBy")
   fosterPlacementsReturned FosterPlacement[]                @relation("FosterPlacementReturnedBy")
-  likes                    Like[]
+  favorites                Favorite[]
   animalNotesAuthored      AnimalNote[]                     @relation("AnimalNoteAuthor")
   personNotesAuthored      PersonNote[]                     @relation("PersonNoteAuthor")
   partnerNotesAuthored     PartnerNote[]                    @relation("PartnerNoteAuthor")
@@ -437,7 +437,7 @@ model Animal {
   vitalsLogs           VitalsLog[]
   notes                AnimalNote[]
   tasks                Task[]
-  likes                Like[]
+  favorites            Favorite[]
   adoptionApplications AdoptionApplication[]
   intake               Intake[]
   Outcome              Outcome[]
@@ -1240,7 +1240,7 @@ model FosterPlacement {
   @@map("foster_placements")
 }
 
-model Like {
+model Favorite {
   id String @id @default(cuid())
 
   animalId String @map(name: "animal_id")
@@ -1252,7 +1252,7 @@ model Like {
   createdAt DateTime @default(now())
 
   @@unique([userId, animalId])
-  @@map(name: "likes")
+  @@map(name: "favorites")
 }
 
 // ═══════════════════════════════════════════════════
