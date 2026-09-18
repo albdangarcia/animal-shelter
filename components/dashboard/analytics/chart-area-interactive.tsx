@@ -49,15 +49,13 @@ export function ChartAreaInteractive({ data }: ChartAreaInteractiveProps) {
   );
 
   // Filter the data on the client-side based on the selected time range.
-  const filteredData = React.useMemo(() => {
-    let daysToFilter = 90;
-    if (timeRange === "30d") {
-      daysToFilter = 30;
-    } else if (timeRange === "7d") {
-      daysToFilter = 7;
-    }
-    return data.slice(-daysToFilter); // Get the most recent 'n' days.
-  }, [data, timeRange]);
+  let daysToFilter = 90;
+  if (timeRange === "30d") {
+    daysToFilter = 30;
+  } else if (timeRange === "7d") {
+    daysToFilter = 7;
+  }
+  const filteredData = data.slice(-daysToFilter); // Get the most recent 'n' days.
 
   return (
     <Card className="@container/card">
