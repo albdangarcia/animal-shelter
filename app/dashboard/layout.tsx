@@ -1,5 +1,6 @@
 import { getCachedSession } from "@/app/lib/auth/session";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/dashboard/nav/sidebar-links";
 import { CommandPaletteProvider } from "@/components/dashboard/search/command-palette-provider";
@@ -15,10 +16,14 @@ interface LayoutProps {
 }
 
 const Layout = async ({ children }: LayoutProps) => {
-  const session = await getCachedSession();
+  const [session, cookieStore] = await Promise.all([
+    getCachedSession(),
+    cookies(),
+  ]);
   if (!session || !session.user) {
     redirect(`/sign-in?callbackUrl=${encodeURIComponent("/dashboard")}`);
   }
+  const defaultOpen = cookieStore.get("sidebar_state")?.value !== "false";
 
   // Filter navigation links based on user permissions
   const [filteredNavMain, filteredDocuments, filteredNavSecondary, canUseAi, canSearch] =
@@ -63,6 +68,7 @@ const Layout = async ({ children }: LayoutProps) => {
 
   return (
     <SidebarProvider
+      defaultOpen={defaultOpen}
       style={
         {
           "--sidebar-width": "calc(var(--spacing) * 72)",

@@ -1,5 +1,9 @@
 import * as React from "react"
 
+// Registry-declared dependency of components/ui/sidebar.tsx: `npx shadcn add
+// sidebar --overwrite` silently rewrites this file back to a useState +
+// useEffect version that fails react-hooks/set-state-in-effect. The
+// useSyncExternalStore shape here is deliberate, not stylistic preference.
 const MOBILE_BREAKPOINT = 768
 
 // Helper to check the query status safely (won't crash on server)
