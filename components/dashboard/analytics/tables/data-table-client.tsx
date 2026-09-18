@@ -66,10 +66,7 @@ const DataTable = <TData extends RowData, TExtra = Record<string, never>>({
   const [columnVisibility, setColumnVisibility] =
     React.useState<ColumnVisibilityState>({});
 
-  const columns = React.useMemo(() => {
-    if (getColumns) return getColumns(columnProps as TExtra);
-    return staticColumns ?? [];
-  }, [getColumns, columnProps, staticColumns]);
+  const columns = getColumns ? getColumns(columnProps as TExtra) : staticColumns ?? [];
 
   const features = {
     ...stockFeatures,
