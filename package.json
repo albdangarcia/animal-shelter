@@ -87,7 +87,7 @@
     "react-dom": "^19.3.0",
     "react-hook-form": "^7.65.0",
     "react-markdown": "^10.1.0",
-    "recharts": "^3.8.1",
+    "recharts": "^3.10.1",
     "remark-gfm": "^4.0.1",
     "sonner": "^2.0.5",
     "use-debounce": "^10.0.4",
