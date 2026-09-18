@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bars3Icon, HeartIcon } from "@heroicons/react/24/outline";
+import { Menu as Bars3Icon, Heart as HeartIcon } from "lucide-react";
 import { IconPaw } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import {

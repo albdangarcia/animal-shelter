@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
-import { XMarkIcon } from "@heroicons/react/24/outline";
+import { X as XMarkIcon } from "lucide-react";
 import type { AnimalImageModel } from "@/prisma/generated/models/AnimalImage";
 import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
 import { PET_PHOTO_COMING_SOON_IMAGE } from "@/app/lib/constants/constants";

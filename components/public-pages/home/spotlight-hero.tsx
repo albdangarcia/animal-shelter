@@ -4,7 +4,7 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import clsx from "clsx";
-import { PhotoIcon } from "@heroicons/react/24/outline";
+import { Image as PhotoIcon } from "lucide-react";
 import type { SpotlightAnimal } from "@/app/lib/data/public.data";
 import { PET_PHOTO_COMING_SOON_IMAGE } from "@/app/lib/constants/constants";
 import { formatWeight } from "@/app/lib/utils/weight-format";
@@ -31,7 +31,7 @@ interface SpotlightHeroProps {
  * image in its fixed-size disc. Weight and badge are still omitted rather than
  * placeholdered, being absolutely positioned or block-level so nothing below
  * them shifts when they are absent. The flick-through thumbnails keep the plain
- * PhotoIcon — the fallback image is illegible at 78px.
+ * photo icon — the fallback image is illegible at 78px.
  */
 const SpotlightHero = ({
   animals,

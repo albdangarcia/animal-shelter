@@ -1,6 +1,6 @@
 "use client";
 
-import { MagnifyingGlassIcon } from "@heroicons/react/16/solid";
+import { Search as MagnifyingGlassIcon } from "lucide-react";
 import { useSearchParams, usePathname, useRouter } from "next/navigation";
 import { useDebouncedCallback } from "use-debounce";
 import { Input } from "@/components/ui/input";
