@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
 import {
@@ -83,16 +83,13 @@ export function AiChat({
         part.state === "approval-requested",
     );
 
-  const send = useCallback(
-    (text: string) => {
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      stickToBottom.current = true;
-      sendMessage({ text: trimmed });
-      setInput("");
-    },
-    [sendMessage],
-  );
+  const send = (text: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    stickToBottom.current = true;
+    sendMessage({ text: trimmed });
+    setInput("");
+  };
 
   // Follow the stream, but stop following the moment the user scrolls up to
   // re-read something — yanking them back to the bottom mid-answer is worse
