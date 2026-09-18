@@ -1,0 +1,101 @@
+.uppy-Dashboard-inner {
+  background-color: var(--background) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius) !important;
+}
+[data-uppy-drag-drop-supported="true"] .uppy-Dashboard-AddFiles {
+  border: 2px dashed var(--border) !important;
+  border-radius: calc(var(--radius) - 4px) !important;
+}
+.uppy-Dashboard-AddFiles-title {
+  color: var(--foreground) !important;
+}
+.uppy-Dashboard-note {
+  color: var(--muted-foreground) !important;
+}
+.uppy-Dashboard-browse {
+  color: var(--primary) !important;
+}
+.uppy-Dashboard-browse:hover,
+.uppy-Dashboard-browse:focus {
+  border-bottom-color: var(--primary) !important;
+}
+.uppy-Dashboard-dropFilesHereHint {
+  background-image: none !important;
+  padding-top: 0 !important;
+  background-color: color-mix(in srgb, var(--accent) 90%, transparent) !important;
+  color: var(--accent-foreground) !important;
+  border: 2px dashed var(--primary) !important;
+  border-radius: calc(var(--radius) - 4px) !important;
+}
+.uppy-Dashboard-Item {
+  border-bottom: 1px solid var(--border) !important;
+}
+.uppy-Dashboard-Item-name {
+  color: var(--foreground) !important;
+}
+.uppy-Dashboard-Item-status {
+  color: var(--muted-foreground) !important;
+}
+.uppy-Dashboard-Item-previewInnerWrap {
+  box-shadow: 0 0 0 1px var(--border) !important;
+}
+.uppy-Dashboard-Item-action {
+  color: var(--muted-foreground) !important;
+}
+.uppy-Dashboard-Item-action:hover {
+  color: var(--foreground) !important;
+}
+.uppy-Dashboard-Item-action--remove {
+  color: var(--destructive) !important;
+}
+.uppy-Dashboard-Item-action--remove:hover {
+  color: color-mix(in srgb, var(--destructive) 80%, transparent) !important;
+}
+.uppy-Dashboard-Item-errorMessage {
+  background-color: var(--destructive) !important;
+  color: #fff !important;
+}
+.uppy-Dashboard-uploadCount {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+}
+.uppy-StatusBar {
+  background-color: var(--background) !important;
+  color: var(--foreground) !important;
+}
+.uppy-StatusBar:before {
+  background-color: var(--border) !important;
+}
+.uppy-StatusBar-statusPrimary,
+.uppy-StatusBar-statusSecondary {
+  color: var(--muted-foreground) !important;
+}
+.uppy-StatusBar.is-waiting .uppy-StatusBar-actionBtn--upload {
+  background-color: var(--primary) !important;
+  color: var(--primary-foreground) !important;
+  border-radius: var(--radius) !important;
+}
+.uppy-StatusBar.is-waiting .uppy-StatusBar-actionBtn--upload:hover {
+  background-color: color-mix(in srgb, var(--primary) 90%, transparent) !important;
+}
+.uppy-StatusBar.is-error .uppy-StatusBar-progress {
+  background-color: var(--destructive) !important;
+}
+.uppy-StatusBar.is-error .uppy-StatusBar-statusIndicator {
+  color: var(--destructive) !important;
+}
+.uppy-Dashboard-serviceMsg {
+  background-color: var(--accent) !important;
+  color: var(--accent-foreground) !important;
+  border-top: 1px solid var(--border) !important;
+  border-bottom: 1px solid var(--border) !important;
+}
+.uppy-DashboardTab-btn {
+  color: var(--muted-foreground) !important;
+  border-radius: var(--radius) !important;
+}
+.uppy-DashboardTab-btn:hover {
+  background-color: var(--accent) !important;
+  color: var(--accent-foreground) !important;
+}
