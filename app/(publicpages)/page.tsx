@@ -5,6 +5,8 @@ import LatestPetsSkeleton from "@/components/public-pages/latest-pets-skeleton";
 import SpotlightHero from "@/components/public-pages/home/spotlight-hero";
 import SpotlightHeroSkeleton from "@/components/public-pages/home/spotlight-hero-skeleton";
 import SpeciesPills from "@/components/public-pages/home/species-pills";
+import SpeciesPillsSkeleton from "@/components/public-pages/home/species-pills-skeleton";
+import BrowseSublineSkeleton from "@/components/public-pages/home/browse-subline-skeleton";
 import HelpPanel from "@/components/public-pages/home/help-panel";
 import { getCachedSession } from "@/app/lib/auth/session";
 import {
@@ -36,12 +38,12 @@ const Page = () => (
           <h2 id="browse-heading" className="mb-1.5 font-display text-[36px]">
             Browse everyone
           </h2>
-          <Suspense fallback={<p className="text-[14.5px]">&nbsp;</p>}>
+          <Suspense fallback={<BrowseSublineSkeleton />}>
             <BrowseSubline />
           </Suspense>
         </div>
 
-        <Suspense fallback={null}>
+        <Suspense fallback={<SpeciesPillsSkeleton />}>
           <SpeciesPillsContent />
         </Suspense>
       </div>
