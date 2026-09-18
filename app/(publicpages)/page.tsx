@@ -3,7 +3,10 @@ import { Suspense } from "react";
 import PetCard from "@/components/public-pages/pets/pet-card";
 import LatestPetsSkeleton from "@/components/public-pages/latest-pets-skeleton";
 import SpotlightHero from "@/components/public-pages/home/spotlight-hero";
+import SpotlightHeroSkeleton from "@/components/public-pages/home/spotlight-hero-skeleton";
 import SpeciesPills from "@/components/public-pages/home/species-pills";
+import SpeciesPillsSkeleton from "@/components/public-pages/home/species-pills-skeleton";
+import BrowseSublineSkeleton from "@/components/public-pages/home/browse-subline-skeleton";
 import HelpPanel from "@/components/public-pages/home/help-panel";
 import { getCachedSession } from "@/app/lib/auth/session";
 import {
@@ -18,7 +21,7 @@ const BROWSE_STRIP_COUNT = 10;
 
 const Page = () => (
   <>
-    <Suspense fallback={<SpotlightBandFallback />}>
+    <Suspense fallback={<SpotlightHeroSkeleton />}>
       <SpotlightBand />
     </Suspense>
 
@@ -35,12 +38,12 @@ const Page = () => (
           <h2 id="browse-heading" className="mb-1.5 font-display text-[36px]">
             Browse everyone
           </h2>
-          <Suspense fallback={<p className="text-[14.5px]">&nbsp;</p>}>
+          <Suspense fallback={<BrowseSublineSkeleton />}>
             <BrowseSubline />
           </Suspense>
         </div>
 
-        <Suspense fallback={null}>
+        <Suspense fallback={<SpeciesPillsSkeleton />}>
           <SpeciesPillsContent />
         </Suspense>
       </div>
@@ -85,18 +88,6 @@ const SpotlightBand = async () => {
     />
   );
 };
-
-/**
- * Holds the band's color and roughly its height while the spotlight query
- * resolves, so the nav doesn't sit on a cream page for a beat and then get a
- * band shoved under it.
- */
-const SpotlightBandFallback = () => (
-  <div
-    aria-hidden="true"
-    className="h-[560px] w-full bg-organic-accent-100 lg:h-[640px]"
-  />
-);
 
 const BrowseSubline = async () => {
   const availableCount = await fetchAvailableAnimalCount();
