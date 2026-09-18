@@ -1,7 +1,7 @@
 "use client";
 
 import { createAnimal, updateAnimal } from "@/app/lib/actions/animal.actions";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
@@ -123,25 +123,17 @@ const AnimalForm = ({
   // its placement is fixed at Unplaced (the action enforces this too).
   const isUnitLocked = animal?.listingStatus === AnimalListingStatus.ARCHIVED;
 
-  const availableStatusOptions = useMemo(() => {
-    if (!isEditMode) {
-      return animalListingStatusOptions.filter(
-        (opt) =>
-          opt.value === AnimalListingStatus.DRAFT ||
-          opt.value === AnimalListingStatus.PUBLISHED,
-      );
-    }
-    if (isStatusLocked) {
-      return animalListingStatusOptions.filter(
-        (opt) => opt.value === animal.listingStatus,
-      );
-    }
-    return animalListingStatusOptions.filter(
-      (opt) =>
-        opt.value === AnimalListingStatus.DRAFT ||
-        opt.value === AnimalListingStatus.PUBLISHED,
-    );
-  }, [isEditMode, isStatusLocked, animal]);
+  const defaultStatusOptions = animalListingStatusOptions.filter(
+    (opt) =>
+      opt.value === AnimalListingStatus.DRAFT ||
+      opt.value === AnimalListingStatus.PUBLISHED,
+  );
+  const availableStatusOptions =
+    isEditMode && isStatusLocked
+      ? animalListingStatusOptions.filter(
+          (opt) => opt.value === animal.listingStatus,
+        )
+      : defaultStatusOptions;
 
   const [isPending, startSubmitTransition] = useTransition();
   const [currentSpeciesId, setCurrentSpeciesId] = useState(

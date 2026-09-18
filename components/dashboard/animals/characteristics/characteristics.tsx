@@ -65,6 +65,8 @@ const AnimalCharacteristicsManager = ({
   const [stagedChanges, setStagedChanges] = useState<Set<string>>(new Set());
   const [openCombobox, setOpenCombobox] = useState(false);
 
+  // Kept memoized (unlike the other derived values in this file):
+  // handleOpenDialog's useCallback depends on this reference
   const initialAssignedIds = useMemo(
     () =>
       new Set(
@@ -76,30 +78,26 @@ const AnimalCharacteristicsManager = ({
   );
 
   // Use stagedChanges if dialog is open, otherwise use initial data
-  const assignedCharacteristics = useMemo(
-    () => animalCharacteristics.filter((char) => stagedChanges.has(char.id)),
-    [animalCharacteristics, stagedChanges],
+  const assignedCharacteristics = animalCharacteristics.filter((char) =>
+    stagedChanges.has(char.id),
   );
 
-  const savedGroupedCharacteristics = useMemo(() => {
-    const savedChars = animalCharacteristics.filter((char) =>
-      initialAssignedIds.has(char.id),
-    );
-    return savedChars.reduce<
-      Record<CharacteristicCategory, CharacteristicWithAssignment[]>
-    >(
-      (acc, char) => {
-        const categoryKey = char.category;
-        (acc[categoryKey] = acc[categoryKey] || []).push(char);
-        return acc;
-      },
-      {} as Record<CharacteristicCategory, CharacteristicWithAssignment[]>,
-    );
-  }, [animalCharacteristics, initialAssignedIds]);
+  const savedChars = animalCharacteristics.filter((char) =>
+    initialAssignedIds.has(char.id),
+  );
+  const savedGroupedCharacteristics = savedChars.reduce<
+    Record<CharacteristicCategory, CharacteristicWithAssignment[]>
+  >(
+    (acc, char) => {
+      const categoryKey = char.category;
+      (acc[categoryKey] = acc[categoryKey] || []).push(char);
+      return acc;
+    },
+    {} as Record<CharacteristicCategory, CharacteristicWithAssignment[]>,
+  );
 
-  const availableForAdding = useMemo(
-    () => animalCharacteristics.filter((char) => !stagedChanges.has(char.id)),
-    [animalCharacteristics, stagedChanges],
+  const availableForAdding = animalCharacteristics.filter(
+    (char) => !stagedChanges.has(char.id),
   );
 
   const handleOpenDialog = useCallback(() => {

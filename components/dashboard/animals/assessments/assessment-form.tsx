@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { useRouter } from "next/navigation";
@@ -119,22 +119,13 @@ export function AssessmentForm({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const initialTemplate = useMemo(() => {
-    if (isEditMode) {
-      return (
-        templates.find((t) => t.key === assessment.template.key) ?? templates[0]
-      );
-    }
-    return (
-      templates.find((t) => t.key === defaultTemplateKey) ?? templates[0]
-    );
-  }, [templates, assessment, isEditMode, defaultTemplateKey]);
+  const initialTemplate = isEditMode
+    ? templates.find((t) => t.key === assessment.template.key) ?? templates[0]
+    : templates.find((t) => t.key === defaultTemplateKey) ?? templates[0];
 
   const [templateKey, setTemplateKey] = useState(initialTemplate?.key ?? "");
-  const template = useMemo(
-    () => templates.find((t) => t.key === templateKey) ?? initialTemplate,
-    [templates, templateKey, initialTemplate],
-  );
+  const template =
+    templates.find((t) => t.key === templateKey) ?? initialTemplate;
 
   const form = useForm<AssessmentFormValues>({
     resolver: template
@@ -160,12 +151,11 @@ export function AssessmentForm({
   const watchedFields = useWatch({ control: form.control, name: "fields" });
   const chosenSignal = useWatch({ control: form.control, name: "signal" });
 
-  const concerningLabels = useMemo(() => {
-    if (!template) return [];
-    return template.fields
-      .filter((f) => isConcerningAnswer(f, watchedFields?.[f.key]?.value))
-      .map((f) => f.label);
-  }, [template, watchedFields]);
+  const concerningLabels = template
+    ? template.fields
+        .filter((f) => isConcerningAnswer(f, watchedFields?.[f.key]?.value))
+        .map((f) => f.label)
+    : [];
 
   const effectiveSignal = deriveSignal(
     chosenSignal ?? AssessmentSignal.NO_CONCERNS,

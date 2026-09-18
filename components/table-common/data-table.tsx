@@ -46,17 +46,11 @@ const DataTable = <TData extends RowData, TExtra = Record<string, never>>({
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const sorting: SortingState = React.useMemo(() => {
-    const sort = searchParams.get("sort");
-    if (!sort) return [];
-    const [id, dir] = sort.split(".");
-    return [{ id, desc: dir === "desc" }];
-  }, [searchParams]);
+  const sort = searchParams.get("sort");
+  const [sortId, sortDir] = sort?.split(".") ?? [];
+  const sorting: SortingState = sort ? [{ id: sortId, desc: sortDir === "desc" }] : [];
 
-  const columns = React.useMemo(() => {
-    if (getColumns) return getColumns(columnProps as TExtra);
-    return staticColumns ?? [];
-  }, [getColumns, columnProps, staticColumns]);
+  const columns = getColumns ? getColumns(columnProps as TExtra) : staticColumns ?? [];
 
   const [rowSelection, setRowSelection] = React.useState({});
   const [columnVisibility, setColumnVisibility] =

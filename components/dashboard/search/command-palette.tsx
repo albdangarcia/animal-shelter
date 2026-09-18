@@ -4,7 +4,6 @@ import {
   Fragment,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -292,12 +291,12 @@ export const CommandPalette = ({
   };
 
   const trimmedQuery = query.trim();
-  const pageMatches = useMemo(() => {
-    const needle = trimmedQuery.toLowerCase();
-    return navItems.filter((item) => item.title.toLowerCase().includes(needle));
-  }, [navItems, trimmedQuery]);
+  const needle = trimmedQuery.toLowerCase();
+  const pageMatches = navItems.filter((item) =>
+    item.title.toLowerCase().includes(needle),
+  );
 
-  const resultGroups = useMemo(() => toResultGroups(results), [results]);
+  const resultGroups = toResultGroups(results);
 
   const hasRows = pageMatches.length > 0 || resultGroups.length > 0;
   // Nothing to say before the user has typed, and no empty flash while the

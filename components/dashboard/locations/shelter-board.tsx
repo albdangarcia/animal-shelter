@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useOptimistic, useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   DndContext,
@@ -437,17 +437,16 @@ export const ShelterBoard = ({ data, canReadFosters }: Props) => {
     useSensor(KeyboardSensor, { coordinateGetter: boardKeyboardCoordinates }),
   );
 
-  const dropTargetLabel = useMemo(() => {
-    const labels = new Map<UniqueIdentifier, string>([
-      [UNPLACED_ID, "Unplaced"],
-    ]);
-    for (const location of locations) {
-      for (const unit of location.units) {
-        labels.set(unit.id, `${unit.name} in ${location.name}`);
-      }
+  const dropTargetLabels = new Map<UniqueIdentifier, string>([
+    [UNPLACED_ID, "Unplaced"],
+  ]);
+  for (const location of locations) {
+    for (const unit of location.units) {
+      dropTargetLabels.set(unit.id, `${unit.name} in ${location.name}`);
     }
-    return (id: UniqueIdentifier) => labels.get(id) ?? "an unknown target";
-  }, [locations]);
+  }
+  const dropTargetLabel = (id: UniqueIdentifier) =>
+    dropTargetLabels.get(id) ?? "an unknown target";
 
   const activeName = (active: Active) =>
     getDragData(active)?.animal.name ?? "the animal";

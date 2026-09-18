@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -69,20 +69,17 @@ export function AnimalCombobox({
   // animals sharing a name are otherwise distinguished by species/age/breed.
   // The rare row that still collides on all of those gets a short cuid
   // fragment appended as the tiebreaker of last resort.
-  const ambiguousIds = useMemo(() => {
-    const groups = new Map<string, string[]>();
-    for (const animal of options) {
-      const key = `${animal.name}|${detailLine(animal)}`;
-      groups.set(key, [...(groups.get(key) ?? []), animal.id]);
+  const comboboxGroups = new Map<string, string[]>();
+  for (const animal of options) {
+    const key = `${animal.name}|${detailLine(animal)}`;
+    comboboxGroups.set(key, [...(comboboxGroups.get(key) ?? []), animal.id]);
+  }
+  const ambiguousIds = new Set<string>();
+  for (const group of comboboxGroups.values()) {
+    if (group.length > 1) {
+      group.forEach((animalId) => ambiguousIds.add(animalId));
     }
-    const ids = new Set<string>();
-    for (const group of groups.values()) {
-      if (group.length > 1) {
-        group.forEach((animalId) => ids.add(animalId));
-      }
-    }
-    return ids;
-  }, [options]);
+  }
 
   const selected = options.find((animal) => animal.id === value);
 
