@@ -2,7 +2,6 @@
 
 import {
   Fragment,
-  useCallback,
   useEffect,
   useRef,
   useState,
@@ -227,14 +226,14 @@ export const CommandPalette = ({
 
   const debouncedSearch = useDebouncedCallback(search, DEBOUNCE_MS);
 
-  const resetSearch = useCallback(() => {
+  const resetSearch = () => {
     debouncedSearch.cancel();
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     setResults(null);
     setIsSearching(false);
     setFailed(false);
-  }, [debouncedSearch]);
+  };
 
   useEffect(() => {
     return () => {
