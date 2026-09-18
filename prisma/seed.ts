@@ -4837,7 +4837,7 @@ async function clearDatabase() {
 
   // Session/Account cascade from User, but clear them explicitly — the
   // next reset's signUpEmail would otherwise collide on account's unique
-  // (issuer, accountId) index. Verification has no FK to User; clear it too.
+  // (providerId, accountId) index. Verification has no FK to User; clear it too.
   await prisma.session.deleteMany();
   await prisma.account.deleteMany();
   await prisma.verification.deleteMany();

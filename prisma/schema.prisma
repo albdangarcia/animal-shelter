@@ -129,11 +129,12 @@ model Session {
 }
 
 /// Better Auth's shape, not Auth.js's — no composite PK, has `password` for
-/// credential accounts (Settled #9). `issuer` + `providerId` are distinct
-/// fields: e.g. `providerId: "credential"`, `issuer: "local:credential"`.
+/// credential accounts. Identity is `(providerId, accountId)`, e.g.
+/// `providerId: "credential"`. Better Auth briefly (1.7.0-1.7.2) identified
+/// accounts by a separate `issuer` field instead; that design was reverted
+/// upstream in 1.7.3, and this schema was migrated back to match.
 model Account {
   id         String @id @default(cuid())
-  issuer     String
   accountId  String @map(name: "account_id")
   providerId String @map(name: "provider_id")
 
@@ -146,13 +147,13 @@ model Account {
   accessTokenExpiresAt  DateTime? @map(name: "access_token_expires_at")
   refreshTokenExpiresAt DateTime? @map(name: "refresh_token_expires_at")
   scope                 String?
-  // Credential sign-in only (Settled #9). Never set for OAuth accounts.
+  // Credential sign-in only. Never set for OAuth accounts.
   password              String?
 
   createdAt DateTime @default(now()) @map(name: "created_at")
   updatedAt DateTime @updatedAt @map(name: "updated_at")
 
-  @@unique([issuer, accountId])
+  @@unique([providerId, accountId])
   @@index([userId])
   @@map(name: "accounts")
 }
