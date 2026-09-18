@@ -2,8 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { togglePetLike } from "@/app/lib/actions/animal.actions";
-import { HeartIcon as OutlineHeartIcon } from "@heroicons/react/24/outline";
-import { HeartIcon as SolidHeartIcon } from "@heroicons/react/20/solid";
+import { IconHeart, IconHeartFilled } from "@tabler/icons-react";
 import clsx from "clsx";
 import LoginPromptModal from "../login-prompt-modal";
 import { toast } from "sonner";
@@ -71,9 +70,9 @@ const LikeButton = ({
         )}
       >
         {isLikedByCurrentUser ? (
-          <SolidHeartIcon className="h-5 w-5 text-primary" />
+          <IconHeartFilled className="h-5 w-5 text-primary" />
         ) : (
-          <OutlineHeartIcon
+          <IconHeart
             className={clsx(
               "h-5 w-5",
               label ? "text-current" : "text-organic-neutral-600",
