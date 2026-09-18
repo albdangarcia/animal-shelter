@@ -531,7 +531,7 @@ const _updateAnimal = async (
   };
 };
 
-const _togglePetLike = async (
+const _togglePetFavorite = async (
   user: SessionUser,
   animalId: string
 ): Promise<{ success: boolean; message: string }> => {
@@ -555,7 +555,7 @@ const _togglePetLike = async (
       return { success: false, message: "Pet not found." };
     }
 
-    const existingLike = await prisma.like.findUnique({
+    const existingFavorite = await prisma.favorite.findUnique({
       where: {
         userId_animalId: {
           userId: personId,
@@ -564,10 +564,10 @@ const _togglePetLike = async (
       },
     });
 
-    if (existingLike) {
-      // Unlike is always allowed, regardless of listing status, so users can
-      // clear pets from their favorites even after the pet becomes unavailable.
-      await prisma.like.delete({
+    if (existingFavorite) {
+      // Unfavoriting is always allowed, regardless of listing status, so users
+      // can clear pets from their favorites even after the pet becomes unavailable.
+      await prisma.favorite.delete({
         where: {
           userId_animalId: {
             userId: personId,
@@ -582,12 +582,13 @@ const _togglePetLike = async (
 
       return { success: true, message: "Removed from favorites." };
     } else {
-      // Creating a new like is only allowed for available pets. This guards
-      // against stale pages or crafted requests trying to like an archived pet.
-      const isLikeableStatus =
+      // Creating a new favorite is only allowed for available pets. This
+      // guards against stale pages or crafted requests trying to favorite an
+      // archived pet.
+      const isFavoritableStatus =
         pet.listingStatus === "PUBLISHED" ||
         pet.listingStatus === "PENDING_ADOPTION";
-      if (!isLikeableStatus) {
+      if (!isFavoritableStatus) {
         return {
           success: false,
           message:
@@ -595,7 +596,7 @@ const _togglePetLike = async (
         };
       }
 
-      await prisma.like.create({
+      await prisma.favorite.create({
         data: {
           userId: personId,
           animalId: validatedAnimalId,
@@ -609,7 +610,7 @@ const _togglePetLike = async (
     }
   } catch (error) {
     console.error(
-      `Database error toggling like for pet ${validatedAnimalId} and user ${personId}:`,
+      `Database error toggling favorite for pet ${validatedAnimalId} and user ${personId}:`,
       error
     );
     return {
@@ -749,4 +750,4 @@ export const updateAnimal = withAuthenticatedUser(
   RequirePermission(AppPermissions.ANIMAL_INFO_MANAGE)(_updateAnimal)
 );
 
-export const togglePetLike = withAuthenticatedUser(_togglePetLike);
+export const toggleAnimalFavorite = withAuthenticatedUser(_togglePetFavorite);

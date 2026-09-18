@@ -1,16 +1,16 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { togglePetLike } from "@/app/lib/actions/animal.actions";
+import { toggleAnimalFavorite } from "@/app/lib/actions/animal.actions";
 import { IconHeart, IconHeartFilled } from "@tabler/icons-react";
 import clsx from "clsx";
 import LoginPromptModal from "../login-prompt-modal";
 import { toast } from "sonner";
 
-interface LikeButtonProps {
+interface FavoriteButtonProps {
   animalId: string;
   currentUserPersonId: string | undefined;
-  isLikedByCurrentUser: boolean;
+  isFavoritedByCurrentUser: boolean;
   /**
    * Renders the control as a labelled secondary pill instead of the icon chip
    * PetCard sits on a photo. Presentational only — the toggle logic, the
@@ -20,23 +20,23 @@ interface LikeButtonProps {
   label?: string;
 }
 
-const LikeButton = ({
+const FavoriteButton = ({
   animalId,
   currentUserPersonId,
-  isLikedByCurrentUser,
+  isFavoritedByCurrentUser,
   label,
-}: LikeButtonProps) => {
+}: FavoriteButtonProps) => {
   const [isPending, startTransition] = useTransition();
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
 
-  const handleLikeClick = () => {
+  const handleFavoriteClick = () => {
     if (!currentUserPersonId) {
       setIsLoginModalOpen(true);
       return;
     }
 
     startTransition(async () => {
-      const result = await togglePetLike(animalId);
+      const result = await toggleAnimalFavorite(animalId);
 
       if (!result.success) {
         toast.error(result.message);
@@ -47,7 +47,7 @@ const LikeButton = ({
   const handleClick = (event: React.MouseEvent) => {
     event.stopPropagation();
     event.preventDefault();
-    handleLikeClick();
+    handleFavoriteClick();
   };
   return (
     <>
@@ -56,9 +56,12 @@ const LikeButton = ({
         onClick={handleClick}
         disabled={isPending}
         aria-label={
-          label ?? (isLikedByCurrentUser ? "Unlike this pet" : "Like this pet")
+          label ??
+          (isFavoritedByCurrentUser
+            ? "Remove from favorites"
+            : "Add to favorites")
         }
-        aria-pressed={isLikedByCurrentUser}
+        aria-pressed={isFavoritedByCurrentUser}
         className={clsx(
           "rounded-full transition-all duration-150 ease-in-out",
           "focus:outline-none focus:ring-2 focus:ring-ring",
@@ -69,7 +72,7 @@ const LikeButton = ({
               "bg-background/85 p-3 shadow-organic-sm hover:bg-background sm:p-1.5",
         )}
       >
-        {isLikedByCurrentUser ? (
+        {isFavoritedByCurrentUser ? (
           <IconHeartFilled className="h-5 w-5 text-primary" />
         ) : (
           <IconHeart
@@ -96,4 +99,4 @@ const LikeButton = ({
   );
 };
 
-export default LikeButton;
+export default FavoriteButton;

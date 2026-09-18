@@ -44,7 +44,7 @@ const LoginPromptModal = ({
   return (
     // Radix portals DialogContent to <body>, but React events still propagate
     // through the React tree — so a click inside the dialog (the X, Cancel, the
-    // backdrop) bubbles up through whatever rendered this modal. LikeButton
+    // backdrop) bubbles up through whatever rendered this modal. FavoriteButton
     // lives inside PetCard's <Link>, so every dismissal was navigating to the
     // pet. Contain it here rather than at each call site: stop click and
     // keydown from escaping the modal's React subtree without preventing
@@ -69,7 +69,7 @@ const LoginPromptModal = ({
               Login Required
             </DialogTitle>
             <DialogDescription>
-              You need to be logged in to like pets and save your favorites.
+              You need to be logged in to save pets to your favorites.
               Please log in or create an account to continue.
             </DialogDescription>
           </DialogHeader>

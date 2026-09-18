@@ -224,7 +224,7 @@ const _fetchSectionCardsAnimalData = async (
         },
         _count: {
           select: {
-            likes: true,
+            favorites: true,
             tasks: {
               where: {
                 status: {

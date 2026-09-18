@@ -8,7 +8,7 @@ import { Image as PhotoIcon } from "lucide-react";
 import type { SpotlightAnimal } from "@/app/lib/data/public.data";
 import { PET_PHOTO_COMING_SOON_IMAGE } from "@/app/lib/constants/constants";
 import { formatWeight } from "@/app/lib/utils/weight-format";
-import LikeButton from "../like-button";
+import FavoriteButton from "../favorite-button";
 
 interface SpotlightHeroProps {
   animals: SpotlightAnimal[];
@@ -255,13 +255,13 @@ const SpotlightHero = ({
               >
                 Meet {animal.name}
               </Link>
-              <LikeButton
+              <FavoriteButton
                 // Keyed so the button resets its pending state when the hero
                 // swaps to a different animal.
                 key={animal.id}
                 animalId={animal.id}
                 currentUserPersonId={currentUserPersonId}
-                isLikedByCurrentUser={animal.isLikedByCurrentUser}
+                isFavoritedByCurrentUser={animal.isFavoritedByCurrentUser}
                 label="Save to favorites"
               />
             </div>

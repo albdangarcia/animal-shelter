@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 // /pets is public. Signed out, the heart on a pet card opens LoginPromptModal.
 //
 // The bug under test: Radix portals the dialog to <body>, but React events
-// still propagate through the React tree — and the heart (LikeButton) sits
+// still propagate through the React tree — and the heart (FavoriteButton) sits
 // inside PetCard's <Link>. So dismissing the modal used to bubble a click into
 // the Link and navigate to the pet's detail page instead of just closing.
 //
@@ -12,7 +12,7 @@ import { expect, test } from "@playwright/test";
 
 const openModal = async (page: import("@playwright/test").Page) => {
   await page.goto("/pets");
-  await page.locator('button[aria-label="Like this pet"]').first().click();
+  await page.locator('button[aria-label="Add to favorites"]').first().click();
   await expect(page.getByRole("dialog")).toBeVisible();
 };
 

@@ -4,7 +4,7 @@ import clsx from "clsx";
 import type { AnimalSize } from "@/prisma/generated/enums";
 import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
 import { PET_PHOTO_COMING_SOON_IMAGE } from "@/app/lib/constants/constants";
-import LikeButton from "../like-button";
+import FavoriteButton from "../favorite-button";
 import { calculateAgeString } from "@/app/lib/utils/date-utils";
 import { formatAnimalSize } from "@/app/lib/utils/enum-formatter";
 
@@ -17,7 +17,7 @@ export interface PetCardData {
   breeds: { name: string }[];
   characteristics: { name: string }[];
   animalImages: { url: string }[];
-  likes?: { userId: string }[];
+  favorites?: { userId: string }[];
 }
 
 interface PetCardProps {
@@ -26,7 +26,7 @@ interface PetCardProps {
   /**
    * When false, the card is rendered greyed-out with an "Unavailable" badge and
    * is NOT clickable through to the detail page (which would 404 for archived
-   * pets). The like button stays interactive so the user can still unlike it.
+   * pets). The favorite button stays interactive so the user can still remove it.
    */
   isAvailable?: boolean;
 }
@@ -36,8 +36,8 @@ const PetCard = ({
   currentUserPersonId,
   isAvailable = true,
 }: PetCardProps) => {
-  const isLikedByCurrentUser = !!(
-    currentUserPersonId && (pet.likes?.length ?? 0) > 0
+  const isFavoritedByCurrentUser = !!(
+    currentUserPersonId && (pet.favorites?.length ?? 0) > 0
   );
   const ageString = calculateAgeString({
     birthDate: pet.birthDate,
@@ -120,10 +120,10 @@ const PetCard = ({
         )}
 
         <div className="absolute top-2 right-2">
-          <LikeButton
+          <FavoriteButton
             animalId={pet.id}
             currentUserPersonId={currentUserPersonId}
-            isLikedByCurrentUser={isLikedByCurrentUser}
+            isFavoritedByCurrentUser={isFavoritedByCurrentUser}
           />
         </div>
       </div>
@@ -170,7 +170,7 @@ const PetCard = ({
 
   // Available pets link through to the detail page; unavailable ones render a
   // non-clickable div (the detail fetcher only serves available pets, so a link
-  // would 404). The like button inside still works in both cases.
+  // would 404). The favorite button inside still works in both cases.
   if (isAvailable) {
     return (
       <Link
