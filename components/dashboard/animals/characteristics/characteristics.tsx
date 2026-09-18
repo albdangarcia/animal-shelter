@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useMemo, useTransition, useCallback } from "react";
+import { useState, useTransition } from "react";
 import { CharacteristicCategory } from "@/prisma/generated/enums";
 import { clsx } from "clsx";
 import { X, PlusCircle, ChevronsUpDown, Loader2 } from "lucide-react";
@@ -65,16 +65,10 @@ const AnimalCharacteristicsManager = ({
   const [stagedChanges, setStagedChanges] = useState<Set<string>>(new Set());
   const [openCombobox, setOpenCombobox] = useState(false);
 
-  // Kept memoized (unlike the other derived values in this file):
-  // handleOpenDialog's useCallback depends on this reference
-  const initialAssignedIds = useMemo(
-    () =>
-      new Set(
-        animalCharacteristics
-          .filter((char) => char.isAssigned)
-          .map((char) => char.id),
-      ),
-    [animalCharacteristics],
+  const initialAssignedIds = new Set(
+    animalCharacteristics
+      .filter((char) => char.isAssigned)
+      .map((char) => char.id),
   );
 
   // Use stagedChanges if dialog is open, otherwise use initial data
@@ -100,17 +94,17 @@ const AnimalCharacteristicsManager = ({
     (char) => !stagedChanges.has(char.id),
   );
 
-  const handleOpenDialog = useCallback(() => {
+  const handleOpenDialog = () => {
     setStagedChanges(new Set(initialAssignedIds));
     setIsDialogOpen(true);
-  }, [initialAssignedIds]);
+  };
 
-  const handleCancel = useCallback(() => {
+  const handleCancel = () => {
     setStagedChanges(new Set());
     setIsDialogOpen(false);
-  }, []);
+  };
 
-  const handleSave = useCallback(() => {
+  const handleSave = () => {
     startTransition(async () => {
       const result = await updateAnimalCharacteristics({
         animalId,
@@ -127,26 +121,20 @@ const AnimalCharacteristicsManager = ({
         toast.error(result.message || "An unexpected error occurred.");
       }
     });
-  }, [animalId, stagedChanges]);
+  };
 
-  const handleTagRemove = useCallback(
-    (charId: string) => {
-      const newStagedChanges = new Set(stagedChanges);
-      newStagedChanges.delete(charId);
-      setStagedChanges(newStagedChanges);
-    },
-    [stagedChanges],
-  );
+  const handleTagRemove = (charId: string) => {
+    const newStagedChanges = new Set(stagedChanges);
+    newStagedChanges.delete(charId);
+    setStagedChanges(newStagedChanges);
+  };
 
-  const handleTagAdd = useCallback(
-    (charId: string) => {
-      const newStagedChanges = new Set(stagedChanges);
-      newStagedChanges.add(charId);
-      setStagedChanges(newStagedChanges);
-      setOpenCombobox(false);
-    },
-    [stagedChanges],
-  );
+  const handleTagAdd = (charId: string) => {
+    const newStagedChanges = new Set(stagedChanges);
+    newStagedChanges.add(charId);
+    setStagedChanges(newStagedChanges);
+    setOpenCombobox(false);
+  };
 
   return (
     <Dialog
