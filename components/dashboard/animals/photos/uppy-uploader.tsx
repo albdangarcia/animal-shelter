@@ -8,6 +8,7 @@ import Dashboard from "@uppy/react/dashboard";
 import XHRUpload from "@uppy/xhr-upload";
 import "@/node_modules/@uppy/core/dist/style.min.css";
 import "@/node_modules/@uppy/dashboard/dist/style.min.css";
+import "./uppy-uploader-overrides.css";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
 
