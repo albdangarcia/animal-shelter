@@ -1,7 +1,7 @@
 import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import { fetchPersonNotes } from "@/app/lib/data/people-directory/person-notes.data";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import PersonNotes from "@/components/dashboard/people-directory/notes/person-notes";
@@ -15,7 +15,7 @@ const Page = async ({ params, searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.PERSONS_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} searchParams={searchParams} />
     </Authorize>

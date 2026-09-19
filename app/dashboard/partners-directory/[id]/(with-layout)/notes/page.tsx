@@ -1,7 +1,7 @@
 import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import { fetchPartnerNotes } from "@/app/lib/data/partners-directory/partner-notes.data";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import PartnerNotes from "@/components/dashboard/partners-directory/notes/partner-notes";
@@ -15,7 +15,7 @@ const Page = async ({ params, searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.PARTNERS_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} searchParams={searchParams} />
     </Authorize>

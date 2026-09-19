@@ -1,7 +1,7 @@
 import PersonForm from "@/components/dashboard/people-directory/person-form";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { SearchParamsType } from "@/app/lib/types";
 
 interface Props {
@@ -12,7 +12,7 @@ const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.PERSONS_MANAGE}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />
     </Authorize>

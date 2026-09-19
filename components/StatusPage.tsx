@@ -3,7 +3,7 @@ import Image from 'next/image';
 import { Button } from '@/components/ui/button'; // Import the Button component
 
 // The props for the component
-interface PageNotFoundOrAccessDeniedProps {
+interface StatusPageProps {
   type: 'notFound' | 'accessDenied' | 'genericError';
   actionButton?: React.ReactNode;
   itemName?: string;
@@ -28,11 +28,10 @@ const errorTypeDetails: Record<'notFound' | 'accessDenied' | 'genericError', Err
     icon: (
       <Image
         src="/icons/giraffe.svg"
-        alt="A giraffe looking surprised."
+        alt=""
         width={80}
         height={80}
         className="mb-5 sm:mb-6 size-20 sm:size-50"
-        aria-hidden="true"
         priority
       />
     ),
@@ -45,34 +44,32 @@ const errorTypeDetails: Record<'notFound' | 'accessDenied' | 'genericError', Err
     icon: (
       <Image
         src="/icons/cobra.svg"
-        alt="A cobra in a defensive stance."
+        alt=""
         width={80}
         height={80}
         className="mb-5 sm:mb-6 size-20 sm:size-50"
-        aria-hidden="true"
         priority
       />
     ),
   },
   genericError: {
-    errorCode: '500',
+    errorCode: 'Error',
     title: 'Something Went Wrong',
-    description: "We've encountered an unexpected server error. Please try refreshing the page or click the button below to try again.",
+    description: "We've encountered an unexpected error. Please try refreshing the page or click the button below to try again.",
     icon: (
-        <Image
+      <Image
         src="/icons/racoon.svg"
-        alt="A racoon looking surprised."
+        alt=""
         width={80}
         height={80}
         className="mb-5 sm:mb-6 size-20 sm:size-50"
-        aria-hidden="true"
         priority
       />
     ),
   },
 };
 
-const PageNotFoundOrAccessDenied = ({ type, actionButton, itemName, redirectUrl, buttonGoTo }: PageNotFoundOrAccessDeniedProps) => {
+const StatusPage = ({ type, actionButton, itemName, redirectUrl, buttonGoTo }: StatusPageProps) => {
   const details = errorTypeDetails[type] || errorTypeDetails.notFound;
   const { errorCode, description, icon } = details;
 
@@ -105,4 +102,4 @@ const PageNotFoundOrAccessDenied = ({ type, actionButton, itemName, redirectUrl,
   );
 };
 
-export default PageNotFoundOrAccessDenied;
+export default StatusPage;

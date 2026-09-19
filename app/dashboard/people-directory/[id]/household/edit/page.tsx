@@ -1,6 +1,6 @@
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { fetchPersonProfileTabData } from "@/app/lib/data/people-directory/people-directory.data";
 import { IDParamType } from "@/app/lib/types";
 import { notFound } from "next/navigation";
@@ -14,7 +14,7 @@ const Page = async ({ params }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.PERSONS_MANAGE}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} />
     </Authorize>

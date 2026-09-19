@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { Ban } from "lucide-react";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import ActionBlockedMessage from "@/components/action-blocked-message";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchFosterPlacementById } from "@/app/lib/data/fosters/fosters.data";
@@ -16,7 +16,7 @@ const Page = async ({ params }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.FOSTERS_MANAGE}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} />
     </Authorize>

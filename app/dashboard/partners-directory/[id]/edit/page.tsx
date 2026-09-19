@@ -1,7 +1,7 @@
 import PartnerForm from "@/components/dashboard/partners-directory/partner-form";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { fetchPartnerForEdit } from "@/app/lib/data/partners-directory/partners-directory.data";
 import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import { notFound } from "next/navigation";
@@ -15,7 +15,7 @@ const Page = async ({ params, searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.PARTNERS_MANAGE}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} searchParams={searchParams} />
     </Authorize>

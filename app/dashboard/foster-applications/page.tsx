@@ -12,7 +12,7 @@ import { getColumns } from "@/components/dashboard/foster-applications/table/fos
 import FosterApplicationsTableToolbar from "@/components/dashboard/foster-applications/table/foster-applications-table-toolbar";
 import { fetchFosterApplications } from "@/app/lib/data/fosters/foster-applications.data";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.FOSTERS_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />
     </Authorize>

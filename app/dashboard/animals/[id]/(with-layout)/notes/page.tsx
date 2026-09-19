@@ -2,7 +2,7 @@ import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import AnimalNotes from "@/components/dashboard/animals/notes/notes";
 import { fetchAnimalNotes } from "@/app/lib/data/animals/animal-note.data";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 
@@ -15,7 +15,7 @@ const Page = async ({ params, searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.ANIMAL_NOTE_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} searchParams={searchParams} />
     </Authorize>

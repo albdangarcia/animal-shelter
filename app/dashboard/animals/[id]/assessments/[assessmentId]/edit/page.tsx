@@ -8,7 +8,7 @@ import {
 import { getActiveTemplate } from "@/app/lib/assessments/templates";
 import { AssessmentForm } from "@/components/dashboard/animals/assessments/assessment-form";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +27,7 @@ const Page = async ({ params }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.ANIMAL_ASSESSMENT_MANAGE}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} />
     </Authorize>

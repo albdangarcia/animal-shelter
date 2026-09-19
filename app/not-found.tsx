@@ -1,7 +1,7 @@
-import PageNotFoundOrAccessDenied from "../components/PageNotFoundOrAccessDenied"
+import StatusPage from "../components/StatusPage"
 
 const Page = () => {
-  return <PageNotFoundOrAccessDenied type="notFound" />
+  return <StatusPage type="notFound" />
 }
 
 export default Page

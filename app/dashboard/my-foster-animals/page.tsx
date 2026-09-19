@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchMyFosterAnimals } from "@/app/lib/data/fosters/my-foster-animals.data";
 import { FosterAnimalCard } from "@/components/dashboard/my-foster-animals/foster-animal-card";
@@ -19,7 +19,7 @@ const Page = async () => {
   return (
     <Authorize
       permission={AppPermissions.MY_FOSTER_ANIMALS_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent />
     </Authorize>

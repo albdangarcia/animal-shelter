@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/card";
 import { fetchAnimalForPhotosPage } from "@/app/lib/data/animals/animal.data";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import AnimalImageGallery from "@/components/dashboard/animals/photos/animal-image-gallery";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
@@ -23,7 +23,7 @@ const Page = async ({ params }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.ANIMAL_INFO_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} />
     </Authorize>

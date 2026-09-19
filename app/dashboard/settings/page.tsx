@@ -7,7 +7,7 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
 import { hasAnyPermission } from "@/app/lib/getFilteredLinks";
 import { SETTINGS_PERMISSIONS } from "@/components/dashboard/nav/nav-links.config";
@@ -66,7 +66,7 @@ const Page = async () => {
     const allowed = await hasAnyPermission(SETTINGS_PERMISSIONS);
 
     if (!allowed) {
-        return <PageNotFoundOrAccessDenied type="accessDenied" />;
+        return <StatusPage type="accessDenied" />;
     }
 
     return <PageContent />;

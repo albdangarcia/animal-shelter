@@ -13,7 +13,7 @@ import AnimalAppTableToolbar from "@/components/dashboard/animals/adoption-appli
 import { fetchAnimalApplications } from "@/app/lib/data/animals/animal-adoption-application.data";
 import { notFound } from "next/navigation";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 
@@ -26,7 +26,7 @@ const Page = async ({ searchParams, params }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.APPLICATIONS_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} params={params} />
     </Authorize>

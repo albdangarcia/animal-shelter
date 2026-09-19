@@ -12,7 +12,7 @@ import { getColumns } from "@/components/dashboard/people-directory/adoption-app
 import { fetchPersonAdoptionApplications } from "@/app/lib/data/people-directory/person-adoption-applications.data";
 import { fetchPersonHasUserAccount } from "@/app/lib/data/people-directory/people-directory.data";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { Button } from "@/components/ui/button";
@@ -27,7 +27,7 @@ const Page = async ({ searchParams, params }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.PERSONS_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} params={params} />
     </Authorize>

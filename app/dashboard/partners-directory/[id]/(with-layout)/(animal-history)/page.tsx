@@ -1,7 +1,7 @@
 import { IDParamType } from "@/app/lib/types";
 import { fetchPartnerAnimalHistory } from "@/app/lib/data/partners-directory/partner-animal-history.data";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import PartnerAnimalHistory from "@/components/dashboard/partners-directory/animal-history/partner-animal-history";
 
@@ -13,7 +13,7 @@ const Page = async ({ params }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.PARTNERS_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} />
     </Authorize>
