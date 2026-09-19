@@ -29,6 +29,7 @@ import {
   isAllowedTransition,
   illegalTransitionMessage,
 } from "../utils/application-status";
+import { formatSingleEnumOption } from "../utils/enum-formatter";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 // Non-terminal statuses block a new application from being submitted, mirroring
@@ -232,7 +233,7 @@ const _withdrawMyFosterApplication = async (
   if (terminalFosterStatuses.includes(application.status)) {
     return {
       success: false,
-      message: `Cannot withdraw application. Its status is currently "${application.status}".`,
+      message: `Cannot withdraw application. Its status is currently "${formatSingleEnumOption(application.status)}".`,
     };
   }
 

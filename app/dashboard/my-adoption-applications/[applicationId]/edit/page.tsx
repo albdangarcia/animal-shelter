@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { MyApplicationForm } from "@/components/dashboard/my-adoption-applications/my-adoption-application-form";
 import { fetchMyAdoptionAppById } from "@/app/lib/data/my-adoption-applications.data";
-import { ApplicationStatus } from "@/prisma/generated/enums";
+import { APPLICANT_EDITABLE_STATUSES } from "@/app/lib/utils/application-status";
 
 interface Props {
   params: Promise<{ applicationId: string }>;
@@ -24,11 +24,10 @@ const Page = async ({ params }: Props) => {
     notFound();
   }
 
-  // PENDING is the only status `updateMyAdoptionApp` accepts. Without this the
-  // form rendered fully editable at every other status and only failed on
-  // submit, with a raw enum name in the message. The read-only view page says
-  // what the status means instead.
-  if (myApplication.status !== ApplicationStatus.PENDING) {
+  // Without this the form rendered fully editable at every other status and
+  // only failed on submit, with a raw enum name in the message. The read-only
+  // view page says what the status means instead.
+  if (!APPLICANT_EDITABLE_STATUSES.includes(myApplication.status)) {
     redirect(`/dashboard/my-adoption-applications/${applicationId}`);
   }
 

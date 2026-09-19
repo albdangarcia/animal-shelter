@@ -11,7 +11,10 @@ import { AdoptionApplicationWithOutcome } from "@/app/lib/data/user-adoption-app
 import { staffUpdateAdoptionApp } from "@/app/lib/actions/adoption-application.actions";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { AnimalForAdoptionApplicationPayload } from "@/app/lib/types";
-import { ALLOWED_APPLICATION_TRANSITIONS } from "@/app/lib/utils/application-status";
+import {
+  ALLOWED_APPLICATION_TRANSITIONS,
+  STAFF_EDITABLE_STATUSES,
+} from "@/app/lib/utils/application-status";
 import {
   formatSingleEnumOption,
   livingSituationOptions,
@@ -69,6 +72,8 @@ export function StaffApplicationUpdateForm({
   const isApproved = application.status === "APPROVED";
   const outcome = application.outcome;
   const isWalkIn = application.applicant?.user === null;
+  const canEditFields =
+    isWalkIn && STAFF_EDITABLE_STATUSES.includes(application.status);
 
   const currentStatus = application.status;
   const allowedNextStatuses = ALLOWED_APPLICATION_TRANSITIONS[currentStatus];
@@ -137,7 +142,7 @@ export function StaffApplicationUpdateForm({
                   </Link>
                 </Button>
               </CardDescription>
-              {isWalkIn && (
+              {canEditFields && (
                 <Button asChild variant="outline" size="sm" className="mt-2 w-fit">
                   <Link
                     href={`/dashboard/adoption-applications/${application.id}/edit?returnTo=/dashboard/adoption-applications/${application.id}/review`}

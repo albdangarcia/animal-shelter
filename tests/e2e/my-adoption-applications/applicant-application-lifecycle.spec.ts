@@ -272,6 +272,28 @@ test("a reviewed application is read-only, and shows why", async ({ page }) => {
   );
 });
 
+// WAITLISTED never returns to PENDING, so an editable waitlisted application
+// would stay editable for good after staff have assessed it. The update action
+// used to accept it while the page and the Edit link (both PENDING-only) hid
+// it, which left a direct POST as the only way in.
+test("a waitlisted application is read-only, like any other reviewed one", async ({
+  page,
+}) => {
+  await listByStatus(page, "WAITLISTED");
+  const href = await applicationHref(page);
+  await openApplication(page, href);
+
+  await expect(
+    page.getByRole("link", { name: "Edit application" }),
+  ).toHaveCount(0);
+
+  await page.goto(`${href}/edit`);
+  await waitForPathname(page, href);
+  await expect(statusMessage(page)).toContainText(
+    MESSAGE_TITLE_BY_STATUS.WAITLISTED,
+  );
+});
+
 test("a rejected applicant cannot apply for that animal again", async ({
   page,
 }) => {

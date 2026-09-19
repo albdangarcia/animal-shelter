@@ -12,6 +12,7 @@ import {
   reactivateMyAdoptionApplication,
   withdrawMyAdoptionApplication,
 } from "@/app/lib/actions/my-adoption-application.actions";
+import { APPLICANT_EDITABLE_STATUSES } from "@/app/lib/utils/application-status";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -86,7 +87,7 @@ export const MyApplicationActions = ({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {status === ApplicationStatus.PENDING && (
+      {APPLICANT_EDITABLE_STATUSES.includes(status) && (
         <Button asChild size="sm">
           <Link
             href={`/dashboard/my-adoption-applications/${applicationId}/edit`}

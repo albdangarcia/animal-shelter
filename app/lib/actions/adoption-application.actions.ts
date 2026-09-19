@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import prisma from "@/app/lib/prisma";
+import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import {
   StaffUpdateAdoptionAppFormSchema,
   StaffAdoptionApplicationFormSchema,
@@ -25,7 +25,9 @@ import { safeInternalPath } from "../utils/safe-redirect";
 import {
   isAllowedTransition,
   illegalTransitionMessage,
+  STAFF_EDITABLE_STATUSES,
 } from "../utils/application-status";
+import { formatSingleEnumOption } from "../utils/enum-formatter";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
@@ -33,6 +35,23 @@ const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
 
 const personApplicationsPath = (personId: string) =>
   `/dashboard/people-directory/${personId}/adoption-applications`;
+
+const REGISTERED_USER_CREATE_MESSAGE =
+  "Cannot submit an application on behalf of a registered user. The person should submit their own application.";
+
+const REGISTERED_USER_EDIT_MESSAGE =
+  "Cannot edit an application belonging to a registered user. The person should manage their own application.";
+
+// Holds the person's row for the rest of the transaction. Creating a `User`
+// inserts a row that references the person, and Postgres takes a FOR KEY SHARE
+// lock on the referenced row for that foreign-key check; FOR UPDATE conflicts
+// with it. So a sign-up that links to this person waits for the staff write to
+// commit instead of landing between the account check and the write — after
+// which the write would have gone through against an application the applicant
+// now owns. A plain read of `person.user` cannot give that guarantee, however
+// close to the write it sits.
+const lockPerson = (tx: TransactionClient, personId: string) =>
+  tx.$queryRaw`SELECT id FROM persons WHERE id = ${personId} FOR UPDATE`;
 
 const _staffUpdateAdoptionApp = async (
   adoptionAppId: string,
@@ -267,11 +286,7 @@ const _staffCreateAdoptionApplication = async (
     return { ok: false, message: "Person not found." };
   }
   if (targetPerson.user !== null) {
-    return {
-      ok: false,
-      message:
-        "Cannot submit an application on behalf of a registered user. The person should submit their own application.",
-    };
+    return { ok: false, message: REGISTERED_USER_CREATE_MESSAGE };
   }
 
   const validatedFields =
@@ -343,6 +358,16 @@ const _staffCreateAdoptionApplication = async (
 
   try {
     await prisma.$transaction(async (tx) => {
+      // The read above gives the friendly error; this one is the guarantee.
+      await lockPerson(tx, validatedPersonId);
+      const linkedUser = await tx.user.findUnique({
+        where: { personId: validatedPersonId },
+        select: { id: true },
+      });
+      if (linkedUser) {
+        throw new ConflictError(REGISTERED_USER_CREATE_MESSAGE);
+      }
+
       const newApplication = await tx.adoptionApplication.create({
         data: {
           applicantId: validatedPersonId,
@@ -374,6 +399,9 @@ const _staffCreateAdoptionApplication = async (
       });
     });
   } catch (error) {
+    if (error instanceof ConflictError) {
+      return { ok: false, message: error.message };
+    }
     console.error("Database Error during staff create application transaction:", error);
     return {
       ok: false,
@@ -437,11 +465,7 @@ const _staffEditPersonApplication = async (
   }
   if (!targetPerson) return { ok: false, message: "Person not found." };
   if (targetPerson.user !== null) {
-    return {
-      ok: false,
-      message:
-        "Cannot edit an application belonging to a registered user. The person should manage their own application.",
-    };
+    return { ok: false, message: REGISTERED_USER_EDIT_MESSAGE };
   }
 
   // Verify the application exists and belongs to this person.
@@ -449,7 +473,7 @@ const _staffEditPersonApplication = async (
   try {
     existingApplication = await prisma.adoptionApplication.findUnique({
       where: { id: validatedAppId, applicantId: validatedPersonId },
-      select: { id: true },
+      select: { status: true },
     });
   } catch (error) {
     console.error("Database error fetching application:", error);
@@ -460,6 +484,12 @@ const _staffEditPersonApplication = async (
   }
   if (!existingApplication) {
     return { ok: false, message: "Application not found." };
+  }
+  if (!STAFF_EDITABLE_STATUSES.includes(existingApplication.status)) {
+    return {
+      ok: false,
+      message: `Cannot edit ${formatSingleEnumOption(existingApplication.status).toLowerCase()} applications.`,
+    };
   }
 
   const validatedFields = MyAdoptionAppFormSchema.safeParse(values);
@@ -477,13 +507,29 @@ const _staffEditPersonApplication = async (
 
   try {
     await prisma.$transaction(async (tx) => {
-      await tx.adoptionApplication.update({
-        where: { id: validatedAppId },
+      // Conditional rather than pre-checked: the reads above only produce the
+      // friendly errors. With the person locked, this statement sees any
+      // account link that committed before us and blocks one that has not, so
+      // a count of 0 means the application stopped being staff-editable
+      // since those reads ran.
+      await lockPerson(tx, validatedPersonId);
+      const { count } = await tx.adoptionApplication.updateMany({
+        where: {
+          id: validatedAppId,
+          applicantId: validatedPersonId,
+          status: { in: STAFF_EDITABLE_STATUSES },
+          applicant: { user: null },
+        },
         data: {
           ...toAdoptionApplicantData(validatedFields.data),
           ...householdProfileData,
         },
       });
+      if (count === 0) {
+        throw new ConflictError(
+          "This application can no longer be edited. It may have moved to a status staff cannot edit, or the person may have just registered an account and now manages it themselves.",
+        );
+      }
 
       await tx.householdProfile.upsert({
         where: { personId: validatedPersonId },
@@ -492,6 +538,9 @@ const _staffEditPersonApplication = async (
       });
     });
   } catch (error) {
+    if (error instanceof ConflictError) {
+      return { ok: false, message: error.message };
+    }
     console.error("Database Error during staff edit application transaction:", error);
     return { ok: false, message: "Database Error: Failed to update application." };
   }

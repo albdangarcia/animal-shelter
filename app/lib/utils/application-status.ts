@@ -70,6 +70,32 @@ export const BLOCKING_APPLICATION_STATUSES: ApplicationStatus[] = [
   ApplicationStatus.ADOPTED,
 ];
 
+// Where an applicant may still change the application they submitted. Only
+// PENDING: once staff have picked it up (REVIEWING) or held it (WAITLISTED)
+// they are deciding on the text as it stands, and WAITLISTED never returns to
+// PENDING, so leaving it editable would leave it editable forever with no
+// signal to the reviewer. An allow-list rather than a deny-list so a status
+// added to the enum is non-editable until someone decides otherwise. The edit
+// page, the Edit link and the update action all read this.
+export const APPLICANT_EDITABLE_STATUSES: ApplicationStatus[] = [
+  ApplicationStatus.PENDING,
+];
+
+// Where staff may still rewrite the applicant snapshot of a walk-in
+// application (one whose person has no account). Broader than the applicant's
+// list because staff are the reviewers — they transcribed the snapshot at
+// intake and correcting it mid-review, or after approval when a phone number
+// turns out to be wrong, is ordinary. The closed-out statuses are excluded:
+// REJECTED and WITHDRAWN are settled decisions, and ADOPTED and CLOSED are
+// records of what happened, so rewriting the snapshot behind them would leave
+// the decision resting on text that no longer says what it said.
+export const STAFF_EDITABLE_STATUSES: ApplicationStatus[] = [
+  ApplicationStatus.PENDING,
+  ApplicationStatus.REVIEWING,
+  ApplicationStatus.WAITLISTED,
+  ApplicationStatus.APPROVED,
+];
+
 // The applicant-visible reason written onto every application the outcome
 // cascade closes. Keyed by all six OutcomeTypes because the cascade runs for
 // every one of them — an animal that was transferred, reunited with its owner
@@ -93,6 +119,20 @@ export const CLOSURE_REASON_BY_OUTCOME: Record<OutcomeType, string> = {
   [OutcomeType.DECEASED]: "This animal is no longer at the shelter.",
   [OutcomeType.EUTHANIZED]: "This animal is no longer at the shelter.",
   [OutcomeType.OTHER]: "This animal is no longer available for adoption.",
+};
+
+// Joins a status list for a refusal message ("pending", "pending or
+// waitlisted"). A message that spells its rule out by hand goes stale the
+// moment someone edits the list it is reporting — which is how the old
+// "PENDING is the only status the action accepts" comment came to be false —
+// so every sentence that names these statuses derives them from the array.
+export const formatStatusList = (statuses: ApplicationStatus[]): string => {
+  const labels = statuses.map((status) =>
+    formatSingleEnumOption(status).toLowerCase(),
+  );
+  return labels.length > 1
+    ? `${labels.slice(0, -1).join(", ")} or ${labels[labels.length - 1]}`
+    : labels.join("");
 };
 
 export const isAllowedTransition = (

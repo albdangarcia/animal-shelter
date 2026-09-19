@@ -18,6 +18,7 @@ import {
   type TaskStatus,
 } from "@/prisma/generated/enums";
 import { NotFoundError } from "../utils/errors";
+import { formatSingleEnumOption } from "../utils/enum-formatter";
 import { applyTaskStatusChange } from "../tasks/apply-task-status-change";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
@@ -352,7 +353,10 @@ const _updateTaskStatus = async (
   revalidatePath(`/dashboard/animals/${animalId}/tasks`);
   revalidatePath(`/dashboard/animal-tasks`);
 
-  return { success: true, message: `Task status updated to ${status}.` };
+  return {
+    success: true,
+    message: `Task status updated to ${formatSingleEnumOption(status)}.`,
+  };
 };
 
 const UpdateAssigneeSchema = z.object({

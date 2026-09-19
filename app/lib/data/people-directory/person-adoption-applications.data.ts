@@ -5,6 +5,7 @@ import {
   currentPageSchema,
 } from "../../zod-schemas/common.schemas";
 import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
+import { STAFF_EDITABLE_STATUSES } from "../../utils/application-status";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import z from "zod";
@@ -155,7 +156,8 @@ const _fetchAdoptionApplicationForEdit = async (
       },
       select: {
         // Only walk-in contacts (no user account) can have their applications
-        // edited by staff — registered users manage their own.
+        // edited by staff — registered users manage their own — and only while
+        // the application is in a status staff may still rewrite.
         applicant: { select: { user: { select: { id: true } } } },
         id: true,
         status: true,
@@ -187,7 +189,11 @@ const _fetchAdoptionApplicationForEdit = async (
       },
     });
 
-    if (!application || application.applicant.user !== null) {
+    if (
+      !application ||
+      application.applicant.user !== null ||
+      !STAFF_EDITABLE_STATUSES.includes(application.status)
+    ) {
       return null;
     }
 

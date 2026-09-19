@@ -5,6 +5,11 @@ import prisma from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { AnimalListingStatus, ApplicationStatus } from "@/prisma/generated/enums";
 import {
+  APPLICANT_EDITABLE_STATUSES,
+  formatStatusList,
+} from "../utils/application-status";
+import { formatSingleEnumOption } from "../utils/enum-formatter";
+import {
   MyAdoptionAppFormSchema,
   toAdoptionApplicantData,
   type MyAdoptionAppFormInput,
@@ -61,20 +66,12 @@ const _updateMyAdoptionApp = async (
     return { ok: false, message: "Adoption Application not found." };
   }
 
-  // Check if the application status prevents modification
-  const nonEditableStatuses: ApplicationStatus[] = [
-    ApplicationStatus.REVIEWING,
-    ApplicationStatus.APPROVED,
-    ApplicationStatus.REJECTED,
-    ApplicationStatus.WITHDRAWN,
-    ApplicationStatus.ADOPTED,
-    ApplicationStatus.CLOSED,
-  ];
-
-  if (nonEditableStatuses.includes(application.status)) {
+  // Allow-list, not a deny-list: a status added to the enum stays
+  // non-editable here until it is added to APPLICANT_EDITABLE_STATUSES.
+  if (!APPLICANT_EDITABLE_STATUSES.includes(application.status)) {
     return {
       ok: false,
-      message: `Cannot update application. Its status is currently "${application.status}". Applications cannot be modified if their status is REVIEWING, APPROVED, REJECTED, WITHDRAWN, ADOPTED, or CLOSED.`,
+      message: `Cannot update application. Its status is currently "${formatSingleEnumOption(application.status)}". Only ${formatStatusList(APPLICANT_EDITABLE_STATUSES)} applications can be modified.`,
     };
   }
 
@@ -100,12 +97,21 @@ const _updateMyAdoptionApp = async (
     ...toHouseholdData(validatedFields.data),
   };
 
-  // Update the adoption application
+  // Conditional rather than pre-checked: the reads above only produce the
+  // friendly errors. A reviewer picking the application up between those reads
+  // and this write would otherwise have their assessment land on text the
+  // applicant rewrote underneath them, with nothing anywhere to say so.
+  let updatedCount: number;
   try {
-    await prisma.adoptionApplication.update({
-      where: { id: validatedApplicationId },
+    const { count } = await prisma.adoptionApplication.updateMany({
+      where: {
+        id: validatedApplicationId,
+        applicantId: user.personId,
+        status: { in: APPLICANT_EDITABLE_STATUSES },
+      },
       data: dataToUpdate,
     });
+    updatedCount = count;
   } catch (error) {
     console.error(
       `Database Error updating adoption application ${validatedApplicationId}:`,
@@ -114,6 +120,14 @@ const _updateMyAdoptionApp = async (
     return {
       ok: false,
       message: "Database Error: Failed to Update Adoption Application.",
+    };
+  }
+
+  if (updatedCount === 0) {
+    return {
+      ok: false,
+      message:
+        "This application can no longer be edited. Its status changed while you were editing it.",
     };
   }
 
@@ -178,7 +192,7 @@ const _withdrawMyAdoptionApplication = async (
   if (nonWithdrawableStatuses.includes(application.status)) {
     return {
       success: false,
-      message: `Cannot withdraw application. Its status is currently "${application.status}".`,
+      message: `Cannot withdraw application. Its status is currently "${formatSingleEnumOption(application.status)}".`,
     };
   }
 
@@ -281,7 +295,7 @@ const _reactivateMyAdoptionApplication = async (
   if (application.status !== ApplicationStatus.WITHDRAWN) {
     return {
       success: false,
-      message: `Cannot reactivate application. Its status is currently "${application.status}".`,
+      message: `Cannot reactivate application. Its status is currently "${formatSingleEnumOption(application.status)}".`,
     };
   }
 
