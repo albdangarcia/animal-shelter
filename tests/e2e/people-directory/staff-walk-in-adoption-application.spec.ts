@@ -376,6 +376,58 @@ test("Edit Application Fields round-trips between review and edit", async ({
   ).toBeVisible();
 });
 
+test("a withdrawn application can no longer be edited by staff", async ({
+  page,
+}) => {
+  await page.goto(
+    `/dashboard/people-directory/${walkInId}/adoption-applications`,
+  );
+  await openRowMenu(page);
+  await page.getByRole("menuitem", { name: "Review" }).click();
+  await waitForPathname(page, REVIEW_PATH);
+
+  const appId = new URL(page.url()).pathname.split("/")[3];
+
+  // REVIEWING -> WITHDRAWN needs a reason.
+  await page.getByLabel("Application Status *", { exact: true }).click();
+  await page.getByRole("option", { name: "Withdrawn" }).click();
+  await fillStable(
+    page.getByPlaceholder("Provide a reason for changing the status..."),
+    "Applicant called to withdraw.",
+  );
+  await page.getByRole("button", { name: "Update Application" }).click();
+  await expect(
+    page.getByText("Application updated successfully."),
+  ).toBeVisible();
+  await waitForPathname(
+    page,
+    `/dashboard/people-directory/${walkInId}/adoption-applications`,
+  );
+
+  // Row menu no longer offers Edit; Review still opens, and its Edit
+  // Application Fields shortcut is gone with it.
+  await openRowMenu(page);
+  await expect(page.getByRole("menuitem", { name: "Edit" })).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "Review" }).click();
+  await waitForPathname(page, REVIEW_PATH);
+  await expect(
+    page.getByText("Applicant Information (Read-Only)"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Edit Application Fields" }),
+  ).toHaveCount(0);
+
+  // The route itself, not just the links to it: a bookmarked URL must not
+  // render a form the action would refuse on submit.
+  await page.goto(`/dashboard/adoption-applications/${appId}/edit`);
+  await expect(
+    page.getByRole("heading", { name: /not found/i }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Save Changes" }),
+  ).toHaveCount(0);
+});
+
 test("a registered user's application 404s on the staff edit route", async ({
   page,
 }) => {

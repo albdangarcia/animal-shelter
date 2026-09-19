@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import Link from "next/link";
 import { PersonAdoptionApplicationPayload } from "@/app/lib/data/people-directory/person-adoption-applications.data";
+import { STAFF_EDITABLE_STATUSES } from "@/app/lib/utils/application-status";
 
 interface DataTableRowActionsProps {
   row: Row<StockFeatures, PersonAdoptionApplicationPayload>;
@@ -52,7 +53,7 @@ export function DataTableRowActions({
         >
           <DropdownMenuItem>Review</DropdownMenuItem>
         </Link>
-        {canEdit && (
+        {canEdit && STAFF_EDITABLE_STATUSES.includes(application.status) && (
           <Link
             href={`/dashboard/adoption-applications/${application.id}/edit?returnTo=/dashboard/people-directory/${personId}/adoption-applications`}
           >
