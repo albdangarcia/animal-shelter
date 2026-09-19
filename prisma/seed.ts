@@ -23,6 +23,7 @@ import {
   CharacteristicCategory,
   OutcomeType,
   LocationType,
+  ApplicationSource,
   ApplicationStatus,
   LivingSituation,
   FosterStatus,
@@ -1871,8 +1872,13 @@ async function seedApplicationWithHistory(opts: {
   transitions: AppTransition[];
   // Who entered it. Omitted for an applicant's own submission; set to the
   // staff member for a walk-in application, which writes the history row
-  // `_staffCreateAdoptionApplication` writes.
+  // `_staffCreateAdoptionApplication` writes and the STAFF `source` it sets.
   submittedByStaffId?: string;
+  // A later rewrite of the applicant snapshot, as the two edit actions record
+  // it. Written into the create rather than as a follow-up update: an extra
+  // `prisma` call here would shift the seeded random stream for everything
+  // after it.
+  lastEdit?: { byPersonId: string; at: Date };
 }): Promise<string> {
   const application = await prisma.adoptionApplication.create({
     data: {
@@ -1883,6 +1889,11 @@ async function seedApplicationWithHistory(opts: {
       reasonForAdoption: opts.reasonForAdoption,
       status: ApplicationStatus.PENDING,
       submittedAt: opts.submittedAt,
+      source: opts.submittedByStaffId
+        ? ApplicationSource.STAFF
+        : ApplicationSource.SELF,
+      lastEditedById: opts.lastEdit?.byPersonId ?? null,
+      lastEditedAt: opts.lastEdit?.at ?? null,
       history: {
         create: {
           status: ApplicationStatus.PENDING,
@@ -4185,14 +4196,21 @@ async function seedRegisteredUserApplicationFixtures() {
   // where reactivate is offered and still fails. Claimed last so it leaves
   // every earlier claim exactly where it was.
   //
-  // A shorter age floor than the other open-stay fixtures: three dates in the
+  // The live one is also where the audit trail has something to show: both are
+  // STAFF-entered, and once the account linked, Jane corrected the snapshot
+  // staff had transcribed for her over the phone. That is the state the review
+  // screen's "edited after submission" notice exists for, and nothing else in
+  // this seed produces it — the two edit actions are the only writers of
+  // `lastEditedBy`, and neither runs during a seed.
+  //
+  // A shorter age floor than the other open-stay fixtures: four dates in the
   // last three weeks are all this needs, and the 45-day pool is spent by the
   // ones above.
   const handOverAnimal = await claimAnimal("WITHDRAWN + PENDING (hand-over)", {
     listingStatus: AnimalListingStatus.PUBLISHED,
     intake: { some: {}, every: { intakeDate: { lte: daysAgo(20) } } },
   });
-  const handOverDates = [daysAgo(18), daysAgo(16), daysAgo(12)];
+  const handOverDates = [daysAgo(18), daysAgo(16), daysAgo(12), daysAgo(9)];
   await seedApplicationWithHistory({
     animalId: handOverAnimal.id,
     applicant,
@@ -4216,6 +4234,7 @@ async function seedRegisteredUserApplicationFixtures() {
     reasonForAdoption: "We talked it over and would like to apply again.",
     householdProfileData: FIXTURE_HOUSEHOLD,
     submittedByStaffId: reviewer.id,
+    lastEdit: { byPersonId: applicant.id, at: handOverDates[3] },
     transitions: [],
   });
 

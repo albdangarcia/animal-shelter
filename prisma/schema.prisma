@@ -40,29 +40,30 @@ model Person {
   fosterProfile    FosterProfile?
   householdProfile HouseholdProfile?
 
-  adoptionApplications     AdoptionApplication[]
-  applicationStatusHistory ApplicationStatusHistory[]
-  fosterApplications       FosterApplication[]
-  fosterApplicationHistory FosterApplicationStatusHistory[]
-  fosterPlacementsPlaced   FosterPlacement[]                @relation("FosterPlacementPlacedBy")
-  fosterPlacementsReturned FosterPlacement[]                @relation("FosterPlacementReturnedBy")
-  favorites                Favorite[]
-  animalNotesAuthored      AnimalNote[]                     @relation("AnimalNoteAuthor")
-  personNotesAuthored      PersonNote[]                     @relation("PersonNoteAuthor")
-  partnerNotesAuthored     PartnerNote[]                    @relation("PartnerNoteAuthor")
-  animalNotesEdited        AnimalNote[]                     @relation("AnimalNoteLastEditor")
-  personNotesEdited        PersonNote[]                     @relation("PersonNoteLastEditor")
-  partnerNotesEdited       PartnerNote[]                    @relation("PartnerNoteLastEditor")
-  noteEvents               NoteEvent[]                      @relation("NoteEventActor")
-  personNotes              PersonNote[]                     @relation("PersonNoteSubject") // notes written ABOUT this person
-  partnerContacts          PartnerContact[]
-  tasksAssigned            Task[]                           @relation("TasksAssignedTo")
-  tasksCreated             Task[]                           @relation("TasksCreatedBy")
-  reclaimedAnimalsAsOwner  Outcome[]                        @relation("ReclaimedByOwner")
-  processedOutcomes        Outcome[]                        @relation("ProcessedOutcome")
-  surrenderedAnimals       Intake[]                         @relation("SurrenderedBy")
-  foundAnimals             Intake[]                         @relation("FoundBy")
-  processedIntakes         Intake[]                         @relation("ProcessedBy")
+  adoptionApplications       AdoptionApplication[]
+  applicationStatusHistory   ApplicationStatusHistory[]
+  fosterApplications         FosterApplication[]
+  fosterApplicationHistory   FosterApplicationStatusHistory[]
+  fosterPlacementsPlaced     FosterPlacement[]                @relation("FosterPlacementPlacedBy")
+  fosterPlacementsReturned   FosterPlacement[]                @relation("FosterPlacementReturnedBy")
+  favorites                  Favorite[]
+  animalNotesAuthored        AnimalNote[]                     @relation("AnimalNoteAuthor")
+  personNotesAuthored        PersonNote[]                     @relation("PersonNoteAuthor")
+  partnerNotesAuthored       PartnerNote[]                    @relation("PartnerNoteAuthor")
+  animalNotesEdited          AnimalNote[]                     @relation("AnimalNoteLastEditor")
+  personNotesEdited          PersonNote[]                     @relation("PersonNoteLastEditor")
+  partnerNotesEdited         PartnerNote[]                    @relation("PartnerNoteLastEditor")
+  adoptionApplicationsEdited AdoptionApplication[]            @relation("AdoptionApplicationLastEditor")
+  noteEvents                 NoteEvent[]                      @relation("NoteEventActor")
+  personNotes                PersonNote[]                     @relation("PersonNoteSubject") // notes written ABOUT this person
+  partnerContacts            PartnerContact[]
+  tasksAssigned              Task[]                           @relation("TasksAssignedTo")
+  tasksCreated               Task[]                           @relation("TasksCreatedBy")
+  reclaimedAnimalsAsOwner    Outcome[]                        @relation("ReclaimedByOwner")
+  processedOutcomes          Outcome[]                        @relation("ProcessedOutcome")
+  surrenderedAnimals         Intake[]                         @relation("SurrenderedBy")
+  foundAnimals               Intake[]                         @relation("FoundBy")
+  processedIntakes           Intake[]                         @relation("ProcessedBy")
 
   // financialTransactions  FinancialTransaction[]
   // processedTransactions  FinancialTransaction[] @relation("ProcessedFinance")
@@ -86,8 +87,15 @@ model User {
   id            String  @id @default(cuid())
   /// Denormalized copy of Person.name — Better Auth requires `name` on the
   /// user table, but the name of record lives on Person. NEVER write this
-  /// directly — kept in sync by a single writer in the person-update action.
+  /// directly — `syncPersonToUser` in app/lib/services/user-person-sync.ts is
+  /// the only writer, and every action that edits a Person's contact details
+  /// goes through it.
   name          String
+  /// Denormalized copy of Person.email, and the address Better Auth matches a
+  /// returning sign-in against. Same single writer as `name`: correcting the
+  /// person's email has to move this too, or they keep signing in under the
+  /// address the shelter no longer has for them. That writer also clears
+  /// `emailVerified` whenever it moves this column — see the note there.
   email         String  @unique
   emailVerified Boolean @default(false) @map(name: "email_verified")
   image         String?
@@ -1027,6 +1035,16 @@ enum ApplicationStatus {
   CLOSED // Closed administratively because the animal left the shelter, not a judgment on the applicant. Never set by staff review; only the outcome cascade sets it, and it is the one status that does not block re-applying.
 }
 
+/// Who entered an application. Informational, for reviewers — never a
+/// permission rule. A staff-entered snapshot was transcribed verbally at
+/// intake, so it is *more* likely to contain errors than one the applicant
+/// typed themselves, and the applicant is the only person who can correct
+/// them; blocking their edit would lock the shelter's typos in.
+enum ApplicationSource {
+  SELF // Submitted by the applicant through the public flow
+  STAFF // Entered by staff on behalf of an applicant, usually a walk-in
+}
+
 /// Represents a user's application to adopt a specific animal. This is a snapshot-in-time record.
 model AdoptionApplication {
   id String @id @default(cuid())
@@ -1055,6 +1073,18 @@ model AdoptionApplication {
   // Status and Workflow Management
   status        ApplicationStatus @default(PENDING)
   internalNotes String? // For persistent staff notes about the application as a whole
+
+  /// Deliberately has no default: every create site must say which flow it
+  /// came from, so a new one cannot silently claim to be self-submitted.
+  source ApplicationSource
+
+  /// Who last rewrote the applicant snapshot, and when. Written by the two
+  /// snapshot-edit paths only — never by the status action — so unlike
+  /// `updatedAt` (which a status change or an internalNotes edit also bumps)
+  /// this is a clean signal that the text a reviewer read has since moved.
+  lastEditedById String?   @map(name: "last_edited_by_id")
+  lastEditedBy   Person?   @relation("AdoptionApplicationLastEditor", fields: [lastEditedById], references: [id], onDelete: SetNull)
+  lastEditedAt   DateTime? @map(name: "last_edited_at")
 
   outcome         Outcome?
   history         ApplicationStatusHistory[]

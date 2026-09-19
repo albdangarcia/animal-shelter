@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import {
   APPLICANT_EMAIL,
   MY_APPLICATIONS_PATH,
+  OTHER_PERSON_EMAIL,
   SEEDED_USER_PASSWORD,
   bootstrapStorageState,
   fillStable,
@@ -378,6 +379,18 @@ test("a closed applicant can apply again once the animal is back", async ({
     page.getByLabel("Reason for Adoption *", { exact: true }),
     reason,
   );
+
+  // Submitted with an address that already belongs to another person. The
+  // email on this form is the contact address for this application and goes
+  // nowhere near the email of record, so a taken one is not a conflict at all
+  // and the application goes through untouched. Using a taken address is the
+  // point: if the apply flow ever starts writing the email of record again,
+  // that write collides here and this test is where it surfaces.
+  await fillStable(
+    page.getByLabel("Email *", { exact: true }),
+    OTHER_PERSON_EMAIL,
+  );
+
   await page.getByRole("button", { name: "Submit Application" }).click();
 
   await expect(
@@ -396,6 +409,11 @@ test("a closed applicant can apply again once the animal is back", async ({
   );
   await expect(page.getByText(reason)).toBeVisible();
 
+  // The contested address reached the application's own snapshot — that column
+  // has no unique index and is the record of what she typed, which is what a
+  // reviewer reads.
+  await expect(page.getByText(OTHER_PERSON_EMAIL)).toBeVisible();
+
   // The apply page hides the form once an application exists, but the form
   // already open in the other tab still posts to the same action — which has
   // to refuse rather than leave her with two.
@@ -408,6 +426,13 @@ test("a closed applicant can apply again once the animal is back", async ({
   await page.goto(`${MY_APPLICATIONS_PATH}?pageSize=20`);
   await expect(page.locator("tbody tr")).toHaveCount(
     Object.values(FIXTURE_COUNT_BY_STATUS).reduce((a, b) => a + b, 0) + 1,
+  );
+
+  // Her own record — and the address she signs in with — keeps what it had.
+  // Applying is not a way to change either one; the account page is.
+  await page.goto("/dashboard/account");
+  await expect(page.getByLabel("Email", { exact: true })).toHaveValue(
+    APPLICANT_EMAIL,
   );
 });
 

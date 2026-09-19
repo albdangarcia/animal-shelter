@@ -74,6 +74,9 @@ export type AdoptionApplicationWithOutcome = Prisma.AdoptionApplicationGetPayloa
         };
       };
     };
+    lastEditedBy: {
+      select: { name: true };
+    };
     history: {
       orderBy: { changedAt: "desc" };
       include: {
@@ -261,6 +264,10 @@ const _fetchAdoptionApplicationById = async (
             },
           },
         },
+        // Who last rewrote the snapshot. The review screen shows it beside
+        // `lastEditedAt` so a reviewer can see the text moved after they read
+        // it; the column is null until someone edits, which is the common case.
+        lastEditedBy: { select: { name: true } },
         history: {
           orderBy: { changedAt: "desc" },
           include: { changedBy: { select: { name: true } } },

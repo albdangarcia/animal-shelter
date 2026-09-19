@@ -13,6 +13,12 @@ export const SEEDED_USER_PASSWORD = "7dJbys5@?tMA";
 export const APPLICANT_EMAIL = "surrenderer1@example.com";
 export const APPLICANT_NAME = "Jane Doe";
 
+// Another seeded person's address, used where a test needs an email that is
+// already taken. "John Smith" is a seeded Person with his own account, and the
+// applicant fixture deliberately leaves him alone, so this stays a real
+// conflict without disturbing anything the fixtures assert.
+export const OTHER_PERSON_EMAIL = "finder1@example.com";
+
 export const MY_APPLICATIONS_PATH = "/dashboard/my-adoption-applications";
 
 export const signIn = async (page: Page, email: string, password: string) => {

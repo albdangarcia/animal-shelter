@@ -11,7 +11,7 @@ description: How to boot this app locally and drive it end-to-end for verificati
   independent of the Playwright e2e docker-compose stack. Check `docker ps` — if it's
   up, `.env`'s `DATABASE_URL` already points at it and `npm run dev` works with no
   extra setup.
-- `npx dotenv -e .env -- prisma migrate status` to confirm the schema is current before
+- `npx dotenv run -f .env -- prisma migrate status` to confirm the schema is current before
   assuming seed data matches the code.
 - Seed data: `admin@example.com` uses `ADMIN_PASSWORD` from `.env`. Every other seeded
   user (`staff1@`, `staff2@`, `volunteer1@`, `surrenderer1@`, `finder1@example.com`,
