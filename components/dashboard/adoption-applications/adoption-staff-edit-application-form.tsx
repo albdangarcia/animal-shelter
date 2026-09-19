@@ -1,7 +1,15 @@
 "use client";
 
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { ArrowRight, Eye, EyeOff, Info, Loader2, Pencil } from "lucide-react";
+import {
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Info,
+  Loader2,
+  Pencil,
+  PencilLine,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTransition } from "react";
@@ -15,6 +23,7 @@ import {
   ALLOWED_APPLICATION_TRANSITIONS,
   STAFF_EDITABLE_STATUSES,
 } from "@/app/lib/utils/application-status";
+import { formatDateToLongString, formatTimeAgo } from "@/app/lib/utils/date-utils";
 import {
   formatSingleEnumOption,
   livingSituationOptions,
@@ -74,6 +83,15 @@ export function StaffApplicationUpdateForm({
   const isWalkIn = application.applicant?.user === null;
   const canEditFields =
     isWalkIn && STAFF_EDITABLE_STATUSES.includes(application.status);
+
+  // The provenance of the text in the read-only cards below. `source` says who
+  // typed it: a staff-entered snapshot was transcribed at intake, so a
+  // mishearing is likelier there than in one the applicant typed themselves.
+  // `lastEditedAt` says it has since changed, which is the thing a reviewer
+  // cannot otherwise find out — `updatedAt` moves for status and internal-notes
+  // edits too, so it never meant this.
+  const enteredByStaff = application.source === "STAFF";
+  const lastEditedAt = application.lastEditedAt;
 
   const currentStatus = application.status;
   const allowedNextStatuses = ALLOWED_APPLICATION_TRANSITIONS[currentStatus];
@@ -282,8 +300,28 @@ export function StaffApplicationUpdateForm({
           <Card>
             <CardHeader>
               <CardTitle>Applicant Information (Read-Only)</CardTitle>
+              <CardDescription>
+                {enteredByStaff
+                  ? "Entered by staff on behalf of the applicant, so these answers were transcribed rather than typed by them."
+                  : "Submitted by the applicant through the adoption form."}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {lastEditedAt && (
+                <Alert>
+                  <PencilLine className="h-4 w-4" />
+                  <AlertTitle>Edited after submission</AlertTitle>
+                  <AlertDescription>
+                    These answers were last changed
+                    {application.lastEditedBy
+                      ? ` by ${application.lastEditedBy.name}`
+                      : ""}{" "}
+                    on {formatDateToLongString(lastEditedAt)} (
+                    {formatTimeAgo(lastEditedAt)}). Anything you read before
+                    then may no longer be what it says now.
+                  </AlertDescription>
+                </Alert>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormItem>
                   <FormLabel>Full Name</FormLabel>

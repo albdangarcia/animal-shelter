@@ -12,7 +12,7 @@ import { authOptions } from "@/auth.options";
 const runId = Date.now().toString(36);
 
 // extension-phone.test.ts disconnects in its single test's `finally`; this file
-// has four tests, so that pattern only closes the pool when the last one is
+// has several tests, so that pattern only closes the pool when the last one is
 // reached. A throw outside any `try` — the setup at the top of a test, say —
 // would leave the pg pool holding the event loop open, and node:test does not
 // force-exit, so `npm run test:db` would hang instead of reporting the failure.
@@ -197,5 +197,66 @@ test("User.email is lowercased with no help from the call site", async () => {
   } finally {
     await prisma.user.delete({ where: { id: user.id } });
     await prisma.person.delete({ where: { id: person.id } });
+  }
+});
+
+// The hook's fallback creates a Person on an email it has just proven may be
+// taken: the verified branch links only when the matched Person has no account,
+// so a match that already has one falls straight through to the create with
+// that same address. Uncaught, the unique-index violation is a 500 and the
+// person signing up has no route in at all.
+//
+// Reachable when a shelter record carries the wrong email — staff put Bob's
+// address on Jane's row while Jane's own account keeps hers — and Bob then
+// signs up. Better Auth finds no User with Bob's address so it calls
+// createUser, the hook matches Jane's Person, skips the link, and collides.
+test("the sign-up hook reports the collision its fallback create can hit", async () => {
+  const contested = `Contested.${runId}@Example.com`;
+
+  const owner = await prisma.person.create({
+    data: { name: "Record Owner", email: contested },
+    select: { id: true },
+  });
+  const ownersAccount = await prisma.user.create({
+    data: {
+      name: "Record Owner",
+      email: `owner.${runId}@example.com`,
+      personId: owner.id,
+    },
+    select: { id: true },
+  });
+
+  try {
+    const before = authOptions(prisma).databaseHooks.user.create.before;
+    await assert.rejects(
+      () =>
+        before({
+          id: "unused",
+          name: "Rightful Owner",
+          email: contested,
+          emailVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }),
+      (error: unknown) => {
+        const named = error as { statusCode?: number; message?: string };
+        assert.equal(named.statusCode, 409);
+        assert.match(String(named.message), /already recorded on a shelter record/);
+        // The address is in the message: whoever reads the failure has to be
+        // able to tell the shelter which record to look at.
+        assert.ok(String(named.message).includes(contested.toLowerCase()));
+        return true;
+      },
+    );
+
+    // The collision must leave nothing behind — no half-made second Person for
+    // the same address.
+    const rows = await prisma.person.count({
+      where: { email: contested.toLowerCase() },
+    });
+    assert.equal(rows, 1);
+  } finally {
+    await prisma.user.delete({ where: { id: ownersAccount.id } });
+    await prisma.person.delete({ where: { id: owner.id } });
   }
 });

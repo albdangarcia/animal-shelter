@@ -17,7 +17,11 @@ import { toHouseholdData } from "../zod-schemas/household-profile.schemas";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { ApplicationStatus, AnimalListingStatus } from "@/prisma/generated/enums";
+import {
+  ApplicationSource,
+  ApplicationStatus,
+  AnimalListingStatus,
+} from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
 import { getCachedSession } from "@/app/lib/auth/session";
 import { ConflictError } from "../utils/errors";
@@ -399,6 +403,11 @@ const _staffCreateAdoptionApplication = async (
           ...toAdoptionApplicantData(validatedFields.data),
           ...householdProfileData,
           status: ApplicationStatus.PENDING,
+          // this snapshot was transcribed at
+          // intake rather than typed by the applicant, so it is the one more
+          // likely to hold a mishearing. Never a permission rule — the
+          // applicant may still correct it once they have an account.
+          source: ApplicationSource.STAFF,
         },
         select: { id: true },
       });
@@ -547,6 +556,12 @@ const _staffEditPersonApplication = async (
         data: {
           ...toAdoptionApplicantData(validatedFields.data),
           ...householdProfileData,
+          // The other of the two snapshot-edit paths. Recorded here for the
+          // same reason as on the applicant's own edit: a reviewer needs to
+          // know the text moved after they read it, and `updatedAt` also moves
+          // for a status change.
+          lastEditedById: session.user.personId,
+          lastEditedAt: new Date(),
         },
       });
       if (count === 0) {

@@ -3,7 +3,11 @@
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import prisma from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
-import { AnimalListingStatus, ApplicationStatus } from "@/prisma/generated/enums";
+import {
+  AnimalListingStatus,
+  ApplicationSource,
+  ApplicationStatus,
+} from "@/prisma/generated/enums";
 import {
   APPLICANT_EDITABLE_STATUSES,
   BLOCKING_APPLICATION_STATUSES,
@@ -22,7 +26,7 @@ import { SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { ActionResult } from "../types";
 import { z } from "zod";
 import { isOwnedByUser } from "../auth/ownership";
-import { Prisma } from "@/prisma/generated/client";
+import { syncPersonToUser } from "../services/user-person-sync";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 type MyAdoptionAppResult = FormResult<MyAdoptionAppFormInput>;
@@ -95,9 +99,17 @@ const _updateMyAdoptionApp = async (
   // The two shared mappers cover every column on the row between them, so the
   // string -> boolean/number/array conversions are no longer written out by
   // hand here (and identically again in the staff actions).
+  //
+  // `lastEditedBy`/`lastEditedAt` ride along with them because this is one of
+  // the only two paths that rewrites the snapshot. `updatedAt` cannot say this:
+  // a status change or an internal-notes edit bumps that too, so a reviewer
+  // reading it has no way to tell whether the text in front of them moved after
+  // they read it.
   const dataToUpdate = {
     ...toAdoptionApplicantData(validatedFields.data),
     ...toHouseholdData(validatedFields.data),
+    lastEditedById: user.personId,
+    lastEditedAt: new Date(),
   };
 
   // Conditional rather than pre-checked: the reads above only produce the
@@ -396,9 +408,10 @@ const _createMyAdoptionApp = async (
     };
   }
 
+  // No `applicantEmail`: it belongs to the application snapshot (the shared
+  // mapper puts it there) and deliberately never reaches the Person sync below.
   const {
     applicantName,
-    applicantEmail,
     applicantPhone,
     applicantAddressLine1,
     applicantAddressLine2,
@@ -417,6 +430,7 @@ const _createMyAdoptionApp = async (
     ...householdProfileData,
     applicantId: user.personId,
     animalId: validatedAnimalId,
+    source: ApplicationSource.SELF,
   };
 
   try {
@@ -471,37 +485,44 @@ const _createMyAdoptionApp = async (
           update: householdProfileData,
         });
 
-        // Best-effort sync of contact info back to Person. If the email
-        // collides with another Person's record, skip the sync rather than
-        // failing the whole application.
-        try {
-          await tx.person.update({
-            where: { id: user.personId },
-            data: {
-              name: applicantName,
-              email: applicantEmail || null,
-              phone: applicantPhone,
-              address: applicantAddressLine2
-                ? `${applicantAddressLine1}, ${applicantAddressLine2}`
-                : applicantAddressLine1,
-              city: applicantCity,
-              state: applicantState,
-              zipCode: applicantZipCode,
-            },
-          });
-        } catch (error) {
-          if (
-            error instanceof Prisma.PrismaClientKnownRequestError &&
-            error.code === "P2002"
-          ) {
-            console.warn(
-              "Skipped syncing Person contact info due to email conflict.",
-              error,
-            );
-          } else {
-            throw error;
-          }
-        }
+        // Sync the contact details back onto Person, so the shelter's record
+        // reflects what the applicant last told it.
+        //
+        // Every column here except one. The email the applicant types is the
+        // contact address *for this application* and stays on the application
+        // snapshot, which is what a reviewer reads. It deliberately does not
+        // become the email of record, because the email of record is also the
+        // address the account signs in under: most accounts here arrive
+        // through a provider, so moving it would repoint the login — and cost
+        // the account its verified status — from a form that looks nothing
+        // like account settings. Someone changing the address the shelter
+        // holds for them does it on their profile, where that is the stated
+        // purpose of the page.
+        //
+        // Leaving it out is also what keeps this transaction safe. `email` is
+        // the only one of these columns behind a unique index, so it was the
+        // only one that could collide with another record; a statement that
+        // fails inside a Postgres transaction aborts the whole transaction,
+        // which would have taken the application and the household profile
+        // down with a contact-detail sync.
+        await tx.person.update({
+          where: { id: user.personId },
+          data: {
+            name: applicantName,
+            phone: applicantPhone,
+            address: applicantAddressLine2
+              ? `${applicantAddressLine1}, ${applicantAddressLine2}`
+              : applicantAddressLine1,
+            city: applicantCity,
+            state: applicantState,
+            zipCode: applicantZipCode,
+          },
+        });
+
+        // The name still has to reach `User`: it is denormalized there and the
+        // row above just moved it. No `email` key, so the login address is
+        // left exactly as it was.
+        await syncPersonToUser(tx, user.personId, { name: applicantName });
       },
       {
         isolationLevel: "Serializable",

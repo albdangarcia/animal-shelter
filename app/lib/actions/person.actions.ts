@@ -21,6 +21,10 @@ import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import { safeInternalPath } from "../utils/safe-redirect";
 import { normalizePhone } from "../utils/phone";
+import {
+  findEmailConflict,
+  syncPersonToUser,
+} from "../services/user-person-sync";
 
 const PEOPLE_DIRECTORY_PATH = "/dashboard/people-directory";
 
@@ -208,10 +212,76 @@ const _updatePerson = async (
     if (duplicate) return duplicate;
   }
 
+  // The email of record is also the address the account signs in under, so for
+  // a person who has one this field is not staff's to move. Credential users
+  // authenticate by that address and there is no self-serve sign-up or
+  // password reset to recover through, so a staff edit here is a lockout, not
+  // an inconvenience. The person changes it from their own profile.
+  //
+  // Only the email. The rest of the record stays staff-editable, which is the
+  // same line `_staffEditPersonApplication` and `_updateStaffHouseholdProfile`
+  // already draw around a registered user.
+  let existingPerson;
   try {
-    await prisma.person.update({
+    existingPerson = await prisma.person.findUnique({
       where: { id: parsedId.data },
-      data: toPersonData(validatedFields.data),
+      select: { email: true, user: { select: { id: true } } },
+    });
+  } catch (error) {
+    console.error("Database Error reading person before update:", error);
+    return { ok: false, message: "Database Error: Failed to update person." };
+  }
+  if (!existingPerson) {
+    return { ok: false, message: "Person not found." };
+  }
+
+  // Stored addresses are always lowercase (the normalization extension), so
+  // this compares addresses rather than how they were typed.
+  const requestedEmail = validatedFields.data.email?.trim().toLowerCase() || null;
+  if (existingPerson.user && requestedEmail !== existingPerson.email) {
+    return {
+      ok: false,
+      message: "Failed to update person.",
+      fieldErrors: {
+        email: [
+          "This person has an account and signs in with this address. They can change it from their own profile.",
+        ],
+      },
+    };
+  }
+
+  // `findDuplicate` only ever looks at `Person`, and this action now moves the
+  // login address too. An address can sit on a `User` and on no `Person` — a
+  // cleared person email leaves one behind, and rows written before there was
+  // a single writer drifted on their own — in which case the write below fails
+  // on `users.email` and the directory holds nobody to point the editor at.
+  // Named here so the message says where the address actually is.
+  if (
+    (await findEmailConflict(prisma, validatedFields.data.email, parsedId.data)) ===
+    "user"
+  ) {
+    return {
+      ok: false,
+      message: "Failed to update person.",
+      fieldErrors: {
+        email: ["This email is already the sign-in address for another account."],
+      },
+    };
+  }
+
+  try {
+    // One transaction, so the two rows cannot end up disagreeing because the
+    // second write failed. A duplicate email fails whichever statement reaches
+    // it first — `Person.email` and `User.email` are both unique — and either
+    // way the whole thing rolls back. The check above names the common case;
+    // this one is the race that slipped between it and the write, so it says
+    // only what it can still be sure of.
+    await prisma.$transaction(async (tx) => {
+      await tx.person.update({
+        where: { id: parsedId.data },
+        data: toPersonData(validatedFields.data),
+      });
+      await syncPersonToUser(tx, parsedId.data, validatedFields.data);
     });
   } catch (error) {
     if (
@@ -221,7 +291,7 @@ const _updatePerson = async (
       return {
         ok: false,
         message: "Failed to update person.",
-        fieldErrors: { email: ["A person with this email already exists."] },
+        fieldErrors: { email: ["This email is already in use."] },
       };
     }
     console.error("Database Error updating person:", error);
@@ -258,18 +328,49 @@ const _updateMyProfile = async (
     };
   }
 
+  // Both tables are asked, because this writes to both and either unique index
+  // can be the one that refuses. Saying which it is keeps the message useful:
+  // "no such person" is what someone sees when they go looking for a shelter
+  // record that holds an address only an account holds.
+  const conflict = await findEmailConflict(
+    prisma,
+    validatedFields.data.email,
+    personId,
+  );
+  if (conflict) {
+    return {
+      ok: false,
+      message: "Failed to update profile.",
+      fieldErrors: {
+        email: [
+          conflict === "person"
+            ? "A person with this email already exists."
+            : "This email is already the sign-in address for another account.",
+        ],
+      },
+    };
+  }
+
   try {
-    await prisma.person.update({
-      where: { id: personId },
-      data: toPersonData(validatedFields.data),
+    await prisma.$transaction(async (tx) => {
+      await tx.person.update({
+        where: { id: personId },
+        data: toPersonData(validatedFields.data),
+      });
+      // Always a no-op-or-one-row here: this action only runs for a signed-in
+      // person, so the account exists. Shared with the staff path anyway, so
+      // there is one writer rather than two that can drift.
+      await syncPersonToUser(tx, personId, validatedFields.data);
     });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
+        // The pre-check above covers the ordinary case; reaching here means
+        // the address was claimed in between, so this says only that much.
         return {
           ok: false,
           message: "Failed to update profile.",
-          fieldErrors: { email: ["A person with this email already exists."] },
+          fieldErrors: { email: ["This email is already in use."] },
         };
       }
       if (error.code === "P2025") {

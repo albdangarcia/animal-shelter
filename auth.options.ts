@@ -1,5 +1,7 @@
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { APIError } from "better-auth";
 import type { BetterAuthOptions, User } from "better-auth";
+import { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
 
 type ExtendedPrismaClient = typeof prisma;
@@ -50,14 +52,42 @@ function makeLinkOrCreatePerson(db: ExtendedPrismaClient, trustProvidedEmails: b
       }
     }
 
-    const person = await db.person.create({
-      data: { name: user.name, email },
-    });
-    return {
-      data: isProviderVerified
-        ? { personId: person.id, emailVerified: true }
-        : { personId: person.id },
-    };
+    // This create can hand `Person.email @unique` an address a Person already
+    // holds, by either route into it: the lookup above matched but the link
+    // was skipped because that Person already has an account, or the lookup
+    // never ran at all because the email is not provider-verified. It happens
+    // when a shelter record carries the wrong email — staff mistype one
+    // person's address onto another's row — and the person whose address it
+    // really is tries to sign up.
+    //
+    // Uncaught, the P2002 leaves better-auth with a 500 and that person with no
+    // way to register at all. A named 409 at least says what went wrong. It
+    // says only that the address is on a record, not whose or whether that
+    // record has an account of its own: on the unverified path nothing was
+    // read, so the hook does not know. It is not a repair either — the two
+    // records still have to be sorted out by someone who can see both, and
+    // inventing a second Person here would only hide the collision.
+    try {
+      const person = await db.person.create({
+        data: { name: user.name, email },
+      });
+      return {
+        data: isProviderVerified
+          ? { personId: person.id, emailVerified: true }
+          : { personId: person.id },
+      };
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        throw new APIError("CONFLICT", {
+          code: "EMAIL_ON_ANOTHER_SHELTER_RECORD",
+          message: `This email address (${email}) is already recorded on a shelter record. Please contact the shelter so it can be corrected.`,
+        });
+      }
+      throw error;
+    }
   };
 }
 
