@@ -375,7 +375,7 @@ export const fetchPublicPagePetById = async (id: string) => {
   // Validate the id at runtime
   const parsedId = cuidSchema.safeParse(id);
   if (!parsedId.success) {
-    throw new Error("Invalid Pet ID format.");
+    return null;
   }
   // Pet ID is valid, extract the data
   const validatedId = parsedId.data;

@@ -41,7 +41,7 @@ const errorTypeDetails: Record<'notFound' | 'accessDenied' | 'genericError', Err
     errorCode: '403',
     title: 'Access Denied',
     description:
-      'You do not have the necessary permissions to view this page. If you believe this is an error, please contact an administrator or try signing in.',
+      'You do not have the necessary permissions to view this page. If you believe this is an error, please contact an administrator.',
     icon: (
       <Image
         src="/icons/cobra.svg"

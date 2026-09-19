@@ -125,7 +125,7 @@ const _fetchFosterApplicationById = async (
 ): Promise<MyFosterApplicationPayload | null> => {
   const parsedId = cuidSchema.safeParse(id);
   if (!parsedId.success) {
-    throw new Error("Invalid Foster Application ID format.");
+    return null;
   }
 
   try {
