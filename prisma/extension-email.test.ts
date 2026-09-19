@@ -1,0 +1,201 @@
+// Same reasoning as extension-phone.test.ts for living under prisma/ and
+// running via `npm run test:db`.
+//
+// Every write below goes through a raw client call that never lowercases. That
+// is the whole point: it proves the extension, not the call sites.
+import { after, test } from "node:test";
+import assert from "node:assert/strict";
+import prisma from "@/app/lib/prisma";
+import { authOptions } from "@/auth.options";
+
+// Unique per run so a crashed earlier run cannot collide with this one.
+const runId = Date.now().toString(36);
+
+// extension-phone.test.ts disconnects in its single test's `finally`; this file
+// has four tests, so that pattern only closes the pool when the last one is
+// reached. A throw outside any `try` — the setup at the top of a test, say —
+// would leave the pg pool holding the event loop open, and node:test does not
+// force-exit, so `npm run test:db` would hang instead of reporting the failure.
+after(() => prisma.$disconnect());
+
+test("Person.email is lowercased with no help from the call site", async (t) => {
+  const email = `Extension.Probe.${runId}@Example.com`;
+  const person = await prisma.person.create({
+    data: { name: "Email Probe", email },
+    select: { id: true, email: true },
+  });
+
+  try {
+    await t.test("create", () => {
+      assert.equal(person.email, email.toLowerCase());
+    });
+
+    await t.test("update with the { set: ... } wrapper", async () => {
+      const updated = await prisma.person.update({
+        where: { id: person.id },
+        data: { email: { set: `Renamed.${runId}@Example.com` } },
+        select: { email: true },
+      });
+      assert.equal(updated.email, `renamed.${runId}@example.com`);
+    });
+
+    await t.test("tx.person.update inside $transaction", async () => {
+      await prisma.$transaction(async (tx) => {
+        await tx.person.update({
+          where: { id: person.id },
+          data: { email: `InTx.${runId}@Example.com` },
+        });
+      });
+
+      const refetched = await prisma.person.findUniqueOrThrow({
+        where: { id: person.id },
+        select: { email: true },
+      });
+      assert.equal(refetched.email, `intx.${runId}@example.com`);
+    });
+
+    await t.test("an unrelated edit does not touch the column", async () => {
+      const renamed = await prisma.person.update({
+        where: { id: person.id },
+        data: { name: "Email Probe (renamed)" },
+        select: { email: true },
+      });
+      assert.equal(renamed.email, `intx.${runId}@example.com`);
+    });
+
+    await t.test("clearing email preserves null", async () => {
+      const cleared = await prisma.person.update({
+        where: { id: person.id },
+        data: { email: null },
+        select: { email: true },
+      });
+      assert.equal(cleared.email, null);
+    });
+
+    // The hole the extension closes: the unique index alone would have let a
+    // case-variant twin of the same human in.
+    await t.test("a case-variant of an existing email is rejected", async () => {
+      await prisma.person.update({
+        where: { id: person.id },
+        data: { email: `Twin.${runId}@Example.com` },
+      });
+      await assert.rejects(
+        prisma.person.create({
+          data: { name: "Twin", email: `TWIN.${runId}@example.com` },
+        }),
+        { code: "P2002" },
+      );
+    });
+  } finally {
+    await prisma.person.delete({ where: { id: person.id } });
+  }
+});
+
+// The reported defect end to end: staff record a mixed-case address, the
+// account is created with the provider's lowercase one, and the account must
+// link to the existing Person rather than mint a second one.
+test("the sign-up hook links a Person recorded with a mixed-case email", async () => {
+  const staffTyped = `Link.Probe.${runId}@Example.com`;
+  const providerReported = staffTyped.toLowerCase();
+
+  const existing = await prisma.person.create({
+    data: { name: "Link Probe", email: staffTyped },
+    select: { id: true },
+  });
+
+  try {
+    const before = authOptions(prisma).databaseHooks.user.create.before;
+    const result = await before({
+      id: "unused",
+      name: "Link Probe",
+      email: providerReported,
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    assert.deepEqual(result, {
+      data: { personId: existing.id, emailVerified: true },
+    });
+
+    const notes = await prisma.personNote.findMany({
+      where: { personId: existing.id },
+      select: { content: true },
+    });
+    assert.equal(notes.length, 1);
+    assert.match(notes[0].content, /Auto-linked on account creation/);
+
+    const rows = await prisma.person.count({ where: { email: providerReported } });
+    assert.equal(rows, 1);
+  } finally {
+    await prisma.personNote.deleteMany({ where: { personId: existing.id } });
+    await prisma.person.delete({ where: { id: existing.id } });
+  }
+});
+
+// The hook must not depend on better-auth having lowercased the email first:
+// the extension normalizes writes only, so the lookup is case-insensitive
+// purely because the hook lowercases its own input. Feeding it a mixed-case
+// address directly is what fails if that line is ever removed as redundant.
+test("the sign-up hook lowercases its own input rather than trusting the caller", async () => {
+  const mixedCase = `Hook.Probe.${runId}@Example.com`;
+
+  const existing = await prisma.person.create({
+    data: { name: "Hook Probe", email: mixedCase },
+    select: { id: true },
+  });
+
+  try {
+    const before = authOptions(prisma).databaseHooks.user.create.before;
+    const result = await before({
+      id: "unused",
+      name: "Hook Probe",
+      email: mixedCase,
+      emailVerified: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    assert.deepEqual(result, {
+      data: { personId: existing.id, emailVerified: true },
+    });
+
+    const [note] = await prisma.personNote.findMany({
+      where: { personId: existing.id },
+      select: { content: true },
+    });
+    assert.ok(note.content.includes(`(${mixedCase.toLowerCase()})`));
+  } finally {
+    await prisma.personNote.deleteMany({ where: { personId: existing.id } });
+    await prisma.person.delete({ where: { id: existing.id } });
+  }
+});
+
+test("User.email is lowercased with no help from the call site", async () => {
+  const person = await prisma.person.create({
+    data: { name: "User Email Probe" },
+    select: { id: true },
+  });
+  const user = await prisma.user.create({
+    data: {
+      name: "User Email Probe",
+      email: `User.Probe.${runId}@Example.com`,
+      personId: person.id,
+    },
+    select: { id: true, email: true },
+  });
+
+  try {
+    assert.equal(user.email, `user.probe.${runId}@example.com`);
+
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { email: `Changed.${runId}@Example.com` },
+      select: { email: true },
+    });
+    assert.equal(updated.email, `changed.${runId}@example.com`);
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } });
+    await prisma.person.delete({ where: { id: person.id } });
+  }
+});

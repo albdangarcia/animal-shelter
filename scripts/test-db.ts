@@ -1,9 +1,11 @@
 /**
  * `npm run test:db` — runs the Prisma query-extension tests
- * (`prisma/**​/*.test.ts`, currently just `extension-phone.test.ts`).
+ * (`prisma/**​/*.test.ts`, e.g. `extension-phone.test.ts` and
+ * `extension-email.test.ts`).
  *
- * Those tests need a real Postgres: they create, mutate, and delete a `Person`
- * row to prove the phone-normalization extension fires on raw client calls.
+ * Those tests need a real Postgres: they create, mutate, and delete `Person`
+ * (and `User`) rows to prove the normalization extensions fire on raw client
+ * calls.
  * This script points them at the throwaway docker-compose container on port
  * 55432 — the same database `npm run e2e` provisions — and NEVER the dev
  * database. The previous script had a `dotenv -e .env.local -e .env.development

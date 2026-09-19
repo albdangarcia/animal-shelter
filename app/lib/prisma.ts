@@ -3,13 +3,16 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
 import { resolveDatabaseUrl } from "@/app/lib/db-url";
 import { phoneNormalizationExtension } from "@/app/lib/prisma-extensions/phone-normalization";
+import { emailNormalizationExtension } from "@/app/lib/prisma-extensions/email-normalization";
 
 const connectionString = resolveDatabaseUrl("pooled");
 
 const prismaClientSingleton = () => {
   const pool = new pg.Pool({ connectionString });
   const adapter = new PrismaPg(pool);
-  return new PrismaClient({ adapter }).$extends(phoneNormalizationExtension);
+  return new PrismaClient({ adapter })
+    .$extends(phoneNormalizationExtension)
+    .$extends(emailNormalizationExtension);
 };
 
 declare const globalThis: {
