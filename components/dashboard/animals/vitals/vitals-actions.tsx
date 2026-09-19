@@ -1,8 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { Edit, MoreHorizontal, Trash2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +34,10 @@ import {
 } from "@/app/lib/actions/animal-vitals.actions";
 import { VitalsForm } from "./vitals-form";
 import { toast } from "sonner";
+import {
+  DirtyFormHandle,
+  useConfirmedOpenChange,
+} from "@/hooks/use-confirmed-open-change";
 
 interface VitalsActionsProps {
   vitalsLog: AnimalVitalsListPayload;
@@ -40,6 +54,13 @@ export function VitalsActions({
 }: VitalsActionsProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const formRef = useRef<DirtyFormHandle>(null);
+
+  const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
+    useConfirmedOpenChange(
+      () => formRef.current?.isDirty() ?? false,
+      setIsDialogOpen,
+    );
 
   const onRestore = () => {
     startTransition(() => {
@@ -71,7 +92,7 @@ export function VitalsActions({
   }
 
   return (
-    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+    <Dialog open={isDialogOpen} onOpenChange={guardedOnOpenChange}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
@@ -116,8 +137,31 @@ export function VitalsActions({
           vitalsLog={vitalsLog}
           previousWeightGrams={previousWeightGrams}
           onFormSubmit={() => setIsDialogOpen(false)}
+          ref={formRef}
         />
       </DialogContent>
+
+      <AlertDialog
+        open={isConfirmOpen}
+        onOpenChange={(open) => !open && cancelDiscard()}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved vitals entry?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your changes will be lost if you leave without saving.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelDiscard}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDiscard}>
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

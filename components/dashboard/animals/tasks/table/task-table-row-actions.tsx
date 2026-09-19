@@ -2,9 +2,19 @@
 
 import type { Row, StockFeatures } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +41,10 @@ import { TaskForm } from "../task-form";
 import { updateAnimalTaskStatus } from "@/app/lib/actions/animal-task.actions";
 import { TaskStatus } from "@/prisma/generated/enums";
 import { TaskStatusOptions } from "@/app/lib/utils/enum-formatter";
+import {
+  DirtyFormHandle,
+  useConfirmedOpenChange,
+} from "@/hooks/use-confirmed-open-change";
 
 interface DataTableRowActionsProps {
   row: Row<StockFeatures, FetchAnimalTasksPayload>;
@@ -47,6 +61,13 @@ export function DataTableRowActions({
 }: DataTableRowActionsProps) {
   const task = row.original;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const formRef = useRef<DirtyFormHandle>(null);
+
+  const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
+    useConfirmedOpenChange(
+      () => formRef.current?.isDirty() ?? false,
+      setIsDialogOpen,
+    );
 
   if (!canManage) {
     return null;
@@ -68,7 +89,7 @@ export function DataTableRowActions({
   };
 
   return (
-    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+    <Dialog open={isDialogOpen} onOpenChange={guardedOnOpenChange}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -131,10 +152,33 @@ export function DataTableRowActions({
         <TaskForm
           animalId={animalId}
           onFormSubmit={() => setIsDialogOpen(false)}
+          ref={formRef}
           assigneeList={assigneeList}
           task={task}
         />
       </DialogContent>
+
+      <AlertDialog
+        open={isConfirmOpen}
+        onOpenChange={(open) => !open && cancelDiscard()}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your changes will be lost if you leave without saving.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelDiscard}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDiscard}>
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

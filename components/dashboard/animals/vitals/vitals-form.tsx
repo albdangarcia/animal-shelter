@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useImperativeHandle, useRef, useTransition } from "react";
 import { useForm, type DefaultValues } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { Loader2 } from "lucide-react";
@@ -29,12 +29,17 @@ import {
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { NumberField } from "@/components/forms/number-field";
 import { WeightInput } from "@/components/forms/weight-input";
+import {
+  DirtyFormHandle,
+  haveFormValuesChanged,
+} from "@/hooks/use-confirmed-open-change";
 
 interface VitalsFormProps {
   animalId: string;
   vitalsLog?: AnimalVitalsFormPayload; // Optional: if provided, form is in "edit" mode
   previousWeightGrams: number | null;
   onFormSubmit: () => void; // To close the dialog on success
+  ref?: React.Ref<DirtyFormHandle>;
 }
 
 const buildDefaultValues = (
@@ -52,6 +57,7 @@ export function VitalsForm({
   vitalsLog,
   previousWeightGrams,
   onFormSubmit,
+  ref,
 }: VitalsFormProps) {
   const isEditMode = !!vitalsLog;
 
@@ -61,6 +67,17 @@ export function VitalsForm({
     resolver: standardSchemaResolver(VitalsFormSchema),
     defaultValues: buildDefaultValues(vitalsLog),
   });
+
+  const initialValuesRef = useRef(form.getValues());
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      isDirty: () =>
+        haveFormValuesChanged(form.getValues(), initialValuesRef.current),
+    }),
+    [form],
+  );
 
   const onSubmit = (values: VitalsFormValues) => {
     startSubmitTransition(async () => {

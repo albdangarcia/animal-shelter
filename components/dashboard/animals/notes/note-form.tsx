@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useImperativeHandle, useRef, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
@@ -33,16 +33,21 @@ import { FetchAnimalNotePayload } from "@/app/lib/data/animals/animal-note.data"
 import { NoteFormSchema } from "@/app/lib/zod-schemas/animal.schemas";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { toast } from "sonner";
+import {
+  DirtyFormHandle,
+  haveFormValuesChanged,
+} from "@/hooks/use-confirmed-open-change";
 
 type NoteFormValues = z.infer<typeof NoteFormSchema>;
 
 interface Props {
   animalId: string;
   onFormSubmit: () => void; // To close the dialog on success
+  ref?: React.Ref<DirtyFormHandle>;
   note?: FetchAnimalNotePayload;
 }
 
-export const NoteForm = ({ animalId, onFormSubmit, note }: Props) => {
+export const NoteForm = ({ animalId, onFormSubmit, ref, note }: Props) => {
   const [isPending, startSubmitTransition] = useTransition();
 
   const form = useForm<NoteFormValues>({
@@ -57,6 +62,17 @@ export const NoteForm = ({ animalId, onFormSubmit, note }: Props) => {
           content: "",
         },
   });
+
+  const initialValuesRef = useRef(form.getValues());
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      isDirty: () =>
+        haveFormValuesChanged(form.getValues(), initialValuesRef.current),
+    }),
+    [form],
+  );
 
   const onSubmit = (values: NoteFormValues) => {
     startSubmitTransition(async () => {

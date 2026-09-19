@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useImperativeHandle, useRef, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
@@ -44,12 +44,17 @@ import {
 import { FetchAnimalTasksPayload } from "@/app/lib/data/animals/animal-task.data";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { toast } from "sonner";
+import {
+  DirtyFormHandle,
+  haveFormValuesChanged,
+} from "@/hooks/use-confirmed-open-change";
 
 type TaskFormValues = z.infer<typeof TaskFormSchema>;
 
 interface TaskFormProps {
   animalId: string;
   onFormSubmit: () => void; // To close the dialog on success
+  ref?: React.Ref<DirtyFormHandle>;
   assigneeList: TaskAssignee[];
   task?: FetchAnimalTasksPayload;
 }
@@ -57,6 +62,7 @@ interface TaskFormProps {
 export const TaskForm = ({
   animalId,
   onFormSubmit,
+  ref,
   assigneeList,
   task,
 }: TaskFormProps) => {
@@ -86,6 +92,17 @@ export const TaskForm = ({
           assigneeId: undefined,
         },
   });
+
+  const initialValuesRef = useRef(form.getValues());
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      isDirty: () =>
+        haveFormValuesChanged(form.getValues(), initialValuesRef.current),
+    }),
+    [form],
+  );
 
   // No FormData: the values are already validated and correctly typed, so they
   // go to the server as-is. Date survives the RSC boundary, so dueDate no
