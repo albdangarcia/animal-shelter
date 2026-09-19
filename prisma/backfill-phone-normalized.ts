@@ -1,10 +1,10 @@
-// Run via `npm run prisma:backfill-phone`. The npm script passes
-// `-e .env` LAST: DATABASE_URL lives in .env, loaded by prisma.config.ts
-// via `import "dotenv/config"`. This script runs standalone under tsx, not
-// through the Prisma CLI, so it only gets what dotenv-cli supplies —
+// Run via `npm run prisma:backfill-phone`, which wraps this in `dotenv run -f
+// .env`: DATABASE_URL lives in .env. This script runs standalone under tsx,
+// not through the Prisma CLI, so it only gets what that wrapper supplies —
 // copying seed.ts's connection code does NOT carry its env loading, since
-// seed.ts is invoked via `prisma db seed`. .env goes last so .env.local
-// keeps precedence.
+// seed.ts is invoked via `prisma db seed` and picks the environment up from
+// prisma.config.ts. The wrapper names one file because the dotenv CLI treats
+// a missing one as fatal; see the note in prisma.config.ts.
 //
 // --force recomputes every row with a phone, ignoring the
 // `phoneNormalized IS NULL` filter. That's for after a libphonenumber-js

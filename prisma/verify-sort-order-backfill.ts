@@ -20,7 +20,7 @@
  *   5. throws to force a ROLLBACK, so the dev database is left untouched.
  *
  * Run it the same way as prisma:backfill-phone:
- *   npx dotenv -e .env.local -e .env.development -e .env -- \
+ *   npx dotenv run -f .env -- \
  *     tsx prisma/verify-sort-order-backfill.ts
  */
 import { existsSync, readFileSync } from "node:fs";

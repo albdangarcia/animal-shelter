@@ -23,11 +23,11 @@
     "//db:reset": "Prisma 7 removed migrate reset's auto-seed (and --skip-seed, nothing left to skip) — chain prisma db seed explicitly or this won't reseed.",
     "db:reset": "prisma migrate reset --force && prisma db seed",
     "postinstall": "npm run prisma:generate",
-    "prisma:push": "dotenv -e .env.local -e .env.development -- prisma db push",
+    "prisma:push": "dotenv run -f .env -- prisma db push",
     "prisma:generate": "prisma generate",
-    "prisma:studio": "dotenv -e .env.local -e .env.development -- prisma studio",
-    "prisma:backfill-phone": "dotenv -e .env.local -e .env.development -e .env -- tsx prisma/backfill-phone-normalized.ts",
-    "verify:ai": "dotenv -e .env.local -e .env.development -e .env -- tsx scripts/verify-ai-read-tools.ts"
+    "prisma:studio": "dotenv run -f .env -- prisma studio",
+    "prisma:backfill-phone": "dotenv run -f .env -- tsx prisma/backfill-phone-normalized.ts",
+    "verify:ai": "dotenv run -f .env -- tsx scripts/verify-ai-read-tools.ts"
   },
   "dependencies": {
     "@ai-sdk/groq": "^4.0.44",
@@ -101,7 +101,6 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "dotenv": "^18.0.0",
-    "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "^16.3.5",
     "postcss": "^8.5.28",
