@@ -3,16 +3,15 @@
 import PageNotFoundOrAccessDenied from '@/components/PageNotFoundOrAccessDenied';
 import { Button } from '@/components/ui/button';
 
-export default function Error({
-  error: _error,
-  reset,
-}: {
+export interface ErrorFallbackProps {
   error: Error & { digest?: string };
   reset: () => void;
-}) {
-  // You could optionally log the error to a service like Sentry
-  // console.error(error);
+}
 
+// The body of every `error.tsx`. Each boundary file stays (Next requires one
+// per segment) but only forwards its props here, so the UI and any logging
+// live in one place.
+const ErrorFallback = ({ reset }: ErrorFallbackProps) => {
   const actionButton = (
     <Button
       onClick={() => reset()}
@@ -28,4 +27,6 @@ export default function Error({
       actionButton={actionButton}
     />
   );
-}
+};
+
+export default ErrorFallback;
