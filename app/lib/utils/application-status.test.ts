@@ -2,9 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ApplicationStatus } from "@/prisma/generated/enums";
 import {
+  ACTIVE_APPLICATION_STATUSES,
   ALLOWED_APPLICATION_TRANSITIONS,
   APPLICANT_EDITABLE_STATUSES,
+  BLOCKING_APPLICATION_STATUSES,
+  REACTIVATION_BLOCKING_STATUSES,
   STAFF_EDITABLE_STATUSES,
+  STAFF_OVERRIDABLE_APPLICATION_STATUSES,
   formatStatusList,
 } from "./application-status";
 
@@ -55,4 +59,46 @@ test("staff cannot edit rejected, withdrawn, adopted or closed applications", ()
   ]) {
     assert.ok(!STAFF_EDITABLE_STATUSES.includes(status), status);
   }
+});
+
+test("a closed application never stands in the way of a new one", () => {
+  assert.ok(!BLOCKING_APPLICATION_STATUSES.includes(ApplicationStatus.CLOSED));
+  assert.ok(!ACTIVE_APPLICATION_STATUSES.includes(ApplicationStatus.CLOSED));
+});
+
+test("only the statuses staff may override separate active from blocking", () => {
+  assert.deepEqual(
+    BLOCKING_APPLICATION_STATUSES.filter(
+      (status) => !ACTIVE_APPLICATION_STATUSES.includes(status),
+    ),
+    STAFF_OVERRIDABLE_APPLICATION_STATUSES,
+  );
+});
+
+test("every status an application can be worked in is active", () => {
+  for (const status of [
+    ApplicationStatus.PENDING,
+    ApplicationStatus.REVIEWING,
+    ApplicationStatus.WAITLISTED,
+    ApplicationStatus.APPROVED,
+    ApplicationStatus.ADOPTED,
+  ]) {
+    assert.ok(ACTIVE_APPLICATION_STATUSES.includes(status), status);
+  }
+});
+
+test("a rejection is not undone by reviving an older withdrawn application", () => {
+  assert.ok(
+    REACTIVATION_BLOCKING_STATUSES.includes(ApplicationStatus.REJECTED),
+  );
+  for (const status of ACTIVE_APPLICATION_STATUSES) {
+    assert.ok(REACTIVATION_BLOCKING_STATUSES.includes(status), status);
+  }
+});
+
+test("a withdrawn application never blocks reviving another one", () => {
+  assert.ok(
+    !REACTIVATION_BLOCKING_STATUSES.includes(ApplicationStatus.WITHDRAWN),
+  );
+  assert.ok(!REACTIVATION_BLOCKING_STATUSES.includes(ApplicationStatus.CLOSED));
 });

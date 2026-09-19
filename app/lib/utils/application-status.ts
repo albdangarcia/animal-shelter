@@ -70,6 +70,51 @@ export const BLOCKING_APPLICATION_STATUSES: ApplicationStatus[] = [
   ApplicationStatus.ADOPTED,
 ];
 
+// The blocking statuses staff may enter a new application over anyway. The
+// applicant-side rule exists so that re-applying is not a way to appeal a
+// decision; a staff member taking a fresh walk-in application after a
+// rejection, or after the person withdrew and came back in, is making that
+// decision themselves. For WITHDRAWN it is also the only route back: staff
+// cannot reactivate an application, and a person with no account cannot do it
+// for themselves. What the override could otherwise leave behind — a withdrawn
+// application and its replacement both live once the person signs up — is
+// closed on the applicant's side, where reactivation refuses while another
+// application for the animal is active.
+//
+// CLOSED is not listed because it is not in BLOCKING_APPLICATION_STATUSES.
+export const STAFF_OVERRIDABLE_APPLICATION_STATUSES: ApplicationStatus[] = [
+  ApplicationStatus.REJECTED,
+  ApplicationStatus.WITHDRAWN,
+];
+
+// The statuses that stop a second application for the same person and animal
+// from existing alongside it: every blocking status except the ones staff may
+// override. This is what "already has an application" means for anything that
+// would create or revive one — the staff create action, and the applicant's own
+// reactivation of a withdrawn application. Derived so a status added to
+// BLOCKING_APPLICATION_STATUSES is active here until someone decides otherwise.
+export const ACTIVE_APPLICATION_STATUSES: ApplicationStatus[] =
+  BLOCKING_APPLICATION_STATUSES.filter(
+    (status) => !STAFF_OVERRIDABLE_APPLICATION_STATUSES.includes(status),
+  );
+
+// What another application for the same animal has to be before an applicant
+// may revive a withdrawn one. Not the active list: staff may file over a
+// REJECTED application, but the applicant reviving their own older one is not
+// staff making that call, and reactivation would otherwise be the appeal route
+// that BLOCKING_APPLICATION_STATUSES exists to close — the same person cannot
+// submit a new application for an animal they were rejected for.
+//
+// Not the blocking list either: WITHDRAWN has to stay out of it. Reactivation
+// is the only way back from WITHDRAWN, so counting a withdrawn sibling as a
+// blocker would strand someone whose two applications for one animal were both
+// withdrawn — and a withdrawn application is inert, so reviving one beside it
+// creates nothing this guard exists to prevent.
+export const REACTIVATION_BLOCKING_STATUSES: ApplicationStatus[] =
+  BLOCKING_APPLICATION_STATUSES.filter(
+    (status) => status !== ApplicationStatus.WITHDRAWN,
+  );
+
 // Where an applicant may still change the application they submitted. Only
 // PENDING: once staff have picked it up (REVIEWING) or held it (WAITLISTED)
 // they are deciding on the text as it stands, and WAITLISTED never returns to

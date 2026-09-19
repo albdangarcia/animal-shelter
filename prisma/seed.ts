@@ -1869,6 +1869,10 @@ async function seedApplicationWithHistory(opts: {
   reasonForAdoption: string;
   householdProfileData: HouseholdProfileData;
   transitions: AppTransition[];
+  // Who entered it. Omitted for an applicant's own submission; set to the
+  // staff member for a walk-in application, which writes the history row
+  // `_staffCreateAdoptionApplication` writes.
+  submittedByStaffId?: string;
 }): Promise<string> {
   const application = await prisma.adoptionApplication.create({
     data: {
@@ -1882,8 +1886,10 @@ async function seedApplicationWithHistory(opts: {
       history: {
         create: {
           status: ApplicationStatus.PENDING,
-          statusChangeReason: "Application submitted by applicant.",
-          changedById: opts.applicant.id,
+          statusChangeReason: opts.submittedByStaffId
+            ? "Application submitted by staff on behalf of applicant."
+            : "Application submitted by applicant.",
+          changedById: opts.submittedByStaffId ?? opts.applicant.id,
           changedAt: opts.submittedAt,
         },
       },
@@ -3664,6 +3670,11 @@ async function seedApplicationNoise() {
 // without anyone remembering this.
 const HAND_AUTHORED_ANIMAL_NAMES = animalSeedData.map((animal) => animal.name);
 
+// The name the walk-in fixture's animal is given, so the staff form's
+// name-keyed animal search finds exactly one match. Checked for collisions when
+// it is applied.
+const WALK_IN_REAPPLY_ANIMAL_NAME = "Peppercorn";
+
 // One hand-written household profile for the fixture account. Every one of the
 // applications below copies these columns onto itself and upserts them onto
 // Jane's HouseholdProfile, so the read-only household rows say the same thing
@@ -3681,8 +3692,9 @@ const FIXTURE_HOUSEHOLD: HouseholdProfileData = {
   animalExperience: "Grew up with dogs and cats.",
 };
 
-// Ten adoption applications for "Jane Doe" (surrenderer1@example.com), one in
-// each state the applicant-facing screens have to render:
+// Twelve adoption applications for "Jane Doe" (surrenderer1@example.com), one
+// in each state the applicant-facing screens have to render, plus a withdrawn
+// application and its replacement on one animal:
 //
 //   PENDING    / PUBLISHED         the only editable state
 //   REVIEWING  / PUBLISHED         read-only, staff are looking at it
@@ -3694,6 +3706,9 @@ const FIXTURE_HOUSEHOLD: HouseholdProfileData = {
 //   CLOSED     / ARCHIVED          the cascade closed it, nobody judged her
 //   ADOPTED    / ARCHIVED          terminal, with the Outcome behind it
 //   CLOSED     / PUBLISHED         the animal came back — she can apply again
+//   WITHDRAWN  / PUBLISHED         }  one animal, both entered by staff before
+//   PENDING    / PUBLISHED         }  she had an account: reactivating the
+//                                     first is refused while the second lives
 //
 // The two CLOSED rows are the pair that carries the status's meaning. On the
 // archived one it is a dead end she was never judged for; on the republished
@@ -3708,6 +3723,10 @@ const FIXTURE_HOUSEHOLD: HouseholdProfileData = {
 // against that means hand-editing rows first, every time.
 // `FIXTURE_APPLICANT_PERSON_NAMES` keeps her out of those pools, so this list
 // is the whole of what she has.
+//
+// It also seeds the walk-in the staff side needs: a person with no account
+// whose only application for an animal is a CLOSED one on the animal that came
+// back, which staff must be able to file a new application over.
 //
 // This also carries the narrower guarantee it grew out of: the staff
 // standalone adoption-application routes only expose their edit/review actions
@@ -4156,8 +4175,111 @@ async function seedRegisteredUserApplicationFixtures() {
     },
   });
 
+  // 11 and 12 — a withdrawn application and its replacement on one still
+  // published animal. This is the state the hand-over produces: staff took a
+  // walk-in application, the person phoned to withdraw it, and they later came
+  // back in and staff took a fresh one (a withdrawn application does not stop
+  // staff entering another). Both then arrived in "My Applications" when she
+  // signed up. Reactivating the first would leave her with two live
+  // applications for the animal, so it has to be refused — the only fixture
+  // where reactivate is offered and still fails. Claimed last so it leaves
+  // every earlier claim exactly where it was.
+  //
+  // A shorter age floor than the other open-stay fixtures: three dates in the
+  // last three weeks are all this needs, and the 45-day pool is spent by the
+  // ones above.
+  const handOverAnimal = await claimAnimal("WITHDRAWN + PENDING (hand-over)", {
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    intake: { some: {}, every: { intakeDate: { lte: daysAgo(20) } } },
+  });
+  const handOverDates = [daysAgo(18), daysAgo(16), daysAgo(12)];
+  await seedApplicationWithHistory({
+    animalId: handOverAnimal.id,
+    applicant,
+    submittedAt: handOverDates[0],
+    reasonForAdoption: "A neighbour has one from the same litter and we adore her.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
+    submittedByStaffId: reviewer.id,
+    transitions: [
+      {
+        status: ApplicationStatus.WITHDRAWN,
+        reason: "Applicant called to withdraw.",
+        changedById: reviewer.id,
+        at: handOverDates[1],
+      },
+    ],
+  });
+  await seedApplicationWithHistory({
+    animalId: handOverAnimal.id,
+    applicant,
+    submittedAt: handOverDates[2],
+    reasonForAdoption: "We talked it over and would like to apply again.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
+    submittedByStaffId: reviewer.id,
+    transitions: [],
+  });
+
+  // The walk-in counterpart to 10: no account, and a CLOSED application on the
+  // animal that came back, closed by the same adoption that closed Jane's. The
+  // apply gate never blocked on CLOSED, and neither may staff filing one for
+  // her — the CLOSED row is her whole history with the animal.
+  //
+  // The animal is renamed to something no other animal has because the staff
+  // form finds an animal by name and names repeat across this seed: without
+  // this the spec could pick a different animal with the same name, and pass
+  // without ever meeting the CLOSED application it exists to step over.
+  if (
+    (await prisma.animal.count({ where: { name: WALK_IN_REAPPLY_ANIMAL_NAME } })) >
+    0
+  ) {
+    throw new Error(
+      `"${WALK_IN_REAPPLY_ANIMAL_NAME}" is already an animal name; the walk-in fixture needs a unique one.`,
+    );
+  }
+  await prisma.animal.update({
+    where: { id: returnedAnimal.id },
+    data: { name: WALK_IN_REAPPLY_ANIMAL_NAME },
+  });
+  const walkIn = await prisma.person.create({
+    data: {
+      name: "Casey Reapply",
+      email: "casey.reapply@example.com",
+      phone: "212-555-0155",
+      address: "55 Bleecker St",
+      city: "New York",
+      state: "NY",
+      zipCode: "10012",
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      address: true,
+      city: true,
+      state: true,
+      zipCode: true,
+    },
+  });
+  await seedApplicationWithHistory({
+    animalId: returnedAnimal.id,
+    applicant: walkIn,
+    submittedAt: withinStay(returnedAnimal, 0.25),
+    reasonForAdoption: "We saw him at the adoption fair and could not stop thinking about him.",
+    householdProfileData: FIXTURE_HOUSEHOLD,
+    submittedByStaffId: reviewer.id,
+    transitions: [
+      {
+        status: ApplicationStatus.CLOSED,
+        reason: CLOSURE_REASON_BY_OUTCOME[OutcomeType.ADOPTION],
+        changedById: reviewer.id,
+        at: returnedAnimal.outcomeDate as Date,
+      },
+    ],
+  });
+
   console.log(
-    `Seeded 10 adoption application fixtures for ${applicant.name} (${applicant.email}).`,
+    `Seeded 12 adoption application fixtures for ${applicant.name} (${applicant.email}) and 1 for ${walkIn.name}.`,
   );
 }
 

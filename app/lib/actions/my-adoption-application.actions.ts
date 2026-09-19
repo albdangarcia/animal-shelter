@@ -6,8 +6,11 @@ import { revalidatePath } from "next/cache";
 import { AnimalListingStatus, ApplicationStatus } from "@/prisma/generated/enums";
 import {
   APPLICANT_EDITABLE_STATUSES,
+  BLOCKING_APPLICATION_STATUSES,
+  REACTIVATION_BLOCKING_STATUSES,
   formatStatusList,
 } from "../utils/application-status";
+import { ConflictError } from "../utils/errors";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
 import {
   MyAdoptionAppFormSchema,
@@ -268,6 +271,7 @@ const _reactivateMyAdoptionApplication = async (
       select: {
         applicantId: true,
         status: true,
+        animalId: true,
         animal: { select: { listingStatus: true } },
       },
     });
@@ -301,23 +305,55 @@ const _reactivateMyAdoptionApplication = async (
 
   // Update the application status to PENDING and create a history record
   try {
-    await prisma.$transaction(async (tx) => {
-      // Update the application's current status
-      await tx.adoptionApplication.update({
-        where: { id: validatedApplicationId },
-        data: { status: ApplicationStatus.PENDING },
-      });
-      // Create the history record for the audit trail
-      await tx.applicationStatusHistory.create({
-        data: {
-          applicationId: validatedApplicationId,
-          status: ApplicationStatus.PENDING,
-          statusChangeReason: "Application reactivated by user.",
-          changedById: user.personId,
-        },
-      });
-    });
+    await prisma.$transaction(
+      async (tx) => {
+        // Reviving this application must not leave the person with two live
+        // ones for the same animal, and must not walk them back out of a
+        // rejection they could not re-apply past (see
+        // REACTIVATION_BLOCKING_STATUSES). Staff can enter a fresh application
+        // over a withdrawn one before the person has an account, and both then
+        // arrive in "My Applications" together; nothing else stops the
+        // withdrawn one being reactivated alongside its replacement. Read
+        // inside the transaction and serializable, like submitting, so two
+        // withdrawn duplicates cannot both be reactivated at once.
+        const blocker = await tx.adoptionApplication.findFirst({
+          where: {
+            applicantId: user.personId,
+            animalId: application.animalId,
+            id: { not: validatedApplicationId },
+            status: { in: REACTIVATION_BLOCKING_STATUSES },
+          },
+          select: { status: true },
+        });
+        if (blocker) {
+          throw new ConflictError(
+            blocker.status === ApplicationStatus.REJECTED
+              ? "Cannot reactivate application. A previous application for this animal was not approved."
+              : "Cannot reactivate application. You already have an active application for this animal.",
+          );
+        }
+
+        // Update the application's current status
+        await tx.adoptionApplication.update({
+          where: { id: validatedApplicationId },
+          data: { status: ApplicationStatus.PENDING },
+        });
+        // Create the history record for the audit trail
+        await tx.applicationStatusHistory.create({
+          data: {
+            applicationId: validatedApplicationId,
+            status: ApplicationStatus.PENDING,
+            statusChangeReason: "Application reactivated by user.",
+            changedById: user.personId,
+          },
+        });
+      },
+      { isolationLevel: "Serializable" },
+    );
   } catch (error) {
+    if (error instanceof ConflictError) {
+      return { success: false, message: error.message };
+    }
     console.error(
       `Database Error reactivating adoption application ${validatedApplicationId}:`,
       error,
@@ -395,6 +431,25 @@ const _createMyAdoptionApp = async (
           throw new Error("This animal is no longer available for adoption.");
         }
 
+        // The apply page hides the form from someone who already has an
+        // application for this animal, but this action is reachable without
+        // going through that page: from a form left open in another tab, or by
+        // a direct POST. Checked here, in the same serializable transaction as
+        // the create, so two submissions cannot both pass it.
+        const existing = await tx.adoptionApplication.findFirst({
+          where: {
+            applicantId: user.personId,
+            animalId: validatedAnimalId,
+            status: { in: BLOCKING_APPLICATION_STATUSES },
+          },
+          select: { id: true },
+        });
+        if (existing) {
+          throw new ConflictError(
+            "You already have an application for this animal.",
+          );
+        }
+
         await tx.adoptionApplication.create({
           data: {
             ...dataToCreate,
@@ -453,6 +508,9 @@ const _createMyAdoptionApp = async (
       },
     );
   } catch (error: unknown) {
+    if (error instanceof ConflictError) {
+      return { ok: false, message: error.message };
+    }
     console.error("Error submitting adoption application:", error);
     return {
       ok: false,
