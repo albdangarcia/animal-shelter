@@ -260,3 +260,62 @@ test("the sign-up hook reports the collision its fallback create can hit", async
     await prisma.person.delete({ where: { id: owner.id } });
   }
 });
+
+// Same collision, reached by the other route: the hook only reads Person when
+// the email is provider-verified, so an unverified sign-up skips the lookup and
+// falls straight into the create. GitHub allows an unverified primary email, so
+// its provider hands better-auth `emailVerified: false` and the app instance
+// never sets `trustProvidedEmails` — the route is live in production.
+//
+// Nothing here has proven the address is the caller's, so the failure must not
+// tell them it is on a record. For a shelter that fact alone says the person
+// dealt with the organisation, and an attacker sets the probe rate at GitHub,
+// not at this app.
+test("an unverified sign-up is not told whose address collided", async () => {
+  const contested = `Unverified.${runId}@Example.com`;
+
+  const onRecord = await prisma.person.create({
+    data: { name: "On A Shelter Record", email: contested },
+    select: { id: true },
+  });
+
+  try {
+    const before = authOptions(prisma).databaseHooks.user.create.before;
+    await assert.rejects(
+      () =>
+        before({
+          id: "unused",
+          name: "Unverified Caller",
+          email: contested,
+          emailVerified: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }),
+      (error: unknown) => {
+        const named = error as { statusCode?: number; message?: string };
+        // Still the same 409 — the caller cannot register, and the app still
+        // knows why. Only the wording changes.
+        assert.equal(named.statusCode, 409);
+        assert.doesNotMatch(
+          String(named.message),
+          /already recorded on a shelter record/,
+        );
+        assert.ok(!String(named.message).includes(contested.toLowerCase()));
+        assert.ok(!String(named.message).includes(contested));
+        return true;
+      },
+    );
+
+    // The Person on record is untouched: no second row, and no auto-link to an
+    // account the caller never proved was theirs.
+    const rows = await prisma.person.findMany({
+      where: { email: contested.toLowerCase() },
+      select: { id: true, user: { select: { id: true } } },
+    });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].id, onRecord.id);
+    assert.equal(rows[0].user, null);
+  } finally {
+    await prisma.person.delete({ where: { id: onRecord.id } });
+  }
+});
