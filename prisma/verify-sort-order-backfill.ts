@@ -143,6 +143,8 @@ async function main() {
   const adapter = new PrismaPg({
     connectionString: resolveDatabaseUrl("direct"),
   });
+  // Touches animal_images only and always rolls back, so no normalization
+  // extension applies — in particular it never writes Person.email or User.email.
   const prisma = new PrismaClient({ adapter });
 
   try {

@@ -69,6 +69,8 @@ async function main() {
   const { dryRun, force, batchSize } = options;
 
   const adapter = new PrismaPg({ connectionString: resolveDatabaseUrl("direct") });
+  // Writes phoneNormalized only, never Person.email or User.email, so the email
+  // extension is deliberately not applied.
   const prisma = new PrismaClient({ adapter }).$extends(phoneNormalizationExtension);
 
   try {

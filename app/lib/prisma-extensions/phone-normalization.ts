@@ -9,7 +9,12 @@
 //
 // Does NOT cover nested writes — `foo.create({ data: { applicant: { create:
 // { phone } } } })` bypasses query extensions entirely (prisma#24525). There
-// are none today; audit with `person:\s*\{\s*(create|update|upsert)`.
+// are none today. Audit multiline (`rg -U`): a nested write is nearly always
+// formatted across lines, which a line-based search can never match, and it
+// can arrive through any relation that reaches Person, not only `person`.
+// Derive the keys from the schema so the list cannot go stale:
+//   keys=$(rg --no-filename -o '^\s+(\w+)\s+(Person|User)\??\s+@relation' -r '$1' prisma/schema.prisma | sort -u | paste -sd'|' -)
+//   rg -U -n "\b($keys)\s*:\s*\{\s*(create|createMany|update|upsert|connectOrCreate)\s*:" app prisma/*.ts scripts --glob '!app/lib/prisma-extensions/*'
 import { Prisma } from "@/prisma/generated/client";
 import { normalizePhone } from "@/app/lib/utils/phone";
 

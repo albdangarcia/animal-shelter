@@ -22,7 +22,14 @@ function makeLinkOrCreatePerson(db: ExtendedPrismaClient, trustProvidedEmails: b
   return async function linkOrCreatePerson(
     user: User & Record<string, unknown>,
   ) {
-    const email = user.email;
+    // Deliberately lowercased here as well as upstream. better-auth already
+    // lowercases the email before this hook runs (createUser / createOAuthUser
+    // in its internal adapter), but the Person.email extension only normalizes
+    // writes and passes `where` through untouched, so the lookup below is
+    // case-insensitive only if its input is already lowercase. Depending on an
+    // internal of a pinned dependency for that fails silently — the link just
+    // stops happening — so this is defense in depth, not redundancy.
+    const email = user.email.toLowerCase();
     const isProviderVerified =
       user.emailVerified === true || trustProvidedEmails === true;
 

@@ -44,6 +44,7 @@ import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { resolveDatabaseUrl } from "@/app/lib/db-url";
 import { phoneNormalizationExtension } from "@/app/lib/prisma-extensions/phone-normalization";
+import { emailNormalizationExtension } from "@/app/lib/prisma-extensions/email-normalization";
 import {
   syncTemplateRegistry,
   type TemplateRegistryStore,
@@ -114,7 +115,9 @@ const installDeterministicRandom = (): (() => void) => {
 };
 
 const adapter = new PrismaPg({ connectionString: resolveDatabaseUrl("direct") });
-const prisma = new PrismaClient({ adapter }).$extends(phoneNormalizationExtension);
+const prisma = new PrismaClient({ adapter })
+  .$extends(phoneNormalizationExtension)
+  .$extends(emailNormalizationExtension);
 
 // seed-only auth instance: direct-connection client, never mounted on
 // a route, no nextCookies() (would reach for next/headers outside a request
