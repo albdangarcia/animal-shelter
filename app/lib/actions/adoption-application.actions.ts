@@ -23,6 +23,7 @@ import { getCachedSession } from "@/app/lib/auth/session";
 import { ConflictError } from "../utils/errors";
 import { safeInternalPath } from "../utils/safe-redirect";
 import {
+  ACTIVE_APPLICATION_STATUSES,
   isAllowedTransition,
   illegalTransitionMessage,
   STAFF_EDITABLE_STATUSES,
@@ -41,6 +42,9 @@ const REGISTERED_USER_CREATE_MESSAGE =
 
 const REGISTERED_USER_EDIT_MESSAGE =
   "Cannot edit an application belonging to a registered user. The person should manage their own application.";
+
+const DUPLICATE_APPLICATION_MESSAGE =
+  "An active application already exists for this person and animal.";
 
 // Holds the person's row for the rest of the transaction. Creating a `User`
 // inserts a row that references the person, and Postgres takes a FOR KEY SHARE
@@ -325,14 +329,18 @@ const _staffCreateAdoptionApplication = async (
     };
   }
 
-  // Prevent duplicate active applications for the same person + animal.
+  // Prevent duplicate active applications for the same person + animal. Staff
+  // may enter a new one over a rejected or withdrawn application (see
+  // STAFF_OVERRIDABLE_APPLICATION_STATUSES), so this reads the active list
+  // rather than the applicant's stricter blocking one. Repeated inside the
+  // transaction below, which is where the rule is actually enforced.
   let existingApp;
   try {
     existingApp = await prisma.adoptionApplication.findFirst({
       where: {
         applicantId: validatedPersonId,
         animalId,
-        status: { notIn: [ApplicationStatus.REJECTED, ApplicationStatus.WITHDRAWN] },
+        status: { in: ACTIVE_APPLICATION_STATUSES },
       },
       select: { id: true },
     });
@@ -345,10 +353,7 @@ const _staffCreateAdoptionApplication = async (
   }
 
   if (existingApp) {
-    return {
-      ok: false,
-      message: "An active application already exists for this person and animal.",
-    };
+    return { ok: false, message: DUPLICATE_APPLICATION_MESSAGE };
   }
 
   // Same shared mappers the public flow uses, so a staff-entered application
@@ -358,7 +363,8 @@ const _staffCreateAdoptionApplication = async (
 
   try {
     await prisma.$transaction(async (tx) => {
-      // The read above gives the friendly error; this one is the guarantee.
+      // The reads above give the friendly errors; the checks behind this lock
+      // are the guarantee.
       await lockPerson(tx, validatedPersonId);
       const linkedUser = await tx.user.findUnique({
         where: { personId: validatedPersonId },
@@ -366,6 +372,24 @@ const _staffCreateAdoptionApplication = async (
       });
       if (linkedUser) {
         throw new ConflictError(REGISTERED_USER_CREATE_MESSAGE);
+      }
+
+      // Re-read behind the lock for the same reason as the account check
+      // above: the read before the transaction is only the friendly error
+      // path. Without this, two submissions for the same person and animal —
+      // a double-clicked Submit is enough — both pass the earlier check, then
+      // queue on the lock and both create an application, which is the state
+      // this gate exists to prevent.
+      const duplicate = await tx.adoptionApplication.findFirst({
+        where: {
+          applicantId: validatedPersonId,
+          animalId,
+          status: { in: ACTIVE_APPLICATION_STATUSES },
+        },
+        select: { id: true },
+      });
+      if (duplicate) {
+        throw new ConflictError(DUPLICATE_APPLICATION_MESSAGE);
       }
 
       const newApplication = await tx.adoptionApplication.create({

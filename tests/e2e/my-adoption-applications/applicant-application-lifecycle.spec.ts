@@ -31,17 +31,18 @@ test.use({ storageState: storageStatePath });
 
 const VIEW_PATH = /^\/dashboard\/my-adoption-applications\/[^/]+$/;
 
-// Jane Doe's ten seeded applications, by status. Animal *names* are drawn from
-// a pool and repeat across the seed, so nothing here identifies a fixture by
-// name — the statuses are what `seedRegisteredUserApplicationFixtures`
-// guarantees, and the list filters on exactly that.
+// Jane Doe's twelve seeded applications, by status. Animal *names* are drawn
+// from a pool and repeat across the seed, so nothing here identifies a fixture
+// by name — the statuses are what `seedRegisteredUserApplicationFixtures`
+// guarantees, and the list filters on exactly that. The extra PENDING and
+// WITHDRAWN rows are one animal's withdrawn application and its replacement.
 const FIXTURE_COUNT_BY_STATUS = {
-  PENDING: 1,
+  PENDING: 2,
   REVIEWING: 1,
   WAITLISTED: 1,
   APPROVED: 1,
   REJECTED: 1,
-  WITHDRAWN: 2,
+  WITHDRAWN: 3,
   ADOPTED: 1,
   CLOSED: 2,
 } as const;
@@ -361,6 +362,15 @@ test("a closed applicant can apply again once the animal is back", async ({
   await page.getByRole("link", { name: /^Adopt / }).click();
   await waitForPathname(page, `${returned.animal}/adopt`);
 
+  // A second copy of the same form, opened while she still has no application
+  // for this animal. Submitted last, once the first has gone through.
+  const staleTab = await page.context().newPage();
+  await staleTab.goto(`${returned.animal}/adopt`);
+  await fillStable(
+    staleTab.getByLabel("Reason for Adoption *", { exact: true }),
+    `Submitted from a stale tab — E2E ${Date.now()}`,
+  );
+
   // Everything but the reason prefills from her Person record and her
   // HouseholdProfile, both seeded by the fixture.
   const reason = `Ready to try again now that he is back — E2E ${Date.now()}`;
@@ -385,6 +395,20 @@ test("a closed applicant can apply again once the animal is back", async ({
     MESSAGE_TITLE_BY_STATUS.PENDING,
   );
   await expect(page.getByText(reason)).toBeVisible();
+
+  // The apply page hides the form once an application exists, but the form
+  // already open in the other tab still posts to the same action — which has
+  // to refuse rather than leave her with two.
+  await staleTab.getByRole("button", { name: "Submit Application" }).click();
+  await expect(
+    staleTab.getByText("You already have an application for this animal."),
+  ).toBeVisible();
+  await staleTab.close();
+
+  await page.goto(`${MY_APPLICATIONS_PATH}?pageSize=20`);
+  await expect(page.locator("tbody tr")).toHaveCount(
+    Object.values(FIXTURE_COUNT_BY_STATUS).reduce((a, b) => a + b, 0) + 1,
+  );
 });
 
 test("a pending application can still be edited", async ({ page }) => {
@@ -476,7 +500,10 @@ test("reactivate is offered only while the animal is still listed", async ({
   const rows = await listByStatus(page, "WITHDRAWN");
   await expect(rows).toHaveCount(FIXTURE_COUNT_BY_STATUS.WITHDRAWN);
 
-  const hrefs = [await applicationHref(page, 0), await applicationHref(page, 1)];
+  const hrefs: string[] = [];
+  for (let i = 0; i < FIXTURE_COUNT_BY_STATUS.WITHDRAWN; i++) {
+    hrefs.push(await applicationHref(page, i));
+  }
 
   let enabled = 0;
   let disabled = 0;
@@ -498,7 +525,48 @@ test("reactivate is offered only while the animal is still listed", async ({
     }
   }
 
-  expect({ enabled, disabled }).toEqual({ enabled: 1, disabled: 1 });
+  // The button is enabled for both animals still listed, including the one
+  // whose reactivation the next test shows being refused: offered, then
+  // declined on the server.
+  expect({ enabled, disabled }).toEqual({ enabled: 2, disabled: 1 });
+});
+
+// Staff took a walk-in application, it was withdrawn, and they later took a
+// fresh one for the same animal. Both reach "My Applications" when the person
+// signs up, and reactivating the withdrawn one would leave two live
+// applications for the animal.
+test("a withdrawn application cannot be reactivated beside a live replacement", async ({
+  page,
+}) => {
+  const pendingRows = await listByStatus(page, "PENDING");
+  const pendingAnimals = new Set<string | null>();
+  for (let i = 0; i < (await pendingRows.count()); i++) {
+    pendingAnimals.add(await animalLink(page, i).getAttribute("href"));
+  }
+
+  const withdrawnRows = await listByStatus(page, "WITHDRAWN");
+  const blocked: number[] = [];
+  for (let i = 0; i < (await withdrawnRows.count()); i++) {
+    if (pendingAnimals.has(await animalLink(page, i).getAttribute("href"))) {
+      blocked.push(i);
+    }
+  }
+  // Exactly the hand-over pair: the other withdrawn rows sit on animals with
+  // nothing else pending.
+  expect(blocked).toHaveLength(1);
+  const href = await applicationHref(page, blocked[0]);
+
+  await openApplication(page, href);
+  await page.getByRole("button", { name: "Reactivate" }).click();
+
+  await expect(
+    page.getByText(
+      "Cannot reactivate application. You already have an active application for this animal.",
+    ),
+  ).toBeVisible();
+  await expect(statusMessage(page)).toContainText(
+    MESSAGE_TITLE_BY_STATUS.WITHDRAWN,
+  );
 });
 
 test("withdrawing an approved application releases the animal", async ({

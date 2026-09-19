@@ -1,7 +1,6 @@
 import prisma from "@/app/lib/prisma";
 import {
   AnimalListingStatus,
-  ApplicationStatus,
   IntakeType,
   TaskStatus,
   type Sex,
@@ -23,6 +22,7 @@ import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { LATEST_ENTRY_ORDER } from "../../utils/vitals-order";
 import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
+import { ACTIVE_APPLICATION_STATUSES } from "../../utils/application-status";
 
 // data for the animals table in the dashboard
 const _fetchAnimals = async (
@@ -480,17 +480,15 @@ const _searchPublishedAnimals = async (
       where: {
         listingStatus: AnimalListingStatus.PUBLISHED,
         name: { contains: q, mode: "insensitive" },
+        // The same active list the create action's duplicate check reads, so
+        // an animal this hides is one the action would refuse anyway — and a
+        // CLOSED, REJECTED or WITHDRAWN application does not hide it.
         ...(excludePersonId && {
           NOT: {
             adoptionApplications: {
               some: {
                 applicantId: excludePersonId,
-                status: {
-                  notIn: [
-                    ApplicationStatus.REJECTED,
-                    ApplicationStatus.WITHDRAWN,
-                  ],
-                },
+                status: { in: ACTIVE_APPLICATION_STATUSES },
               },
             },
           },

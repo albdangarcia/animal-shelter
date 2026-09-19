@@ -464,3 +464,68 @@ test("the pre-refactor nested new route is gone", async ({ page }) => {
     page.getByRole("heading", { name: /not found/i }),
   ).toBeVisible();
 });
+// "Casey Reapply" is a walk-in whose only application is a CLOSED one on
+// "Peppercorn" (seedRegisteredUserApplicationFixtures) — the animal came back
+// and was republished, so the CLOSED application says nothing against her. The
+// name is unique in the seed on purpose: the animal picker searches by name.
+// A person's applicant-side gate has never blocked on CLOSED, and neither may
+// the staff one, or staff cannot enter the walk-in that she could file herself
+// online.
+test("staff can file over a closed application, and not over a live one", async ({
+  page,
+}) => {
+  const caseyId = await personIdByName(page, "Casey Reapply");
+  const tab = `/dashboard/people-directory/${caseyId}/adoption-applications`;
+  const newApplication = `/dashboard/adoption-applications/new?personId=${caseyId}&returnTo=${tab}`;
+
+  await page.goto(tab);
+  const rows = page.locator("tbody tr");
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText("Peppercorn");
+  await expect(rows.first().getByText("Closed", { exact: true })).toBeVisible();
+
+  // Peppercorn is offered: only an active application hides an animal from
+  // the picker, not a closed one.
+  await page.goto(newApplication);
+  await pickAnimal(page, "Peppercorn");
+
+  // Contact and household fields prefill from Casey's Person record and
+  // HouseholdProfile; the reason is the one thing the seed leaves blank.
+  await fillStable(
+    page.getByLabel("Reason for Adoption *", { exact: true }),
+    `Back again now that he is listed — E2E ${Date.now()}`,
+  );
+  await page.getByRole("button", { name: "Submit Application" }).click();
+
+  await expect(
+    page.getByText("Application submitted successfully."),
+  ).toBeVisible();
+  await waitForPathname(page, tab);
+  await expect(rows).toHaveCount(2);
+  await expect(
+    rows.filter({ hasText: "Peppercorn" }).getByText("Pending", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    rows.filter({ hasText: "Peppercorn" }).getByText("Closed", { exact: true }),
+  ).toBeVisible();
+
+  // Now there is a live one, and the animal is no longer offered.
+  await page.goto(newApplication);
+  await page
+    .getByRole("combobox")
+    .filter({ hasText: "Search for an animal" })
+    .click();
+  await page.getByPlaceholder("Type an animal name...").fill("Peppercorn");
+  // The picker renders its empty state from the results it already holds, and
+  // a freshly loaded form holds none — so asserting on that text straight
+  // after fill() passes during the 300ms debounce, before the search has run,
+  // and would keep passing if the animal were still offered. The search is a
+  // router.replace, so the committed query string is the signal that the
+  // rendered list is an answer to *this* query.
+  await page.waitForURL(
+    (url) => url.searchParams.get("animalSearch") === "Peppercorn",
+    { timeout: 15_000 },
+  );
+  await expect(page.getByRole("option", { name: "Peppercorn" })).toHaveCount(0);
+  await expect(page.getByText("No published animals found.")).toBeVisible();
+});
