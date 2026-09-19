@@ -148,7 +148,7 @@ const _fetchAnimalForFosterPlacement = async (
 ): Promise<AnimalForFosterPlacement | null> => {
   const parsedId = cuidSchema.safeParse(animalId);
   if (!parsedId.success) {
-    throw new Error("Invalid animal ID format.");
+    return null;
   }
 
   try {
@@ -208,7 +208,7 @@ const _fetchFosterProfileForPlacement = async (
 ): Promise<FosterProfileForPlacement | null> => {
   const parsedId = cuidSchema.safeParse(fosterProfileId);
   if (!parsedId.success) {
-    throw new Error("Invalid foster profile ID format.");
+    return null;
   }
 
   try {
@@ -261,7 +261,7 @@ const _fetchFosterPlacementById = async (
 ): Promise<FosterPlacementForAction | null> => {
   const parsedId = cuidSchema.safeParse(placementId);
   if (!parsedId.success) {
-    throw new Error("Invalid foster placement ID format.");
+    return null;
   }
 
   try {
@@ -451,7 +451,7 @@ const _fetchFosterProfileByPersonId = async (
 ): Promise<FosterProfileForTab | null> => {
   const parsedId = cuidSchema.safeParse(personId);
   if (!parsedId.success) {
-    throw new Error("Invalid person ID format.");
+    return null;
   }
 
   try {

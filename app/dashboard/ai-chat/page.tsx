@@ -5,7 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { getCachedSession } from "@/app/lib/auth/session";
 import { can } from "@/app/lib/auth/can";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -28,7 +28,7 @@ const Page = async () => {
 
   if (!session?.user || !can(session.user.role, AppPermissions.AI_CHAT_USE)) {
     return (
-      <PageNotFoundOrAccessDenied
+      <StatusPage
         type="accessDenied"
         redirectUrl="/dashboard"
         buttonGoTo="Dashboard"

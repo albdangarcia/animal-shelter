@@ -1,6 +1,6 @@
 import CharacteristicsCatalog from "@/components/dashboard/settings/characteristics/characteristics-catalog";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchCharacteristicsCatalog } from "@/app/lib/data/animals/characteristics-catalog.data";
 
@@ -8,7 +8,7 @@ const Page = async () => {
   return (
     <Authorize
       permission={AppPermissions.MANAGE_CHARACTERISTICS_CATALOG}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent />
     </Authorize>

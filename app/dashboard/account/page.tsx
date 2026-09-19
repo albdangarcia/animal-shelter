@@ -1,7 +1,7 @@
 import PersonForm from "@/components/dashboard/people-directory/person-form";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { fetchMyHouseholdProfile, fetchMyProfile } from "@/app/lib/data/people-directory/people-directory.data";
 import { notFound } from "next/navigation";
 import { SearchParamsType } from "@/app/lib/types";
@@ -15,7 +15,7 @@ const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.MY_PROFILE_UPDATE}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />
     </Authorize>

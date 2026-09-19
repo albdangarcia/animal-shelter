@@ -145,7 +145,7 @@ const _fetchAdoptionApplicationForEdit = async (
   const parsedApplicationId = cuidSchema.safeParse(applicationId);
 
   if (!parsedApplicationId.success) {
-    throw new Error("Invalid ID format.");
+    return null;
   }
 
   try {

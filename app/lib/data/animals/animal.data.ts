@@ -128,7 +128,7 @@ const _fetchSectionCardsAnimalData = async (
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
-    throw new Error("Invalid animal ID format.");
+    return null;
   }
 
   const validatedAnimalId = parsedId.data;
@@ -257,7 +257,7 @@ const _fetchAnimalById = async (
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
-    throw new Error("Invalid animal ID format.");
+    return null;
   }
 
   const validatedAnimalId = parsedId.data;
@@ -374,7 +374,7 @@ const _fetchAnimalForPhotoPage = async (id: string) => {
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
-    throw new Error("Invalid animal ID format.");
+    return null;
   }
   const validatedAnimalId = parsedId.data;
 
@@ -400,7 +400,7 @@ const _fetchAnimalForOutcomeForm = async (id: string) => {
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
-    throw new Error("Invalid animal ID format.");
+    return null;
   }
   const validatedAnimalId = parsedId.data;
 
@@ -439,7 +439,7 @@ const _fetchAnimalForReIntake = async (
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
-    throw new Error("Invalid animal ID format.");
+    return null;
   }
   const validatedAnimalId = parsedId.data;
 

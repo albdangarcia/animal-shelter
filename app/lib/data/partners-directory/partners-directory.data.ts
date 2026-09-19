@@ -143,7 +143,7 @@ const _fetchPartnerForEdit = async (
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
-    throw new Error("Invalid partner ID format.");
+    return null;
   }
 
   try {
@@ -178,7 +178,7 @@ const _fetchSectionCardsPartnerData = async (
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
-    throw new Error("Invalid partner ID format.");
+    return null;
   }
 
   const validatedPartnerId = parsedId.data;

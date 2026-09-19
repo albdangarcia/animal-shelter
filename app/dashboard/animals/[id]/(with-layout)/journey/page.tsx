@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
@@ -19,7 +19,7 @@ const Page = async ({ params }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.ANIMAL_JOURNEY_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} />
     </Authorize>

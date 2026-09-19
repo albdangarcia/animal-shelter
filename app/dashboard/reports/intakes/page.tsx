@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { SearchParamsType } from "@/app/lib/types";
 import { ReportParamsSchema } from "@/app/lib/zod-schemas/report.schemas";
@@ -67,7 +67,7 @@ const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.REPORTS_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />
     </Authorize>

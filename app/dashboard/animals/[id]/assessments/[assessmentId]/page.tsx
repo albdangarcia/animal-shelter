@@ -6,7 +6,7 @@ import { AssessmentSuggestions } from "@/components/dashboard/animals/assessment
 import { AssessmentDetailActions } from "@/components/dashboard/animals/assessments/assessment-actions";
 import { SignalBadge } from "@/components/dashboard/animals/assessments/signal-badge";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -29,7 +29,7 @@ const Page = async ({ params }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.ANIMAL_ASSESSMENT_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} />
     </Authorize>

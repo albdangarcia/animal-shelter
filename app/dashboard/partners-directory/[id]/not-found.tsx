@@ -4,9 +4,9 @@ const Page = () => {
   return (
     <StatusPage
       type="notFound"
-      itemName="Animal"
-      buttonGoTo="Animals"
-      redirectUrl="/dashboard/animals"
+      itemName="Partner"
+      buttonGoTo="Partner Directory"
+      redirectUrl="/dashboard/partners-directory"
     />
   );
 };

@@ -1,6 +1,6 @@
 import { LocationsSection } from "@/components/dashboard/settings/locations/locations-section";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchLocationsWithUnits } from "@/app/lib/data/locations/locations.data";
 import type { SearchParamsType } from "@/app/lib/types";
@@ -13,7 +13,7 @@ const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.MANAGE_LOCATIONS}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />
     </Authorize>

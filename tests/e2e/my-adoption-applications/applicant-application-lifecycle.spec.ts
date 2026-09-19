@@ -144,7 +144,7 @@ const resolveClosedFixtures = async (page: Page) => {
 
     // The two CLOSED fixtures land on different pages: the archived animal is
     // gone from the public site and renders the "Pet Not Found" page
-    // (PageNotFoundOrAccessDenied), the returned one was republished and — a
+    // (StatusPage), the returned one was republished and — a
     // CLOSED application never blocks — offers the Adopt call to action.
     const adoptCta = page.getByRole("link", { name: /^Adopt / });
     const notFoundHeading = page.getByRole("heading", {

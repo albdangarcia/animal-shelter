@@ -14,7 +14,7 @@ import AnimalsDataTableToolbar from "@/components/dashboard/animals/table/animal
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
@@ -25,7 +25,7 @@ const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.ANIMAL_INFO_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />
     </Authorize>

@@ -136,7 +136,7 @@ const _fetchMyAdoptionAppById = async (
   const parsedAdoptionAppId = cuidSchema.safeParse(adoptionAppId);
 
   if (!parsedAdoptionAppId.success) {
-    throw new Error("Invalid Application ID format.");
+    return null;
   }
   const validatedAdoptionAppId = parsedAdoptionAppId.data;
 
@@ -203,7 +203,7 @@ const _getAnimalForAdoptionApplication = async (
   const parsedId = cuidSchema.safeParse(animalId);
 
   if (!parsedId.success) {
-    throw new Error("Invalid animal ID format.");
+    return null;
   }
   const validatedAnimalId = parsedId.data;
 

@@ -1,5 +1,5 @@
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchAdoptionApplicationForEdit } from "@/app/lib/data/people-directory/person-adoption-applications.data";
 import { notFound } from "next/navigation";
@@ -15,7 +15,7 @@ const Page = async ({ params, searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.PERSONS_MANAGE}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} searchParams={searchParams} />
     </Authorize>

@@ -1,7 +1,7 @@
 import AnimalForm from "@/components/dashboard/animals/animal-intake-form";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { fetchColors, fetchPartners, fetchSpecies } from "@/app/lib/data/animals/animal.data";
 import { fetchUnitPickerOptions } from "@/app/lib/data/locations/unit-picker.data";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
@@ -10,7 +10,7 @@ const Page = async () => {
   return (
     <Authorize
       permission={AppPermissions.INTAKE_MANAGE}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent />
     </Authorize>

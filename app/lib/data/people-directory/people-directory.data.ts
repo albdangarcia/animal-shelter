@@ -206,7 +206,7 @@ const _fetchSectionCardsPersonData = async (
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
-    throw new Error("Invalid person ID format.");
+    return null;
   }
 
   const validatedPersonId = parsedId.data;
@@ -264,7 +264,7 @@ const _fetchPersonForEdit = async (
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
-    throw new Error("Invalid person ID format.");
+    return null;
   }
 
   try {
@@ -328,7 +328,7 @@ const _fetchPersonProfileTabData = async (
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
-    throw new Error("Invalid person ID format.");
+    return null;
   }
 
   try {
@@ -406,7 +406,7 @@ const _fetchPersonForApplicationForm = async (
   const parsedId = cuidSchema.safeParse(id);
 
   if (!parsedId.success) {
-    throw new Error("Invalid person ID format.");
+    return null;
   }
 
   try {

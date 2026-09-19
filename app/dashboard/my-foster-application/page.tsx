@@ -6,7 +6,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { ApplicationStatus } from "@/prisma/generated/enums";
 import {
@@ -27,7 +27,7 @@ const Page = async () => {
   return (
     <Authorize
       permission={AppPermissions.MY_FOSTER_APPLICATION_MANAGE}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent />
     </Authorize>

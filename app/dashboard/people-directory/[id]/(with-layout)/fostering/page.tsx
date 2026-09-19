@@ -1,7 +1,7 @@
 import { FosterStatus } from "@/prisma/generated/enums";
 import { IDParamType } from "@/app/lib/types";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { fetchFosterProfileByPersonId } from "@/app/lib/data/fosters/fosters.data";
@@ -19,7 +19,7 @@ const Page = async ({ params }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.FOSTERS_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent params={params} />
     </Authorize>

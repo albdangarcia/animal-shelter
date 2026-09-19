@@ -215,7 +215,7 @@ const _fetchAdoptionApplicationById = async (
 ): Promise<AdoptionApplicationWithOutcome | null> => {
   const parsedId = cuidSchema.safeParse(id);
   if (!parsedId.success) {
-    throw new Error("Invalid Application ID format.");
+    return null;
   }
   const validatedId = parsedId.data;
 

@@ -1,5 +1,5 @@
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { fetchShelterBoard } from "@/app/lib/data/locations/shelter-board.data";
@@ -9,7 +9,7 @@ const Page = async () => {
   return (
     <Authorize
       permission={AppPermissions.ANIMAL_INFO_READ}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent />
     </Authorize>

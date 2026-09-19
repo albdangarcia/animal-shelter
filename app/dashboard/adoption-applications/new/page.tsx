@@ -1,6 +1,6 @@
 import { SearchParamsType } from "@/app/lib/types";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchPersonForApplicationForm } from "@/app/lib/data/people-directory/people-directory.data";
 import { searchPublishedAnimals } from "@/app/lib/data/animals/animal.data";
@@ -15,7 +15,7 @@ const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.PERSONS_MANAGE}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />
     </Authorize>

@@ -1,6 +1,6 @@
 import { ColorsSection } from "@/components/dashboard/settings/animal-taxonomy/colors-section";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchColorsCatalog } from "@/app/lib/data/colors/colors-catalog.data";
 import { fetchSpeciesCatalog } from "@/app/lib/data/species/species-catalog.data";
@@ -12,7 +12,7 @@ const Page = async () => {
   return (
     <Authorize
       permission={AppPermissions.MANAGE_ANIMAL_TAXONOMY}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent />
     </Authorize>

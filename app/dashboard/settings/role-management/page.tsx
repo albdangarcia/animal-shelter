@@ -12,7 +12,7 @@ import UsersTableToolbar from "@/components/dashboard/role-management/table/role
 import { columns } from "@/components/dashboard/role-management/table/role-management-table-columns";
 import DataTable from "@/components/table-common/data-table";
 import { Authorize } from "@/components/auth/authorize";
-import PageNotFoundOrAccessDenied from "@/components/PageNotFoundOrAccessDenied";
+import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
@@ -23,7 +23,7 @@ const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
       permission={AppPermissions.MANAGE_ROLES}
-      fallback={<PageNotFoundOrAccessDenied type="accessDenied" />}
+      fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />
     </Authorize>
