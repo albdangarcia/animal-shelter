@@ -1,8 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +31,10 @@ import { NotePayload } from "@/app/lib/data/animals/animal-note.data";
 import { NoteForm } from "./note-form";
 import { deleteAnimalNote, restoreAnimalNote } from "@/app/lib/actions/animal-note.actions";
 import { toast } from "sonner";
+import {
+  DirtyFormHandle,
+  useConfirmedOpenChange,
+} from "@/hooks/use-confirmed-open-change";
 
 interface NoteActionsProps {
   note: NotePayload;
@@ -30,6 +44,13 @@ interface NoteActionsProps {
 export function NoteActions({ note, animalId }: NoteActionsProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const formRef = useRef<DirtyFormHandle>(null);
+
+  const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
+    useConfirmedOpenChange(
+      () => formRef.current?.isDirty() ?? false,
+      setIsDialogOpen,
+    );
 
   const onSoftDelete = () => {
     startTransition(() => {
@@ -57,7 +78,7 @@ export function NoteActions({ note, animalId }: NoteActionsProps) {
   };
 
   return (
-    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+    <Dialog open={isDialogOpen} onOpenChange={guardedOnOpenChange}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon" className="h-7 w-7">
@@ -95,9 +116,32 @@ export function NoteActions({ note, animalId }: NoteActionsProps) {
         <NoteForm
           animalId={animalId}
           onFormSubmit={() => setIsDialogOpen(false)}
+          ref={formRef}
           note={note}
         />
       </DialogContent>
+
+      <AlertDialog
+        open={isConfirmOpen}
+        onOpenChange={(open) => !open && cancelDiscard()}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved note?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your changes will be lost if you leave without saving.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelDiscard}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDiscard}>
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }

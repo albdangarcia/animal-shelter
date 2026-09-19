@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { clsx } from "clsx";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Dialog,
   DialogContent,
@@ -36,6 +46,10 @@ import { NoteActions } from "./note-actions";
 import { SimplePagination } from "../../../simple-pagination";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { ServerSideSort } from "@/components/table-common/server-side-sort";
+import {
+  DirtyFormHandle,
+  useConfirmedOpenChange,
+} from "@/hooks/use-confirmed-open-change";
 
 export const noteCategoryColors: Record<NoteCategory, string> = {
   [NoteCategory.BEHAVIORAL]:
@@ -66,6 +80,13 @@ interface Props {
 
 const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const formRef = useRef<DirtyFormHandle>(null);
+
+  const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
+    useConfirmedOpenChange(
+      () => formRef.current?.isDirty() ?? false,
+      setIsAddDialogOpen,
+    );
 
   return (
     <>
@@ -80,7 +101,7 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
           </CardDescription>
 
           <CardAction>
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+            <Dialog open={isAddDialogOpen} onOpenChange={guardedOnOpenChange}>
               <DialogTrigger asChild>
                 <Button
                   variant={canManage ? "default" : "outline"}
@@ -102,8 +123,31 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
                 <NoteForm
                   animalId={animalId}
                   onFormSubmit={() => setIsAddDialogOpen(false)}
+                  ref={formRef}
                 />
               </DialogContent>
+
+              <AlertDialog
+                open={isConfirmOpen}
+                onOpenChange={(open) => !open && cancelDiscard()}
+              >
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Discard unsaved note?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Your changes will be lost if you leave without saving.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel onClick={cancelDiscard}>
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmDiscard}>
+                      Discard
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </Dialog>
           </CardAction>
 

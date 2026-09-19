@@ -30,6 +30,16 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -44,6 +54,7 @@ import { toast } from "sonner";
 import { CATEGORIES } from "@/app/lib/constants/characteristic-categories";
 import { formatDateToLongString } from "@/app/lib/utils/date-utils";
 import { FindingsAgainst } from "./findings-against";
+import { useConfirmedOpenChange } from "@/hooks/use-confirmed-open-change";
 
 const CATEGORY_KEYS = Object.values(CharacteristicCategory);
 
@@ -70,6 +81,13 @@ const AnimalCharacteristicsManager = ({
       .filter((char) => char.isAssigned)
       .map((char) => char.id),
   );
+
+  // stagedChanges is seeded from initialAssignedIds on open (handleOpenDialog),
+  // so dirty means the staged set has actually diverged from what's saved —
+  // not just that it's non-empty.
+  const isDirty =
+    stagedChanges.size !== initialAssignedIds.size ||
+    [...stagedChanges].some((id) => !initialAssignedIds.has(id));
 
   // Use stagedChanges if dialog is open, otherwise use initial data
   const assignedCharacteristics = animalCharacteristics.filter((char) =>
@@ -136,13 +154,18 @@ const AnimalCharacteristicsManager = ({
     setOpenCombobox(false);
   };
 
+  const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
+    useConfirmedOpenChange(() => isDirty, (open) => {
+      if (!open) handleCancel();
+      else handleOpenDialog();
+    });
+
   return (
     <Dialog
       open={isDialogOpen}
       onOpenChange={(open) => {
         if (isPending) return; // block close during save
-        if (!open) handleCancel();
-        else handleOpenDialog();
+        guardedOnOpenChange(open);
       }}
     >
       <Card className="@container/card">
@@ -305,7 +328,11 @@ const AnimalCharacteristicsManager = ({
           </Popover>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={handleCancel} disabled={isPending}>
+          <Button
+            variant="outline"
+            onClick={() => guardedOnOpenChange(false)}
+            disabled={isPending}
+          >
             Cancel
           </Button>
           <Button onClick={handleSave} disabled={isPending}>
@@ -320,6 +347,29 @@ const AnimalCharacteristicsManager = ({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <AlertDialog
+        open={isConfirmOpen}
+        onOpenChange={(open) => !open && cancelDiscard()}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your changes to this animal&apos;s characteristics will be lost
+              if you leave without saving.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelDiscard}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDiscard}>
+              Discard
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 };
