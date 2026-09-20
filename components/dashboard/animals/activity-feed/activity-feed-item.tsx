@@ -58,6 +58,10 @@ const activityConfig: Record<
     icon: LogOut,
     text: "processed an outcome",
   },
+  [AnimalActivityType.OUTCOME_CORRECTED]: {
+    icon: Pencil,
+    text: "corrected an outcome",
+  },
   [AnimalActivityType.MEDICAL_RECORD_ADDED]: {
     icon: HeartPulse,
     text: "added a medical record",

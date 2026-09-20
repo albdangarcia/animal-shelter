@@ -1505,6 +1505,7 @@ enum AnimalActivityType {
   NOTE_EDITED // An existing note was edited
   NOTE_DELETED // A note was soft-deleted
   NOTE_RESTORED // A soft-deleted note was restored
+  OUTCOME_CORRECTED // An existing outcome's date, notes, partner or owner was edited
 }
 
 model AnimalActivityLog {
