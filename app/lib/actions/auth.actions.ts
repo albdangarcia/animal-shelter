@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { APIError } from "better-auth/api";
 import { z } from "zod";
 import { auth } from "@/auth";
+import { DEACTIVATED_ACCOUNT_CODE } from "@/auth.options";
 import { safeInternalPath } from "../utils/safe-redirect";
 import {
   SignInFormSchema,
@@ -38,6 +39,14 @@ export const signInWithCredentials = async (
       error.body?.code === "INVALID_EMAIL_OR_PASSWORD"
     ) {
       return { ok: false, message: "Invalid email or password." };
+    }
+    // Only reached with the right password, so naming the cause discloses
+    // nothing to someone who does not already hold the account.
+    if (
+      error instanceof APIError &&
+      error.body?.code === DEACTIVATED_ACCOUNT_CODE
+    ) {
+      return { ok: false, message: error.body.message ?? "Account deactivated." };
     }
     throw error;
   }

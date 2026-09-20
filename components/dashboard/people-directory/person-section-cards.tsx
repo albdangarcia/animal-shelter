@@ -45,6 +45,13 @@ const PersonSectionCards = async ({ params }: Props) => {
     .filter(Boolean)
     .join(", ");
 
+  // A barred account. Worth its own badge rather than being folded into the
+  // role, because it changes what this screen's own edit link can do: the email
+  // of record is staff's to correct for a person whose account cannot sign in,
+  // and refused for one whose can. Same word and same variant as the role
+  // management table, so the two surfaces read alike.
+  const isDeactivated = !!person.user?.deactivatedAt;
+
   const applicationCount = person._count.adoptionApplications;
   const intakeOutcomeCount =
     person._count.surrenderedAnimals +
@@ -95,7 +102,11 @@ const PersonSectionCards = async ({ params }: Props) => {
                 <CardTitle className="mb-1">{person.name}</CardTitle>
                 <CardDescription className="flex items-center gap-1">
                   <UserIcon className="h-3 w-3" />
-                  {person.user ? "Registered User" : "Contact Record"}
+                  {person.user
+                    ? isDeactivated
+                      ? "Registered User — account cannot sign in"
+                      : "Registered User"
+                    : "Contact Record"}
                 </CardDescription>
                 {fullAddress && (
                   <div className="flex items-center gap-1 text-sm text-muted-foreground mt-2">
@@ -104,7 +115,8 @@ const PersonSectionCards = async ({ params }: Props) => {
                   </div>
                 )}
               </div>
-              <CardAction>
+              <CardAction className="flex flex-wrap items-center justify-end gap-1.5">
+                {isDeactivated && <Badge variant="destructive">Deactivated</Badge>}
                 <Badge variant={person.user ? "default" : "outline"}>
                   {person.user
                     ? formatSingleEnumOption(person.user.role)

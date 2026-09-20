@@ -1,7 +1,13 @@
 import { redirect } from "next/navigation";
 import { IconPaw } from "@tabler/icons-react";
+import { TriangleAlert } from "lucide-react";
 import { auth } from "@/auth";
+import {
+  DEACTIVATED_ACCOUNT_CODE,
+  DEACTIVATED_ACCOUNT_MESSAGE,
+} from "@/auth.options";
 import { getCachedSession } from "@/app/lib/auth/session";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { GitHubIcon, GoogleIcon } from "@/components/auth/provider-icons";
 import { SignInForm } from "@/components/auth/sign-in-form";
 import { SearchParamsType } from "@/app/lib/types";
@@ -22,12 +28,47 @@ const providerIcons = {
   google: GoogleIcon,
 } as const;
 
+/**
+ * Where a refused social sign-in comes back to. Without it better-auth sends
+ * the browser to its own built-in `/api/auth/error` page, which is outside this
+ * app entirely — no nav, no styling, and a button that leads off to
+ * better-auth's own site. A refusal belongs back at the door the person
+ * knocked on, with the destination they were heading for still attached so the
+ * retry goes where the first attempt would have.
+ */
+const signInPathFor = (destination: string) =>
+  `/sign-in?callbackUrl=${encodeURIComponent(destination)}`;
+
+/**
+ * What the card says when a social sign-in came back refused. Credentials
+ * sign-in never reaches this: it gets the same sentence from the thrown error,
+ * through the form's toast.
+ *
+ * Only this app's own refusal codes are spelled out. Everything else falls to
+ * the generic line deliberately — better-auth's own `OAUTH_CALLBACK_ERROR_CODES`
+ * describe machinery the person cannot act on, and the linking hook's
+ * `EMAIL_ON_ANOTHER_SHELTER_RECORD` says more or less depending on whether the
+ * provider vouched for the address. The code alone does not carry which, and
+ * the guarded half is the only one safe to show without knowing: to an
+ * unverified caller, "that address is on a record" is an oracle for whether
+ * someone has dealt with the shelter.
+ *
+ * better-auth also puts an `error_description` on the redirect, and this
+ * ignores it. Anyone can send somebody a `/sign-in?error=x&error_description=…`
+ * link, so reflecting it would render text of a stranger's choosing — a number
+ * to ring, an address to write to — inside this app's own sign-in card.
+ */
+const signInErrorMessage = (code: string) =>
+  code === DEACTIVATED_ACCOUNT_CODE
+    ? DEACTIVATED_ACCOUNT_MESSAGE
+    : "Please try again, or contact the shelter if it keeps happening.";
+
 interface Props {
   searchParams: SearchParamsType;
 }
 
 const SignInPage = async ({ searchParams }: Props) => {
-  const { callbackUrl } = await searchParams;
+  const { callbackUrl, error } = await searchParams;
   // Guards the auth.api.signInSocial call below, which nothing downstream
   // validates. auth.actions.ts guards its own argument separately — it's a
   // public POST endpoint — so this looks redundant for the credentials path.
@@ -58,6 +99,13 @@ const SignInPage = async ({ searchParams }: Props) => {
         </div>
 
         <div className="mt-8 rounded-[32px] bg-card p-8 shadow-organic-md">
+          {error && (
+            <Alert variant="destructive" className="mb-6">
+              <TriangleAlert aria-hidden="true" />
+              <AlertTitle>We couldn&apos;t sign you in</AlertTitle>
+              <AlertDescription>{signInErrorMessage(error)}</AlertDescription>
+            </Alert>
+          )}
           <SignInForm callbackUrl={redirectTo} />
 
           {/* Hairline with "or" plated over it in --card, rather than a gap */}
@@ -80,7 +128,11 @@ const SignInPage = async ({ searchParams }: Props) => {
                   action={async () => {
                     "use server";
                     const { url } = await auth.api.signInSocial({
-                      body: { provider: provider.id, callbackURL: redirectTo },
+                      body: {
+                        provider: provider.id,
+                        callbackURL: redirectTo,
+                        errorCallbackURL: signInPathFor(redirectTo),
+                      },
                     });
                     if (url) redirect(url);
                   }}

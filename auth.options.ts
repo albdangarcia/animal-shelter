@@ -6,6 +6,22 @@ import prisma from "@/app/lib/prisma";
 
 type ExtendedPrismaClient = typeof prisma;
 
+// The code better-auth reports to a client when a deactivated account tries to
+// start a session, and the sentence that goes with it.
+//
+// Both are exported because the refusal is thrown inside a database hook, and
+// the two routes that reach that hook surface it completely differently. A
+// credentials sign-in throws back into `signInWithCredentials`, which reads
+// `error.body.message` and hands it to the form. An OAuth sign-in is a
+// redirect: better-auth catches the same error in its callback route and
+// bounces the browser to the flow's `errorCallbackURL` with `?error=<code>` on
+// it, keeping nothing but the code. So the sign-in page has to be able to look
+// the wording up from the code alone, and it must be the same wording either
+// route produces.
+export const DEACTIVATED_ACCOUNT_CODE = "ACCOUNT_DEACTIVATED";
+export const DEACTIVATED_ACCOUNT_MESSAGE =
+  "This account has been deactivated. Please contact the shelter.";
+
 // on user creation, link to an existing Person by exact email match only
 // if the email is provider-verified AND that Person has no user yet;
 // otherwise create a new Person. Write an audit entry on every auto-link.
@@ -102,6 +118,37 @@ function makeLinkOrCreatePerson(db: ExtendedPrismaClient, trustProvidedEmails: b
   };
 }
 
+// A deactivated account gets no new session. Deactivation is enforced at three
+// points and this is the one that stops the sign-in itself: without it the
+// credentials or OAuth flow "succeeds", the user lands in a logged-out state
+// because `getCachedSession` refuses the session it just made, signs in again,
+// and loops. The other two are the session revocation that runs when the
+// account is deactivated, and the check in `getCachedSession`.
+//
+// Same shape as better-auth's admin plugin ban check, minus its expiry: a
+// deactivation ends when an admin reactivates the account, not on a timer. The
+// user is read through the injected client rather than through better-auth's
+// internal adapter so this hook can be driven directly in a test, the way the
+// sign-up hook is, with no better-auth context to construct.
+//
+// The code and message are safe to show: for credentials this runs after the
+// password has been verified, and for OAuth after the provider has, so neither
+// discloses anything to someone who does not already hold the account.
+function refuseDeactivatedAccount(db: ExtendedPrismaClient) {
+  return async function refuse(session: { userId: string }) {
+    const account = await db.user.findUnique({
+      where: { id: session.userId },
+      select: { deactivatedAt: true },
+    });
+    if (account?.deactivatedAt) {
+      throw new APIError("FORBIDDEN", {
+        code: DEACTIVATED_ACCOUNT_CODE,
+        message: DEACTIVATED_ACCOUNT_MESSAGE,
+      });
+    }
+  };
+}
+
 // Shared config, no plugins, client injected — mounted by auth.ts (the app,
 // pooled client) and prisma/seed.ts (the seed, direct client).
 export const authOptions = (
@@ -141,12 +188,24 @@ export const authOptions = (
           type: ["ADMIN", "STAFF", "USER", "VOLUNTEER"],
           input: false,
         },
+        // On the session's user so `getCachedSession` can refuse a
+        // deactivated account without a query of its own per request.
+        deactivatedAt: {
+          type: "date",
+          required: false,
+          input: false,
+        },
       },
     },
     databaseHooks: {
       user: {
         create: {
           before: makeLinkOrCreatePerson(db, opts?.trustProvidedEmails ?? false),
+        },
+      },
+      session: {
+        create: {
+          before: refuseDeactivatedAccount(db),
         },
       },
     },

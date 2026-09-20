@@ -213,10 +213,17 @@ const _updatePerson = async (
   }
 
   // The email of record is also the address the account signs in under, so for
-  // a person who has one this field is not staff's to move. Credential users
-  // authenticate by that address and there is no self-serve sign-up or
+  // a person who has a live one this field is not staff's to move. Credential
+  // users authenticate by that address and there is no self-serve sign-up or
   // password reset to recover through, so a staff edit here is a lockout, not
   // an inconvenience. The person changes it from their own profile.
+  //
+  // A deactivated account is not a live one, and both halves of that reasoning
+  // fall away: its holder cannot reach their own profile to make the change,
+  // and there is no access left for a staff edit to cost them. Leaving the
+  // guard strict would recreate, in miniature, the dead end where nobody can
+  // correct a record. Reactivating the account later restores sign-in under
+  // whatever address the record holds by then.
   //
   // Only the email, and this is the whole of what an account withholds from
   // staff anywhere in the app: the application snapshot and the household
@@ -229,7 +236,10 @@ const _updatePerson = async (
   try {
     existingPerson = await prisma.person.findUnique({
       where: { id: parsedId.data },
-      select: { email: true, user: { select: { id: true } } },
+      select: {
+        email: true,
+        user: { select: { id: true, deactivatedAt: true } },
+      },
     });
   } catch (error) {
     console.error("Database Error reading person before update:", error);
@@ -242,7 +252,11 @@ const _updatePerson = async (
   // Stored addresses are always lowercase (the normalization extension), so
   // this compares addresses rather than how they were typed.
   const requestedEmail = validatedFields.data.email?.trim().toLowerCase() || null;
-  if (existingPerson.user && requestedEmail !== existingPerson.email) {
+  if (
+    existingPerson.user &&
+    !existingPerson.user.deactivatedAt &&
+    requestedEmail !== existingPerson.email
+  ) {
     return {
       ok: false,
       message: "Failed to update person.",

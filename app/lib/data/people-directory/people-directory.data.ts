@@ -229,6 +229,11 @@ const _fetchSectionCardsPersonData = async (
             role: true,
             image: true,
             emailVerified: true,
+            // Whether the account is barred. The header card says so, because
+            // "has an account" on its own no longer settles what staff may do
+            // with the record: the email of record is theirs to correct once
+            // the account cannot sign in.
+            deactivatedAt: true,
           },
         },
         _count: {

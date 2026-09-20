@@ -113,6 +113,21 @@ model User {
   createdAt DateTime @default(now()) @map(name: "created_at")
   updatedAt DateTime @updatedAt @map(name: "updated_at")
 
+  /// Null is an active account; any timestamp is one that is barred. The whole
+  /// of the state, which is what makes deactivation reversible with no schema
+  /// change. It exists because the app has no other way to stop an account:
+  /// GitHub sign-up is open to anyone, and demoting to USER leaves the five
+  /// `MY_*` permissions, so an abusive applicant keeps submitting. It also
+  /// honors a "close my account" request without destroying shelter history.
+  ///
+  /// Set only by the deactivation service, which revokes the account's sessions
+  /// in the same transaction. Three points enforce it: `session.create.before`
+  /// refuses a new session, that revocation ends the open ones, and
+  /// `getCachedSession` refuses any that slipped between the two.
+  ///
+  /// Never implement "deactivated" by unlinking the Person instead — an
+  /// unlinked account still signs in, and the record it leaves behind stops
+  /// being hidden by `nonAdminPersonFilter`.
   deactivatedAt DateTime? @map(name: "deactivated_at")
 
   @@map(name: "users")

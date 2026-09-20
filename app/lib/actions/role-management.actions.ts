@@ -6,8 +6,23 @@ import { Role } from "@/prisma/generated/enums";
 import { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
 import { authIdSchema } from "../zod-schemas/common.schemas";
-import { RequirePermission } from "../auth/protected-actions";
+import {
+  DeactivateUserSchema,
+  ReactivateUserSchema,
+} from "../zod-schemas/role-management.schemas";
+import {
+  RequirePermission,
+  withAuthenticatedUser,
+  type SessionUser,
+} from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
+import { ConflictError, NotFoundError } from "../utils/errors";
+import {
+  deactivateAccount,
+  reactivateAccount,
+} from "../services/user-deactivation";
+
+const ROLE_MANAGEMENT_PATH = "/dashboard/settings/role-management";
 
 // Define a Zod schema for input validation
 const UpdateUserRoleSchema = z.object({
@@ -44,7 +59,7 @@ const _updateUserRole = async (userId: string, newRole: Role) => {
       },
     });
 
-    revalidatePath("/dashboard/settings/role-management");
+    revalidatePath(ROLE_MANAGEMENT_PATH);
 
     return {
       success: true,
@@ -74,4 +89,84 @@ const _updateUserRole = async (userId: string, newRole: Role) => {
 
 export const updateUserRole = RequirePermission(AppPermissions.MANAGE_ROLES)(
   _updateUserRole
+);
+
+/**
+ * Bar an account from the app, or lift the bar. The work is in
+ * `user-deactivation`; these are the authorization, the transaction and the
+ * cache invalidation around it.
+ *
+ * An admin action performed *on* an account, exactly like the role change
+ * above and held by the same permission: `MANAGE_ROLES` answers "what may this
+ * account do", and whether it may sign in at all is squarely that. There is
+ * deliberately no self-service version. With no self-serve sign-up and no
+ * password reset, a user who deactivated their own account would be locked out
+ * of their own adoption applications with no way to ask for help except
+ * phoning the shelter.
+ *
+ * This bars an account, not a human: someone deactivated can sign up again
+ * under a different provider account and get a fresh record, and nothing here
+ * connects the two. That is a feature with its own design, not a gap to patch
+ * in this action.
+ */
+const _setAccountDeactivated = async (
+  actor: SessionUser,
+  userId: string,
+  reason: string,
+  deactivate: boolean,
+) => {
+  const validation = (
+    deactivate ? DeactivateUserSchema : ReactivateUserSchema
+  ).safeParse({ userId, reason });
+  if (!validation.success) {
+    return {
+      success: false,
+      message: validation.error.issues[0]?.message || "Invalid input provided.",
+    };
+  }
+  const input = validation.data;
+  const acting = { userId: actor.id, personId: actor.personId };
+
+  let personId: string;
+  try {
+    ({ personId } = await prisma.$transaction((tx) =>
+      deactivate
+        ? deactivateAccount(tx, input.userId, acting, { reason: input.reason })
+        : reactivateAccount(tx, input.userId, acting, { reason: input.reason || null }),
+    ));
+  } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ConflictError) {
+      return { success: false, message: error.message };
+    }
+    console.error("Failed to change account state:", error);
+    return {
+      success: false,
+      message: "Database error: Could not update the account.",
+    };
+  }
+
+  revalidatePath(ROLE_MANAGEMENT_PATH);
+  // The note this wrote lands on that person's record.
+  revalidatePath(`/dashboard/people-directory/${personId}`, "layout");
+
+  return {
+    success: true,
+    message: deactivate
+      ? "Account deactivated. It can no longer sign in."
+      : "Account reactivated. It can sign in again.",
+  };
+};
+
+const _deactivateUser = (actor: SessionUser, userId: string, reason: string) =>
+  _setAccountDeactivated(actor, userId, reason, true);
+
+const _reactivateUser = (actor: SessionUser, userId: string, reason: string) =>
+  _setAccountDeactivated(actor, userId, reason, false);
+
+export const deactivateUser = withAuthenticatedUser(
+  RequirePermission(AppPermissions.MANAGE_ROLES)(_deactivateUser),
+);
+
+export const reactivateUser = withAuthenticatedUser(
+  RequirePermission(AppPermissions.MANAGE_ROLES)(_reactivateUser),
 );
