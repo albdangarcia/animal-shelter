@@ -30,13 +30,6 @@ const PageContent = async ({ params }: Props) => {
     notFound();
   }
 
-  // _updateStaffHouseholdProfile refuses to write for a person with a
-  // registered account — this guard keeps a direct URL hit from reaching a
-  // form that can never submit successfully.
-  if (person.user !== null) {
-    notFound();
-  }
-
   return (
     <main>
       <StaffHouseholdForm

@@ -61,6 +61,7 @@ const staffPermissions: readonly AppPermission[] = [
 const adminPermissions: readonly AppPermission[] = [
   ...staffPermissions,
   AppPermissions.MANAGE_ROLES,
+  AppPermissions.PERSON_ACCOUNT_UNLINK,
   AppPermissions.MANAGE_CHARACTERISTICS_CATALOG,
   AppPermissions.MANAGE_ASSESSMENT_TEMPLATES,
   AppPermissions.MANAGE_ANIMAL_TAXONOMY,

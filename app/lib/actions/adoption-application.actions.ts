@@ -13,7 +13,10 @@ import {
   toAdoptionApplicantData,
   type MyAdoptionAppFormInput,
 } from "../zod-schemas/myAdoptionApplication.schema";
-import { toHouseholdData } from "../zod-schemas/household-profile.schemas";
+import {
+  householdEditStamp,
+  toHouseholdData,
+} from "../zod-schemas/household-profile.schemas";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -41,23 +44,14 @@ const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
 const personApplicationsPath = (personId: string) =>
   `/dashboard/people-directory/${personId}/adoption-applications`;
 
-const REGISTERED_USER_CREATE_MESSAGE =
-  "Cannot submit an application on behalf of a registered user. The person should submit their own application.";
-
-const REGISTERED_USER_EDIT_MESSAGE =
-  "Cannot edit an application belonging to a registered user. The person should manage their own application.";
-
 const DUPLICATE_APPLICATION_MESSAGE =
   "An active application already exists for this person and animal.";
 
-// Holds the person's row for the rest of the transaction. Creating a `User`
-// inserts a row that references the person, and Postgres takes a FOR KEY SHARE
-// lock on the referenced row for that foreign-key check; FOR UPDATE conflicts
-// with it. So a sign-up that links to this person waits for the staff write to
-// commit instead of landing between the account check and the write — after
-// which the write would have gone through against an application the applicant
-// now owns. A plain read of `person.user` cannot give that guarantee, however
-// close to the write it sits.
+// Holds the person's row for the rest of the transaction, so everything read
+// behind it is still true at the write. Two concurrent submissions for the
+// same person and animal — a double-clicked Submit is enough — otherwise both
+// pass the duplicate check and both create an application, which is the state
+// that gate exists to prevent.
 const lockPerson = (tx: TransactionClient, personId: string) =>
   tx.$queryRaw`SELECT id FROM persons WHERE id = ${personId} FOR UPDATE`;
 
@@ -276,25 +270,26 @@ const _staffCreateAdoptionApplication = async (
   }
   const validatedPersonId = parsedPersonId.data;
 
-  // Block submission for persons who have a registered account — they submit via the public flow.
+  // No account check. Someone who has an account can file this themselves, but
+  // walking in and giving the answers at the desk is still how a lot of them
+  // arrive, and refusing on the existence of an account would leave staff able
+  // to correct an application they may not enter — which is backwards. The
+  // duplicate gate below is what stops the same application existing twice.
   let targetPerson;
   try {
     targetPerson = await prisma.person.findUnique({
       where: { id: validatedPersonId },
-      select: { user: { select: { id: true } } },
+      select: { id: true },
     });
   } catch (error) {
     console.error("Database error fetching person:", error);
     return {
       ok: false,
-      message: "Database Error: Failed to verify person account status.",
+      message: "Database Error: Failed to verify the person record.",
     };
   }
   if (!targetPerson) {
     return { ok: false, message: "Person not found." };
-  }
-  if (targetPerson.user !== null) {
-    return { ok: false, message: REGISTERED_USER_CREATE_MESSAGE };
   }
 
   const validatedFields =
@@ -367,23 +362,14 @@ const _staffCreateAdoptionApplication = async (
 
   try {
     await prisma.$transaction(async (tx) => {
-      // The reads above give the friendly errors; the checks behind this lock
-      // are the guarantee.
+      // The read above gives the friendly error; the check behind this lock
+      // is the guarantee.
       await lockPerson(tx, validatedPersonId);
-      const linkedUser = await tx.user.findUnique({
-        where: { personId: validatedPersonId },
-        select: { id: true },
-      });
-      if (linkedUser) {
-        throw new ConflictError(REGISTERED_USER_CREATE_MESSAGE);
-      }
 
-      // Re-read behind the lock for the same reason as the account check
-      // above: the read before the transaction is only the friendly error
-      // path. Without this, two submissions for the same person and animal —
-      // a double-clicked Submit is enough — both pass the earlier check, then
-      // queue on the lock and both create an application, which is the state
-      // this gate exists to prevent.
+      // Re-read behind the lock: the read before the transaction is only the
+      // friendly error path. Without this, two submissions for the same person
+      // and animal both pass the earlier check, then queue on the lock and
+      // both create an application.
       const duplicate = await tx.adoptionApplication.findFirst({
         where: {
           applicantId: validatedPersonId,
@@ -403,10 +389,10 @@ const _staffCreateAdoptionApplication = async (
           ...toAdoptionApplicantData(validatedFields.data),
           ...householdProfileData,
           status: ApplicationStatus.PENDING,
-          // this snapshot was transcribed at
-          // intake rather than typed by the applicant, so it is the one more
-          // likely to hold a mishearing. Never a permission rule — the
-          // applicant may still correct it once they have an account.
+          // This snapshot was transcribed at intake rather than typed by the
+          // applicant, so it is the one more likely to hold a mishearing.
+          // Never a permission rule — the applicant may still correct it once
+          // they have an account.
           source: ApplicationSource.STAFF,
         },
         select: { id: true },
@@ -421,14 +407,15 @@ const _staffCreateAdoptionApplication = async (
         },
       });
 
-      // Unlike _updateStaffHouseholdProfile which blocks edits for registered users,
-      // here we always upsert because the H&L data was captured verbally during the application
-      // intake. The "Add Application" flow is only accessible via the staff dashboard, so this
-      // is acceptable behavior.
+      // The household answers were captured at the desk alongside the rest of
+      // the application, so the profile is brought in line with them in the
+      // same transaction — the snapshot and the profile would otherwise
+      // disagree about a household the shelter just wrote down.
+      const editStamp = householdEditStamp(currentPersonId);
       await tx.householdProfile.upsert({
         where: { personId: validatedPersonId },
-        create: { personId: validatedPersonId, ...householdProfileData },
-        update: householdProfileData,
+        create: { personId: validatedPersonId, ...householdProfileData, ...editStamp },
+        update: { ...householdProfileData, ...editStamp },
       });
     });
   } catch (error) {
@@ -482,24 +469,13 @@ const _staffEditPersonApplication = async (
   const validatedAppId = parsedAppId.data;
   const validatedPersonId = parsedPersonId.data;
 
-  // Block edits for persons who have a registered account.
-  let targetPerson;
-  try {
-    targetPerson = await prisma.person.findUnique({
-      where: { id: validatedPersonId },
-      select: { user: { select: { id: true } } },
-    });
-  } catch (error) {
-    console.error("Database error fetching person:", error);
-    return {
-      ok: false,
-      message: "Database Error: Failed to verify person account status.",
-    };
-  }
-  if (!targetPerson) return { ok: false, message: "Person not found." };
-  if (targetPerson.user !== null) {
-    return { ok: false, message: REGISTERED_USER_EDIT_MESSAGE };
-  }
+  // No account check. An applicant who has signed up is still the person whose
+  // answers these are, and staff are still the only ones who can correct a
+  // snapshot they transcribed at intake — most of all for someone who can no
+  // longer reach the account. Refusing on the existence of an account left
+  // that application correctable by nobody. What makes this safe is not a
+  // lock but the record: `lastEditedBy` / `lastEditedAt` below say who moved
+  // the text, on the reviewer's screen and on the applicant's own.
 
   // Verify the application exists and belongs to this person.
   let existingApplication;
@@ -540,18 +516,14 @@ const _staffEditPersonApplication = async (
 
   try {
     await prisma.$transaction(async (tx) => {
-      // Conditional rather than pre-checked: the reads above only produce the
-      // friendly errors. With the person locked, this statement sees any
-      // account link that committed before us and blocks one that has not, so
-      // a count of 0 means the application stopped being staff-editable
-      // since those reads ran.
-      await lockPerson(tx, validatedPersonId);
+      // Conditional rather than pre-checked: the read above only produces the
+      // friendly error, so a count of 0 means the application left a
+      // staff-editable status between that read and this write.
       const { count } = await tx.adoptionApplication.updateMany({
         where: {
           id: validatedAppId,
           applicantId: validatedPersonId,
           status: { in: STAFF_EDITABLE_STATUSES },
-          applicant: { user: null },
         },
         data: {
           ...toAdoptionApplicantData(validatedFields.data),
@@ -566,14 +538,15 @@ const _staffEditPersonApplication = async (
       });
       if (count === 0) {
         throw new ConflictError(
-          "This application can no longer be edited. It may have moved to a status staff cannot edit, or the person may have just registered an account and now manages it themselves.",
+          "This application has moved to a status staff cannot edit.",
         );
       }
 
+      const editStamp = householdEditStamp(session.user.personId);
       await tx.householdProfile.upsert({
         where: { personId: validatedPersonId },
-        create: { personId: validatedPersonId, ...householdProfileData },
-        update: householdProfileData,
+        create: { personId: validatedPersonId, ...householdProfileData, ...editStamp },
+        update: { ...householdProfileData, ...editStamp },
       });
     });
   } catch (error) {

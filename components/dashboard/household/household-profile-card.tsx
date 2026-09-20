@@ -8,19 +8,18 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { HouseholdProfilePayload } from "@/app/lib/types";
+import { HouseholdProfileWithEditorPayload } from "@/app/lib/types";
+import { formatDateToLongString, formatTimeAgo } from "@/app/lib/utils/date-utils";
 import { HouseholdReadOnlyRows } from "./household-read-only";
 
 export const HouseholdProfileCard = ({
   householdProfile,
   personId,
   canManage,
-  hasAccount,
 }: {
-  householdProfile?: HouseholdProfilePayload | null;
+  householdProfile?: HouseholdProfileWithEditorPayload | null;
   personId: string;
   canManage: boolean;
-  hasAccount: boolean;
 }) => {
   return (
     <Card>
@@ -29,7 +28,7 @@ export const HouseholdProfileCard = ({
         <CardDescription>
           Home environment and animal experience.
         </CardDescription>
-        {canManage && !hasAccount && (
+        {canManage && (
           <CardAction>
             <Button variant="outline" size="sm" asChild>
               <Link href={`/dashboard/people-directory/${personId}/household/edit`}>
@@ -41,6 +40,16 @@ export const HouseholdProfileCard = ({
       </CardHeader>
       <CardContent>
         <HouseholdReadOnlyRows hp={householdProfile} />
+        {householdProfile?.lastEditedAt && (
+          <p className="mt-4 text-xs text-muted-foreground">
+            Last edited
+            {householdProfile.lastEditedBy
+              ? ` by ${householdProfile.lastEditedBy.name}`
+              : ""}{" "}
+            on {formatDateToLongString(householdProfile.lastEditedAt)} (
+            {formatTimeAgo(householdProfile.lastEditedAt)}).
+          </p>
+        )}
       </CardContent>
     </Card>
   );

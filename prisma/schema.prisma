@@ -54,6 +54,7 @@ model Person {
   personNotesEdited          PersonNote[]                     @relation("PersonNoteLastEditor")
   partnerNotesEdited         PartnerNote[]                    @relation("PartnerNoteLastEditor")
   adoptionApplicationsEdited AdoptionApplication[]            @relation("AdoptionApplicationLastEditor")
+  householdProfilesEdited    HouseholdProfile[]               @relation("HouseholdProfileLastEditor")
   noteEvents                 NoteEvent[]                      @relation("NoteEventActor")
   personNotes                PersonNote[]                     @relation("PersonNoteSubject") // notes written ABOUT this person
   partnerContacts            PartnerContact[]
@@ -243,6 +244,14 @@ model HouseholdProfile {
   childrenAges            Int[]           @map(name: "children_ages")
   otherAnimalsDescription String?         @map(name: "other_animals_description")
   animalExperience        String?         @map(name: "animal_experience")
+
+  // Who last wrote this profile, whoever that was — the owner from their own
+  // account page or an application they submitted, or staff on their behalf.
+  // Null only for a row that predates the columns. `updatedAt` cannot say this:
+  // it moves for every write and names no one.
+  lastEditedById String?   @map(name: "last_edited_by_id")
+  lastEditedBy   Person?   @relation("HouseholdProfileLastEditor", fields: [lastEditedById], references: [id], onDelete: SetNull)
+  lastEditedAt   DateTime? @map(name: "last_edited_at")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

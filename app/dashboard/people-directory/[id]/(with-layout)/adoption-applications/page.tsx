@@ -10,7 +10,6 @@ import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import DataTable from "@/components/table-common/data-table";
 import { getColumns } from "@/components/dashboard/people-directory/adoption-applications/person-adoption-applications-table-columns";
 import { fetchPersonAdoptionApplications } from "@/app/lib/data/people-directory/person-adoption-applications.data";
-import { fetchPersonHasUserAccount } from "@/app/lib/data/people-directory/people-directory.data";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -39,14 +38,11 @@ const PageContent = async ({ searchParams, params }: Props) => {
   const { page = "1" } = await searchParams;
   const currentPage = Number(page);
 
-  const [canManage, { applications, totalPages, totalRows }, hasUserAccount] =
+  const [canManage, { applications, totalPages, totalRows }] =
     await Promise.all([
       hasPermission(AppPermissions.PERSONS_MANAGE),
       fetchPersonAdoptionApplications(currentPage, personId),
-      fetchPersonHasUserAccount(personId),
     ]);
-
-  const showAddButton = canManage && !hasUserAccount;
 
   return (
     <Card className="@container/card">
@@ -57,7 +53,7 @@ const PageContent = async ({ searchParams, params }: Props) => {
         <CardDescription>
           Applications this person has submitted.
         </CardDescription>
-        {showAddButton && (
+        {canManage && (
           <CardAction>
             <Button asChild size="sm">
               <Link
@@ -76,7 +72,7 @@ const PageContent = async ({ searchParams, params }: Props) => {
               <DataTable
                 data={applications}
                 getColumns={getColumns}
-                columnProps={{ canManage, canEdit: showAddButton, personId }}
+                columnProps={{ canManage, personId }}
                 totalPages={totalPages}
                 totalRows={totalRows}
               />

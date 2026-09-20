@@ -65,15 +65,6 @@ export type AdoptionApplicationWithOutcome = Prisma.AdoptionApplicationGetPayloa
         outcomeDate: true;
       };
     };
-    applicant: {
-      select: {
-        user: {
-          select: {
-            id: true;
-          };
-        };
-      };
-    };
     lastEditedBy: {
       select: { name: true };
     };
@@ -253,15 +244,6 @@ const _fetchAdoptionApplicationById = async (
           select: {
             id: true,
             outcomeDate: true,
-          },
-        },
-        applicant: {
-          select: {
-            user: {
-              select: {
-                id: true,
-              },
-            },
           },
         },
         // Who last rewrote the snapshot. The review screen shows it beside

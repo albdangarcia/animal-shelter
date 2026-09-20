@@ -16,7 +16,10 @@ import {
   type FosterApplicationStatusChangeInput,
   type FosterCapabilityFieldsInput,
 } from "../zod-schemas/foster.schemas";
-import { toHouseholdData } from "../zod-schemas/household-profile.schemas";
+import {
+  householdEditStamp,
+  toHouseholdData,
+} from "../zod-schemas/household-profile.schemas";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   RequirePermission,
@@ -138,10 +141,11 @@ const _createMyFosterApplication = async (
 
         // Keep the user's reusable Household Profile in sync with what they
         // just submitted, so future applications come prefilled.
+        const editStamp = householdEditStamp(user.personId);
         await tx.householdProfile.upsert({
           where: { personId: user.personId },
-          create: { personId: user.personId, ...householdProfileData },
-          update: householdProfileData,
+          create: { personId: user.personId, ...householdProfileData, ...editStamp },
+          update: { ...householdProfileData, ...editStamp },
         });
 
         // Best-effort sync of contact info back to Person. If the email

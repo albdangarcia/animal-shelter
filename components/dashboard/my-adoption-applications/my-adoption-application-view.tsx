@@ -7,8 +7,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { PencilLine } from "lucide-react";
 import { MyAdoptionApplicationDetailPayload } from "@/app/lib/types";
-import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import {
+  formatDateOrNA,
+  formatDateToLongString,
+  formatTimeAgo,
+} from "@/app/lib/utils/date-utils";
 import { HouseholdReadOnlyRows } from "@/components/dashboard/household/household-read-only";
 import { StatusHistoryTimeline } from "@/components/dashboard/applications/status-history-timeline";
 import { ApplicationStatuses } from "./table/my-applications-options";
@@ -57,6 +63,17 @@ export const MyAdoptionApplicationView = ({
     .filter(Boolean)
     .join(", ");
 
+  // Staff may correct the snapshot of an application whose applicant has an
+  // account — someone who transcribed it at intake, or who is helping a person
+  // that cannot reach their own login. That has to be visible to the applicant
+  // too, or the audit record only ever protects the reviewer. Their own edits
+  // are not news to them, so this is the edits that were not theirs.
+  const editedByOtherAt =
+    application.lastEditedById !== null &&
+    application.lastEditedById !== application.applicantId
+      ? application.lastEditedAt
+      : null;
+
   return (
     <div className="space-y-8">
       <Card className="@container/card">
@@ -99,7 +116,22 @@ export const MyAdoptionApplicationView = ({
             The contact details you submitted with this application.
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-6">
+          {editedByOtherAt && (
+            <Alert>
+              <PencilLine className="h-4 w-4" />
+              <AlertTitle>Changed by the shelter</AlertTitle>
+              <AlertDescription>
+                These answers were last changed
+                {application.lastEditedBy
+                  ? ` by ${application.lastEditedBy.name}`
+                  : ""}{" "}
+                on {formatDateToLongString(editedByOtherAt)} (
+                {formatTimeAgo(editedByOtherAt)}). Contact the shelter
+                if anything here is not what you meant to say.
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="space-y-1">
             <ReadOnlyRow label="Full Name" value={application.applicantName} />
             <ReadOnlyRow label="Email" value={application.applicantEmail} />

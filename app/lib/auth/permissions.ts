@@ -88,6 +88,16 @@ export const AppPermissions = {
 
   // Role Management (admins only)
   MANAGE_ROLES: "user:manage_roles",
+
+  // Account linkage repair (admins only)
+  // Detaching a login account from the Person record it was wrongly linked to.
+  // Held apart from PERSONS_MANAGE because it is not record-keeping: it
+  // decides which human an account belongs to, it moves that account off a
+  // record holding somebody's applications and history, and nothing in the app
+  // puts the link back. Held apart from MANAGE_ROLES because that one answers
+  // "what may this account do" and this one answers "whose record is it" —
+  // the role matrix matches today, the intent does not.
+  PERSON_ACCOUNT_UNLINK: "person_account:unlink",
   
   // Catalog / System Configuration (admins only)
   MANAGE_CHARACTERISTICS_CATALOG: "characteristics_catalog:manage",

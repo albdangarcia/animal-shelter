@@ -1,6 +1,11 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
+import {
+  APPLICANT_EMAIL,
+  SEEDED_USER_PASSWORD,
+  signIn as signInAs,
+} from "../support/applications";
 
 const adminPassword = process.env.ADMIN_PASSWORD;
 
@@ -131,6 +136,9 @@ test("saving the household form redirects back to the profile and shows the new 
   // card must reflect the values just saved without a manual reload.
   await expect(page.getByText("Rent Apartment")).toBeVisible();
   await expect(page.getByText(animalExperience)).toBeVisible();
+
+  // And it says who wrote it: the seeded admin is the one signed in here.
+  await expect(page.getByText(/Last edited by Admin User on /)).toBeVisible();
 });
 
 test("the button now reads Edit Household Info", async ({ page }) => {
@@ -140,13 +148,48 @@ test("the button now reads Edit Household Info", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("navigating directly to a registered user's household edit route is blocked", async ({
+// The household profile is the shelter's record of a household, not something
+// an account takes ownership of. Someone who has signed up is still the person
+// staff took these answers from at the desk, and the one who most needs them
+// written down is the one who cannot reach their own login.
+test("a registered user's household is staff-editable", async ({ page }) => {
+  const janeId = await personIdByName(page, "Jane Doe");
+  await page.goto(`/dashboard/people-directory/${janeId}`);
+  await expect(
+    page.getByRole("link", { name: /(Edit|Add) Household Info/ }),
+  ).toBeVisible();
+
+  await page.goto(`/dashboard/people-directory/${janeId}/household/edit`);
+  await expect(page.getByLabel("Living Situation *")).toBeVisible();
+});
+
+// The stamp is written by whoever saves, not only by staff, so a null editor
+// can only mean the row predates the column. Here the owner saves from their own
+// account page and staff then read who wrote it.
+test("the owner's own edit is attributed to them", async ({
   page,
+  browser,
 }) => {
   const janeId = await personIdByName(page, "Jane Doe");
-  await page.goto(`/dashboard/people-directory/${janeId}/household/edit`);
-  await expect(
-    page.getByRole("heading", { name: /not found/i }),
-  ).toBeVisible();
-  await expect(page.getByLabel("Living Situation *")).not.toBeVisible();
+
+  // Its own context: this file's storageState is the admin.
+  const context = await browser.newContext({ storageState: undefined });
+  const ownerPage = await context.newPage();
+  try {
+    await signInAs(ownerPage, APPLICANT_EMAIL, SEEDED_USER_PASSWORD);
+    await ownerPage.goto("/dashboard/account");
+    await fillStable(
+      ownerPage.getByLabel("Experience with Animals *"),
+      `Owner edit ${Date.now()}`,
+    );
+    await ownerPage.getByRole("button", { name: "Save Household Info" }).click();
+    await expect(
+      ownerPage.getByText("Household information updated successfully."),
+    ).toBeVisible();
+  } finally {
+    await context.close();
+  }
+
+  await page.goto(`/dashboard/people-directory/${janeId}`);
+  await expect(page.getByText(/Last edited by Jane Doe on /)).toBeVisible();
 });

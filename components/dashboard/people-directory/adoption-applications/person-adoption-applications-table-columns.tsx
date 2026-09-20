@@ -12,13 +12,11 @@ import { DataTableRowActions } from "./person-adoption-applications-table-row-ac
 
 export interface GetColumnsProps {
   canManage: boolean;
-  canEdit: boolean;
   personId: string;
 }
 
 export const getColumns = ({
   canManage,
-  canEdit,
   personId,
 }: GetColumnsProps): ColumnDef<StockFeatures, PersonAdoptionApplicationPayload>[] => [
   {
@@ -124,7 +122,6 @@ export const getColumns = ({
         row={row}
         personId={personId}
         canManage={canManage}
-        canEdit={canEdit}
       />
     ),
   },

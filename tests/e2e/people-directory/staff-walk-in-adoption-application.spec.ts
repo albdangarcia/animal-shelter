@@ -354,7 +354,7 @@ test("Edit Application Fields round-trips between review and edit", async ({
   const reviewUrl = new URL(page.url());
   const appId = reviewUrl.pathname.split("/")[3];
 
-  // Only rendered for walk-ins.
+  // Rendered while the status is one staff may still rewrite.
   await page
     .getByRole("link", { name: "Edit Application Fields" })
     .click();
@@ -428,7 +428,46 @@ test("a withdrawn application can no longer be edited by staff", async ({
   ).toHaveCount(0);
 });
 
-test("a registered user's application 404s on the staff edit route", async ({
+// Signing up does not take the snapshot away from staff. They are the ones who
+// transcribed it at intake, so they are the ones who can correct a mishearing
+// — and for an applicant who can no longer reach their own account, nobody
+// else can. The status allow-list still applies, as the walk-in case above
+// shows for WITHDRAWN, and the edit is recorded rather than refused.
+test("a registered user's application is staff-editable", async ({ page }) => {
+  const janeId = await personIdByName(page, "Jane Doe");
+  await page.goto(
+    `/dashboard/people-directory/${janeId}/adoption-applications`,
+  );
+
+  // The seed leaves Jane a PENDING application on the hand-over animal, which
+  // is a status staff may rewrite. Picked by its badge rather than by row
+  // order, which the default sort does not pin down.
+  const pendingRow = page
+    .locator("tbody tr")
+    .filter({ hasText: "Pending" })
+    .first();
+  await expect(pendingRow).toBeVisible();
+
+  const trigger = pendingRow.getByRole("button", { name: "Open menu" });
+  const editItem = page.getByRole("menuitem", { name: "Edit" });
+  await expect(async () => {
+    if (!(await editItem.isVisible())) {
+      await trigger.click();
+    }
+    await expect(editItem).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+
+  await editItem.click();
+  await waitForPathname(page, /^\/dashboard\/adoption-applications\/[^/]+\/edit$/);
+  await expect(
+    page.getByRole("button", { name: "Save Changes" }),
+  ).toBeVisible();
+});
+
+// The row menu is one way in; the review screen is the other, and it used to
+// hide its shortcut from anyone with an account while the route behind it had
+// already stopped refusing them.
+test("a registered user's review screen offers Edit Application Fields", async ({
   page,
 }) => {
   const janeId = await personIdByName(page, "Jane Doe");
@@ -436,24 +475,33 @@ test("a registered user's application 404s on the staff edit route", async ({
     `/dashboard/people-directory/${janeId}/adoption-applications`,
   );
 
-  await openRowMenu(page);
-  const reviewHref = await page
-    .locator("a", { has: page.getByRole("menuitem", { name: "Review" }) })
-    .getAttribute("href");
-  const janeAppId = reviewHref?.match(
-    /adoption-applications\/([^/?]+)\/review/,
-  )?.[1];
-  if (!janeAppId) {
-    throw new Error(`Could not read Jane Doe's application id from ${reviewHref}`);
-  }
+  const pendingRow = page
+    .locator("tbody tr")
+    .filter({ hasText: "Pending" })
+    .first();
+  await expect(pendingRow).toBeVisible();
 
-  await page.goto(`/dashboard/adoption-applications/${janeAppId}/edit`);
-  await expect(
-    page.getByRole("heading", { name: /not found/i }),
-  ).toBeVisible();
+  const trigger = pendingRow.getByRole("button", { name: "Open menu" });
+  const reviewItem = page.getByRole("menuitem", { name: "Review" });
+  await expect(async () => {
+    if (!(await reviewItem.isVisible())) {
+      await trigger.click();
+    }
+    await expect(reviewItem).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+
+  await reviewItem.click();
+  await waitForPathname(page, REVIEW_PATH);
+  const appId = new URL(page.url()).pathname.split("/")[3];
+
+  await page.getByRole("link", { name: "Edit Application Fields" }).click();
+  await waitForPathname(
+    page,
+    `/dashboard/adoption-applications/${appId}/edit`,
+  );
   await expect(
     page.getByRole("button", { name: "Save Changes" }),
-  ).toHaveCount(0);
+  ).toBeVisible();
 });
 
 test("the pre-refactor nested new route is gone", async ({ page }) => {

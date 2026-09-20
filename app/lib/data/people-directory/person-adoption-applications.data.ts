@@ -13,7 +13,6 @@ import z from "zod";
 export type AdoptionApplicationForEditPayload =
   Prisma.AdoptionApplicationGetPayload<{
     select: {
-      applicant: { select: { user: { select: { id: true } } } };
       id: true;
       status: true;
       applicantId: true;
@@ -155,10 +154,10 @@ const _fetchAdoptionApplicationForEdit = async (
         id: parsedApplicationId.data,
       },
       select: {
-        // Only walk-in contacts (no user account) can have their applications
-        // edited by staff — registered users manage their own — and only while
-        // the application is in a status staff may still rewrite.
-        applicant: { select: { user: { select: { id: true } } } },
+        // Staff may rewrite the snapshot whether or not the applicant has an
+        // account, but only while the application is in a status they may
+        // still rewrite — the same allow-list the action enforces, so a
+        // bookmarked URL cannot reach a form that would refuse on submit.
         id: true,
         status: true,
         applicantId: true,
@@ -191,7 +190,6 @@ const _fetchAdoptionApplicationForEdit = async (
 
     if (
       !application ||
-      application.applicant.user !== null ||
       !STAFF_EDITABLE_STATUSES.includes(application.status)
     ) {
       return null;
