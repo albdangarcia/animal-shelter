@@ -2,13 +2,15 @@
  * `npm run test:db` — runs the tests that need a real Postgres
  * (`prisma/**​/*.test.ts`: the query-extension tests
  * `extension-phone.test.ts` and `extension-email.test.ts`,
- * `user-person-sync.test.ts`, and `person-account-unlink.test.ts`).
+ * `user-person-sync.test.ts`, `person-account-unlink.test.ts`,
+ * `user-deactivation.test.ts`, and `session-deactivation.test.ts`).
  *
  * They create, mutate, and delete `Person` (and `User`) rows, because what is
  * under test is what the unique indexes and the stored rows actually do —
  * whether the normalization extensions fire on raw client calls, whether the
- * Person/User contact sync holds, and where the rows end up when an account
- * is moved off the record it was wrongly linked to.
+ * Person/User contact sync holds, where the rows end up when an account is
+ * moved off the record it was wrongly linked to, and whether deactivating one
+ * really sets the column, revokes the sessions and refuses the next sign-in.
  * This script points them at the throwaway docker-compose container on port
  * 55432 — the same database `npm run e2e` provisions — and NEVER the dev
  * database. The previous script had a `dotenv -e .env.local -e .env.development

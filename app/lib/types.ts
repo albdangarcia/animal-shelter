@@ -405,6 +405,7 @@ export type PersonSectionCardPayload = Prisma.PersonGetPayload<{
         role: true;
         image: true;
         emailVerified: true;
+        deactivatedAt: true;
       };
     };
     _count: {

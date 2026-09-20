@@ -235,6 +235,22 @@ const personData = [
     zipCode: "10014",
   },
   {
+    // A barred account, so the role-management "Deactivated" filter and the
+    // Status column have a row to show, and the staff email guard has an
+    // account it treats as no account. Not one of the six roled accounts the
+    // e2e specs sign in as, and it must stay that way: this one cannot sign
+    // in, so any spec that needs a login must use another.
+    name: "Casey Deactivated",
+    email: "casey.deactivated@example.com",
+    role: Role.USER,
+    deactivatedAt: new Date(),
+    phone: "212-555-0133",
+    address: "58 Bleecker St",
+    city: "New York",
+    state: "NY",
+    zipCode: "10012",
+  },
+  {
     // Walk-in with contact details on file but no user account — the fixture
     // the staff "file an adoption application on behalf of a walk-in" e2e
     // spec fills its form for. Kept out of every seeded applicant pool below
@@ -288,6 +304,10 @@ const NON_APPLICANT_PERSON_NAMES = new Set([
 // would also tie the record into the animal lifecycle, and the e2e spec that
 // unlinks it is destructive.
 //
+// "Casey Deactivated": the barred-account fixture. The account cannot sign in,
+// so an application drawn for it could never be edited or withdrawn by its own
+// applicant, and would sit in the pool as a row nobody can act on.
+//
 // "John Smith" (finder1@example.com): the second registered applicant, the one
 // whose dashboard is meant to look like an ordinary person's rather than like
 // a fixture — one application, no edge cases. He used to be left in the random
@@ -299,6 +319,7 @@ const FIXTURE_APPLICANT_PERSON_NAMES = new Set([
   "Jane Doe",
   "John Smith",
   "Pat Mislinked",
+  "Casey Deactivated",
 ]);
 
 const allColors = {
@@ -2465,7 +2486,7 @@ async function seedPersonsAndUsers() {
 
       await prisma.user.update({
         where: { id: user.id },
-        data: { role: pData.role },
+        data: { role: pData.role, deactivatedAt: pData.deactivatedAt },
       });
     }
   }
