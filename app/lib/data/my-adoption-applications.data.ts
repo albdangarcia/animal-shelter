@@ -174,6 +174,10 @@ const _fetchMyAdoptionAppById = async (
             },
           },
         },
+        // Who last rewrote the snapshot. Staff may correct an application
+        // whose applicant has an account, so the applicant is shown the same
+        // thing the reviewer is: their own answers can now move without them.
+        lastEditedBy: { select: { name: true } },
         history: {
           orderBy: { changedAt: "desc" },
           include: { changedBy: { select: { name: true } } },

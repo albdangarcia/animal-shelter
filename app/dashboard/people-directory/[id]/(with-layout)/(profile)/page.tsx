@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { HouseholdProfileCard } from "@/components/dashboard/household/household-profile-card";
+import { UnlinkAccountButton } from "@/components/dashboard/people-directory/unlink-account-button";
 
 interface Props {
   params: IDParamType;
@@ -36,16 +37,15 @@ const Page = async ({ params }: Props) => {
 const PageContent = async ({ params }: Props) => {
   const { id } = await params;
 
-  const [person, canManage] = await Promise.all([
+  const [person, canManage, canUnlinkAccount] = await Promise.all([
     fetchPersonProfileTabData(id),
     hasPermission(AppPermissions.PERSONS_MANAGE),
+    hasPermission(AppPermissions.PERSON_ACCOUNT_UNLINK),
   ]);
 
   if (!person) {
     notFound();
   }
-
-  const hasAccount = !!person.user;
 
   return (
     <div className="@container/profile-cards">
@@ -102,6 +102,10 @@ const PageContent = async ({ params }: Props) => {
                 {person.user && (
                   <>
                     <div className="flex items-center justify-between border-b pb-2 text-sm">
+                      <span className="text-muted-foreground">Sign-in Email</span>
+                      <span>{person.user.email}</span>
+                    </div>
+                    <div className="flex items-center justify-between border-b pb-2 text-sm">
                       <span className="text-muted-foreground">Role</span>
                       <span>{formatSingleEnumOption(person.user.role)}</span>
                     </div>
@@ -112,6 +116,15 @@ const PageContent = async ({ params }: Props) => {
                   </>
                 )}
               </div>
+              {person.user && canUnlinkAccount && (
+                <div className="mt-4 flex justify-end">
+                  <UnlinkAccountButton
+                    personId={person.id}
+                    personName={person.name}
+                    accountEmail={person.user.email}
+                  />
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -121,7 +134,6 @@ const PageContent = async ({ params }: Props) => {
           householdProfile={person.householdProfile}
           personId={person.id}
           canManage={canManage}
-          hasAccount={hasAccount}
         />
       </div>
     </div>

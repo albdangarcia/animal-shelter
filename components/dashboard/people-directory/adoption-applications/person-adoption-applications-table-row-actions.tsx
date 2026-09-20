@@ -19,14 +19,12 @@ interface DataTableRowActionsProps {
   row: Row<StockFeatures, PersonAdoptionApplicationPayload>;
   personId: string;
   canManage: boolean;
-  canEdit: boolean;
 }
 
 export function DataTableRowActions({
   row,
   personId,
   canManage,
-  canEdit,
 }: DataTableRowActionsProps) {
   if (!canManage) {
     return null;
@@ -53,7 +51,7 @@ export function DataTableRowActions({
         >
           <DropdownMenuItem>Review</DropdownMenuItem>
         </Link>
-        {canEdit && STAFF_EDITABLE_STATUSES.includes(application.status) && (
+        {STAFF_EDITABLE_STATUSES.includes(application.status) && (
           <Link
             href={`/dashboard/adoption-applications/${application.id}/edit?returnTo=/dashboard/people-directory/${personId}/adoption-applications`}
           >

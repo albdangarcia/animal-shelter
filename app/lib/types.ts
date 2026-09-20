@@ -211,6 +211,9 @@ export type MyAdoptionApplicationDetailPayload =
           };
         };
       };
+      lastEditedBy: {
+        select: { name: true };
+      };
       history: {
         orderBy: { changedAt: "desc" };
         include: {
@@ -446,6 +449,7 @@ export type PersonProfileTabPayload = Prisma.PersonGetPayload<{
     user: {
       select: {
         role: true;
+        email: true;
         emailVerified: true;
       };
     };
@@ -459,6 +463,8 @@ export type PersonProfileTabPayload = Prisma.PersonGetPayload<{
         childrenAges: true;
         otherAnimalsDescription: true;
         animalExperience: true;
+        lastEditedAt: true;
+        lastEditedBy: { select: { name: true } };
       };
     };
   };
@@ -474,6 +480,24 @@ export type HouseholdProfilePayload = Prisma.HouseholdProfileGetPayload<{
     childrenAges: true;
     otherAnimalsDescription: true;
     animalExperience: true;
+  };
+}>;
+
+// The household profile as staff see it on a person's profile: the fields plus
+// who last wrote them. A superset of `HouseholdProfilePayload`, so it renders
+// through the same read-only rows.
+export type HouseholdProfileWithEditorPayload = Prisma.HouseholdProfileGetPayload<{
+  select: {
+    livingSituation: true;
+    hasYard: true;
+    landlordPermission: true;
+    householdSize: true;
+    hasChildren: true;
+    childrenAges: true;
+    otherAnimalsDescription: true;
+    animalExperience: true;
+    lastEditedAt: true;
+    lastEditedBy: { select: { name: true } };
   };
 }>;
 
@@ -636,11 +660,6 @@ export type PersonForApplicationFormPayload = Prisma.PersonGetPayload<{
     city: true;
     state: true;
     zipCode: true;
-    user: {
-      select: {
-        id: true;
-      };
-    };
     householdProfile: {
       select: {
         livingSituation: true;

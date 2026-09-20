@@ -218,9 +218,13 @@ const _updatePerson = async (
   // password reset to recover through, so a staff edit here is a lockout, not
   // an inconvenience. The person changes it from their own profile.
   //
-  // Only the email. The rest of the record stays staff-editable, which is the
-  // same line `_staffEditPersonApplication` and `_updateStaffHouseholdProfile`
-  // already draw around a registered user.
+  // Only the email, and this is the whole of what an account withholds from
+  // staff anywhere in the app: the application snapshot and the household
+  // profile stay staff-writable for a registered person, recorded rather than
+  // refused. The line is around the credentials, not around the existence of
+  // an account — a record staff may not touch is a record nobody can correct
+  // once its owner cannot reach it. When the account turns out to belong to a
+  // different human altogether, `unlinkPersonAccount` separates the two.
   let existingPerson;
   try {
     existingPerson = await prisma.person.findUnique({

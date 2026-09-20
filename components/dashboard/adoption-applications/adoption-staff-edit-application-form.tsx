@@ -80,9 +80,7 @@ export function StaffApplicationUpdateForm({
   const isAdopted = application.status === "ADOPTED";
   const isApproved = application.status === "APPROVED";
   const outcome = application.outcome;
-  const isWalkIn = application.applicant?.user === null;
-  const canEditFields =
-    isWalkIn && STAFF_EDITABLE_STATUSES.includes(application.status);
+  const canEditFields = STAFF_EDITABLE_STATUSES.includes(application.status);
 
   // The provenance of the text in the read-only cards below. `source` says who
   // typed it: a staff-entered snapshot was transcribed at intake, so a

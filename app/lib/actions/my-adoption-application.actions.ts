@@ -21,7 +21,10 @@ import {
   toAdoptionApplicantData,
   type MyAdoptionAppFormInput,
 } from "../zod-schemas/myAdoptionApplication.schema";
-import { toHouseholdData } from "../zod-schemas/household-profile.schemas";
+import {
+  householdEditStamp,
+  toHouseholdData,
+} from "../zod-schemas/household-profile.schemas";
 import { SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { ActionResult } from "../types";
 import { z } from "zod";
@@ -479,10 +482,11 @@ const _createMyAdoptionApp = async (
 
         // Keep the user's reusable Household Profile in sync with what they
         // just submitted, so future applications come prefilled.
+        const editStamp = householdEditStamp(user.personId);
         await tx.householdProfile.upsert({
           where: { personId: user.personId },
-          create: { personId: user.personId, ...householdProfileData },
-          update: householdProfileData,
+          create: { personId: user.personId, ...householdProfileData, ...editStamp },
+          update: { ...householdProfileData, ...editStamp },
         });
 
         // Sync the contact details back onto Person, so the shelter's record

@@ -149,3 +149,13 @@ export const toHouseholdData = (data: HouseholdFieldsOutput) => ({
   otherAnimalsDescription: data.otherAnimalsDescription || null,
   animalExperience: data.animalExperience,
 });
+
+// Written beside `toHouseholdData` at every `HouseholdProfile` upsert, on both
+// the create and the update branch, so a null `lastEditedById` only ever means
+// "predates the column". Kept apart from `toHouseholdData` because the same
+// mapper output is spread onto application rows, which have their own edit
+// columns with a different meaning.
+export const householdEditStamp = (editorPersonId: string) => ({
+  lastEditedById: editorPersonId,
+  lastEditedAt: new Date(),
+});

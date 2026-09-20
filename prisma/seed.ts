@@ -216,6 +216,25 @@ const personData = [
     zipCode: "10017",
   },
   {
+    // The state a mislinked sign-up leaves behind, and the only thing the
+    // account-unlink repair has to work on. Read it as: this record is the
+    // shelter's note of one walk-in, but the address on it turned out to be
+    // somebody else's, so when that somebody else signed up the auto-link
+    // matched on the email and handed them this record — its applications,
+    // its notes, its history. Seeded the same way the bug happens: a Person
+    // with an email, then a sign-up on that same email, which is exactly what
+    // `linkOrCreatePerson` links. Nothing else in the seed depends on this
+    // pair, because unlinking it is destructive and the e2e suite does.
+    name: "Pat Mislinked",
+    email: "pat.mislinked@example.com",
+    role: Role.USER,
+    phone: "212-555-0166",
+    address: "12 Carmine St",
+    city: "New York",
+    state: "NY",
+    zipCode: "10014",
+  },
+  {
     // Walk-in with contact details on file but no user account — the fixture
     // the staff "file an adoption application on behalf of a walk-in" e2e
     // spec fills its form for. Kept out of every seeded applicant pool below
@@ -237,6 +256,12 @@ const personData = [
 // seeded adoption/foster applicant pool so a random draw never hands one of
 // them a HouseholdProfile or application — the empty state needs to hold
 // across reseeds, not just on lucky ones.
+//
+// **Persons with no User account only.** Every pool below applies this set to
+// its `walkInPersons` query (`where: { user: null }`) and applies
+// FIXTURE_APPLICANT_PERSON_NAMES to its account-holders query, so a name
+// listed on the wrong side is excluded from nothing at all. Put a registered
+// person in that set instead.
 const NON_APPLICANT_PERSON_NAMES = new Set([
   "Alex Duplicate",
   "Sam Duplicate",
@@ -244,18 +269,37 @@ const NON_APPLICANT_PERSON_NAMES = new Set([
   "WalkIn TestUser",
 ]);
 
-// Registered users whose adoption applications are hand-written by
+// The same exclusion as NON_APPLICANT_PERSON_NAMES, for persons who have a
+// User account. It has to be a second set because the pools below draw
+// account-holders from a separate query (`userRolePersons`) that
+// NON_APPLICANT_PERSON_NAMES is never applied to — put a registered person in
+// that set and the exclusion silently does nothing.
+//
+// "Jane Doe": her adoption applications are hand-written by
 // `seedRegisteredUserApplicationFixtures` rather than drawn at random. Keeping
-// them out of *every* random applicant pool — the adoption cascades in
+// her out of *every* random applicant pool — the adoption cascades in
 // `seedAnimalsAndRelations` as well as `seedApplicationNoise` — is what makes
-// that set exact. Both pools would otherwise hand them extra applications
+// that set exact. Both pools would otherwise hand her extra applications
 // whose statuses move whenever anything upstream shifts the random stream,
 // which is precisely the non-determinism the fixture exists to remove.
 //
-// "John Smith" (finder1@example.com) is deliberately NOT here: the applicant
-// dashboard still needs one registered user whose applications look like
-// everybody else's.
-const FIXTURE_APPLICANT_PERSON_NAMES = new Set(["Jane Doe"]);
+// "Pat Mislinked": the account-unlink fixture, which has to start as a known,
+// fixed set of rows for the repair to be checked against. A drawn application
+// would also tie the record into the animal lifecycle, and the e2e spec that
+// unlinks it is destructive.
+//
+// "John Smith" (finder1@example.com): the second registered applicant, the one
+// whose dashboard is meant to look like an ordinary person's rather than like
+// a fixture — one application, no edge cases. He used to be left in the random
+// pools for exactly that reason, and it worked only by luck: whether he was
+// drawn at all moved with the seeded random stream, so a run that missed him
+// left the "another applicant" case with nothing in it and nothing to say so.
+// Hand-written below instead, which is the same guarantee Jane's set has.
+const FIXTURE_APPLICANT_PERSON_NAMES = new Set([
+  "Jane Doe",
+  "John Smith",
+  "Pat Mislinked",
+]);
 
 const allColors = {
   BLACK: { name: "Black" },
@@ -3703,6 +3747,24 @@ const FIXTURE_HOUSEHOLD: HouseholdProfileData = {
   animalExperience: "Grew up with dogs and cats.",
 };
 
+// The second registered applicant's household. Hand-written for the same
+// reason as the one above, and deliberately a different household from it —
+// two accounts showing identical answers reads as a copy-paste rather than as
+// two people, and the read-only household rows are one of the things the
+// applicant screens are checked against.
+const SECOND_FIXTURE_HOUSEHOLD: HouseholdProfileData = {
+  livingSituation: LivingSituation.OWN_HOME,
+  hasYard: false,
+  // null rather than false: the question does not apply to an owner, which is
+  // the distinction the shared mappers preserve.
+  landlordPermission: null,
+  householdSize: 1,
+  hasChildren: false,
+  childrenAges: [],
+  otherAnimalsDescription: "No other animals at home.",
+  animalExperience: "Fostered two cats for a rescue in Brooklyn.",
+};
+
 // Twelve adoption applications for "Jane Doe" (surrenderer1@example.com), one
 // in each state the applicant-facing screens have to render, plus a withdrawn
 // application and its replacement on one animal:
@@ -3738,6 +3800,9 @@ const FIXTURE_HOUSEHOLD: HouseholdProfileData = {
 // It also seeds the walk-in the staff side needs: a person with no account
 // whose only application for an animal is a CLOSED one on the animal that came
 // back, which staff must be able to file a new application over.
+//
+// And a second registered applicant with a single mid-review application, so
+// there is one account whose dashboard is ordinary rather than exhaustive.
 //
 // This also carries the narrower guarantee it grew out of: the staff
 // standalone adoption-application routes only expose their edit/review actions
@@ -4297,8 +4362,54 @@ async function seedRegisteredUserApplicationFixtures() {
     ],
   });
 
+  // The second registered applicant. Not another edge case — the opposite:
+  // one application, mid-review, which is what an ordinary account's dashboard
+  // looks like. The set above is every state a screen has to render, and a
+  // screen checked only against it is checked only against extremes.
+  //
+  // Claimed after everything above, so every earlier claim lands on the animal
+  // it always did.
+  const secondApplicant = await prisma.person.findFirst({
+    where: { name: "John Smith", user: { role: Role.USER } },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      phone: true,
+      address: true,
+      city: true,
+      state: true,
+      zipCode: true,
+    },
+  });
+  if (!secondApplicant) {
+    throw new Error(
+      "Expected the seeded 'John Smith' registered user for the adoption application fixtures.",
+    );
+  }
+  const secondApplicantAnimal = await claimAnimal(
+    "REVIEWING (second applicant)",
+    publishedWhere,
+  );
+  await seedApplicationWithHistory({
+    animalId: secondApplicantAnimal.id,
+    applicant: secondApplicant,
+    submittedAt: openStayDates[0],
+    reasonForAdoption:
+      "My flat is quiet and I am home most days — I would like the company.",
+    householdProfileData: SECOND_FIXTURE_HOUSEHOLD,
+    transitions: [
+      {
+        status: ApplicationStatus.REVIEWING,
+        reason: "Application moved to review.",
+        changedById: reviewer.id,
+        at: openStayDates[1],
+      },
+    ],
+  });
+
   console.log(
-    `Seeded 12 adoption application fixtures for ${applicant.name} (${applicant.email}) and 1 for ${walkIn.name}.`,
+    `Seeded 12 adoption application fixtures for ${applicant.name} (${applicant.email}), 1 for ${secondApplicant.name} (${secondApplicant.email}), and 1 for ${walkIn.name}.`,
   );
 }
 
@@ -4607,9 +4718,10 @@ async function seedNoteAudit() {
     prisma.animal.findFirst({ where: { name: "Frisco" } }),
     prisma.animal.findFirst({ where: { name: "Buddy" } }),
   ]);
-  const [janeDoe, johnSmith] = await Promise.all([
+  const [janeDoe, johnSmith, patMislinked] = await Promise.all([
     prisma.person.findFirst({ where: { email: "surrenderer1@example.com" } }),
     prisma.person.findFirst({ where: { email: "finder1@example.com" } }),
+    prisma.person.findFirst({ where: { email: "pat.mislinked@example.com" } }),
   ]);
   const [cityAnimalControl, secondChanceRescue, downtownVet] = await Promise.all([
     prisma.partner.findFirst({ where: { name: "City Animal Control" } }),
@@ -4724,6 +4836,18 @@ async function seedNoteAudit() {
       "Found the stray on Court St; happy to be listed as the finder contact if the owner turns up.",
     createdAt: daysAgo(8),
   });
+  // On the mislinked record: what the shelter wrote about the person this
+  // record is actually about, which is what has to still be here after the
+  // account that never belonged to them is moved off it.
+  if (patMislinked) {
+    await seedPersonNote({
+      personId: patMislinked.id,
+      authorId: olivia.id,
+      content:
+        "Came in about the grey tabby in the window. Asked us to call the landline, not email.",
+      createdAt: daysAgo(9),
+    });
+  }
   // Edited by a different staffer than the author (Olivia → Benjamin).
   const janeNoteToEdit = await seedPersonNote({
     personId: janeDoe.id,

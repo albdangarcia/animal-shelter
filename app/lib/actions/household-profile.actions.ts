@@ -13,6 +13,7 @@ import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   HouseholdFieldsInput,
   HouseholdFieldsSchema,
+  householdEditStamp,
   toHouseholdData,
 } from "../zod-schemas/household-profile.schemas";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
@@ -43,7 +44,10 @@ const _updateMyHouseholdProfile = async (
     };
   }
 
-  const dataToSave = toHouseholdData(validatedFields.data);
+  const dataToSave = {
+    ...toHouseholdData(validatedFields.data),
+    ...householdEditStamp(user.personId),
+  };
 
   try {
     await prisma.householdProfile.upsert({
@@ -68,6 +72,7 @@ export const updateMyHouseholdProfile = withAuthenticatedUser(
 );
 
 const _updateStaffHouseholdProfile = async (
+  user: SessionUser,
   personId: string,
   values: HouseholdFieldsInput,
 ): Promise<HouseholdResult> => {
@@ -76,21 +81,18 @@ const _updateStaffHouseholdProfile = async (
     return { ok: false, message: "Invalid person ID format." };
   }
 
+  // No account check. Whether this person can sign in says nothing about
+  // whether the shelter may keep its own record of their household — and the
+  // person who most needs staff to write it down is the one standing at the
+  // desk who cannot reach their account. What an account does own is its
+  // credentials, which live on `User` and are not writable from here.
   const person = await prisma.person.findUnique({
     where: { id: parsedId.data },
-    select: { user: { select: { id: true } } },
+    select: { id: true },
   });
 
   if (!person) {
     return { ok: false, message: "Person not found." };
-  }
-
-  if (person.user !== null) {
-    return {
-      ok: false,
-      message:
-        "Unauthorized: Cannot edit household profile for a registered user account.",
-    };
   }
 
   const validatedFields = HouseholdFieldsSchema.safeParse(values);
@@ -104,7 +106,13 @@ const _updateStaffHouseholdProfile = async (
     };
   }
 
-  const dataToSave = toHouseholdData(validatedFields.data);
+  // Recorded rather than refused: the profile may belong to someone with an
+  // account, and staff reading it later can tell it was staff, not the owner,
+  // who last wrote it.
+  const dataToSave = {
+    ...toHouseholdData(validatedFields.data),
+    ...householdEditStamp(user.personId),
+  };
 
   try {
     await prisma.householdProfile.upsert({
@@ -128,6 +136,6 @@ const _updateStaffHouseholdProfile = async (
   };
 };
 
-export const updateStaffHouseholdProfile = RequirePermission(
-  AppPermissions.PERSONS_MANAGE,
-)(_updateStaffHouseholdProfile);
+export const updateStaffHouseholdProfile = withAuthenticatedUser(
+  RequirePermission(AppPermissions.PERSONS_MANAGE)(_updateStaffHouseholdProfile),
+);

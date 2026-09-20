@@ -346,6 +346,9 @@ const _fetchPersonProfileTabData = async (
         user: {
           select: {
             role: true,
+            // The sign-in address, named in the unlink confirmation so nobody
+            // detaches an account without seeing which one it is.
+            email: true,
             emailVerified: true,
           },
         },
@@ -359,6 +362,10 @@ const _fetchPersonProfileTabData = async (
             childrenAges: true,
             otherAnimalsDescription: true,
             animalExperience: true,
+            // Who last wrote it, so the card can say when staff rather than the
+            // owner did.
+            lastEditedAt: true,
+            lastEditedBy: { select: { name: true } },
           },
         },
       },
@@ -410,6 +417,11 @@ const _fetchPersonForApplicationForm = async (
   }
 
   try {
+    // No account check. Whether this person can sign in says nothing about
+    // whether they walked up to the desk and gave their answers out loud, and
+    // refusing here would leave staff able to correct an application they may
+    // not enter. The duplicate gate in the create action is what stops the
+    // same application existing twice.
     const person = await prisma.person.findUnique({
       where: { id: parsedId.data },
       select: {
@@ -421,11 +433,6 @@ const _fetchPersonForApplicationForm = async (
         city: true,
         state: true,
         zipCode: true,
-        user: {
-          select: {
-            id: true,
-          },
-        },
         householdProfile: {
           select: {
             livingSituation: true,
@@ -441,12 +448,6 @@ const _fetchPersonForApplicationForm = async (
       },
     });
 
-    // Block the staff application form for any person who already has a registered account.
-    // Registered users submit their own applications via the public flow.
-    if (person?.user) {
-      return null;
-    }
-
     return person;
   } catch (error) {
     console.error("Error fetching person for application form.", error);
@@ -457,29 +458,6 @@ const _fetchPersonForApplicationForm = async (
 export const fetchPersonForApplicationForm = RequirePermission(
   AppPermissions.PERSONS_MANAGE,
 )(_fetchPersonForApplicationForm);
-
-const _fetchPersonHasUserAccount = async (
-  personId: string,
-): Promise<boolean> => {
-  const parsedId = cuidSchema.safeParse(personId);
-  if (!parsedId.success) {
-    throw new Error("Invalid person ID format.");
-  }
-  try {
-    const person = await prisma.person.findUnique({
-      where: { id: parsedId.data },
-      select: { user: { select: { id: true } } },
-    });
-    return person?.user != null;
-  } catch (error) {
-    console.error("Error fetching person account status.", error);
-    throw new Error("Error fetching person account status.");
-  }
-};
-
-export const fetchPersonHasUserAccount = RequirePermission(
-  AppPermissions.PERSONS_MANAGE,
-)(_fetchPersonHasUserAccount);
 
 export const fetchPersonProfileTabData = RequirePermission(
   AppPermissions.PERSONS_READ,

@@ -40,6 +40,15 @@ test("ADMIN holds every permission in AppPermissions", () => {
   }
 });
 
+// Separating an account from the record it is linked to is not part of
+// keeping the record, and nothing in the app puts the link back, so holding
+// PERSONS_MANAGE is deliberately not enough for it.
+test("PERSON_ACCOUNT_UNLINK stops at ADMIN", () => {
+  assert.equal(can(Role.STAFF, AppPermissions.PERSON_ACCOUNT_UNLINK), false);
+  assert.equal(can(Role.STAFF, AppPermissions.PERSONS_MANAGE), true);
+  assert.equal(can(Role.ADMIN, AppPermissions.PERSON_ACCOUNT_UNLINK), true);
+});
+
 test("the documented volunteer exception: VOLUNTEER holds ANIMAL_VITALS_MANAGE", () => {
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_VITALS_MANAGE), true);
   // ...and it is genuinely an exception: no other MANAGE permission leaks to it.
