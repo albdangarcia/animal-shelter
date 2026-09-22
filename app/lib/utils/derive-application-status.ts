@@ -19,6 +19,35 @@ export type ReviewStatus = Exclude<
   typeof ApplicationStatus.ADOPTED | typeof ApplicationStatus.CLOSED
 >;
 
+export const isReviewStatus = (
+  status: ApplicationStatus,
+): status is ReviewStatus =>
+  status !== ApplicationStatus.ADOPTED && status !== ApplicationStatus.CLOSED;
+
+/**
+ * The review decision to derive from, given what the status column holds.
+ *
+ * The outcome cascade still writes ADOPTED and CLOSED onto the column, over
+ * the decision that was there. Neither loss matters to the derivation:
+ *  - ADOPTED only ever replaced APPROVED. Both paths that record an adoption
+ *    refuse an application that is not approved, or that belongs to another
+ *    animal, so the adoption outcome that set it is among its own animal's
+ *    outcomes and derives ADOPTED again. A row written before that refusal
+ *    existed may not.
+ *  - CLOSED replaced whichever open status the application had, and every open
+ *    status derives the same way: the outcome that closed it was recorded
+ *    after the application was submitted, so the derivation closes it again
+ *    whichever open status stands in here.
+ * Only feed this to `deriveApplicationStatus`. It is not the decision staff
+ * made, and never something to show. Once the column holds only decisions, a
+ * stored status is its own review status and this goes.
+ */
+export function reviewStatusOf(stored: ApplicationStatus): ReviewStatus {
+  if (stored === ApplicationStatus.ADOPTED) return ApplicationStatus.APPROVED;
+  if (stored === ApplicationStatus.CLOSED) return ApplicationStatus.PENDING;
+  return stored;
+}
+
 // The review decisions an Outcome does not override: staff rejected the
 // application or the applicant withdrew it, and the animal leaving afterwards
 // changes neither. Every other review status is still open, and an outcome

@@ -4,7 +4,8 @@ import { cuidSchema } from "./common.schemas";
 import { householdSuperRefine } from "./household-profile.schemas";
 import { myAdoptionAppFieldsShape } from "./myAdoptionApplication.schema";
 
-// Exclude 'ADOPTED' from this list.
+// The review decisions. Staff never choose adopted or closed; an outcome for
+// the animal is what makes an application either.
 const updatableApplicationStatuses = [
   ApplicationStatus.PENDING,
   ApplicationStatus.REVIEWING,

@@ -1,6 +1,9 @@
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import type { ApplicationStatus } from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
+import {
+  inPageOrder,
+  pageApplicationsByEffectiveStatus,
+} from "../application-status.data";
 import prisma from "@/app/lib/prisma";
 import { RequirePermission } from "../../auth/protected-actions";
 import {
@@ -50,20 +53,20 @@ const _fetchAnimalApplications = async (
     validatedArgs.data;
   const offset = (currentPage - 1) * pageSize;
 
-  const orderBy: Prisma.AdoptionApplicationOrderByWithRelationInput = (() => {
-    if (!sort) return { submittedAt: "desc" };
-    const [field, direction] = sort.split(".");
-    const dir = direction === "asc" ? "asc" : "desc";
+  const [sortField, sortDirection] = sort?.split(".") ?? [];
+  const dir = sortDirection === "asc" ? "asc" : "desc";
+  // Status is derived, not a column the database can sort by, so a status
+  // sort is applied after the derivation instead of here.
+  const statusSort = sortField === "status" ? dir : undefined;
 
-    switch (field) {
+  const orderBy: Prisma.AdoptionApplicationOrderByWithRelationInput = (() => {
+    switch (sortField) {
       case "applicantName":
         return { applicantName: dir };
       case "applicantEmail":
         return { applicantEmail: dir };
       case "applicantPhone":
         return { applicantPhone: dir };
-      case "status":
-        return { status: dir };
       case "animalName":
         return { animal: { name: dir } };
       case "animalSpecies":
@@ -85,53 +88,46 @@ const _fetchAnimalApplications = async (
     }),
   };
 
-  if (status) {
-    const statuses = status.split(",") as ApplicationStatus[];
-    if (statuses.length > 1) {
-      whereClause.status = { in: statuses };
-    } else if (statuses.length === 1) {
-      whereClause.status = statuses[0];
-    }
-  }
-
   try {
-    const [applications, count] = await Promise.all([
-      prisma.adoptionApplication.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          applicantId: true,
-          applicantName: true,
-          applicantEmail: true,
-          applicantPhone: true,
-          applicantCity: true,
-          applicantState: true,
-          status: true,
-          submittedAt: true,
-          animal: {
-            select: {
-              id: true,
-              name: true,
-              species: {
-                select: {
-                  name: true,
-                },
+    const page = await pageApplicationsByEffectiveStatus({
+      where: whereClause,
+      orderBy,
+      statuses: status ? status.split(",") : [],
+      statusSort,
+      offset,
+      pageSize,
+    });
+    const rows = await prisma.adoptionApplication.findMany({
+      where: { id: { in: page.ids } },
+      select: {
+        id: true,
+        applicantId: true,
+        applicantName: true,
+        applicantEmail: true,
+        applicantPhone: true,
+        applicantCity: true,
+        applicantState: true,
+        status: true,
+        submittedAt: true,
+        animal: {
+          select: {
+            id: true,
+            name: true,
+            species: {
+              select: {
+                name: true,
               },
             },
           },
         },
-        orderBy: orderBy,
-        take: pageSize,
-        skip: offset,
-      }),
-      prisma.adoptionApplication.count({
-        where: whereClause,
-      }),
-    ]);
+      },
+    });
 
-    const totalPages = Math.ceil(count / pageSize);
-
-    return { applications, totalPages, totalRows: count };
+    return {
+      applications: inPageOrder(rows, page),
+      totalPages: Math.ceil(page.totalRows / pageSize),
+      totalRows: page.totalRows,
+    };
   } catch (error) {
     console.error("Error fetching animal applications.", error);
     throw new Error("Error fetching animal applications.");

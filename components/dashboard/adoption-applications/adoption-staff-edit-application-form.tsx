@@ -20,9 +20,10 @@ import { staffUpdateAdoptionApp } from "@/app/lib/actions/adoption-application.a
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { AnimalForAdoptionApplicationPayload } from "@/app/lib/types";
 import {
-  ALLOWED_APPLICATION_TRANSITIONS,
+  allowedNextStatuses,
   STAFF_EDITABLE_STATUSES,
 } from "@/app/lib/utils/application-status";
+import { isReviewStatus } from "@/app/lib/utils/derive-application-status";
 import { formatDateToLongString, formatTimeAgo } from "@/app/lib/utils/date-utils";
 import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import {
@@ -78,6 +79,9 @@ export function StaffApplicationUpdateForm({
   application,
   returnTo,
 }: StaffApplicationUpdateFormProps) {
+  // `application.status` is the effective status, derived from the animal's
+  // outcomes by the fetch, so adopted and closed here mean what the outcomes
+  // say rather than what the column holds.
   const isAdopted = application.status === "ADOPTED";
   const isApproved = application.status === "APPROVED";
   const outcome = application.outcome;
@@ -93,7 +97,7 @@ export function StaffApplicationUpdateForm({
   const lastEditedAt = application.lastEditedAt;
 
   const currentStatus = application.status;
-  const allowedNextStatuses = ALLOWED_APPLICATION_TRANSITIONS[currentStatus];
+  const nextStatuses = allowedNextStatuses(currentStatus);
 
   const [isPending, startSubmitTransition] = useTransition();
   const router = useRouter();
@@ -101,7 +105,10 @@ export function StaffApplicationUpdateForm({
   const form = useForm<StaffUpdateFormData>({
     resolver: standardSchemaResolver(StaffUpdateAdoptionAppFormSchema),
     defaultValues: {
-      status: application.status as StaffUpdateFormData["status"],
+      // Only a review decision can be submitted as a status. An adopted or
+      // closed application starts with none, so saving its internal notes
+      // does not send a status the form schema would refuse.
+      status: isReviewStatus(currentStatus) ? currentStatus : undefined,
       internalNotes: application.internalNotes ?? "",
       statusChangeReason: "",
     },
@@ -219,18 +226,22 @@ export function StaffApplicationUpdateForm({
                       <FormLabel>Application Status *</FormLabel>
                       <Select
                         onValueChange={field.onChange}
-                        value={field.value ?? ""}
-                        disabled={isPending || allowedNextStatuses.length === 0}
+                        // Shows the current status when the form holds none,
+                        // which is when it is adopted or closed.
+                        value={field.value ?? currentStatus}
+                        disabled={isPending || nextStatuses.length === 0}
                       >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select a new status">
-                              {formatSingleEnumOption(field.value)}
+                              {formatSingleEnumOption(
+                                field.value ?? currentStatus,
+                              )}
                             </SelectValue>
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {allowedNextStatuses.map((status) => (
+                          {nextStatuses.map((status) => (
                             <SelectItem key={status} value={status}>
                               {formatSingleEnumOption(status)}
                             </SelectItem>

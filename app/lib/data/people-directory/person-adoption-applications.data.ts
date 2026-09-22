@@ -6,10 +6,16 @@ import {
 } from "../../zod-schemas/common.schemas";
 import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
 import { STAFF_EDITABLE_STATUSES } from "../../utils/application-status";
+import {
+  effectiveApplicationStatus,
+  effectiveApplicationStatuses,
+} from "../application-status.data";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import z from "zod";
 
+// Both payloads carry the application's effective status in `status`,
+// derived from the animal's outcomes, not the column's value.
 export type AdoptionApplicationForEditPayload =
   Prisma.AdoptionApplicationGetPayload<{
     select: {
@@ -131,8 +137,22 @@ const _fetchPersonAdoptionApplications = async (
       }),
     ]);
 
+    const statusById = await effectiveApplicationStatuses(
+      applications.map((application) => ({
+        ...application,
+        animalId: application.animal.id,
+      })),
+    );
+
     const totalPages = Math.ceil(totalCount / APPLICATIONS_PER_PAGE);
-    return { applications, totalPages, totalRows: totalCount };
+    return {
+      applications: applications.map((application) => ({
+        ...application,
+        status: statusById.get(application.id)!,
+      })),
+      totalPages,
+      totalRows: totalCount,
+    };
   } catch (error) {
     console.error("Error fetching person adoption applications.", error);
     throw new Error("Could not fetch person adoption applications.");
@@ -160,6 +180,7 @@ const _fetchAdoptionApplicationForEdit = async (
         // bookmarked URL cannot reach a form that would refuse on submit.
         id: true,
         status: true,
+        submittedAt: true,
         applicantId: true,
         applicantName: true,
         applicantEmail: true,
@@ -188,14 +209,18 @@ const _fetchAdoptionApplicationForEdit = async (
       },
     });
 
-    if (
-      !application ||
-      !STAFF_EDITABLE_STATUSES.includes(application.status)
-    ) {
+    if (!application) {
+      return null;
+    }
+    const status = await effectiveApplicationStatus({
+      ...application,
+      animalId: application.animal.id,
+    });
+    if (!STAFF_EDITABLE_STATUSES.includes(status)) {
       return null;
     }
 
-    return application;
+    return { ...application, status };
   } catch (error) {
     console.error("Error fetching adoption application for edit.", error);
     throw new Error("Could not fetch application for editing.");

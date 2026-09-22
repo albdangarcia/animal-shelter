@@ -106,6 +106,17 @@ const _createOutcome = async (
         );
       }
 
+      // An application's adopted status is derived from an adoption outcome
+      // for its own animal that links to it. A link on any other outcome, or
+      // from another animal's outcome, would mark the application adopted
+      // here while its animal's record says otherwise. The form never sends
+      // either; a direct call must not be able to.
+      if (adoptionApplicationId && outcomeType !== OutcomeType.ADOPTION) {
+        throw new PreconditionFailedError(
+          "Only an adoption outcome can be recorded against an adoption application.",
+        );
+      }
+
       // If the outcome is an ADOPTION, ensure it was published
       if (outcomeType === OutcomeType.ADOPTION) {
         if (!adoptionApplicationId) {
@@ -116,9 +127,14 @@ const _createOutcome = async (
 
         const application = await tx.adoptionApplication.findUnique({
           where: { id: adoptionApplicationId },
-          select: { status: true },
+          select: { status: true, animalId: true },
         });
 
+        if (application && application.animalId !== animalId) {
+          throw new PreconditionFailedError(
+            "Cannot process adoption: The application is for a different animal.",
+          );
+        }
         if (application?.status !== ApplicationStatus.APPROVED) {
           throw new PreconditionFailedError(
             "Cannot process adoption: The application has not been approved.",

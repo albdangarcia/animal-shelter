@@ -1,8 +1,18 @@
 import { ApplicationStatus, OutcomeType } from "@/prisma/generated/enums";
 import { formatSingleEnumOption } from "./enum-formatter";
+import { isReviewStatus, type ReviewStatus } from "./derive-application-status";
+
+// Every rule in this file is about an application's effective status: the
+// answer `deriveApplicationStatus` gives, never the status column read on its
+// own. ADOPTED and CLOSED are consequences of an Outcome recorded for the
+// animal, and the derivation is what says whether one holds. The column still
+// carries them for now, but a rule that reads the column is reading a copy.
 
 // Shared by adoption and foster application status-change actions so both
-// enforce the same pipeline instead of accepting any status change.
+// enforce the same pipeline instead of accepting any status change. Keyed by
+// the review decisions only, because a transition is a decision: staff move an
+// application from one decision to the next, and never into or out of a
+// consequence. See `allowedNextStatuses` for an application an outcome holds.
 //
 // WAITLISTED is grouped with PENDING/REVIEWING as a non-terminal "in
 // progress" state — other in-progress states can move into it, and from
@@ -17,12 +27,9 @@ import { formatSingleEnumOption } from "./enum-formatter";
 // REJECTED. APPROVED is reversible only to the two terminal states — that's
 // the "approved applicant backs out" path (adoption additionally releases the
 // animal back to PUBLISHED).
-//
-// ADOPTED and CLOSED are never set through these actions (the outcome
-// cascade sets both), so they have no outgoing transitions here.
 export const ALLOWED_APPLICATION_TRANSITIONS: Record<
-  ApplicationStatus,
-  ApplicationStatus[]
+  ReviewStatus,
+  readonly ReviewStatus[]
 > = {
   [ApplicationStatus.PENDING]: [
     ApplicationStatus.REVIEWING,
@@ -48,9 +55,15 @@ export const ALLOWED_APPLICATION_TRANSITIONS: Record<
   ],
   [ApplicationStatus.REJECTED]: [],
   [ApplicationStatus.WITHDRAWN]: [],
-  [ApplicationStatus.ADOPTED]: [],
-  [ApplicationStatus.CLOSED]: [],
 };
+
+// Where staff may move an application to, given its effective status. An
+// application an outcome has adopted or closed has nothing left for review to
+// decide: the animal has left, and no review decision brings it back.
+export const allowedNextStatuses = (
+  status: ApplicationStatus,
+): readonly ReviewStatus[] =>
+  isReviewStatus(status) ? ALLOWED_APPLICATION_TRANSITIONS[status] : [];
 
 // The statuses that stop this person applying for this animal again.
 //
@@ -60,6 +73,11 @@ export const ALLOWED_APPLICATION_TRANSITIONS: Record<
 // apply again. REJECTED still blocks — a staff rejection is a decision, and
 // re-applying is not the way to appeal it. Flip that by removing REJECTED
 // from this list; every apply gate reads it.
+//
+// Whether an application blocks is therefore a question about its derived
+// status, and so is every list below that is built from this one: test
+// membership against what `deriveApplicationStatus` returns. The column is not
+// what says an application is closed.
 export const BLOCKING_APPLICATION_STATUSES: ApplicationStatus[] = [
   ApplicationStatus.PENDING,
   ApplicationStatus.REVIEWING,
@@ -131,9 +149,10 @@ export const APPLICANT_EDITABLE_STATUSES: ApplicationStatus[] = [
 // list because staff are the reviewers — they transcribed the snapshot at
 // intake and correcting it mid-review, or after approval when a phone number
 // turns out to be wrong, is ordinary. The closed-out statuses are excluded:
-// REJECTED and WITHDRAWN are settled decisions, and ADOPTED and CLOSED are
-// records of what happened, so rewriting the snapshot behind them would leave
-// the decision resting on text that no longer says what it said.
+// REJECTED and WITHDRAWN are settled decisions, and an application an outcome
+// has adopted or closed is a record of what happened, so rewriting the
+// snapshot behind any of them would leave the outcome resting on text that no
+// longer says what it said.
 export const STAFF_EDITABLE_STATUSES: ApplicationStatus[] = [
   ApplicationStatus.PENDING,
   ApplicationStatus.REVIEWING,
@@ -183,7 +202,7 @@ export const formatStatusList = (statuses: ApplicationStatus[]): string => {
 export const isAllowedTransition = (
   from: ApplicationStatus,
   to: ApplicationStatus,
-): boolean => ALLOWED_APPLICATION_TRANSITIONS[from].includes(to);
+): boolean => (allowedNextStatuses(from) as readonly ApplicationStatus[]).includes(to);
 
 export const illegalTransitionMessage = (
   from: ApplicationStatus,

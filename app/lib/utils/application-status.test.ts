@@ -9,8 +9,11 @@ import {
   REACTIVATION_BLOCKING_STATUSES,
   STAFF_EDITABLE_STATUSES,
   STAFF_OVERRIDABLE_APPLICATION_STATUSES,
+  allowedNextStatuses,
   formatStatusList,
+  isAllowedTransition,
 } from "./application-status";
+import { isReviewStatus } from "./derive-application-status";
 
 test("an applicant can only edit an application nobody has picked up yet", () => {
   assert.deepEqual(APPLICANT_EDITABLE_STATUSES, [ApplicationStatus.PENDING]);
@@ -27,7 +30,36 @@ test("staff can edit at every status the applicant can", () => {
 // it said. This fails when a status is added to the staff list carelessly.
 test("staff can only edit applications that can still move forward", () => {
   for (const status of STAFF_EDITABLE_STATUSES) {
-    assert.ok(ALLOWED_APPLICATION_TRANSITIONS[status].length > 0, status);
+    assert.ok(allowedNextStatuses(status).length > 0, status);
+  }
+});
+
+// A transition is a review decision. Nobody decides that an application was
+// adopted or closed, so staff can neither move one there nor out again.
+test("a transition only ever leads to a review decision", () => {
+  for (const targets of Object.values(ALLOWED_APPLICATION_TRANSITIONS)) {
+    for (const target of targets) {
+      assert.ok(isReviewStatus(target), target);
+    }
+  }
+});
+
+test("an application an outcome has adopted or closed has nothing left to review", () => {
+  for (const status of [ApplicationStatus.ADOPTED, ApplicationStatus.CLOSED]) {
+    assert.deepEqual(allowedNextStatuses(status), [], status);
+    for (const target of Object.values(ApplicationStatus)) {
+      assert.ok(!isAllowedTransition(status, target), `${status} -> ${target}`);
+    }
+  }
+});
+
+test("a review decision's next statuses are the transition map's", () => {
+  for (const [status, targets] of Object.entries(ALLOWED_APPLICATION_TRANSITIONS)) {
+    assert.deepEqual(
+      allowedNextStatuses(status as ApplicationStatus),
+      targets,
+      status,
+    );
   }
 });
 

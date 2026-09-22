@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { ApplicationStatus, OutcomeType } from "@/prisma/generated/enums";
 import {
   deriveApplicationStatus,
+  isReviewStatus,
+  reviewStatusOf,
   type DerivationApplication,
   type DerivationOutcome,
   type ReviewStatus,
@@ -243,4 +245,43 @@ test("an adoption re-recorded after a reversal adopts the same application again
     ),
     ApplicationStatus.CLOSED,
   );
+});
+
+// While the cascade still writes consequences onto the status column, a read
+// site derives from `reviewStatusOf(stored)`. It must hand back exactly what
+// the cascade stores. That holds because an adoption is only recorded against
+// an application for the same animal, which these cases take as given.
+test("a stored review decision is its own review status", () => {
+  for (const status of Object.values(ApplicationStatus).filter(isReviewStatus)) {
+    assert.equal(reviewStatusOf(status), status);
+  }
+});
+
+test("a stored adoption derives adopted again from its outcome", () => {
+  const applicationA = application(
+    "a",
+    reviewStatusOf(ApplicationStatus.ADOPTED),
+    "2026-01-01T10:00:00Z",
+  );
+  assert.equal(
+    deriveApplicationStatus(applicationA, [adoptionOf("a", "2026-01-05T10:00:00Z")]),
+    ApplicationStatus.ADOPTED,
+  );
+});
+
+test("a stored closure derives closed again from the outcome that closed it", () => {
+  const applicationA = application(
+    "a",
+    reviewStatusOf(ApplicationStatus.CLOSED),
+    "2026-01-01T10:00:00Z",
+  );
+  for (const closedBy of [
+    adoptionOf("b", "2026-01-05T10:00:00Z"),
+    outcome("2026-01-05T10:00:00Z", { type: OutcomeType.RETURN_TO_OWNER }),
+  ]) {
+    assert.equal(
+      deriveApplicationStatus(applicationA, [closedBy]),
+      ApplicationStatus.CLOSED,
+    );
+  }
 });
