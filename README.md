@@ -3,13 +3,17 @@
 </p>
 
 <p align="center">
-  <b><a href="https://animal-shelter-zeta.vercel.app/">🌐 Live Demo</a></b> | 
-  <b><a href="#-ai-staff-assistant">🤖 AI Assistant</a></b> | 
-  <b><a href="#getting-started">📖 Setup</a></b> | 
-  <b><a href="contributing.md">🤝 Contributing</a></b>
+  <b><a href="https://animal-shelter-zeta.vercel.app/">Live Demo</a></b> | 
+  <b><a href="#-ai-staff-assistant">AI Assistant</a></b> | 
+  <b><a href="#getting-started">Setup</a></b> | 
+  <b><a href="contributing.md">Contributing</a></b>
 </p>
 
 ---
+
+> ### 🚧 Active development — expect breaking changes
+>
+> This project is still evolving quickly. Despite the `v1.0.0` tag, it has **not** reached a stable API/schema — breaking changes to the database schema, environment variables, and features should be expected between releases until noted otherwise. Pin to a specific tag/commit rather than tracking `main` if you need stability.
 
 An open-source, end-to-end platform for animal shelters and rescue organizations — covering the full animal lifecycle from intake to outcome. A public portal lets adopters browse and apply; a permission-controlled staff dashboard handles day-to-day operations, backed by a built-in AI assistant.
 
