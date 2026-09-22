@@ -6,12 +6,19 @@ import {
   AnimalForAdoptionApplicationPayload,
 } from "../types";
 import { MyAdoptionApplicationsSchema } from "../zod-schemas/animal.schemas";
-import { AnimalListingStatus, type ApplicationStatus } from "@/prisma/generated/client";
+import { AnimalListingStatus } from "@/prisma/generated/client";
 import type { Prisma } from "@/prisma/generated/client";
 import { RequirePermission, SessionUser, withAuthenticatedUser } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
 import { ANIMAL_IMAGE_ORDER } from "../utils/animal-image-order";
 import { BLOCKING_APPLICATION_STATUSES } from "../utils/application-status";
+import {
+  DERIVATION_APPLICATION_SELECT,
+  effectiveApplicationStatus,
+  effectiveApplicationStatuses,
+  inPageOrder,
+  pageApplicationsByEffectiveStatus,
+} from "./application-status.data";
 
 const _fetchMyAdoptionApplications = async (
   user: SessionUser,
@@ -45,16 +52,17 @@ const _fetchMyAdoptionApplications = async (
   const { query, currentPage, sort, status, pageSize } = validatedArgs.data;
   const offset = (currentPage - 1) * pageSize;
 
-  const orderBy: Prisma.AdoptionApplicationOrderByWithRelationInput = (() => {
-    if (!sort) return { submittedAt: "desc" };
-    const [field, direction] = sort.split(".");
-    const dir = direction === "asc" ? "asc" : "desc";
+  const [sortField, sortDirection] = sort?.split(".") ?? [];
+  const dir = sortDirection === "asc" ? "asc" : "desc";
+  // Status is derived, not a column the database can filter or sort by, so
+  // both are applied after the derivation, the same way the staff and
+  // people-directory application tables do.
+  const statusSort = sortField === "status" ? dir : undefined;
 
-    switch (field) {
+  const orderBy: Prisma.AdoptionApplicationOrderByWithRelationInput = (() => {
+    switch (sortField) {
       case "animalName":
         return { animal: { name: dir } };
-      case "status":
-        return { status: dir };
       case "submittedAt":
         return { submittedAt: dir };
       default:
@@ -72,50 +80,49 @@ const _fetchMyAdoptionApplications = async (
     },
   };
 
-  if (status) {
-    const statuses = status.split(",") as ApplicationStatus[];
-    whereClause.status = { in: statuses };
-  }
-
   try {
-    const [count, myApplications] = await Promise.all([
-      prisma.adoptionApplication.count({ where: whereClause }),
-      prisma.adoptionApplication.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          status: true,
-          submittedAt: true,
-          applicantName: true,
-          applicantPhone: true,
-          animal: {
-            select: {
-              id: true,
-              name: true,
-              species: {
-                select: {
-                  name: true,
-                },
+    const page = await pageApplicationsByEffectiveStatus({
+      where: whereClause,
+      orderBy,
+      statuses: status ? status.split(",") : [],
+      statusSort,
+      offset,
+      pageSize,
+    });
+    const rows = await prisma.adoptionApplication.findMany({
+      where: { id: { in: page.ids } },
+      select: {
+        id: true,
+        status: true,
+        submittedAt: true,
+        applicantName: true,
+        applicantPhone: true,
+        animal: {
+          select: {
+            id: true,
+            name: true,
+            species: {
+              select: {
+                name: true,
               },
-              animalImages: {
-                select: {
-                  url: true,
-                },
-                orderBy: ANIMAL_IMAGE_ORDER,
-                take: 1,
+            },
+            animalImages: {
+              select: {
+                url: true,
               },
+              orderBy: ANIMAL_IMAGE_ORDER,
+              take: 1,
             },
           },
         },
-        orderBy: orderBy,
-        take: pageSize,
-        skip: offset,
-      }),
-    ]);
+      },
+    });
 
-    const totalPages = Math.ceil(count / pageSize);
-
-    return { myApplications, totalPages, totalRows: count };
+    return {
+      myApplications: inPageOrder(rows, page),
+      totalPages: Math.ceil(page.totalRows / pageSize),
+      totalRows: page.totalRows,
+    };
   } catch (error) {
     console.error("Error fetching applications.", error);
     throw new Error("Error fetching applications.");
@@ -185,7 +192,12 @@ const _fetchMyAdoptionAppById = async (
       },
     });
 
-    return myApplication;
+    return (
+      myApplication && {
+        ...myApplication,
+        status: await effectiveApplicationStatus(myApplication),
+      }
+    );
   } catch (error) {
     console.error("Error fetching Application.", error);
     throw new Error("Error fetching application.");
@@ -230,23 +242,33 @@ const _getAnimalForAdoptionApplication = async (
             name: true,
           },
         },
-        // Only the applications that block re-applying. A CLOSED one does
-        // not: the animal left the shelter while it was open, and this query
-        // has already established the animal is PUBLISHED again.
+        // Every one of this person's applications for this animal, derived
+        // rather than filtered by the column: the column cannot tell a
+        // genuinely open application from one an outcome has since closed,
+        // and a CLOSED one does not block re-applying — the animal left the
+        // shelter while it was open, and this query has already established
+        // it is PUBLISHED again.
         adoptionApplications: {
-          where: {
-            applicantId: personId,
-            status: { in: BLOCKING_APPLICATION_STATUSES },
-          },
-          select: {
-            id: true,
-          },
-          take: 1,
+          where: { applicantId: personId },
+          select: DERIVATION_APPLICATION_SELECT,
         },
       },
     });
 
-    return animal;
+    if (!animal) {
+      return null;
+    }
+
+    const statuses = await effectiveApplicationStatuses(
+      animal.adoptionApplications,
+    );
+    const blockingApplications = animal.adoptionApplications
+      .filter((application) =>
+        BLOCKING_APPLICATION_STATUSES.includes(statuses.get(application.id)!),
+      )
+      .map(({ id }) => ({ id }));
+
+    return { ...animal, adoptionApplications: blockingApplications };
   } catch (error) {
     console.error("Error fetching animal for application:", error);
     throw new Error("Failed to fetch animal information for application.");

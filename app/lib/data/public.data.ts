@@ -10,6 +10,10 @@ import { calculateAgeString } from "../utils/date-utils";
 import { computeStays, type StayEvent } from "../utils/stay-utils";
 import { calendarDay } from "../utils/shelter-day";
 import { BLOCKING_APPLICATION_STATUSES } from "../utils/application-status";
+import {
+  DERIVATION_APPLICATION_SELECT,
+  effectiveApplicationStatuses,
+} from "./application-status.data";
 
 export type PetsPayload = Prisma.AnimalGetPayload<{
   select: {
@@ -450,20 +454,16 @@ export const fetchPublicPagePetById = async (id: string) => {
             take: 1,
           },
         }),
-        // Conditionally include this person's applications that would block
-        // them applying again. Filtered rather than fetched wholesale: a
-        // CLOSED application must not stand in the way if the animal has
-        // returned and been republished.
+        // Conditionally include this person's applications for this animal.
+        // Every one of them, not filtered by the column: the column cannot
+        // tell a genuinely open application from one an outcome has since
+        // closed, and a CLOSED application must not stand in the way if the
+        // animal has returned and been republished. Which ones actually
+        // block is decided below, from the derived status.
         ...(personId && {
           adoptionApplications: {
-            where: {
-              applicantId: personId,
-              status: { in: BLOCKING_APPLICATION_STATUSES },
-            },
-            select: {
-              id: true,
-            },
-            take: 1,
+            where: { applicantId: personId },
+            select: DERIVATION_APPLICATION_SELECT,
           },
         }),
       },
@@ -473,10 +473,21 @@ export const fetchPublicPagePetById = async (id: string) => {
       return null;
     }
 
-    const { microchipNumber, ...rest } = pet;
+    const { microchipNumber, adoptionApplications, ...rest } = pet;
+    let blockingApplications: { id: string }[] = [];
+    if (adoptionApplications) {
+      const statuses = await effectiveApplicationStatuses(adoptionApplications);
+      blockingApplications = adoptionApplications
+        .filter((application) =>
+          BLOCKING_APPLICATION_STATUSES.includes(statuses.get(application.id)!),
+        )
+        .map(({ id }) => ({ id }));
+    }
+
     return {
       ...flattenCharacteristics(rest),
       hasMicrochip: microchipNumber !== null,
+      ...(personId && { adoptionApplications: blockingApplications }),
     };
   } catch (error) {
     console.error("Error fetching pet.", error);
