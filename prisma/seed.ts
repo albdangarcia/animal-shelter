@@ -40,6 +40,10 @@ import {
 } from "@/app/lib/utils/seeding-utils";
 import { computeStays, orderStayEvents } from "@/app/lib/utils/stay-utils";
 import {
+  deriveApplicationStatus,
+  type ReviewStatus,
+} from "@/app/lib/utils/derive-application-status";
+import {
   calendarDay,
   shelterDayKey,
   shelterToday,
@@ -2167,6 +2171,11 @@ async function seedAdoptionCascade(opts: {
       animalId: opts.animalId,
       type: OutcomeType.ADOPTION,
       outcomeDate: shelterDayKey(opts.outcomeDate, seedTimezone),
+      // When it was recorded, not only the day the animal left: application
+      // status is derived from whether an outcome was recorded after the
+      // application was submitted, and the default `now()` would put every
+      // seeded outcome after every seeded application.
+      createdAt: opts.outcomeDate,
       staffMemberId: approvingStaff.id,
       adoptionApplicationId: winnerAppId,
     },
@@ -2929,6 +2938,8 @@ async function seedAnimalsAndRelations() {
               animalId: animal.id,
               type: outcomeType,
               outcomeDate: shelterDayKey(stay.outcomeDate as Date, seedTimezone),
+              // Recorded when it happened, as `seedAdoptionCascade` explains.
+              createdAt: stay.outcomeDate as Date,
               staffMemberId: outcomeStaff.id,
               ownerId,
               destinationPartnerId,
@@ -3515,6 +3526,8 @@ async function seedFostering() {
         animalId: animal.id,
         type: OutcomeType.ADOPTION,
         outcomeDate: shelterDayKey(adoptedAt, seedTimezone),
+        // Recorded when it happened, as `seedAdoptionCascade` explains.
+        createdAt: adoptedAt,
         staffMemberId: approver.id,
         adoptionApplicationId: applicationId,
       },
@@ -5312,6 +5325,80 @@ async function assertAnimalLifecycleConsistency() {
   console.log(`Verified lifecycle consistency for ${animals.length} animals.`);
 }
 
+// Every adoption application's stored status must be what
+// `deriveApplicationStatus` computes from the animal's outcomes. The outcome
+// cascade still writes ADOPTED and CLOSED onto the status column, so this
+// checks two things against each other: the derivation against what the
+// cascade actually did, and the seed's timestamps against the order of events
+// they claim. A disagreement is a bug in one of the three, never noise.
+//
+// A stored ADOPTED or CLOSED has overwritten the review decision beneath it,
+// and the derivation takes that decision as input. It is recovered from the
+// application's history: the latest row that records a decision rather than a
+// consequence.
+async function assertApplicationStatusDerivation() {
+  console.log("Verifying derived application status against stored status...");
+
+  const applications = await prisma.adoptionApplication.findMany({
+    select: {
+      id: true,
+      status: true,
+      submittedAt: true,
+      animal: {
+        select: {
+          name: true,
+          Outcome: {
+            select: { createdAt: true, type: true, adoptionApplicationId: true },
+          },
+        },
+      },
+      history: {
+        select: { status: true },
+        orderBy: { changedAt: "desc" },
+      },
+    },
+  });
+
+  const isReviewStatus = (status: ApplicationStatus): status is ReviewStatus =>
+    status !== ApplicationStatus.ADOPTED && status !== ApplicationStatus.CLOSED;
+
+  const disagreements: string[] = [];
+  for (const application of applications) {
+    const label = `Application ${application.id} for "${application.animal.name}"`;
+    const reviewStatus = isReviewStatus(application.status)
+      ? application.status
+      : application.history.map((row) => row.status).find(isReviewStatus);
+    if (!reviewStatus) {
+      disagreements.push(
+        `${label} is ${application.status} with no review decision in its history.`,
+      );
+      continue;
+    }
+
+    const derived = deriveApplicationStatus(
+      { id: application.id, reviewStatus, submittedAt: application.submittedAt },
+      // Nothing reverses an outcome yet, so every recorded one is live.
+      application.animal.Outcome.map((outcome) => ({ ...outcome, reversed: false })),
+    );
+    if (derived !== application.status) {
+      disagreements.push(
+        `${label} is stored ${application.status} (review status ${reviewStatus}) but derives ${derived}.`,
+      );
+    }
+  }
+
+  if (disagreements.length > 0) {
+    throw new Error(
+      `Application status derivation disagrees for ${disagreements.length} of ${applications.length} application(s):\n` +
+        disagreements.join("\n"),
+    );
+  }
+
+  console.log(
+    `Verified derived status for ${applications.length} adoption applications.`,
+  );
+}
+
 /**
  * Favorites for the public `/pets/favorites` page.
  *
@@ -6223,6 +6310,7 @@ async function seedAll() {
   await seedAssessments();
   await seedReadinessFixtures();
   await assertAnimalLifecycleConsistency();
+  await assertApplicationStatusDerivation();
   console.log("Seeding finished successfully.");
 }
 
