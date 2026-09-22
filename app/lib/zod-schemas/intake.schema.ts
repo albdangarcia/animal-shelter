@@ -1,6 +1,6 @@
 import { AnimalHealthStatus, IntakeType } from "@/prisma/generated/enums";
 import { z } from "zod";
-import { optionalUsStateSchema } from "./common.schemas";
+import { calendarDaySchema, optionalUsStateSchema } from "./common.schemas";
 
 // The eight fields shared by every intake surface, exported as a raw shape
 // plus a standalone refinement — the same shape-composition treatment batch
@@ -9,7 +9,7 @@ import { optionalUsStateSchema } from "./common.schemas";
 // than calling .extend() on an already-refined schema.
 export const intakeFieldsShape = {
   intakeType: z.enum(IntakeType),
-  intakeDate: z.date(),
+  intakeDate: calendarDaySchema("An intake date"),
   notes: z.string().optional(),
   sourcePartnerId: z.cuid2().optional().or(z.literal("")),
   // Required when intakeType === STRAY — AnimalFormSchema's rule, which wins
@@ -83,7 +83,10 @@ export const intakeSuperRefine = (
 // form (fields absent).
 export const IntakeFieldsSchema = z.object(intakeFieldsShape).partial();
 
-export type IntakeFieldsValues = z.infer<typeof IntakeFieldsSchema>;
+// The INPUT side: what the form holds while it is being filled in, where a
+// day is still the plain `yyyy-MM-dd` string the picker writes. The parsed
+// output type belongs to the action, not to the fields.
+export type IntakeFieldsValues = z.input<typeof IntakeFieldsSchema>;
 
 // Composed from the shared shape, following batch 5's household/applicant
 // treatment — a fresh z.object() spreading intakeFieldsShape plus the one

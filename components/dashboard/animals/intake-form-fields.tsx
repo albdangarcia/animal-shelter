@@ -1,3 +1,4 @@
+import { parseISO } from "date-fns";
 import {
   FormControl,
   FormField,
@@ -5,7 +6,8 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { DateField } from "@/components/forms/date-field";
+import { DayField } from "@/components/forms/day-field";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -29,6 +31,8 @@ interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
   suggestedSurrenderingPersonId?: string;
   suggestedSurrenderingPersonLabel?: string;
   canCreatePerson?: boolean;
+  /** Today on the shelter's calendar, resolved on the server. */
+  today: CalendarDay;
 }
 
 export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
@@ -37,6 +41,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
   suggestedSurrenderingPersonId,
   suggestedSurrenderingPersonLabel,
   canCreatePerson,
+  today,
 }: IntakeFormFieldsProps<T>) => {
   // useWatch rather than a passed-in watch(): watch() subscribes the component
   // that called useForm, so the React Compiler memoizes this child and the
@@ -77,14 +82,17 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
           )}
         />
 
-        <DateField
+        <DayField
           control={control}
           name={"intakeDate" as Path<T>}
           label="Intake Date"
           className="col-span-3"
           triggerClassName="w-full pl-3"
+          // No future days, and nothing before the epoch the pickers share.
+          // The grid works in local dates, so the shelter's day is read as one
+          // to compare against.
           disabledDates={(date) =>
-            date > new Date() || date < new Date("1900-01-01")
+            date > parseISO(today) || date < parseISO("1900-01-01")
           }
         />
 

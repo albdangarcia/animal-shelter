@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import { TimeAgo } from "@/components/common/time-ago";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import Link from "next/link";
@@ -139,7 +140,13 @@ const PersonAnimalHistory = ({ history }: Props) => {
                             </TooltipTrigger>
 
                             <TooltipContent>
-                              {formatDateOrNA(entry.date)}
+                              {/* An entry dated by an intake or outcome
+                                  carries the calendar day it fell on, and is
+                                  shown as that day. The rest are ordinary
+                                  timestamps, read in the viewer's own zone. */}
+                              {entry.day
+                                ? formatShelterDayOrNA(entry.day)
+                                : formatDateOrNA(entry.date)}
                             </TooltipContent>
                           </Tooltip>
                         ) : (

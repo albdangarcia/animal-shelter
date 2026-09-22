@@ -1,8 +1,14 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
+import {
+  calendarDay,
+  startOfShelterDay,
+  type CalendarDay,
+} from "@/app/lib/utils/shelter-day";
 
 export type PersonAnimalHistoryRole =
   | "SURRENDERER"
@@ -13,7 +19,18 @@ export type PersonAnimalHistoryRole =
 
 export type PersonAnimalHistoryEntry = {
   role: PersonAnimalHistoryRole;
+  /**
+   * When this happened, for ordering and for the relative time shown on the
+   * card. A role dated by an intake or outcome takes the instant its day
+   * begins on the shelter's calendar, because a day cannot be ordered against
+   * the timestamps it shares this list with.
+   */
   date: Date | null;
+  /**
+   * The calendar day itself, for the roles that have one. It is what the card
+   * shows in full, so the browser never re-derives a day from an instant.
+   */
+  day?: CalendarDay;
   animal: {
     id: string;
     name: string;
@@ -24,6 +41,9 @@ export type PersonAnimalHistoryEntry = {
   // Only populated for APPLICANT entries
   applicationStatus?: string;
 };
+
+/** A day-valued entry's two fields: the day, and where it sorts. */
+const dated = (day: CalendarDay, timezone: string) => ({ day, date: startOfShelterDay(day, timezone) });
 
 const animalSelect = {
   id: true,
@@ -94,20 +114,21 @@ const _fetchPersonAnimalHistory = async (
       return { history: [] };
     }
 
+    const timezone = (await getShelterSettings()).timezone;
     const history: PersonAnimalHistoryEntry[] = [
       ...person.surrenderedAnimals.map((intake) => ({
         role: "SURRENDERER" as const,
-        date: intake.intakeDate,
+        ...dated(calendarDay(intake.intakeDate), timezone),
         animal: intake.animal,
       })),
       ...person.foundAnimals.map((intake) => ({
         role: "FINDER" as const,
-        date: intake.intakeDate,
+        ...dated(calendarDay(intake.intakeDate), timezone),
         animal: intake.animal,
       })),
       ...person.reclaimedAnimalsAsOwner.map((outcome) => ({
         role: "OWNER_RECLAIMED" as const,
-        date: outcome.outcomeDate,
+        ...dated(calendarDay(outcome.outcomeDate), timezone),
         animal: outcome.animal,
       })),
       ...person.adoptionApplications.map((application) => ({
@@ -118,7 +139,7 @@ const _fetchPersonAnimalHistory = async (
       })),
       ...(person.fosterProfile?.placements.map((placement) => ({
         role: "FOSTER_CARER" as const,
-        date: placement.startDate,
+        ...dated(calendarDay(placement.startDate), timezone),
         animal: placement.animal,
       })) ?? []),
     ];

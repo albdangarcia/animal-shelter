@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import type { LongestStayRow } from "@/app/lib/data/reports/length-of-stay-report.data";
-import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { formatShelterDay } from "@/app/lib/utils/shelter-day";
 import {
   Table,
   TableBody,
@@ -57,7 +57,7 @@ export function LongestStaysTable({ rows }: { rows: LongestStayRow[] }) {
               <TableCell className="text-muted-foreground text-right tabular-nums">
                 {row.hasPriorStays ? row.cumulativeDays : "same"}
               </TableCell>
-              <TableCell>{formatDateOrNA(row.intakeDate)}</TableCell>
+              <TableCell>{formatShelterDay(row.intakeDate)}</TableCell>
             </TableRow>
           ))
         )}

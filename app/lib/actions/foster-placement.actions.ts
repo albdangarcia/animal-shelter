@@ -1,5 +1,7 @@
 "use server";
 
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import {
@@ -20,10 +22,12 @@ import {
 import { AppPermissions } from "../auth/permissions";
 import {
   ConvertFosterToAdoptionSchema,
-  CreateFosterPlacementSchema,
+  createFosterPlacementSchema,
+  type CreateFosterPlacementSchema,
   ReturnFromFosterSchema,
 } from "../zod-schemas/foster.schemas";
 import { computeStays, type StayEvent } from "../utils/stay-utils";
+import { calendarDay } from "../utils/shelter-day";
 import {
   ConflictError,
   NotFoundError,
@@ -33,7 +37,7 @@ import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
 
-type CreateFosterPlacementInput = z.input<typeof CreateFosterPlacementSchema>;
+type CreateFosterPlacementInput = z.input<CreateFosterPlacementSchema>;
 type ReturnFromFosterInput = z.input<typeof ReturnFromFosterSchema>;
 type ConvertFosterToAdoptionInput = z.input<
   typeof ConvertFosterToAdoptionSchema
@@ -45,7 +49,13 @@ const _createFosterPlacement = async (
 ): Promise<FormResult<CreateFosterPlacementInput>> => {
   const staffMemberId = user.personId;
 
-  const validatedFields = CreateFosterPlacementSchema.safeParse(values);
+  // One resolved day for the whole action: it rejects a return date already in
+  // the past, dates the placement's start, and decides whether the animal is in
+  // care. Only the server can resolve it, so this is the check that decides —
+  // the browser's is a convenience.
+  const today = await getShelterToday();
+
+  const validatedFields = createFosterPlacementSchema(today).safeParse(values);
 
   if (!validatedFields.success) {
     return {
@@ -117,17 +127,17 @@ const _createFosterPlacement = async (
           ...animal.intake.map(
             (intake): StayEvent => ({
               kind: "intake",
-              date: intake.intakeDate,
+              date: calendarDay(intake.intakeDate),
             }),
           ),
           ...animal.Outcome.map(
             (outcome): StayEvent => ({
               kind: "outcome",
-              date: outcome.outcomeDate,
+              date: calendarDay(outcome.outcomeDate),
             }),
           ),
         ];
-        if (!computeStays(events, new Date()).isInCare) {
+        if (!computeStays(events, today).isInCare) {
           throw new PreconditionFailedError(
             "This animal is not currently in the shelter's care.",
           );
@@ -136,6 +146,7 @@ const _createFosterPlacement = async (
         await tx.fosterPlacement.create({
           data: {
             type,
+            startDate: today,
             expectedEndDate,
             animalId,
             fosterProfileId,
@@ -258,7 +269,7 @@ const _returnFromFoster = async (
       const updateResult = await tx.fosterPlacement.updateMany({
         where: { id: placementId, endDate: null },
         data: {
-          endDate: new Date(),
+          endDate: await getShelterToday(),
           returnReason,
           // Nullable column: a cleared textarea submits "" from the client,
           // which should read back as "no notes" rather than an empty string.
@@ -410,6 +421,10 @@ const _convertFosterToAdoption = async (
       const outcome = await tx.outcome.create({
         data: {
           type: OutcomeType.ADOPTION,
+          // The conversion happens now, so the adoption is dated today on the
+          // shelter's calendar. Nothing in the placement records the day the
+          // foster decided, and inventing one from its dates would be a guess.
+          outcomeDate: await getShelterToday(),
           animal: { connect: { id: placement.animalId } },
           staffMember: { connect: { id: staffMemberId } },
           ...(adoptionApplicationId && {
@@ -480,7 +495,7 @@ const _convertFosterToAdoption = async (
       const updateResult = await tx.fosterPlacement.updateMany({
         where: { id: placementId, endDate: null },
         data: {
-          endDate: new Date(),
+          endDate: await getShelterToday(),
           returnReason: FosterReturnReason.ADOPTED_BY_FOSTER,
           returnedById: staffMemberId,
           outcomeId: outcome.id,

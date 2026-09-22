@@ -1,5 +1,7 @@
 "use server";
 
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
+
 import { revalidatePath } from "next/cache";
 import prisma from "@/app/lib/prisma";
 import { z } from "zod";
@@ -28,6 +30,7 @@ import { ConflictError, NotFoundError } from "../utils/errors";
 import { del } from "@vercel/blob";
 import { isDemo } from "@/lib/flags";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+import { startOfShelterDay } from "../utils/shelter-day";
 
 // Shared by create and update — the "" -> null conversion for every nullable
 // column either action writes. Not every field applies to both actions
@@ -232,7 +235,10 @@ const _createAnimal = async (
           data: {
             animalId: newAnimal.id,
             recordedById: staffMemberId,
-            recordedAt: intakeDate,
+            // A vitals log records an instant, and the intake supplies only a
+            // day, so the weigh-in is placed at the moment that day begins on
+            // the shelter's calendar. Nothing finer was recorded.
+            recordedAt: startOfShelterDay(intakeDate, (await getShelterSettings()).timezone),
             weightGrams,
           },
         });

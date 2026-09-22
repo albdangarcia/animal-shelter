@@ -28,6 +28,7 @@ import {
 } from "@/app/lib/zod-schemas/vitals.schemas";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { NumberField } from "@/components/forms/number-field";
+import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { WeightInput } from "@/components/forms/weight-input";
 import {
   DirtyFormHandle,
@@ -36,6 +37,7 @@ import {
 
 interface VitalsFormProps {
   animalId: string;
+  unitSystem: WeightUnitSystem;
   vitalsLog?: AnimalVitalsFormPayload; // Optional: if provided, form is in "edit" mode
   previousWeightGrams: number | null;
   onFormSubmit: () => void; // To close the dialog on success
@@ -54,6 +56,7 @@ const buildDefaultValues = (
 
 export function VitalsForm({
   animalId,
+  unitSystem,
   vitalsLog,
   previousWeightGrams,
   onFormSubmit,
@@ -109,6 +112,7 @@ export function VitalsForm({
                 <FormLabel>Weight</FormLabel>
                 <FormControl>
                   <WeightInput
+                    unitSystem={unitSystem}
                     placeholder="0"
                     value={field.value}
                     onChange={field.onChange}

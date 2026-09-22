@@ -2,9 +2,9 @@
 
 import { useImperativeHandle, useRef, useTransition } from "react";
 import { useForm } from "react-hook-form";
+import { parseISO } from "date-fns";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { z } from "zod";
-import { startOfToday } from "date-fns";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { DateField } from "@/components/forms/date-field";
+import { DayField } from "@/components/forms/day-field";
 import {
   TaskCategoryOptions,
   TaskPriorityOptions,
@@ -32,9 +32,10 @@ import {
 } from "@/app/lib/utils/enum-formatter";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import {
-  CreateTaskFormSchema,
+  createTaskFormSchema,
   TaskFormSchema,
 } from "@/app/lib/zod-schemas/animal.schemas";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { TaskAssignee } from "@/app/lib/types";
 import { TaskPriority, TaskStatus } from "@/prisma/generated/enums";
 import {
@@ -49,7 +50,11 @@ import {
   haveFormValuesChanged,
 } from "@/hooks/use-confirmed-open-change";
 
-type TaskFormValues = z.infer<typeof TaskFormSchema>;
+// The INPUT side: while the form is being filled in, a due date is still the
+// plain `yyyy-MM-dd` string the picker writes. react-hook-form maps a branded
+// string into a nested `dirtyFields` shape, so the output type cannot be used
+// here.
+type TaskFormValues = z.input<typeof TaskFormSchema>;
 
 interface TaskFormProps {
   animalId: string;
@@ -57,6 +62,14 @@ interface TaskFormProps {
   ref?: React.Ref<DirtyFormHandle>;
   assigneeList: TaskAssignee[];
   task?: FetchAnimalTasksPayload;
+  /**
+   * Today, on the shelter's calendar, resolved on the server and handed down.
+   * The browser is not told the shelter's timezone, so it cannot work this out
+   * for itself — and a `new Date()` here would answer in the viewer's zone,
+   * which is a different day for part of every evening. The create action
+   * re-checks the same rule against the day it resolves itself.
+   */
+  today: CalendarDay;
 }
 
 export const TaskForm = ({
@@ -65,12 +78,13 @@ export const TaskForm = ({
   ref,
   assigneeList,
   task,
+  today,
 }: TaskFormProps) => {
   const [isPending, startSubmitTransition] = useTransition();
 
   const form = useForm<TaskFormValues>({
     resolver: standardSchemaResolver(
-      task ? TaskFormSchema : CreateTaskFormSchema,
+      task ? TaskFormSchema : createTaskFormSchema(today),
     ),
     defaultValues: task
       ? {
@@ -79,7 +93,7 @@ export const TaskForm = ({
           category: task.category,
           status: task.status,
           priority: task.priority,
-          dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+          dueDate: task.dueDate ?? undefined,
           assigneeId: task.assignee?.id || undefined,
         }
       : {
@@ -105,8 +119,8 @@ export const TaskForm = ({
   );
 
   // No FormData: the values are already validated and correctly typed, so they
-  // go to the server as-is. Date survives the RSC boundary, so dueDate no
-  // longer needs toISOString() on the way out and z.coerce on the way in.
+  // go to the server as-is. A due date travels as the day string the picker
+  // wrote, which needs no encoding in either direction.
   //
   // Closing the dialog happens here, in the handler, rather than in an effect
   // watching action state. That effect was the same cascading-render pattern
@@ -245,16 +259,17 @@ export const TaskForm = ({
           />
 
           {/* Due Date */}
-          <DateField
+          <DayField
             control={form.control}
             name="dueDate"
             label="Due Date"
             className="md:col-span-2 md:col-start-4"
             triggerClassName="w-full pl-3"
             // An existing task keeps whatever due date it already has; a new
-            // one can't be created already overdue.
+            // one can't be created already overdue. The grid works in local
+            // dates, so the shelter's day is read as one to compare against.
             disabledDates={(date) =>
-              task ? date < new Date("1900-01-01") : date < startOfToday()
+              date < parseISO(task ? "1900-01-01" : today)
             }
           />
 

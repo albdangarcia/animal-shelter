@@ -1,9 +1,15 @@
 import type { Actor } from "@/app/lib/auth/actor";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import type { AiToolName } from "./tool-names";
 
 /**
  * The system prompt. Contains what the app is, who the user is (role + display
  * name), today's date, and how to behave around ambiguous references.
+ *
+ * `today` is passed in, already resolved on the shelter's calendar. Deriving it
+ * here from a `Date` would answer in whatever zone this process runs in, which
+ * for several hours each evening is a different day from the one the shelter is
+ * having — and the model judges everything overdue or upcoming against it.
  *
  * It contains NO authorization rules — tool availability is enforced by the
  * registry filter and each tool's own `requireFor`, and "only do X if staff" is
@@ -16,10 +22,8 @@ export function buildSystemPrompt(input: {
   actor: Actor;
   displayName: string;
   availableTools: readonly AiToolName[];
-  now?: Date;
+  today: CalendarDay;
 }): string {
-  const now = input.now ?? new Date();
-  const today = now.toISOString().slice(0, 10);
   const canSetTaskStatus = input.availableTools.includes("setTaskStatus");
 
   return [
@@ -28,7 +32,8 @@ export function buildSystemPrompt(input: {
     "language.",
     "",
     `The person you are helping is ${input.displayName} (role: ${input.actor.role}).`,
-    `Today's date is ${today}. All dates in tool results are ISO 8601 strings;`,
+    `Today's date is ${input.today}. All dates in tool results are ISO 8601`,
+    "strings — a calendar day as yyyy-MM-dd, a timestamp in full;",
     "use today's date to judge what is overdue or upcoming.",
     "",
     "Guidelines:",

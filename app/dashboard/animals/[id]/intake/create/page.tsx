@@ -11,6 +11,7 @@ import {
   fetchPartners,
 } from "@/app/lib/data/animals/animal.data";
 import ReIntakeForm from "@/components/dashboard/animals/re-intake-form";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { notFound } from "next/navigation";
 import ActionBlockedMessage from "@/components/action-blocked-message";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
@@ -89,6 +90,7 @@ const PageContent = async ({ animalId }: { animalId: string }) => {
         animal={animal}
         partners={partners}
         canCreatePerson={canCreatePerson}
+        today={await getShelterToday()}
       />
     </main>
   );

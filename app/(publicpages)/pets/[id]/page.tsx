@@ -1,8 +1,9 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
+import { formatShelterDay, calendarDay } from "@/app/lib/utils/shelter-day";
 import { fetchPublicPagePetById } from "@/app/lib/data/public.data";
 import { IDParamType } from "@/app/lib/types";
 import {
   calculateAgeString,
-  formatDateToLongString,
 } from "@/app/lib/utils/date-utils";
 import { formatWeight } from "@/app/lib/utils/weight-format";
 import {
@@ -35,18 +36,19 @@ const Page = async ({ params }: Props) => {
   const currentUserPersonId = session?.user?.personId;
 
   const animal = await fetchPublicPagePetById(animalId);
+  const unitSystem = (await getShelterSettings()).weightUnitSystem;
   if (!animal) {
     notFound();
   }
 
   // Calculate age string
   const ageString = calculateAgeString({
-    birthDate: animal.birthDate,
+    birthDate: calendarDay(animal.birthDate),
     simple: true,
   });
 
   // Format birth date for display using the utility function
-  const formattedBirthDate = formatDateToLongString(animal.birthDate);
+  const formattedBirthDate = formatShelterDay(calendarDay(animal.birthDate));
 
   // The query already filtered to this person's blocking applications, so the
   // presence of a row is the whole answer — no second applicantId check, and
@@ -78,7 +80,7 @@ const Page = async ({ params }: Props) => {
   const meta = [
     breedString,
     ageString,
-    formatWeight(animal.currentWeightGrams),
+    formatWeight(animal.currentWeightGrams, unitSystem),
   ].filter(Boolean);
 
   // Neutered and Microchipped are facts about the animal's body, but they read
@@ -168,7 +170,7 @@ const Page = async ({ params }: Props) => {
               label="Weight"
               value={
                 animal.currentWeightGrams != null
-                  ? formatWeight(animal.currentWeightGrams)
+                  ? formatWeight(animal.currentWeightGrams, unitSystem)
                   : null
               }
             />

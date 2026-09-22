@@ -1,3 +1,4 @@
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { getCachedSession } from "@/app/lib/auth/session";
 import { AnimalListingStatus, AnimalSize, Sex } from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
@@ -7,6 +8,7 @@ import { PublishedPetsSchema } from "../zod-schemas/animal.schemas";
 import { ANIMAL_IMAGE_ORDER } from "../utils/animal-image-order";
 import { calculateAgeString } from "../utils/date-utils";
 import { computeStays, type StayEvent } from "../utils/stay-utils";
+import { calendarDay } from "../utils/shelter-day";
 import { BLOCKING_APPLICATION_STATUSES } from "../utils/application-status";
 
 export type PetsPayload = Prisma.AnimalGetPayload<{
@@ -294,7 +296,7 @@ export const fetchColors = async () => {
 export type FavoritePet = {
   id: string;
   name: string;
-  birthDate: Date;
+  birthDate: string;
   listingStatus: AnimalListingStatus;
   size: AnimalSize | null;
   species: { name: string };
@@ -617,23 +619,26 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
       },
     });
 
-    const now = new Date();
+    const today = await getShelterToday();
 
     const withStay = animals.map((animal) => {
       const events: StayEvent[] = [
         ...animal.intake.map(
-          (intake): StayEvent => ({ kind: "intake", date: intake.intakeDate }),
+          (intake): StayEvent => ({
+            kind: "intake",
+            date: calendarDay(intake.intakeDate),
+          }),
         ),
         ...animal.Outcome.map(
           (outcome): StayEvent => ({
             kind: "outcome",
-            date: outcome.outcomeDate,
+            date: calendarDay(outcome.outcomeDate),
           }),
         ),
       ];
       // currentStayDays is null unless the last stay is still open, which is
       // exactly the `waitingDays` contract.
-      const { isInCare, currentStayDays } = computeStays(events, now);
+      const { isInCare, currentStayDays } = computeStays(events, today);
       return { animal, isInCare, currentStayDays };
     });
 
@@ -680,7 +685,7 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
         return named.length < animal.breeds.length ? `${first} mix` : first;
       })(),
       ageString: calculateAgeString({
-        birthDate: animal.birthDate,
+        birthDate: calendarDay(animal.birthDate),
         simple: true,
       }),
       description: animal.description,

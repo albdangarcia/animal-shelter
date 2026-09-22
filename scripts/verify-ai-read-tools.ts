@@ -24,6 +24,7 @@ import {
 } from "@/app/lib/ai/provider-guard";
 import { buildToolsForActor } from "@/app/lib/ai/registry";
 import { buildSystemPrompt } from "@/app/lib/ai/prompt";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import type { Actor } from "@/app/lib/auth/actor";
 import { getAnimalReadinessTool } from "@/app/lib/ai/tools/get-animal-readiness";
 import { getAnimalSummaryTool } from "@/app/lib/ai/tools/get-animal-summary";
@@ -71,6 +72,7 @@ async function ask(who: { actor: Actor; name: string }, question: string) {
           actor: who.actor,
           displayName: who.name,
           availableTools: Object.keys(tools) as (keyof typeof tools)[],
+          today: await getShelterToday(),
         }),
         prompt: question,
         tools,

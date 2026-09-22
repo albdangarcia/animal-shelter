@@ -1,3 +1,4 @@
+import { getPhoneSearchSettings } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import { Role } from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
@@ -71,6 +72,7 @@ const _fetchPeople = async (
     }
   })();
 
+  await getPhoneSearchSettings();
   const whereClause: Prisma.PersonWhereInput = personSearchWhereClause(query);
 
   // REPLACE with account filtering.
@@ -138,6 +140,7 @@ const _fetchPeopleForPicker = async (
   const query = parsedQuery.success ? parsedQuery.data : "";
 
   try {
+    await getPhoneSearchSettings();
     return await prisma.person.findMany({
       where: personSearchWhereClause(query),
       orderBy: { name: "asc" },
@@ -167,7 +170,7 @@ const _fetchDuplicatePersonCandidate = async (
   phone: string | null,
   excludePersonId?: string,
 ): Promise<PersonPickerOption | null> => {
-  const normalizedPhone = normalizePhone(phone);
+  const normalizedPhone = normalizePhone(phone, (await getPhoneSearchSettings()).defaultPhoneCountry);
 
   if (!email && !normalizedPhone) {
     return null;

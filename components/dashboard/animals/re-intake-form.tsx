@@ -42,17 +42,26 @@ import {
   type ReIntakeFormInput,
 } from "@/app/lib/zod-schemas/intake.schema";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 
 interface ReIntakeFormProps {
   animal: AnimalReIntakeFormPayload;
   partners: PartnerPayload[];
   canCreatePerson?: boolean;
+  /**
+   * Today, on the shelter's calendar, resolved on the server. It is the day an
+   * intake recorded now is filed under — a `new Date()` here would be
+   * re-resolved in the viewer's zone, so the server render and the browser's
+   * could disagree by a day.
+   */
+  today: CalendarDay;
 }
 
 const ReIntakeForm = ({
   animal,
   partners,
   canCreatePerson,
+  today,
 }: ReIntakeFormProps) => {
   const router = useRouter();
   const [isPending, startSubmitTransition] = useTransition();
@@ -60,7 +69,9 @@ const ReIntakeForm = ({
   const form = useForm<ReIntakeFormInput>({
     resolver: standardSchemaResolver(ReIntakeFormSchema),
     defaultValues: {
-      intakeDate: new Date(),
+      // Today on the shelter's calendar, which is the day an intake recorded
+      // now is filed under.
+      intakeDate: today,
       intakeType: undefined,
       healthStatus: AnimalHealthStatus.HEALTHY,
       isSpayedNeutered: false,
@@ -162,6 +173,7 @@ const ReIntakeForm = ({
               control={form.control}
               partners={partners}
               canCreatePerson={canCreatePerson}
+              today={today}
             />
           </CardContent>
 

@@ -50,7 +50,7 @@ const _fetchMyFosterAnimals = async (
       where: { personId },
       select: {
         placements: {
-          orderBy: { startDate: "desc" },
+          orderBy: [{ startDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
           include: fosterPlacementForMyAnimalsInclude,
         },
       },

@@ -17,6 +17,7 @@ import { getToolApprovalSecret } from "@/app/lib/ai/approval-secret";
 import { buildToolsForActor } from "@/app/lib/ai/registry";
 import { WRITE_TOOL_NAMES } from "@/app/lib/ai/tool-names";
 import { buildSystemPrompt } from "@/app/lib/ai/prompt";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { setTaskStatusApproval } from "@/app/lib/ai/tools/set-task-status";
 import { CHAT_ERROR_COPY, classifyChatError } from "@/app/lib/ai/chat-errors";
 import type { ShelterUIMessage } from "@/app/lib/ai/ui-message";
@@ -134,6 +135,7 @@ export async function POST(request: Request) {
       actor,
       displayName: session.user.name,
       availableTools,
+      today: await getShelterToday(),
     }),
     messages: await convertToModelMessages(messages),
     tools,

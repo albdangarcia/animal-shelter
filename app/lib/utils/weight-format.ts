@@ -1,4 +1,4 @@
-import { WEIGHT_UNIT_SYSTEM } from "@/app/lib/constants/constants";
+import type { WeightUnitSystem } from "./shelter-settings";
 
 export type WeightUnit = "g" | "kg" | "oz" | "lb";
 
@@ -13,9 +13,11 @@ const GRAMS_PER_UNIT: Record<WeightUnit, number> = {
 };
 
 // The two units offered by the entry-form toggle, small unit first. Which pair
-// depends on the org-wide WEIGHT_UNIT_SYSTEM, not a per-user preference.
-export const WEIGHT_UNITS: readonly [WeightUnit, WeightUnit] =
-  WEIGHT_UNIT_SYSTEM === "imperial" ? ["oz", "lb"] : ["g", "kg"];
+// depends on the org-wide weight unit setting, not a per-user preference.
+export const weightUnits = (
+  system: WeightUnitSystem,
+): readonly [WeightUnit, WeightUnit] =>
+  system === "imperial" ? ["oz", "lb"] : ["g", "kg"];
 
 export function toGrams(value: number, unit: WeightUnit): number {
   return value * GRAMS_PER_UNIT[unit];
@@ -31,13 +33,14 @@ export function roundForUnit(value: number, unit: WeightUnit): number {
   return unit === "g" ? Math.round(value) : Math.round(value * 100) / 100;
 }
 
-// Which of the two WEIGHT_UNITS should be pre-selected, based on the magnitude
+// Which of the two weight units should be pre-selected, based on the magnitude
 // of a previous weight entry (e.g. a 180g kitten defaults to oz, not lb).
 // Falls back to the large unit when there's no prior entry to infer from.
 export function inferWeightUnit(
-  previousWeightGrams: number | null | undefined
+  previousWeightGrams: number | null | undefined,
+  system: WeightUnitSystem,
 ): WeightUnit {
-  const [small, large] = WEIGHT_UNITS;
+  const [small, large] = weightUnits(system);
   if (previousWeightGrams == null) return large;
   const smallUnitCeilingGrams = GRAMS_PER_UNIT[large];
   return previousWeightGrams < smallUnitCeilingGrams ? small : large;
@@ -58,10 +61,13 @@ function trimDecimal(value: number, maxDecimals: number): string {
  * (a 180g kitten is "6.3 oz", not "0.4 lb"). Returns "" for null/undefined so
  * it composes directly with components that already hide empty values.
  */
-export function formatWeight(grams: number | null | undefined): string {
+export function formatWeight(
+  grams: number | null | undefined,
+  system: WeightUnitSystem,
+): string {
   if (grams == null) return "";
 
-  if (WEIGHT_UNIT_SYSTEM === "imperial") {
+  if (system === "imperial") {
     if (grams < GRAMS_PER_POUND) {
       return `${trimDecimal(grams / GRAMS_PER_OUNCE, 1)} oz`;
     }
@@ -79,10 +85,13 @@ export function formatWeight(grams: number | null | undefined): string {
  * formatWeight: canonical storage is Celsius, Fahrenheit is a display-time
  * conversion for imperial shelters.
  */
-export function formatTemperature(celsius: number | null | undefined): string {
+export function formatTemperature(
+  celsius: number | null | undefined,
+  system: WeightUnitSystem,
+): string {
   if (celsius == null) return "";
 
-  if (WEIGHT_UNIT_SYSTEM === "imperial") {
+  if (system === "imperial") {
     const fahrenheit = (celsius * 9) / 5 + 32;
     return `${trimDecimal(fahrenheit, 1)}°F`;
   }

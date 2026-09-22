@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import { AssessmentSignal } from "@/prisma/generated/enums";
@@ -290,6 +291,7 @@ const _fetchAssessmentDetail = async (
       assessment: toRecordedAssessment(assessment),
       deleted: assessment.deletedAt !== null,
       ...(await fetchAnimalFindings(prisma, animalId)),
+      timezone: (await getShelterSettings()).timezone,
     });
     return { ...assessment, ...summary };
   } catch (error) {

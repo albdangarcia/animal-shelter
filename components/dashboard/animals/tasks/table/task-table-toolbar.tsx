@@ -28,6 +28,7 @@ import {
 import { FetchAnimalTasksPayload } from "@/app/lib/data/animals/animal-task.data";
 import { TaskForm } from "../task-form";
 import { TaskAssignee } from "@/app/lib/types";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
 import {
@@ -40,6 +41,8 @@ interface TasksDataTableToolbarProps {
   animalId: string;
   assigneeList: TaskAssignee[];
   canManage: boolean;
+  /** Today on the shelter's calendar, resolved on the server. */
+  today: CalendarDay;
 }
 
 const TasksDataTableToolbar = ({
@@ -47,6 +50,7 @@ const TasksDataTableToolbar = ({
   animalId,
   assigneeList,
   canManage,
+  today,
 }: TasksDataTableToolbarProps) => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const formRef = useRef<DirtyFormHandle>(null);
@@ -102,6 +106,7 @@ const TasksDataTableToolbar = ({
               onFormSubmit={() => setIsDialogOpen(false)}
               ref={formRef}
               assigneeList={assigneeList}
+              today={today}
             />
           </DialogContent>
 

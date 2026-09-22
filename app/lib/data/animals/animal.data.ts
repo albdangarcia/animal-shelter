@@ -211,9 +211,9 @@ const _fetchSectionCardsAnimalData = async (
           select: {
             intakeDate: true,
           },
-          orderBy: {
-            intakeDate: "desc",
-          },
+          // Two intakes on one day tie on the date alone, so `createdAt`
+          // settles which of them is the latest.
+          orderBy: [{ intakeDate: "desc" }, { createdAt: "desc" }],
           take: 1,
         },
         vitalsLogs: {
@@ -416,7 +416,7 @@ const _fetchAnimalForOutcomeForm = async (id: string) => {
             type: IntakeType.OWNER_SURRENDER,
             surrenderingPersonId: { not: null },
           },
-          orderBy: { intakeDate: "desc" },
+          orderBy: [{ intakeDate: "desc" }, { createdAt: "desc" }],
           take: 1,
           select: {
             surrenderingPerson: {
@@ -586,7 +586,7 @@ const aiAnimalSummarySelect = {
   // constraint — order + take defensively.
   fosterPlacements: {
     where: { endDate: null },
-    orderBy: { startDate: "desc" },
+    orderBy: [{ startDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     take: 1,
     select: {
       id: true,
@@ -612,7 +612,7 @@ const aiAnimalSummarySelect = {
     },
   },
   intake: {
-    orderBy: { intakeDate: "desc" },
+    orderBy: [{ intakeDate: "desc" }, { createdAt: "desc" }],
     take: 1,
     select: { intakeDate: true, type: true },
   },

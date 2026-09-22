@@ -10,7 +10,11 @@ import {
   withAuthenticatedUser,
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { TaskFormSchema } from "../zod-schemas/animal.schemas";
+import {
+  createTaskFormSchema,
+  TaskFormSchema,
+} from "../zod-schemas/animal.schemas";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import {
   AnimalActivityType,
   type TaskCategory,
@@ -61,7 +65,7 @@ const changedTaskFields = (
     details: string | null;
     category: TaskCategory;
     priority: TaskPriority;
-    dueDate: Date | null;
+    dueDate: string | null;
   },
 ): string[] => {
   const changed: string[] = [];
@@ -73,11 +77,11 @@ const changedTaskFields = (
   if (next.priority !== undefined && next.priority !== prev.priority) {
     changed.push("priority");
   }
-  // Two Date instances are never ===, even for the same instant, and a cleared
-  // date arrives as null — compare by epoch, treating null as "no date".
-  const nextDue = next.dueDate?.getTime() ?? null;
-  const prevDue = prev.dueDate?.getTime() ?? null;
-  if (nextDue !== prevDue) changed.push("due date");
+  // A cleared date arrives as null, so normalise both sides before comparing
+  // two days as the plain strings they are.
+  if ((next.dueDate ?? null) !== (prev.dueDate ?? null)) {
+    changed.push("due date");
+  }
   return changed;
 };
 
@@ -145,7 +149,12 @@ const _createAnimalTask = async (
     return { ok: false, message: "Invalid animal ID format." };
   }
 
-  const validatedFields = TaskFormSchema.safeParse(values);
+  // A new task cannot be born already overdue. The browser checks the same
+  // rule against the day it was handed, but only the server can resolve which
+  // day it is on the shelter's calendar, so this is the check that decides.
+  const validatedFields = createTaskFormSchema(
+    await getShelterToday(),
+  ).safeParse(values);
 
   if (!validatedFields.success) {
     return {

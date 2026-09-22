@@ -123,21 +123,25 @@ export const _fetchOutcomes = async (
 
   const { query, currentPage, sort, type, pageSize } = validatedArgs.data;
 
-  const orderBy: Prisma.OutcomeOrderByWithRelationInput = (() => {
-    if (!sort) return { outcomeDate: "desc" };
+  // Every sort here is on a non-unique column — and an outcome date is a
+  // calendar day, so a busy day ties dozens of rows at once. Offset pagination
+  // over an unstable order drops rows from one page and repeats them on the
+  // next, so each order ends with the row id to break the remaining ties.
+  const orderBy: Prisma.OutcomeOrderByWithRelationInput[] = ((): Prisma.OutcomeOrderByWithRelationInput[] => {
+    if (!sort) return [{ outcomeDate: "desc" }, { createdAt: "desc" }];
 
     const [id, dir] = sort.split(".");
     // Sanitize the direction to ensure it's always 'asc' or 'desc'.
     const direction: "asc" | "desc" = dir === "desc" ? "desc" : "asc";
 
     if (id === "staffMember") {
-      return { staffMember: { name: direction } };
+      return [{ staffMember: { name: direction } }];
     }
     if (id === "animal") {
-      return { animal: { name: direction } };
+      return [{ animal: { name: direction } }];
     }
     if (id === "date") {
-      return { outcomeDate: direction };
+      return [{ outcomeDate: direction }, { createdAt: direction }];
     }
 
     // Only these top-level fields can be safely passed straight through to
@@ -146,11 +150,11 @@ export const _fetchOutcomes = async (
     // the safe default below instead of throwing a Prisma validation error.
     const sortableFields = new Set(["outcomeDate", "type", "createdAt", "updatedAt"]);
     if (sortableFields.has(id)) {
-      return { [id]: direction };
+      return [{ [id]: direction }];
     }
 
-    return { outcomeDate: "desc" };
-  })();
+    return [{ outcomeDate: "desc" }, { createdAt: "desc" }];
+  })().concat({ id: "asc" });
 
   const whereClause: Prisma.OutcomeWhereInput = {
     // Add filtering by outcome type if provided

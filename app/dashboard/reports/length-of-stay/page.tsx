@@ -9,7 +9,10 @@ import {
   formatRangeLabel,
   resolveReportRange,
 } from "@/app/lib/utils/report-date-utils";
-import { SHELTER_TIMEZONE } from "@/app/lib/constants/constants";
+import {
+  getShelterSettings,
+  getShelterToday,
+} from "@/app/lib/data/shelter-settings.data";
 import { fetchSpecies } from "@/app/lib/data/animals/animal.data";
 import { fetchLengthOfStayReport } from "@/app/lib/data/reports/length-of-stay-report.data";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
@@ -72,7 +75,8 @@ const PageContent = async ({ searchParams }: Props) => {
   const parsed = ReportParamsSchema.safeParse(raw);
   const { from, to, species } = parsed.success ? parsed.data : {};
 
-  const range = resolveReportRange(from, to);
+  const timezone = (await getShelterSettings()).timezone;
+  const range = resolveReportRange(from, to, await getShelterToday());
   const [speciesList, report] = await Promise.all([
     fetchSpecies(),
     fetchLengthOfStayReport(from, to, species),
@@ -111,7 +115,7 @@ const PageContent = async ({ searchParams }: Props) => {
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{formatRangeLabel(range)}</span>
           <span className="text-muted-foreground text-xs">
-            · Times counted in {SHELTER_TIMEZONE}
+            · Times counted in {timezone}
           </span>
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
             <ReportRangePicker />
@@ -188,7 +192,7 @@ const PageContent = async ({ searchParams }: Props) => {
         stay runs from an intake to its next outcome; repeat visits are separate
         stays; cumulative is the sum of an animal&apos;s stays. Same-day intake and
         outcome counts as 0 days. In-care status is derived from intake/outcome
-        records. Date boundaries computed in {SHELTER_TIMEZONE}.
+        records. Date boundaries computed in {timezone}.
       </p>
     </div>
   );

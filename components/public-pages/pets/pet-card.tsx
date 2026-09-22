@@ -1,3 +1,4 @@
+import { calendarDay } from "@/app/lib/utils/shelter-day";
 import Image from "next/image";
 import Link from "next/link";
 import clsx from "clsx";
@@ -11,7 +12,7 @@ import { formatAnimalSize } from "@/app/lib/utils/enum-formatter";
 export interface PetCardData {
   id: string;
   name: string;
-  birthDate: Date;
+  birthDate: string;
   size: AnimalSize | null;
   species: { name: string };
   breeds: { name: string }[];
@@ -40,7 +41,7 @@ const PetCard = ({
     currentUserPersonId && (pet.favorites?.length ?? 0) > 0
   );
   const ageString = calculateAgeString({
-    birthDate: pet.birthDate,
+    birthDate: calendarDay(pet.birthDate),
     simple: true,
   });
 

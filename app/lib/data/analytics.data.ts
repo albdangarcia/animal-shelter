@@ -1,3 +1,7 @@
+import {
+  getShelterSettings,
+  getShelterToday,
+} from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import {
@@ -8,6 +12,13 @@ import {
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../auth/protected-actions";
 import { Prettify } from "../utils/type-utils";
+import {
+  calendarDay,
+  countByShelterDay,
+  shiftDayKey,
+  type CalendarDay,
+} from "../utils/shelter-day";
+import { resolveDashboardMonthBoundaries } from "./dashboard-month-boundaries";
 
 export type PetCardDataType = {
   totalPets: number;
@@ -25,10 +36,17 @@ export type PetCardDataType = {
 
 const _fetchAnimalCardData = async (): Promise<PetCardDataType> => {
   try {
-    const now = new Date();
-    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+    const [today, settings] = await Promise.all([
+      getShelterToday(),
+      getShelterSettings(),
+    ]);
+    const {
+      currentMonthFromDay,
+      lastMonthFromDay,
+      lastMonthToDay,
+      startOfCurrentMonth,
+      startOfLastMonth,
+    } = resolveDashboardMonthBoundaries(today, settings.timezone);
 
     // Current totals
     const [
@@ -79,7 +97,7 @@ const _fetchAnimalCardData = async (): Promise<PetCardDataType> => {
         where: {
           type: OutcomeType.ADOPTION,
           outcomeDate: {
-            gte: startOfCurrentMonth,
+            gte: currentMonthFromDay,
           },
         },
       }),
@@ -111,7 +129,7 @@ const _fetchAnimalCardData = async (): Promise<PetCardDataType> => {
         where: {
           createdAt: {
             gte: startOfLastMonth,
-            lte: endOfLastMonth,
+            lt: startOfCurrentMonth,
           },
         },
       }),
@@ -119,8 +137,8 @@ const _fetchAnimalCardData = async (): Promise<PetCardDataType> => {
         where: {
           type: OutcomeType.ADOPTION,
           outcomeDate: {
-            gte: startOfLastMonth,
-            lte: endOfLastMonth,
+            gte: lastMonthFromDay,
+            lte: lastMonthToDay,
           },
         },
       }),
@@ -128,7 +146,7 @@ const _fetchAnimalCardData = async (): Promise<PetCardDataType> => {
         where: {
           publishedAt: {
             gte: startOfLastMonth,
-            lte: endOfLastMonth,
+            lt: startOfCurrentMonth,
           },
         },
       }),
@@ -137,7 +155,7 @@ const _fetchAnimalCardData = async (): Promise<PetCardDataType> => {
           status: "TODO",
           createdAt: {
             gte: startOfLastMonth,
-            lte: endOfLastMonth,
+            lt: startOfCurrentMonth,
           },
         },
       }),
@@ -186,46 +204,31 @@ const _fetchChartData = async (): Promise<ChartData> => {
   try {
     const days = 90;
 
-    const now = new Date();
-    const startDate = new Date(
-      Date.UTC(
-        now.getUTCFullYear(),
-        now.getUTCMonth(),
-        now.getUTCDate() - days,
-      ),
-    );
+    // The chart's unit is the calendar day, the same day the reports count in,
+    // and each axis label is one day. It ends on today, so an outcome recorded
+    // today shows.
+    const startKey = shiftDayKey(await getShelterToday(), -(days - 1));
 
     const [intakeData, outcomeData] = await Promise.all([
       prisma.intake.findMany({
-        where: { intakeDate: { gte: startDate } },
+        where: { intakeDate: { gte: startKey } },
         select: { intakeDate: true },
       }),
       prisma.outcome.findMany({
-        where: { outcomeDate: { gte: startDate } },
+        where: { outcomeDate: { gte: startKey } },
         select: { outcomeDate: true },
       }),
     ]);
 
-    // intakeDate/outcomeDate are full timestamps, so events on the same
-    // calendar day rarely share an exact value. Bucket by day in JS instead
-    // of using a DB-level groupBy, which would group by exact timestamp and
-    // undercount days with multiple events.
-    const countByDay = (dates: Date[]) => {
-      const map = new Map<string, number>();
-      for (const date of dates) {
-        const key = date.toISOString().split("T")[0];
-        map.set(key, (map.get(key) ?? 0) + 1);
-      }
-      return map;
-    };
-
-    const intakeMap = countByDay(intakeData.map((item) => item.intakeDate));
-    const outcomeMap = countByDay(outcomeData.map((item) => item.outcomeDate));
+    const intakeMap = countByShelterDay(
+      intakeData.map((item) => calendarDay(item.intakeDate)),
+    );
+    const outcomeMap = countByShelterDay(
+      outcomeData.map((item) => calendarDay(item.outcomeDate)),
+    );
 
     const chartData = Array.from({ length: days }, (_, i) => {
-      const date = new Date(startDate);
-      date.setUTCDate(startDate.getUTCDate() + i);
-      const dateString = date.toISOString().split("T")[0];
+      const dateString = shiftDayKey(startKey, i);
 
       return {
         date: dateString,
@@ -329,7 +332,7 @@ type AnimalForAttentionQueryPayload = Prisma.AnimalGetPayload<{
 
 export type AnimalsRequiringAttentionPayload = Prettify<
   Omit<AnimalForAttentionQueryPayload, "intake"> & {
-    intakeDate: Date;
+    intakeDate: CalendarDay;
   }
 >;
 
@@ -359,9 +362,9 @@ const _fetchAnimalsRequiringAttention = async (): Promise<
           select: {
             intakeDate: true,
           },
-          orderBy: {
-            intakeDate: "asc",
-          },
+          // Two intakes on one day tie on the date alone, so `createdAt`
+          // settles which of them is the earlier one.
+          orderBy: [{ intakeDate: "asc" }, { createdAt: "asc" }],
           take: 1,
         },
       },
@@ -373,7 +376,7 @@ const _fetchAnimalsRequiringAttention = async (): Promise<
         id: animal.id,
         name: animal.name,
         healthStatus: animal.healthStatus,
-        intakeDate: animal.intake[0].intakeDate,
+        intakeDate: calendarDay(animal.intake[0].intakeDate),
       }));
   } catch (error) {
     console.error("Error fetching animals requiring attention data.", error);

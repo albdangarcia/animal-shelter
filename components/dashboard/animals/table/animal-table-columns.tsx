@@ -1,5 +1,7 @@
 "use client";
 
+import { calendarDay } from "@/app/lib/utils/shelter-day";
+
 import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -68,7 +70,7 @@ export const columns: ColumnDef<StockFeatures, AnimalsPayload>[] = [
       return (
         <span>
           {calculateAgeString({
-            birthDate: row.getValue("birthDate"),
+            birthDate: calendarDay(row.getValue<string>("birthDate")),
             simple: true,
           })}
         </span>

@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/card";
 import { withdrawMyFosterApplication } from "@/app/lib/actions/foster-application.actions";
 import { MyFosterApplicationPayload } from "@/app/lib/types";
-import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { FormattedDate } from "@/components/common/formatted-date";
 import { ApplicationStatuses } from "@/components/dashboard/my-adoption-applications/table/my-applications-options";
 import { HouseholdReadOnlyRows } from "@/components/dashboard/household/household-read-only";
 import { StatusHistoryTimeline } from "@/components/dashboard/applications/status-history-timeline";
@@ -132,7 +132,7 @@ export function FosterApplicationStatus({
             )}
           </CardTitle>
           <CardDescription>
-            Submitted {formatDateOrNA(application.submittedAt)}.
+            Submitted <FormattedDate date={application.submittedAt} />.
           </CardDescription>
           {canWithdraw && (
             <CardAction>

@@ -19,15 +19,11 @@
  * carry clock times that say nothing about which came first.
  */
 
-import { formatInTimeZone } from "date-fns-tz";
-import { SHELTER_TIMEZONE } from "../constants/constants";
-
-const shelterDay = (date: Date) =>
-  formatInTimeZone(date, SHELTER_TIMEZONE, "yyyy-MM-dd");
+import { shelterDayKey } from "../utils/shelter-day";
 
 /** Whether `a` was observed on a strictly later day than `b`. */
-export const observedOnLaterDay = (a: Date, b: Date): boolean =>
-  shelterDay(a) > shelterDay(b);
+export const observedOnLaterDay = (a: Date, b: Date, timezone: string): boolean =>
+  shelterDayKey(a, timezone) > shelterDayKey(b, timezone);
 
 /** A proposing field of the template version an assessment was recorded on. */
 export interface RecordedField {
@@ -172,6 +168,7 @@ export interface AnimalContradictions<A extends RecordedAssessment> {
  */
 export function contradictionsByCharacteristic<A extends RecordedAssessment>(
   assessments: readonly A[],
+  timezone: string,
 ): AnimalContradictions<A> {
   const latestAffirming = new Map<string, A>();
   for (const assessment of assessments) {
@@ -191,7 +188,7 @@ export function contradictionsByCharacteristic<A extends RecordedAssessment>(
       const affirming = latestAffirming.get(id);
       if (
         affirming &&
-        observedOnLaterDay(affirming.observedAt, assessment.observedAt)
+        observedOnLaterDay(affirming.observedAt, assessment.observedAt, timezone)
       ) {
         const list = superseded.get(id) ?? [];
         list.push({ assessment, contradiction, supersededBy: affirming });
@@ -293,9 +290,10 @@ export function summarizeAssessmentCharacteristics(input: {
   deleted: boolean;
   assignments: readonly ActiveCharacteristicAssignment[];
   liveAssessments: readonly RecordedAssessment[];
+  timezone: string;
 }): AssessmentCharacteristicsSummary {
-  const { assessment, deleted, assignments, liveAssessments } = input;
-  const contradictions = contradictionsByCharacteristic(liveAssessments);
+  const { assessment, deleted, assignments, liveAssessments, timezone } = input;
+  const contradictions = contradictionsByCharacteristic(liveAssessments, timezone);
 
   // A deleted assessment can't source anything; its own superseded findings
   // aren't shown either — it no longer speaks for the animal at all.

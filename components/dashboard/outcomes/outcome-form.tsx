@@ -1,6 +1,7 @@
 "use client";
 
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
+import { parseISO } from "date-fns";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,7 +30,8 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { DateField } from "@/components/forms/date-field";
+import { DayField } from "@/components/forms/day-field";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import {
   Select,
   SelectContent,
@@ -65,13 +67,23 @@ interface OutcomeFormProps {
   suggestedOwnerId?: string; // For the 'Return to Owner' option
   suggestedOwnerLabel?: string;
   canCreatePerson?: boolean;
+  /**
+   * Today, on the shelter's calendar, resolved on the server. The picker starts
+   * on it, and it is the same day the outcome would be filed under — a
+   * `new Date()` here would be re-resolved in the viewer's zone, so the server
+   * render and the browser's could disagree by a day.
+   */
+  today: CalendarDay;
 }
 
 const buildDefaultValues = (
+  today: CalendarDay,
   outcome?: OutcomePayload,
   application?: AdoptionApplicationPayload,
 ): DefaultValues<OutcomeFormValues> => ({
-  outcomeDate: outcome?.outcomeDate ?? new Date(),
+  // The day the picker starts on: today on the shelter's calendar, which is the
+  // day an outcome recorded now is filed under.
+  outcomeDate: outcome?.outcomeDate ?? today,
   // Undefined rather than `"" as OutcomeType` when there is nothing to
   // preselect: the field is legitimately unset until the user picks, and the
   // cast claimed an empty string was a valid enum member.
@@ -89,6 +101,7 @@ export function OutcomeForm({
   suggestedOwnerId,
   suggestedOwnerLabel,
   canCreatePerson,
+  today,
 }: OutcomeFormProps) {
   const isEditMode = !!outcome;
   const router = useRouter();
@@ -102,7 +115,7 @@ export function OutcomeForm({
 
   const form = useForm<OutcomeFormValues>({
     resolver: standardSchemaResolver(OutcomeFormSchema),
-    defaultValues: buildDefaultValues(outcome, application),
+    defaultValues: buildDefaultValues(today, outcome, application),
   });
 
   // useWatch rather than form.watch(): watch() returns a function the React
@@ -114,9 +127,6 @@ export function OutcomeForm({
 
   const handleFormSubmit = (values: OutcomeFormValues) => {
     startSubmitTransition(async () => {
-      // outcomeDate travels as a real Date — server actions serialize it, so
-      // the toISOString() round-trip and the `new Date(... as string)` cast on
-      // the other end are both gone.
       const result = isEditMode
         ? await updateOutcome(outcome.id, values)
         : await createOutcome(
@@ -192,7 +202,7 @@ export function OutcomeForm({
                   </FormItem>
                 )}
               />
-              <DateField
+              <DayField
                 control={form.control}
                 name="outcomeDate"
                 label="Date of Outcome *"
@@ -201,11 +211,10 @@ export function OutcomeForm({
                 // Required field: clicking the selected day again must not
                 // clear it.
                 keepValueOnDeselect
-                disabledDates={(date) => {
-                  const today = new Date();
-                  today.setHours(23, 59, 59, 999);
-                  return date > today;
-                }}
+                // No future days: an outcome is recorded after it happens. The
+                // grid works in local dates, so the shelter's day is read as
+                // one to compare against.
+                disabledDates={(date) => date > parseISO(today)}
               />
             </div>
 

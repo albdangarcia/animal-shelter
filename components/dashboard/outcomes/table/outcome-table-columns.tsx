@@ -9,7 +9,7 @@ import { OutcomeTypesOptions } from "./outcome-options";
 import { DataTableColumnHeader } from "../../../table-common/data-table-column-header";
 import { DataTableRowActions } from "./outcome-table-row-actions";
 import { OutcomeWithDetails } from "@/app/lib/data/animals/outcome.data";
-import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 
 // Maps outcome types to their recipient's relationship label. Types not
 // listed here (deceased, euthanized, other) genuinely have no recipient.
@@ -147,12 +147,9 @@ export const getColumns = ({
       displayName: "Outcome Date",
     },
     cell: ({ row }) => {
-      const date = row.getValue("outcomeDate") as
-        | string
-        | Date
-        | undefined
-        | null;
-      return <span>{formatDateOrNA(date)}</span>;
+      // The column holds a calendar day; a table cell reads it untyped.
+      const day = row.getValue("outcomeDate") as string | undefined | null;
+      return <span>{formatShelterDayOrNA(day)}</span>;
     },
   },
   {

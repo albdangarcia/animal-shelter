@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FetchAnimalTasksPayload } from "@/app/lib/data/animals/animal-task.data";
 import { TaskAssignee } from "@/app/lib/types";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { TaskForm } from "../task-form";
 import { updateAnimalTaskStatus } from "@/app/lib/actions/animal-task.actions";
 import { TaskStatus } from "@/prisma/generated/enums";
@@ -51,6 +52,8 @@ interface DataTableRowActionsProps {
   assigneeList: TaskAssignee[];
   animalId: string;
   canManage: boolean;
+  /** Today on the shelter's calendar, resolved on the server. */
+  today: CalendarDay;
 }
 
 export function DataTableRowActions({
@@ -58,6 +61,7 @@ export function DataTableRowActions({
   assigneeList,
   animalId,
   canManage,
+  today,
 }: DataTableRowActionsProps) {
   const task = row.original;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -155,6 +159,7 @@ export function DataTableRowActions({
           ref={formRef}
           assigneeList={assigneeList}
           task={task}
+          today={today}
         />
       </DialogContent>
 

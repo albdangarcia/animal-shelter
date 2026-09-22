@@ -1,16 +1,17 @@
-import { formatInTimeZone } from "date-fns-tz";
 import type { AnimalListingStatus } from "@/prisma/generated/enums";
-import { SHELTER_TIMEZONE } from "@/app/lib/constants/constants";
 import {
   blockerAction,
   describeBlocker,
   earliestSince,
   orderBlockers,
-  shelterDaysBetween,
   type AnimalReadiness,
   type ReadinessBlockerKind,
   type ReadinessViewerCan,
 } from "@/app/lib/readiness/board";
+import {
+  shelterDayKey,
+  shelterDaysBetween,
+} from "@/app/lib/utils/shelter-day";
 
 /**
  * One item still outstanding on the animal's readiness checklist.
@@ -86,9 +87,6 @@ export type ReadinessLine =
       kinds: ReadinessBlockerKind[];
     };
 
-const shelterDateOnly = (date: Date): string =>
-  formatInTimeZone(date, SHELTER_TIMEZONE, "yyyy-MM-dd");
-
 /**
  * `now` is a parameter rather than a `new Date()` inside, so day counts are a
  * pure function of their inputs and can be tested without freezing a clock.
@@ -96,7 +94,8 @@ const shelterDateOnly = (date: Date): string =>
 export function toAnimalReadinessView(
   readiness: AnimalReadiness,
   can: ReadinessViewerCan,
-  now: Date = new Date(),
+  now: Date,
+  timezone: string,
 ): AnimalReadinessView {
   const { animal, blockers } = readiness;
   const identity: ReadinessIdentity = {
@@ -116,13 +115,13 @@ export function toAnimalReadinessView(
   return {
     ...identity,
     status: "NOT_READY",
-    daysOutstanding: since ? shelterDaysBetween(since, now) : null,
+    daysOutstanding: since ? shelterDaysBetween(since, now, timezone) : null,
     outstanding: orderBlockers(blockers).map((blocker) => ({
       kind: blocker.kind,
-      description: describeBlocker(blocker),
-      since: blocker.since ? shelterDateOnly(blocker.since) : null,
+      description: describeBlocker(blocker, timezone),
+      since: blocker.since ? shelterDayKey(blocker.since, timezone) : null,
       daysOutstanding: blocker.since
-        ? shelterDaysBetween(blocker.since, now)
+        ? shelterDaysBetween(blocker.since, now, timezone)
         : null,
       nextStep: blockerAction(blocker, animal.id, can).label,
     })),
@@ -131,7 +130,8 @@ export function toAnimalReadinessView(
 
 export function toReadinessLine(
   readiness: AnimalReadiness,
-  now: Date = new Date(),
+  now: Date,
+  timezone: string,
 ): ReadinessLine {
   const { animal, blockers } = readiness;
   if (animal.listingStatus === "ARCHIVED") return { status: "ARCHIVED" };
@@ -141,7 +141,7 @@ export function toReadinessLine(
   return {
     status: "NOT_READY",
     outstandingCount: blockers.length,
-    daysOutstanding: since ? shelterDaysBetween(since, now) : null,
+    daysOutstanding: since ? shelterDaysBetween(since, now, timezone) : null,
     kinds: [...new Set(orderBlockers(blockers).map((b) => b.kind))],
   };
 }

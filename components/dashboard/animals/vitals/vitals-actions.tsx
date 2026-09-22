@@ -32,6 +32,7 @@ import {
   deleteVitalsEntry,
   restoreVitalsEntry,
 } from "@/app/lib/actions/animal-vitals.actions";
+import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { VitalsForm } from "./vitals-form";
 import { toast } from "sonner";
 import {
@@ -41,6 +42,7 @@ import {
 
 interface VitalsActionsProps {
   vitalsLog: AnimalVitalsListPayload;
+  unitSystem: WeightUnitSystem;
   animalId: string;
   canManage: boolean;
   previousWeightGrams: number | null;
@@ -48,6 +50,7 @@ interface VitalsActionsProps {
 
 export function VitalsActions({
   vitalsLog,
+  unitSystem,
   animalId,
   canManage,
   previousWeightGrams,
@@ -133,6 +136,7 @@ export function VitalsActions({
           </DialogDescription>
         </DialogHeader>
         <VitalsForm
+          unitSystem={unitSystem}
           animalId={animalId}
           vitalsLog={vitalsLog}
           previousWeightGrams={previousWeightGrams}

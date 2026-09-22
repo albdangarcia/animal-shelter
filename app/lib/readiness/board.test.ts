@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fromZonedTime } from "date-fns-tz";
-import { SHELTER_TIMEZONE } from "../constants/constants";
+const SHELTER_TIMEZONE = "America/New_York";
+import { shelterDaysBetween as rawShelterDaysBetween } from "../utils/shelter-day";
 import type { ReadinessBlocker } from "./compute-readiness";
 import {
   BLOCKER_KIND_ORDER,
@@ -10,10 +11,9 @@ import {
   READINESS_PREVIEW_LIMIT,
   UNPLACED_LOCATION,
   blockerAction,
-  buildReadinessBoard,
+  buildReadinessBoard as rawBuildReadinessBoard,
   parseReadinessBoardFilters,
   readinessBoardFilterOptions,
-  shelterDaysBetween,
   type AnimalReadiness,
   type ReadinessAnimal,
   type ReadinessBoardFilters,
@@ -22,6 +22,9 @@ import {
 
 // Shelter-local wall-clock times, so day counts don't depend on the machine
 // running the tests.
+const shelterDaysBetween = (since: Date, now: Date) => rawShelterDaysBetween(since, now, SHELTER_TIMEZONE);
+const buildReadinessBoard = (readiness: Parameters<typeof rawBuildReadinessBoard>[0], filters: Parameters<typeof rawBuildReadinessBoard>[1], now: Date, page = 1) => rawBuildReadinessBoard(readiness, filters, now, page, SHELTER_TIMEZONE);
+
 const at = (day: number, time = "12:00") =>
   fromZonedTime(
     `2026-09-${String(day).padStart(2, "0")} ${time}`,

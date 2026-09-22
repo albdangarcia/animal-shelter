@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { AnimalVitalsListPayload } from "@/app/lib/data/animals/animal-vitals.data";
 import { formatDateToLongString } from "@/app/lib/utils/date-utils";
+import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { formatWeight, formatTemperature } from "@/app/lib/utils/weight-format";
 import { ServerSideSort } from "@/components/table-common/server-side-sort";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
@@ -50,6 +51,7 @@ const vitalsStatusOptions = [
 
 interface Props {
   vitalsLogs: AnimalVitalsListPayload[];
+  unitSystem: WeightUnitSystem;
   animalId: string;
   totalPages: number;
   canManage: boolean;
@@ -58,6 +60,7 @@ interface Props {
 
 const AnimalVitalsTab = ({
   vitalsLogs,
+  unitSystem,
   animalId,
   totalPages,
   canManage,
@@ -100,6 +103,7 @@ const AnimalVitalsTab = ({
                 </DialogDescription>
               </DialogHeader>
               <VitalsForm
+                unitSystem={unitSystem}
                 animalId={animalId}
                 previousWeightGrams={previousWeightGrams}
                 onFormSubmit={() => setIsAddDialogOpen(false)}
@@ -180,7 +184,7 @@ const AnimalVitalsTab = ({
                             Weight:{" "}
                           </span>
                           <span className="text-sm font-medium">
-                            {formatWeight(vitalsLog.weightGrams)}
+                            {formatWeight(vitalsLog.weightGrams, unitSystem)}
                           </span>
                         </div>
                       )}
@@ -190,7 +194,7 @@ const AnimalVitalsTab = ({
                             Temperature:{" "}
                           </span>
                           <span className="text-sm font-medium">
-                            {formatTemperature(vitalsLog.temperatureC)}
+                            {formatTemperature(vitalsLog.temperatureC, unitSystem)}
                           </span>
                         </div>
                       )}
@@ -214,6 +218,7 @@ const AnimalVitalsTab = ({
                   </div>
 
                   <VitalsActions
+                    unitSystem={unitSystem}
                     vitalsLog={vitalsLog}
                     animalId={animalId}
                     canManage={canManage}

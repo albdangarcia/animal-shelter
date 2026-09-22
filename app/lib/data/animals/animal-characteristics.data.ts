@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
@@ -93,6 +94,7 @@ const _fetchAnimalCharacteristics = async (
 
     const contradictions = contradictionsByCharacteristic(
       findings.liveAssessments,
+      (await getShelterSettings()).timezone,
     );
 
     const assignmentByCharId = new Map(

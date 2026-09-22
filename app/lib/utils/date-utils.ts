@@ -5,17 +5,19 @@ import {
   differenceInWeeks,
   differenceInDays,
   addYears,
-  isPast,
-  startOfDay,
+  formatDistanceStrict,
   formatDistanceToNowStrict,
+  parseISO,
 } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { TaskStatus } from "@/prisma/generated/enums";
+import { parseCalendarDay, type CalendarDay } from "./shelter-day";
 
 interface calculateAgeStringProps {
   /**
    * The date of birth.
    */
-  birthDate: Date;
+  birthDate: CalendarDay;
   /**
    * Optional. If true, returns the largest unit of age (e.g., "1 year" instead of "1 year, 3 months").
    * Defaults to false.
@@ -32,7 +34,8 @@ interface calculateAgeStringProps {
  */
 export const calculateAgeString = ({ birthDate, simple = false }: calculateAgeStringProps): string => {
   // Extract the year, month, week, or day difference based on the simple flag
-  return simple ? calculateSimpleAge(birthDate) : calculateDetailedAge(birthDate);
+  const date = parseISO(birthDate);
+  return simple ? calculateSimpleAge(date) : calculateDetailedAge(date);
 }
 
 const calculateSimpleAge = (birthDate: Date): string => {
@@ -127,6 +130,18 @@ export const formatDateOrNA = (dateInput: string | Date | undefined | null): str
   }
 };
 
+/** A stable first render for instant dates, independent of the runtime's zone. */
+export const formatUtcDateOrNA = (
+  dateInput: string | Date | undefined | null,
+): string => {
+  if (dateInput === null || dateInput === undefined) return "N/A";
+  try {
+    return formatInTimeZone(dateInput, "UTC", "MMM d, yyyy");
+  } catch {
+    return "Invalid Date";
+  }
+};
+
 /**
  * Formats a date to a "time ago" string in a simple format.
  * e.g., "5 minutes ago", "2 hours ago", "3 days ago".
@@ -154,53 +169,63 @@ export const formatTimeAgo = (dateInput: string | Date | undefined | null): stri
 };
 
 /**
- * Formats a due date with special handling for overdue tasks.
- * @param {string | Date | undefined | null} dateInput - The due date.
- * @param {TaskStatus} status - The current status of the task.
- * @returns {string} A formatted string like "Overdue by 3 days", "in 2 hours", or "N/A".
+ * Formats a day-valued due date, with special handling for overdue tasks.
+ *
+ * The distance is measured between two calendar days, never between a stored
+ * value and the reader's clock, so it reads the same for everyone and does not
+ * differ between the server render and the browser's.
+ *
+ * @param day - The due day, or nothing when the task is undated.
+ * @param status - The current status of the task.
+ * @param today - Today on the shelter's calendar.
+ * @returns A string like "Overdue by 3 days", "in 2 days", "Today", or "N/A".
  */
-export const formatDueDate = (
-  dateInput: string | Date | undefined | null,
-  status: TaskStatus
+export const formatDueDay = (
+  day: string | null | undefined,
+  status: TaskStatus,
+  today: CalendarDay,
 ): string => {
-  if (dateInput === null || dateInput === undefined) {
+  if (day === null || day === undefined) {
     return "N/A";
   }
 
-  const date = new Date(dateInput);
-  const isOverdue = isPast(date);
-
-  // Define which statuses are considered "active" for overdue checks
-  const activeStatuses: TaskStatus[] = [
-    TaskStatus.TODO,
-    TaskStatus.IN_PROGRESS,
-  ];
-
-  if (activeStatuses.includes(status) && isOverdue) {
-    // Return a special string for active, overdue tasks
-    return `Overdue by ${formatDistanceToNowStrict(date)}`;
+  const due = parseCalendarDay(day);
+  if (due === null) {
+    return "Invalid Date";
+  }
+  if (due === today) {
+    return "Today";
   }
 
-  // For all other cases (done tasks, future tasks), use the standard time ago format
-  return formatTimeAgo(dateInput);
+  // Both days are read as plain local dates, which cancels out — the distance
+  // between them is whole days either way.
+  const distance = formatDistanceStrict(parseISO(due), parseISO(today));
+
+  // Only a task someone is still expected to do can be overdue; a closed one
+  // just reads as a past date.
+  const isActive =
+    status === TaskStatus.TODO || status === TaskStatus.IN_PROGRESS;
+  if (due < today) {
+    return isActive ? `Overdue by ${distance}` : `${distance} ago`;
+  }
+  return `in ${distance}`;
 };
 
 /**
  * True when an open foster placement's expected return date has already passed.
  *
- * Mirrors attention-queue Signal 3: strictly before *today*, so a placement
- * expected back today is not yet overdue. Keep in sync with the
- * `expectedEndDate: { lt: startOfToday }` filter in attention-queue.data.ts.
+ * Both sides are calendar days, so this is a plain string comparison: strictly
+ * before *today*, so a placement expected back today is not yet overdue. The
+ * attention queue draws the same boundary with the same two values.
  *
- * Deliberately not `isPast()` — that is timestamp-based and would flag a
- * placement due today as overdue by mid-morning, contradicting the queue.
+ * `today` is a parameter because only the server can resolve which day it is on
+ * the shelter's calendar; a browser rendering this has been handed the answer.
  *
- * @param {Date | string | null | undefined} expectedEndDate - The expected return date.
- * @returns {boolean} True only when a date is set and it falls before today.
+ * @param expectedEndDate - The expected return day, or nothing when open-ended.
+ * @param today - Today on the shelter's calendar.
+ * @returns True only when a day is set and it falls before today.
  */
 export const isFosterPlacementOverdue = (
-  expectedEndDate: Date | string | null | undefined
-): boolean => {
-  if (!expectedEndDate) return false;
-  return new Date(expectedEndDate) < startOfDay(new Date());
-};
+  expectedEndDate: string | null | undefined,
+  today: CalendarDay,
+): boolean => !!expectedEndDate && expectedEndDate < today;

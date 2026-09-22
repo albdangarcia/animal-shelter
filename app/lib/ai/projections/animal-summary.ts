@@ -74,7 +74,7 @@ export function toAnimalSummary(
     breeds: row.breeds.map((b) => b.name),
     primaryColor: row.primaryColor?.name ?? null,
     sex: row.sex,
-    birthDate: row.birthDate.toISOString().slice(0, 10),
+    birthDate: row.birthDate,
     size: row.size,
     healthStatus: row.healthStatus,
     listingStatus: row.listingStatus,
@@ -84,8 +84,8 @@ export function toAnimalSummary(
           personId: foster.fosterProfile.person.id,
           personName: foster.fosterProfile.person.name,
           placementType: foster.type,
-          startDate: foster.startDate.toISOString(),
-          expectedEndDate: foster.expectedEndDate?.toISOString() ?? null,
+          startDate: foster.startDate,
+          expectedEndDate: foster.expectedEndDate,
         }
       : null,
     openTasks: row.tasks.map((task) => ({
@@ -94,11 +94,11 @@ export function toAnimalSummary(
       status: task.status,
       priority: task.priority,
       category: task.category,
-      dueDate: task.dueDate?.toISOString() ?? null,
+      dueDate: task.dueDate,
     })),
     latestIntake: row.intake[0]
       ? {
-          date: row.intake[0].intakeDate.toISOString(),
+          date: row.intake[0].intakeDate,
           type: row.intake[0].type,
         }
       : null,

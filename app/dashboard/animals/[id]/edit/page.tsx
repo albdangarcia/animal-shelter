@@ -1,3 +1,7 @@
+import {
+  getShelterSettings,
+  getShelterToday,
+} from "@/app/lib/data/shelter-settings.data";
 import { notFound } from "next/navigation";
 import {
   fetchAnimalById,
@@ -43,10 +47,12 @@ const Page = async ({ params }: Props) => {
 
       <AnimalForm
         speciesList={speciesList}
+        unitSystem={(await getShelterSettings()).weightUnitSystem}
         partners={partners}
         colors={colors}
         animal={animal}
         unitOptions={unitOptions}
+        today={await getShelterToday()}
       />
     </main>
   );

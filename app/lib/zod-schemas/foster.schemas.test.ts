@@ -1,14 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
-import { CreateFosterPlacementSchema } from "./foster.schemas";
+import { createFosterPlacementSchema } from "./foster.schemas";
+import { calendarDay, shiftDayKey } from "@/app/lib/utils/shelter-day";
 
-const dayOffset = (days: number): Date => {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  d.setHours(12, 0, 0, 0);
-  return d;
-};
+// A fixed day the schema is built from, so these cases do not depend on when
+// or where the suite runs — which is why the schema takes today as an argument.
+const TODAY = calendarDay("2026-09-21");
+const schema = createFosterPlacementSchema(TODAY);
+const day = (offset: number) => shiftDayKey(TODAY, offset);
 
 const baseInput = {
   animalId: "cmtn2bxpz00gancgsd6hyf79q",
@@ -16,46 +16,43 @@ const baseInput = {
   type: "GENERAL" as const,
 };
 
-test("CreateFosterPlacementSchema: omitting the expected return date is valid", () => {
+test("createFosterPlacementSchema: omitting the expected return date is valid", () => {
   // The open-ended placement — the common case, and the one that motivated
   // keeping this field optional.
-  const result = CreateFosterPlacementSchema.safeParse(baseInput);
+  const result = schema.safeParse(baseInput);
   assert.equal(result.success, true);
 });
 
-test("CreateFosterPlacementSchema: a future expected return date is valid", () => {
-  const result = CreateFosterPlacementSchema.safeParse({
+test("createFosterPlacementSchema: a future expected return day is valid", () => {
+  const result = schema.safeParse({
     ...baseInput,
-    expectedEndDate: dayOffset(9),
+    expectedEndDate: day(9),
   });
   assert.equal(result.success, true);
 });
 
-test("CreateFosterPlacementSchema: a today expected return date is valid", () => {
-  const result = CreateFosterPlacementSchema.safeParse({
-    ...baseInput,
-    expectedEndDate: dayOffset(0),
-  });
+test("createFosterPlacementSchema: a today expected return day is valid", () => {
+  const result = schema.safeParse({ ...baseInput, expectedEndDate: TODAY });
   assert.equal(result.success, true);
 });
 
-test("CreateFosterPlacementSchema: a past expected return date is rejected", () => {
+test("createFosterPlacementSchema: a past expected return day is rejected", () => {
   // The bug this fixes: the calendar greys out past days client-side, but
-  // nothing stopped a past date reaching createFosterPlacement, producing a
+  // nothing stopped a past day reaching createFosterPlacement, producing a
   // placement that lands in the overdue attention queue the moment it exists.
-  const result = CreateFosterPlacementSchema.safeParse({
+  const result = schema.safeParse({
     ...baseInput,
-    expectedEndDate: dayOffset(-1),
+    expectedEndDate: day(-1),
   });
   assert.equal(result.success, false);
 });
 
-test("CreateFosterPlacementSchema: the past-date error is on the expectedEndDate path", () => {
+test("createFosterPlacementSchema: the past-day error is on the expectedEndDate path", () => {
   // createFosterPlacement surfaces errors via z.flattenError(...).fieldErrors,
   // so the message has to be keyed to the field for the form to show it.
-  const result = CreateFosterPlacementSchema.safeParse({
+  const result = schema.safeParse({
     ...baseInput,
-    expectedEndDate: dayOffset(-3),
+    expectedEndDate: day(-3),
   });
   assert.equal(result.success, false);
   if (result.success) return;
@@ -64,4 +61,34 @@ test("CreateFosterPlacementSchema: the past-date error is on the expectedEndDate
   assert.deepEqual(fieldErrors.expectedEndDate, [
     "An expected return date cannot be in the past.",
   ]);
+});
+
+test("createFosterPlacementSchema: a malformed expected return date is rejected", () => {
+  // The picker can only produce `yyyy-MM-dd`, but the action is a public
+  // entry point and the column's invariant has to hold whatever reaches it.
+  const result = schema.safeParse({
+    ...baseInput,
+    expectedEndDate: "2026-9-1",
+  });
+  assert.equal(result.success, false);
+});
+
+test("createFosterPlacementSchema: the boundary moves with the day it is built from", () => {
+  // The whole reason today is a parameter: the same submitted day is valid or
+  // not depending on which day the shelter is having.
+  const submitted = "2026-09-21";
+  assert.equal(
+    createFosterPlacementSchema(calendarDay("2026-09-21")).safeParse({
+      ...baseInput,
+      expectedEndDate: submitted,
+    }).success,
+    true,
+  );
+  assert.equal(
+    createFosterPlacementSchema(calendarDay("2026-09-22")).safeParse({
+      ...baseInput,
+      expectedEndDate: submitted,
+    }).success,
+    false,
+  );
 });

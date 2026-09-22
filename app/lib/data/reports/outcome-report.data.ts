@@ -1,3 +1,4 @@
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import { OutcomeType } from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -54,13 +55,13 @@ const _fetchOutcomeReport = async (
   species?: string,
 ): Promise<OutcomeReport> => {
   try {
-    const range = resolveReportRange(from, to);
+    const range = resolveReportRange(from, to, await getShelterToday());
     const speciesIds = parseSpeciesIds(species);
 
     const grouped = await prisma.outcome.groupBy({
       by: ["type"],
       where: {
-        outcomeDate: { gte: range.gte, lt: range.lt },
+        outcomeDate: { gte: range.fromLabel, lte: range.toLabel },
         ...speciesWhere(speciesIds),
       },
       _count: { id: true },

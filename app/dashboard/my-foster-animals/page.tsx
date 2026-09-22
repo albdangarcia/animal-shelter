@@ -12,6 +12,7 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchMyFosterAnimals } from "@/app/lib/data/fosters/my-foster-animals.data";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { FosterAnimalCard } from "@/components/dashboard/my-foster-animals/foster-animal-card";
 import { PastFostersCard } from "@/components/dashboard/my-foster-animals/past-fosters-card";
 
@@ -27,8 +28,8 @@ const Page = async () => {
 };
 
 const PageContent = async () => {
-  const { hasFosterProfile, currentPlacements, pastPlacements } =
-    await fetchMyFosterAnimals();
+  const [{ hasFosterProfile, currentPlacements, pastPlacements }, today] =
+    await Promise.all([fetchMyFosterAnimals(), getShelterToday()]);
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
@@ -62,7 +63,11 @@ const PageContent = async () => {
           ) : (
             <div className="grid grid-cols-1 gap-4 @2xl/card:grid-cols-2">
               {currentPlacements.map((placement) => (
-                <FosterAnimalCard key={placement.id} placement={placement} />
+                <FosterAnimalCard
+                  key={placement.id}
+                  placement={placement}
+                  today={today}
+                />
               ))}
             </div>
           )}

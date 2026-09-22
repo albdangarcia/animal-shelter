@@ -1,5 +1,7 @@
 "use client";
 
+import { calendarDay } from "@/app/lib/utils/shelter-day";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useDraggable } from "@dnd-kit/core";
@@ -72,7 +74,7 @@ const AnimalHoverContent = ({
         <dd className="font-medium">{formatSingleEnumOption(animal.sex)}</dd>
         <dt className="text-muted-foreground">Age</dt>
         <dd className="font-medium">
-          {calculateAgeString({ birthDate: new Date(animal.birthDate), simple: true })}
+          {calculateAgeString({ birthDate: calendarDay(animal.birthDate), simple: true })}
         </dd>
       </dl>
 

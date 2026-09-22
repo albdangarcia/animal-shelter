@@ -13,6 +13,7 @@ import {
   fetchFostersForPicker,
 } from "@/app/lib/data/fosters/fosters.data";
 import { PlacementCreateForm } from "@/components/dashboard/fosters/placements/placement-create-form";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -76,6 +77,7 @@ const PageContent = async ({ searchParams }: Props) => {
         <PlacementCreateForm
           fixedAnimal={{ id: animal.id, name: animal.name }}
           fosterOptions={fosterOptions}
+          today={await getShelterToday()}
         />
       </main>
     );
@@ -124,6 +126,7 @@ const PageContent = async ({ searchParams }: Props) => {
       <PlacementCreateForm
         fixedFoster={{ id: fosterProfile.id, personName: fosterProfile.personName }}
         animalOptions={animalOptions}
+        today={await getShelterToday()}
       />
     </main>
   );

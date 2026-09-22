@@ -1,90 +1,62 @@
-// Report date boundaries are computed in a single configured timezone
-// (SHELTER_TIMEZONE). Timestamps are stored in UTC, but a shelter's "June"
-// means June in the shelter's local days — so every report boundary is resolved
-// in one configured zone. This guarantees all viewers see identical numbers
-// regardless of their own browser/OS timezone.
+// Report boundaries are two calendar days, inclusive at both ends. A day-valued
+// column compares against them as plain strings, because `yyyy-MM-dd` is
+// fixed-width and zero-padded — see docs/calendar-days.md.
+//
+// The shelter's timezone is involved in one thing only: deciding which day
+// "today" is, for the range that has no explicit end.
 
-import { format, differenceInCalendarDays, isValid, parseISO } from "date-fns";
-import { fromZonedTime, formatInTimeZone } from "date-fns-tz";
-import { SHELTER_TIMEZONE } from "../constants/constants";
+import { parseISO, format } from "date-fns";
+import {
+  parseCalendarDay,
+  shiftDayKey,
+  shelterDaysBetweenKeys,
+  type CalendarDay,
+} from "./shelter-day";
 
 // Widest window a report may cover; wider requests are clamped, never errored.
 const MAX_RANGE_DAYS = 731;
 
 export type ReportRange = {
-  gte: Date; // UTC instant: start of `from` day in shelter tz
-  lt: Date; // UTC instant: start of the day AFTER `to` in shelter tz (exclusive)
-  fromLabel: string; // "yyyy-MM-dd" actually used (after defaults/clamping)
-  toLabel: string;
+  /** The first day counted, after defaults and clamping. */
+  fromLabel: CalendarDay;
+  /** The last day counted. Inclusive. */
+  toLabel: CalendarDay;
 };
 
-/** Today's date as `yyyy-MM-dd`, reckoned in the shelter timezone. */
-function todayLabel(): string {
-  return formatInTimeZone(new Date(), SHELTER_TIMEZONE, "yyyy-MM-dd");
-}
-
-/** January 1 of the current shelter-timezone year, as `yyyy-MM-dd`. */
-function startOfYearLabel(): string {
-  const year = formatInTimeZone(new Date(), SHELTER_TIMEZONE, "yyyy");
-  return `${year}-01-01`;
+/** January 1 of the current year on the shelter's calendar. */
+function startOfYearDay(today: CalendarDay): CalendarDay {
+  return `${today.slice(0, 4)}-01-01` as CalendarDay;
 }
 
 /**
- * Parses a `yyyy-MM-dd` string into a plain calendar Date (local midnight, used
- * only for day arithmetic/labeling), returning null if absent, malformed, or a
- * non-existent calendar date (e.g. "2026-02-30").
- */
-function parseLabel(value: string | undefined): Date | null {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
-  const parsed = parseISO(value);
-  if (!isValid(parsed)) return null;
-  // Reject roll-over dates: the round-tripped label must match the input.
-  if (format(parsed, "yyyy-MM-dd") !== value) return null;
-  return parsed;
-}
-
-/** The UTC instant at which `yyyy-MM-dd` begins (midnight) in the shelter tz. */
-function zonedDayStart(label: string): Date {
-  return fromZonedTime(`${label} 00:00:00`, SHELTER_TIMEZONE);
-}
-
-function addDaysLabel(label: string, days: number): string {
-  const d = parseISO(label);
-  d.setDate(d.getDate() + days);
-  return format(d, "yyyy-MM-dd");
-}
-
-/**
- * Resolves raw `from`/`to` URL params into a concrete, timezone-anchored range.
+ * Resolves raw `from`/`to` URL params into a concrete day range.
  *
  *  - Missing `to` → today; missing `from` → Jan 1 of the current year (YTD).
  *  - `from > to` is swapped rather than errored.
  *  - Spans wider than 731 days clamp `from` to `to - 731 days`.
  *  - Unparseable input falls back to the defaults; this function never throws.
  *
- * The returned `gte`/`lt` are UTC instants ready for Prisma; `lt` is exclusive
- * (start of the day after `to`) so no event is double-counted at midnight.
+ * Both ends are inclusive: a report for a single day asks for that day twice.
  */
-export function resolveReportRange(from?: string, to?: string): ReportRange {
-  let fromLabel = parseLabel(from) ? from! : startOfYearLabel();
-  let toLabel = parseLabel(to) ? to! : todayLabel();
+export function resolveReportRange(
+  from: string | undefined,
+  to: string | undefined,
+  today: CalendarDay,
+): ReportRange {
+  let fromDay = parseCalendarDay(from) ?? startOfYearDay(today);
+  let toDay = parseCalendarDay(to) ?? today;
 
   // Swap reversed ranges.
-  if (fromLabel > toLabel) {
-    [fromLabel, toLabel] = [toLabel, fromLabel];
+  if (fromDay > toDay) {
+    [fromDay, toDay] = [toDay, fromDay];
   }
 
   // Clamp overly wide windows, holding `to` fixed.
-  if (differenceInCalendarDays(parseISO(toLabel), parseISO(fromLabel)) > MAX_RANGE_DAYS) {
-    fromLabel = addDaysLabel(toLabel, -MAX_RANGE_DAYS);
+  if (shelterDaysBetweenKeys(fromDay, toDay) > MAX_RANGE_DAYS) {
+    fromDay = shiftDayKey(toDay, -MAX_RANGE_DAYS);
   }
 
-  return {
-    gte: zonedDayStart(fromLabel),
-    lt: zonedDayStart(addDaysLabel(toLabel, 1)),
-    fromLabel,
-    toLabel,
-  };
+  return { fromLabel: fromDay, toLabel: toDay };
 }
 
 /**

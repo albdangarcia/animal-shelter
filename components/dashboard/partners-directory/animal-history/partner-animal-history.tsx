@@ -17,7 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import { TimeAgo } from "@/components/common/time-ago";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import Link from "next/link";
@@ -141,7 +141,7 @@ const PartnerAnimalHistory = ({ history }: Props) => {
                             </TooltipTrigger>
 
                             <TooltipContent>
-                              {formatDateOrNA(entry.date)}
+                              {formatShelterDayOrNA(entry.day)}
                             </TooltipContent>
                           </Tooltip>
                         ) : (

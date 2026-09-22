@@ -47,3 +47,5 @@ next-env.d.ts
 
 # prisma generated client
 /prisma/generated/
+
+docs/specs/

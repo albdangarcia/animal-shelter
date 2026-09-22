@@ -2,6 +2,7 @@ import {
   fetchAnimalTasks,
   fetchTaskAssigneeList,
 } from "@/app/lib/data/animals/animal-task.data";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { getColumns } from "@/components/dashboard/animals/tasks/table/task-table-columns";
 import DataTable from "@/components/table-common/data-table";
 import TasksDataTableToolbar from "@/components/dashboard/animals/tasks/table/task-table-toolbar";
@@ -54,6 +55,8 @@ const Page = async ({ params, searchParams }: Props) => {
   // for volunteers, so only call it when the user can manage tasks.
   const assigneeList = canManage ? await fetchTaskAssigneeList() : [];
 
+  const today = await getShelterToday();
+
   return (
     <Card className="@container/card">
       <CardHeader>
@@ -72,9 +75,9 @@ const Page = async ({ params, searchParams }: Props) => {
               <DataTable
                 data={tasks}
                 getColumns={getColumns}
-                columnProps={{ animalId, assigneeList, canManage }}
+                columnProps={{ animalId, assigneeList, canManage, today }}
                 ToolbarComponent={TasksDataTableToolbar}
-                toolbarProps={{ animalId, assigneeList, canManage }}
+                toolbarProps={{ animalId, assigneeList, canManage, today }}
                 totalPages={totalPages}
                 totalRows={totalRows}
               />

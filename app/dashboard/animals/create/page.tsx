@@ -1,3 +1,7 @@
+import {
+  getShelterSettings,
+  getShelterToday,
+} from "@/app/lib/data/shelter-settings.data";
 import AnimalForm from "@/components/dashboard/animals/animal-intake-form";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Authorize } from "@/components/auth/authorize";
@@ -31,10 +35,12 @@ const PageContent = async () => {
     <main>
       <AnimalForm
         speciesList={speciesList}
+        unitSystem={(await getShelterSettings()).weightUnitSystem}
         partners={partners}
         colors={colors}
         unitOptions={unitOptions}
         canCreatePerson={canCreatePerson}
+        today={await getShelterToday()}
       />
     </main>
   );

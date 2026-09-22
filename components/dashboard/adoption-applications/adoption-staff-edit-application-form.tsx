@@ -24,6 +24,7 @@ import {
   STAFF_EDITABLE_STATUSES,
 } from "@/app/lib/utils/application-status";
 import { formatDateToLongString, formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import {
   formatSingleEnumOption,
   livingSituationOptions,
@@ -178,7 +179,7 @@ export function StaffApplicationUpdateForm({
                   </AlertTitle>
                   <AlertDescription className="text-blue-700 dark:text-blue-300">
                     This application was finalized on{" "}
-                    {new Date(outcome.outcomeDate).toLocaleDateString()}.
+                    {formatShelterDayOrNA(outcome.outcomeDate)}.
                     <Link
                       href={`/dashboard/outcomes/${outcome.id}/edit`}
                       className="ml-2 font-semibold text-blue-800 underline hover:text-blue-600 dark:text-blue-200 dark:hover:text-blue-400"

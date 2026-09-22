@@ -4,6 +4,7 @@ import { createAnimal, updateAnimal } from "@/app/lib/actions/animal.actions";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
+import { parseISO } from "date-fns";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { Check, ChevronsUpDown, Loader2, TriangleAlert, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -50,7 +51,8 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { DateField } from "@/components/forms/date-field";
+import { DayField } from "@/components/forms/day-field";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import {
   AnimalHealthStatus,
   AnimalListingStatus,
@@ -78,6 +80,7 @@ import Link from "next/link";
 import { IntakeFormFields } from "./intake-form-fields";
 import { UnitPickerLocation } from "@/app/lib/data/locations/unit-picker.data";
 import { formatDateToLongString } from "@/app/lib/utils/date-utils";
+import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { formatWeight } from "@/app/lib/utils/weight-format";
 import { WeightInput } from "@/components/forms/weight-input";
 import { NumberField } from "@/components/forms/number-field";
@@ -96,20 +99,30 @@ type AnimalFormValues = CreateAnimalFormInput;
 
 interface AnimalFormProps {
   speciesList: SpeciesPayload[];
+  unitSystem: WeightUnitSystem;
   partners: PartnerPayload[];
   colors: ColorPayload[];
   unitOptions: UnitPickerLocation[];
   animal?: AnimalIntakeFormPayload;
   canCreatePerson?: boolean;
+  /**
+   * Today, on the shelter's calendar, resolved on the server. It is the day an
+   * intake recorded now is filed under — a `new Date()` here would be
+   * re-resolved in the viewer's zone, so the server render and the browser's
+   * could disagree by a day.
+   */
+  today: CalendarDay;
 }
 
 const AnimalForm = ({
   speciesList,
+  unitSystem,
   partners,
   colors,
   unitOptions,
   animal,
   canCreatePerson,
+  today,
 }: AnimalFormProps) => {
   const router = useRouter();
   const isEditMode = !!animal;
@@ -174,7 +187,7 @@ const AnimalForm = ({
             .map((c) => c.id),
           sex: animal.sex,
           size: animal.size ?? "",
-          estimatedBirthDate: new Date(animal.birthDate),
+          estimatedBirthDate: animal.birthDate,
           heightCm: animal.heightCm ?? null,
           healthStatus: animal.healthStatus ?? AnimalHealthStatus.HEALTHY,
           microchipNumber: animal.microchipNumber || "",
@@ -184,7 +197,9 @@ const AnimalForm = ({
           currentUnitId: animal.currentUnitId || "",
         }
       : {
-          intakeDate: new Date(),
+          // Today on the shelter's calendar, which is the day an intake
+          // recorded now is filed under.
+          intakeDate: today,
           animalName: "",
           description: "",
           intakeType: undefined,
@@ -507,14 +522,17 @@ const AnimalForm = ({
                     </FormItem>
                   )}
                 />
-                <DateField
+                <DayField
                   control={form.control}
                   name="estimatedBirthDate"
                   label="Estimated Birth Date"
                   className="col-span-2"
                   triggerClassName="w-full pl-3"
+                  // No future days, and nothing before the epoch the pickers
+                  // share. The grid works in local dates, so the shelter's day
+                  // is read as one to compare against.
                   disabledDates={(date) =>
-                    date > new Date() || date < new Date("1900-01-01")
+                    date > parseISO(today) || date < parseISO("1900-01-01")
                   }
                 />
                 <FormField
@@ -603,7 +621,7 @@ const AnimalForm = ({
                     <FormLabel className="mb-2 block">Weight</FormLabel>
                     <p className="text-sm">
                       {animal.currentWeightGrams != null
-                        ? formatWeight(animal.currentWeightGrams)
+                        ? formatWeight(animal.currentWeightGrams, unitSystem)
                         : "Not recorded"}
                     </p>
                     {animal.vitalsLogs[0] && (
@@ -628,6 +646,7 @@ const AnimalForm = ({
                         <FormLabel>Weight</FormLabel>
                         <FormControl>
                           <WeightInput
+                            unitSystem={unitSystem}
                             placeholder="e.g., 15.5"
                             value={field.value}
                             onChange={field.onChange}
@@ -828,6 +847,7 @@ const AnimalForm = ({
                 control={form.control}
                 partners={partners}
                 canCreatePerson={canCreatePerson}
+                today={today}
               />
             )}
           </CardContent>

@@ -2,9 +2,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fromZonedTime } from "date-fns-tz";
-import { SHELTER_TIMEZONE } from "../constants/constants";
+const SHELTER_TIMEZONE = "America/New_York";
 import {
-  contradictionsByCharacteristic,
+  contradictionsByCharacteristic as rawContradictionsByCharacteristic,
   contradictionsOf,
   proposalsOf,
   suggestionActionFor,
@@ -13,6 +13,8 @@ import {
   type RecordedAssessment,
   type RecordedField,
 } from "./proposals";
+
+const contradictionsByCharacteristic = <A extends RecordedAssessment>(assessments: readonly A[]) => rawContradictionsByCharacteristic(assessments, SHELTER_TIMEZONE);
 
 const CATS = { id: "char-cats", name: "Good with cats" };
 const DOGS = { id: "char-dogs", name: "Good with other dogs" };
@@ -75,6 +77,7 @@ const summarize = (
     deleted,
     assignments,
     liveAssessments: deleted ? others : [assessment, ...others],
+    timezone: SHELTER_TIMEZONE,
   });
 
 // --- Reading one assessment's findings ---------------------------------------

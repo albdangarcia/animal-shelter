@@ -1,3 +1,4 @@
+import { resolveShelterSettings } from "@/app/lib/utils/shelter-settings";
 // Run via `npm run prisma:backfill-phone`, which wraps this in `dotenv run -f
 // .env`: DATABASE_URL lives in .env. This script runs standalone under tsx,
 // not through the Prisma CLI, so it only gets what that wrapper supplies —
@@ -7,9 +8,8 @@
 // a missing one as fatal; see the note in prisma.config.ts.
 //
 // --force recomputes every row with a phone, ignoring the
-// `phoneNormalized IS NULL` filter. That's for after a libphonenumber-js
-// version bump changes normalization: stored derived values don't correct
-// themselves.
+// `phoneNormalized IS NULL` filter. Use it after a normalization-library
+// change; changes to the configured country are reindexed automatically.
 import { PrismaClient, Prisma } from "@/prisma/generated/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { resolveDatabaseUrl } from "@/app/lib/db-url";
@@ -71,7 +71,11 @@ async function main() {
   const adapter = new PrismaPg({ connectionString: resolveDatabaseUrl("direct") });
   // Writes phoneNormalized only, never Person.email or User.email, so the email
   // extension is deliberately not applied.
-  const prisma = new PrismaClient({ adapter }).$extends(phoneNormalizationExtension);
+  const rawPrisma = new PrismaClient({ adapter });
+  const readCountry = async () => resolveShelterSettings(
+    await rawPrisma.shelterSettings.findUnique({ where: { id: "shelter" } }),
+  ).defaultPhoneCountry;
+  const prisma = rawPrisma.$extends(phoneNormalizationExtension(readCountry));
 
   try {
     console.log("Starting phone normalization backfill...");
@@ -116,7 +120,7 @@ async function main() {
       const updates: { id: string; phoneNormalized: string | null }[] = [];
 
       for (const person of batch) {
-        const normalized = normalizePhone(person.phone);
+        const normalized = normalizePhone(person.phone, await readCountry());
 
         if (normalized !== null) {
           normalizedCount++;

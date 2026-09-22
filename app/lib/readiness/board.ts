@@ -9,11 +9,13 @@
  * every viewer sees the same count whatever their own timezone.
  */
 
-import { differenceInCalendarDays, parseISO } from "date-fns";
-import { formatInTimeZone } from "date-fns-tz";
 import type { AnimalListingStatus } from "@/prisma/generated/enums";
-import { SHELTER_TIMEZONE } from "../constants/constants";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
+import {
+  formatShelterDay,
+  shelterDayKey,
+  shelterDaysBetween,
+} from "../utils/shelter-day";
 import type { ReadinessBlocker } from "./compute-readiness";
 
 /** Where an animal is right now. Fostered and unplaced animals have no unit. */
@@ -233,17 +235,6 @@ export interface ReadinessBoardDetail {
 
 export type ReadinessBoard = ReadinessBoardOverview | ReadinessBoardDetail;
 
-const shelterDay = (date: Date) =>
-  parseISO(formatInTimeZone(date, SHELTER_TIMEZONE, "yyyy-MM-dd"));
-
-/** A date as it reads on the shelter's calendar, e.g. "Sep 1, 2026". */
-export const formatShelterDate = (date: Date): string =>
-  formatInTimeZone(date, SHELTER_TIMEZONE, "MMM d, yyyy");
-
-/** Whole days between two instants on the shelter's calendar, never negative. */
-export const shelterDaysBetween = (since: Date, now: Date): number =>
-  Math.max(0, differenceInCalendarDays(shelterDay(now), shelterDay(since)));
-
 /** When the oldest of these blockers began; null when none of them is dated. */
 export const earliestSince = (
   blockers: readonly ReadinessBlocker[],
@@ -275,6 +266,7 @@ function rowsForKind(
   matching: readonly AnimalReadiness[],
   kind: ReadinessBlockerKind,
   now: Date,
+  timezone: string,
 ): ReadinessBoardRow[] {
   const rows: ReadinessBoardRow[] = [];
   for (const { animal, blockers } of matching) {
@@ -285,7 +277,7 @@ function rowsForKind(
       animal,
       blockers: ofKind,
       since,
-      blockedDays: since ? shelterDaysBetween(since, now) : null,
+      blockedDays: since ? shelterDaysBetween(since, now, timezone) : null,
     });
   }
   return rows.sort(compareRows);
@@ -304,13 +296,14 @@ export function buildReadinessBoard(
   filters: ReadinessBoardFilters,
   now: Date,
   page = 1,
+  timezone: string,
 ): ReadinessBoard {
   const matching = readiness.filter((r) => matchesFilters(r.animal, filters));
   const animalCount = matching.length;
   const blockedCount = matching.filter((r) => r.blockers.length > 0).length;
 
   if (filters.kind) {
-    const rows = rowsForKind(matching, filters.kind, now);
+    const rows = rowsForKind(matching, filters.kind, now, timezone);
     const totalRows = rows.length;
     const totalPages = Math.ceil(totalRows / READINESS_KIND_PAGE_SIZE);
     const start = (page - 1) * READINESS_KIND_PAGE_SIZE;
@@ -328,7 +321,7 @@ export function buildReadinessBoard(
   }
 
   const groups = BLOCKER_KIND_ORDER.map((kind) => {
-    const rows = rowsForKind(matching, kind, now);
+    const rows = rowsForKind(matching, kind, now, timezone);
     return {
       kind,
       rows: rows.slice(0, READINESS_PREVIEW_LIMIT),
@@ -346,12 +339,12 @@ const CLAIM_ISSUE_TEXT = {
 } as const;
 
 /** What a blocker is, in the words the board and the panel show it in. */
-export const describeBlocker = (blocker: ReadinessBlocker): string => {
+export const describeBlocker = (blocker: ReadinessBlocker, timezone: string): string => {
   switch (blocker.kind) {
     case "MISSING_ASSESSMENT":
       return blocker.templateName;
     case "ESCALATED_FINDING":
-      return `${blocker.templateName} of ${formatShelterDate(blocker.observedAt)}`;
+      return `${blocker.templateName} of ${formatShelterDay(shelterDayKey(blocker.observedAt, timezone))}`;
     case "UNSUPPORTED_CHARACTERISTIC":
       return `${blocker.characteristicName} — ${CLAIM_ISSUE_TEXT[blocker.issue]}`;
     case "NOT_SPAYED_NEUTERED":

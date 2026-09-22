@@ -1,3 +1,4 @@
+import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import {
   Card,
   CardContent,
@@ -6,7 +7,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { formatDateOrNA } from "@/app/lib/utils/date-utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { MyFosterPlacementPayload } from "@/app/lib/data/fosters/my-foster-animals.data";
 
@@ -37,8 +37,8 @@ export function PastFostersCard({ placements }: Props) {
                 </Badge>
               </div>
               <span className="text-muted-foreground">
-                {formatDateOrNA(placement.startDate)} –{" "}
-                {formatDateOrNA(placement.endDate)}
+                {formatShelterDayOrNA(placement.startDate)} –{" "}
+                {formatShelterDayOrNA(placement.endDate)}
               </span>
             </li>
           ))}

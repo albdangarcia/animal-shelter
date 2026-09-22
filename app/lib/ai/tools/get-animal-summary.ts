@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import { tool } from "ai";
 import { z } from "zod";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -66,7 +67,7 @@ export const getAnimalSummaryTool = tool({
         ok: true,
         animal: toAnimalSummary(
           row,
-          readiness ? toReadinessLine(readiness) : null,
+          readiness ? toReadinessLine(readiness, new Date(), (await getShelterSettings()).timezone) : null,
         ),
       };
     } catch (error) {
