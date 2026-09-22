@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { US_STATES } from "@/app/lib/constants/us-states";
+import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
 export const searchQuerySchema = z.string().trim().max(100, {
   error: "Query cannot exceed 100 characters.",
@@ -65,3 +66,26 @@ export const requiredNumber = (label: string) =>
         ? `${label} is required.`
         : `${label} must be a number.`,
   });
+
+/**
+ * A calendar day submitted by a form, as `yyyy-MM-dd`.
+ *
+ * This is one of the boundaries where unknown input becomes a day (see
+ * docs/calendar-days.md): the field travels as a plain string, and what comes
+ * out the other side is typed as a day. `label` names the field in the message
+ * a blank or malformed submission produces.
+ */
+export const calendarDaySchema = (label: string) =>
+  z
+    .string({
+      error: (issue) =>
+        issue.input === undefined ? `${label} is required.` : undefined,
+    })
+    .transform((value, ctx): CalendarDay => {
+      const day = parseCalendarDay(value);
+      if (day === null) {
+        ctx.addIssue({ code: "custom", message: `${label} is required.` });
+        return z.NEVER;
+      }
+      return day;
+    });

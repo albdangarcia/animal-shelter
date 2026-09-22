@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import {
   fetchAnimalVitalsLogs,
   fetchAnimalCurrentWeightGrams,
@@ -39,6 +40,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
   return (
     <AnimalVitalsTab
       vitalsLogs={vitalsLogs}
+      unitSystem={(await getShelterSettings()).weightUnitSystem}
       totalPages={totalPages}
       animalId={animalId}
       canManage={canManage}

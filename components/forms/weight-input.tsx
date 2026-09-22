@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
+import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { Button } from "@/components/ui/button";
 import { NumberInput } from "@/components/forms/number-input";
 import {
-  WEIGHT_UNITS,
+  weightUnits,
   type WeightUnit,
   toGrams,
   fromGrams,
@@ -23,6 +24,7 @@ type WeightInputProps = Omit<
   /** Grams. Unit to pre-select from when `value` is empty at mount — e.g. the
    *  animal's last known weight, so a 180g kitten opens on oz rather than lb. */
   inferFrom?: number | null;
+  unitSystem: WeightUnitSystem;
 };
 
 // Owns the g/kg/oz/lb toggle and the toGrams/fromGrams round-trip so no call
@@ -32,12 +34,23 @@ export function WeightInput({
   value,
   onChange,
   inferFrom,
+  unitSystem,
   ...props
 }: WeightInputProps) {
   const grams = value ?? null;
-  const [unit, setUnit] = React.useState<WeightUnit>(() =>
-    inferWeightUnit(grams ?? inferFrom),
-  );
+  const [selection, setSelection] = React.useState<{
+    system: WeightUnitSystem;
+    unit: WeightUnit;
+  }>(() => ({
+    system: unitSystem,
+    unit: inferWeightUnit(grams ?? inferFrom, unitSystem),
+  }));
+  // A new server setting takes effect in this render, even if React preserves
+  // the mounted form. The stored selection is only valid for its own system.
+  const unit =
+    selection.system === unitSystem
+      ? selection.unit
+      : inferWeightUnit(grams ?? inferFrom, unitSystem);
 
   const displayValue =
     grams == null ? null : roundForUnit(fromGrams(grams, unit), unit);
@@ -55,14 +68,14 @@ export function WeightInput({
         }}
       />
       <div className="flex rounded-md border overflow-hidden shrink-0">
-        {WEIGHT_UNITS.map((u) => (
+        {weightUnits(unitSystem).map((u) => (
           <Button
             key={u}
             type="button"
             size="sm"
             variant={u === unit ? "default" : "ghost"}
             className="h-full rounded-none px-2"
-            onClick={() => setUnit(u)}
+            onClick={() => setSelection({ system: unitSystem, unit: u })}
           >
             {u}
           </Button>

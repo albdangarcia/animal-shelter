@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import Link from "next/link";
 import { Suspense } from "react";
 import PetCard from "@/components/public-pages/pets/pet-card";
@@ -83,6 +84,7 @@ const SpotlightBand = async () => {
   return (
     <SpotlightHero
       animals={spotlightAnimals}
+      unitSystem={(await getShelterSettings()).weightUnitSystem}
       availableCount={availableCount}
       currentUserPersonId={session?.user?.personId}
     />

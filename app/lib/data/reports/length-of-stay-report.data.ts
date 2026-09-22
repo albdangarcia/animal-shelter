@@ -1,7 +1,9 @@
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import { resolveReportRange } from "@/app/lib/utils/report-date-utils";
 import { computeStays } from "@/app/lib/utils/stay-utils";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { _fetchAnimalStayEvents, parseSpeciesIds } from "./report-shared.data";
 
 // An open stay past this many days is counted as long-staying. Must match the
@@ -47,7 +49,7 @@ export type LongestStayRow = {
   // True when the animal has returned before, so cumulative > current and the
   // UI shows the cumulative column; false renders "same"/blank.
   hasPriorStays: boolean;
-  intakeDate: Date; // intake date of the currently open stay
+  intakeDate: CalendarDay; // intake date of the currently open stay
 };
 
 export type LengthOfStayReport = {
@@ -82,9 +84,9 @@ const _fetchLengthOfStayReport = async (
   species?: string,
 ): Promise<LengthOfStayReport> => {
   try {
-    const range = resolveReportRange(from, to);
+    const today = await getShelterToday();
+    const range = resolveReportRange(from, to, today);
     const speciesIds = parseSpeciesIds(species);
-    const now = new Date();
 
     // PERF: this walks every animal's full intake/outcome history in memory
     // (O(animals)). Acceptable at current shelter scale. Optimization candidate:
@@ -99,7 +101,7 @@ const _fetchLengthOfStayReport = async (
     for (const animal of animals) {
       const { stays, isInCare, currentStayDays, cumulativeDays } = computeStays(
         animal.events,
-        now,
+        today,
       );
 
       // Compliance stats: every completed stay whose outcome falls in-range.
@@ -107,8 +109,8 @@ const _fetchLengthOfStayReport = async (
       for (const stay of stays) {
         if (
           stay.outcomeDate &&
-          stay.outcomeDate >= range.gte &&
-          stay.outcomeDate < range.lt
+          stay.outcomeDate >= range.fromLabel &&
+          stay.outcomeDate <= range.toLabel
         ) {
           completedStayDays.push(stay.days);
         }

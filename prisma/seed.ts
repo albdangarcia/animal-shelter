@@ -1,3 +1,4 @@
+import { fallbackShelterSettings, resolveShelterSettings } from "@/app/lib/utils/shelter-settings";
 import fs from "node:fs";
 import path from "node:path";
 import { betterAuth } from "better-auth";
@@ -37,7 +38,15 @@ import {
   generateOrderedTimeline,
   randomInt,
 } from "@/app/lib/utils/seeding-utils";
-import { computeStays } from "@/app/lib/utils/stay-utils";
+import { computeStays, orderStayEvents } from "@/app/lib/utils/stay-utils";
+import {
+  calendarDay,
+  shelterDayKey,
+  shelterToday,
+  shiftDayKey,
+  startOfShelterDay,
+  type CalendarDay,
+} from "@/app/lib/utils/shelter-day";
 import { CLOSURE_REASON_BY_OUTCOME } from "@/app/lib/utils/application-status";
 import { recordNoteMutation } from "@/app/lib/services/note-audit";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
@@ -116,8 +125,12 @@ const installDeterministicRandom = (): (() => void) => {
 };
 
 const adapter = new PrismaPg({ connectionString: resolveDatabaseUrl("direct") });
-const prisma = new PrismaClient({ adapter })
-  .$extends(phoneNormalizationExtension)
+const rawPrisma = new PrismaClient({ adapter });
+const readCountry = async () => resolveShelterSettings(
+  await rawPrisma.shelterSettings.findUnique({ where: { id: "shelter" } }),
+).defaultPhoneCountry;
+const prisma = rawPrisma
+  .$extends(phoneNormalizationExtension(readCountry))
   .$extends(emailNormalizationExtension);
 
 // seed-only auth instance: direct-connection client, never mounted on
@@ -753,7 +766,7 @@ interface AnimalBlueprint {
   // only when the age must stay fixed across reseeds — the "Bruno"
   // disambiguation pair needs two same-named animals a human can tell apart by
   // birth date alone, every reseed.
-  birthDate?: Date;
+  birthDate?: CalendarDay;
   // Whether the animal has been spayed/neutered. Normally derived from age by
   // `resolveBlueprintDerivedFields`; set here only to pin it against the age
   // gate. Read by the public pet detail page and the redesigned homepage badge.
@@ -1146,7 +1159,7 @@ const animalSeedData: AnimalBlueprint[] = [
     unitName: allLocations.DOG_BLOCK_A.units.A3.name,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
-    birthDate: new Date("2023-04-11"),
+    birthDate: calendarDay("2023-04-11"),
   },
   {
     name: "Bruno",
@@ -1166,7 +1179,7 @@ const animalSeedData: AnimalBlueprint[] = [
     unitName: null,
     archetype: "IN_CARE",
     listingStatus: AnimalListingStatus.PUBLISHED,
-    birthDate: new Date("2019-08-02"),
+    birthDate: calendarDay("2019-08-02"),
   },
 ];
 
@@ -1210,7 +1223,7 @@ const taskSeedData = [
     priority: TaskPriority.HIGH,
     category: TaskCategory.MEDICAL,
     // 5 days from now
-    dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+    daysUntilDue: 5,
   },
   {
     title: "Behavioral assessment for new dog",
@@ -1220,7 +1233,7 @@ const taskSeedData = [
     priority: TaskPriority.MEDIUM,
     category: TaskCategory.BEHAVIORAL,
     // 12 days from now
-    dueDate: new Date(Date.now() + 12 * 24 * 60 * 60 * 1000),
+    daysUntilDue: 12,
   },
   {
     title: "Update adoption profile photos",
@@ -1230,7 +1243,7 @@ const taskSeedData = [
     priority: TaskPriority.LOW,
     category: TaskCategory.ADMINISTRATIVE,
     // 3 days from now
-    dueDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+    daysUntilDue: 3,
   },
 ];
 
@@ -1238,7 +1251,7 @@ const taskSeedData = [
 // attention-queue signal 1 has stable, verifiable input. Previously the one
 // past-due seed task was assigned to a random animal — it routinely landed on
 // an archived one, and the queue differed between resets. `daysOverdue: 0` is
-// "due today" (still caught by "dueDate <= end of today").
+// "due today" (still caught by "dueDate <= today").
 const overdueTaskSeedData: {
   animalName: string;
   title: string;
@@ -1650,9 +1663,10 @@ function resolveBlueprintDerivedFields(blueprints: AnimalBlueprint[]): void {
     // 1. Birth date. Long-stayers skew adult (real ones do); everyone else
     //    keeps the default spread.
     if (!blueprint.birthDate) {
-      blueprint.birthDate = blueprint.longStay
-        ? getRandomDate(8, 2)
-        : getRandomDate();
+      blueprint.birthDate = shelterDayKey(
+        blueprint.longStay ? getRandomDate(8, 2) : getRandomDate(),
+        seedTimezone,
+      );
     }
 
     // 2. Spay/neuter status, gated by age unless the blueprint pins it.
@@ -1660,7 +1674,8 @@ function resolveBlueprintDerivedFields(blueprints: AnimalBlueprint[]): void {
       if (blueprint.longStay) {
         blueprint.isSpayedNeutered = true;
       } else {
-        const neuterRate = blueprint.birthDate > sixMonthsAgo ? 0.15 : 0.85;
+        const neuterRate =
+          blueprint.birthDate > shelterDayKey(sixMonthsAgo, seedTimezone) ? 0.15 : 0.85;
         blueprint.isSpayedNeutered = Math.random() < neuterRate;
       }
     }
@@ -1802,12 +1817,6 @@ function daysAgo(n: number): Date {
   const date = new Date();
   date.setDate(date.getDate() - n);
   return date;
-}
-
-// A date `n` days after now — for forward-looking dates like a placement's
-// expectedEndDate.
-function daysFromNow(n: number): Date {
-  return daysAgo(-n);
 }
 
 // Generates a dated weigh-in history for one animal, using the same
@@ -2157,7 +2166,7 @@ async function seedAdoptionCascade(opts: {
     data: {
       animalId: opts.animalId,
       type: OutcomeType.ADOPTION,
-      outcomeDate: opts.outcomeDate,
+      outcomeDate: shelterDayKey(opts.outcomeDate, seedTimezone),
       staffMemberId: approvingStaff.id,
       adoptionApplicationId: winnerAppId,
     },
@@ -2259,7 +2268,7 @@ async function seedReturnAndReadoptAnimal(opts: {
   const animal = await prisma.animal.create({
     data: {
       name: blueprint.name,
-      birthDate: blueprint.birthDate ?? getRandomDate(),
+      birthDate: blueprint.birthDate ?? shelterDayKey(getRandomDate(), seedTimezone),
       sex: blueprint.sex,
       size: blueprint.size,
       currentWeightGrams: blueprint.weightGrams,
@@ -2306,7 +2315,7 @@ async function seedReturnAndReadoptAnimal(opts: {
     data: {
       animalId: animal.id,
       type: blueprint.intakeType,
-      intakeDate: stay1.intakeDate,
+      intakeDate: shelterDayKey(stay1.intakeDate, seedTimezone),
       staffMemberId: processingStaff.id,
       ...firstRelations,
     },
@@ -2372,7 +2381,7 @@ async function seedReturnAndReadoptAnimal(opts: {
     data: {
       animalId: animal.id,
       type: reIntakeType,
-      intakeDate: stay2.intakeDate,
+      intakeDate: shelterDayKey(stay2.intakeDate, seedTimezone),
       staffMemberId: processingStaff.id,
       ...reIntakeRelations,
     },
@@ -2435,9 +2444,9 @@ async function seedReturnAndReadoptAnimal(opts: {
         category: TaskCategory.MEDICAL,
         priority: TaskPriority.HIGH,
         status: TaskStatus.TODO,
-        dueDate: new Date(
-          Date.now() +
-          (Math.floor(Math.random() * 5) + 3) * 24 * 60 * 60 * 1000,
+        dueDate: shiftDayKey(
+          shelterToday(seedTimezone),
+          Math.floor(Math.random() * 5) + 3,
         ),
       },
     });
@@ -2783,7 +2792,7 @@ async function seedAnimalsAndRelations() {
       const animal = await prisma.animal.create({
         data: {
           name: blueprint.name,
-          birthDate: blueprint.birthDate ?? getRandomDate(),
+          birthDate: blueprint.birthDate ?? shelterDayKey(getRandomDate(), seedTimezone),
           sex: blueprint.sex,
           // Staff-set expected adult size — independent of weightGrams.
           size: blueprint.size,
@@ -2836,7 +2845,7 @@ async function seedAnimalsAndRelations() {
         data: {
           animalId: animal.id,
           type: blueprint.intakeType,
-          intakeDate: stay.intakeDate,
+          intakeDate: shelterDayKey(stay.intakeDate, seedTimezone),
           staffMemberId: processingStaff.id,
           ...intakeRelations,
         },
@@ -2919,7 +2928,7 @@ async function seedAnimalsAndRelations() {
             data: {
               animalId: animal.id,
               type: outcomeType,
-              outcomeDate: stay.outcomeDate as Date,
+              outcomeDate: shelterDayKey(stay.outcomeDate as Date, seedTimezone),
               staffMemberId: outcomeStaff.id,
               ownerId,
               destinationPartnerId,
@@ -2993,10 +3002,10 @@ async function seedAnimalsAndRelations() {
             category: TaskCategory.MEDICAL,
             priority: TaskPriority.HIGH,
             status: TaskStatus.TODO,
-            // Random due date between 3 and 7 days from now
-            dueDate: new Date(
-              Date.now() +
-              (Math.floor(Math.random() * 5) + 3) * 24 * 60 * 60 * 1000,
+            // Random due day between 3 and 7 days from now
+            dueDate: shiftDayKey(
+              shelterToday(seedTimezone),
+              Math.floor(Math.random() * 5) + 3,
             ),
           },
         });
@@ -3238,11 +3247,11 @@ async function seedFostering() {
         // needs a seeded USER account with a real open placement to view.
         fosterProfileId: activeMedical.id,
         type: FosterPlacementType.GENERAL,
-        startDate: openStart,
+        startDate: shelterDayKey(openStart, seedTimezone),
         // Still within its expected window — attention-queue signal 3 must
         // NOT flag this one. Juniper's scripted placement below is the overdue
         // case.
-        expectedEndDate: daysFromNow(9),
+        expectedEndDate: shiftDayKey(shelterToday(seedTimezone), 9),
         previousUnitId: openAnimal.currentUnitId,
         placedById: approver.id,
       },
@@ -3287,8 +3296,8 @@ async function seedFostering() {
           animalId: plan.animal.id,
           fosterProfileId: plan.profile.id,
           type: FosterPlacementType.GENERAL,
-          startDate: start,
-          endDate: end,
+          startDate: shelterDayKey(start, seedTimezone),
+          endDate: shelterDayKey(end, seedTimezone),
           previousUnitId: plan.animal.currentUnitId,
           placedById: approver.id,
           returnedById: returnStaff.id,
@@ -3338,8 +3347,9 @@ async function seedFostering() {
         animalId: juniper.id,
         fosterProfileId: activeGeneralist.id,
         type: FosterPlacementType.GENERAL,
-        startDate: juniperPlacementStart,
-        expectedEndDate: daysAgo(4), // overdue
+        startDate: shelterDayKey(juniperPlacementStart, seedTimezone),
+        // Overdue: strictly before today, which is what signal 3 looks for.
+        expectedEndDate: shiftDayKey(shelterToday(seedTimezone), -4),
         previousUnitId: juniper.currentUnitId,
         placedById: approver.id,
       },
@@ -3390,7 +3400,7 @@ async function seedFostering() {
         name: "Winston",
         // Adopted adult dog: draw an adult age so the hard-set
         // isSpayedNeutered below stays consistent with the age gate.
-        birthDate: getRandomDate(6, 1),
+        birthDate: shelterDayKey(getRandomDate(6, 1), seedTimezone),
         sex: Sex.MALE,
         size: AnimalSize.LARGE,
         currentWeightGrams: winstonWeightGrams,
@@ -3423,7 +3433,7 @@ async function seedFostering() {
       data: {
         animalId: animal.id,
         type: IntakeType.OWNER_SURRENDER,
-        intakeDate,
+        intakeDate: shelterDayKey(intakeDate, seedTimezone),
         staffMemberId: approver.id,
         surrenderingPersonId: surrenderer.id,
       },
@@ -3454,7 +3464,7 @@ async function seedFostering() {
         animalId: animal.id,
         fosterProfileId: activeGeneralist.id,
         type: FosterPlacementType.FOSTER_TO_ADOPT,
-        startDate: placedAt,
+        startDate: shelterDayKey(placedAt, seedTimezone),
         previousUnitId: startUnit.id,
         previousListingStatus: AnimalListingStatus.PUBLISHED,
         placedById: approver.id,
@@ -3504,7 +3514,7 @@ async function seedFostering() {
       data: {
         animalId: animal.id,
         type: OutcomeType.ADOPTION,
-        outcomeDate: adoptedAt,
+        outcomeDate: shelterDayKey(adoptedAt, seedTimezone),
         staffMemberId: approver.id,
         adoptionApplicationId: applicationId,
       },
@@ -3535,7 +3545,7 @@ async function seedFostering() {
     await prisma.fosterPlacement.update({
       where: { id: placement.id },
       data: {
-        endDate: adoptedAt,
+        endDate: shelterDayKey(adoptedAt, seedTimezone),
         returnReason: FosterReturnReason.ADOPTED_BY_FOSTER,
         returnedById: approver.id,
         outcomeId: outcome.id,
@@ -3598,7 +3608,7 @@ async function seedApplicationNoise() {
       id: true,
       intake: {
         select: { intakeDate: true },
-        orderBy: { intakeDate: "desc" },
+        orderBy: [{ intakeDate: "desc" }, { createdAt: "desc" }],
         take: 1,
       },
     },
@@ -3650,9 +3660,13 @@ async function seedApplicationNoise() {
     applicantIdx++;
 
     const now = new Date();
-    const intakeDate =
-      animal.intake[0]?.intakeDate ??
-      new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    // The floor these application dates walk forward from. An intake is a
+    // calendar day, so it enters this instant arithmetic at the moment that
+    // day begins on the shelter's calendar.
+    const latestIntake = animal.intake[0];
+    const intakeDate = latestIntake
+      ? startOfShelterDay(calendarDay(latestIntake.intakeDate), seedTimezone)
+      : new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const submittedAt = addDaysClamped(intakeDate, randomInt(1, 20), now);
     const staffMember = getRandomItem(staffMembers);
 
@@ -3901,12 +3915,12 @@ async function seedRegisteredUserApplicationFixtures() {
         name: true,
         intake: {
           select: { intakeDate: true },
-          orderBy: { intakeDate: "desc" },
+          orderBy: [{ intakeDate: "desc" }, { createdAt: "desc" }],
           take: 1,
         },
         Outcome: {
           select: { outcomeDate: true },
-          orderBy: { outcomeDate: "desc" },
+          orderBy: [{ outcomeDate: "desc" }, { createdAt: "desc" }],
           take: 1,
         },
       },
@@ -3920,8 +3934,13 @@ async function seedRegisteredUserApplicationFixtures() {
     return {
       id: animal.id,
       name: animal.name,
-      intakeDate: animal.intake[0].intakeDate,
-      outcomeDate: animal.Outcome[0]?.outcomeDate ?? null,
+      // The fixture dates below are instants placed inside this stay, so the
+      // stay's own days enter that arithmetic at the moment each begins on the
+      // shelter's calendar.
+      intakeDate: startOfShelterDay(calendarDay(animal.intake[0].intakeDate), seedTimezone),
+      outcomeDate: animal.Outcome[0]
+        ? startOfShelterDay(calendarDay(animal.Outcome[0].outcomeDate), seedTimezone)
+        : null,
     };
   };
 
@@ -3932,7 +3951,7 @@ async function seedRegisteredUserApplicationFixtures() {
   // *latest* intake is the one these dates have to sit after.
   const publishedWhere: Prisma.AnimalWhereInput = {
     listingStatus: AnimalListingStatus.PUBLISHED,
-    intake: { some: {}, every: { intakeDate: { lte: daysAgo(45) } } },
+    intake: { some: {}, every: { intakeDate: { lte: shelterDayKey(daysAgo(45), seedTimezone) } } },
   };
 
   // Dates run backwards from today rather than forwards from intake, so every
@@ -4195,8 +4214,8 @@ async function seedRegisteredUserApplicationFixtures() {
   const returnedAnimal = await claimAnimal("CLOSED (animal returned)", {
     listingStatus: AnimalListingStatus.ARCHIVED,
     archiveReason: OutcomeType.ADOPTION,
-    intake: { every: { intakeDate: { lte: daysAgo(30) } } },
-    Outcome: { every: { outcomeDate: { lte: daysAgo(30) } } },
+    intake: { every: { intakeDate: { lte: shelterDayKey(daysAgo(30), seedTimezone) } } },
+    Outcome: { every: { outcomeDate: { lte: shelterDayKey(daysAgo(30), seedTimezone) } } },
   });
   await seedApplicationWithHistory({
     animalId: returnedAnimal.id,
@@ -4230,7 +4249,7 @@ async function seedRegisteredUserApplicationFixtures() {
     data: {
       animalId: returnedAnimal.id,
       type: IntakeType.OWNER_SURRENDER,
-      intakeDate: reIntakeDate,
+      intakeDate: shelterDayKey(reIntakeDate, seedTimezone),
       staffMemberId: reviewer.id,
     },
   });
@@ -4294,7 +4313,7 @@ async function seedRegisteredUserApplicationFixtures() {
   // ones above.
   const handOverAnimal = await claimAnimal("WITHDRAWN + PENDING (hand-over)", {
     listingStatus: AnimalListingStatus.PUBLISHED,
-    intake: { some: {}, every: { intakeDate: { lte: daysAgo(20) } } },
+    intake: { some: {}, every: { intakeDate: { lte: shelterDayKey(daysAgo(20), seedTimezone) } } },
   });
   const handOverDates = [daysAgo(18), daysAgo(16), daysAgo(12), daysAgo(9)];
   await seedApplicationWithHistory({
@@ -4447,10 +4466,11 @@ async function seedTasks() {
       return;
     }
 
-    for (const taskData of taskSeedData) {
+    for (const { daysUntilDue, ...taskData } of taskSeedData) {
       await prisma.task.create({
         data: {
           ...taskData,
+          dueDate: shiftDayKey(shelterToday(seedTimezone), daysUntilDue),
           animalId: getRandomItem(animals).id,
           assigneeId: getRandomItem(staffMembers).id,
           createdById: getRandomItem(staffMembers).id,
@@ -4463,9 +4483,6 @@ async function seedTasks() {
     const overdueAssignee =
       staffMembers.find((s) => s.email === "staff1@example.com") ??
       staffMembers[0];
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-
     for (const taskData of overdueTaskSeedData) {
       const animal = animals.find((a) => a.name === taskData.animalName);
       if (!animal) {
@@ -4473,8 +4490,10 @@ async function seedTasks() {
           `overdueTaskSeedData references animal "${taskData.animalName}", which was not seeded.`,
         );
       }
-      const dueDate = new Date(startOfToday);
-      dueDate.setDate(dueDate.getDate() - taskData.daysOverdue);
+      const dueDate = shiftDayKey(
+        shelterToday(seedTimezone),
+        -taskData.daysOverdue,
+      );
 
       await prisma.task.create({
         data: {
@@ -4540,7 +4559,7 @@ async function seedAiActivityLog() {
       return d;
     };
 
-    // Undated so signal 1 of the attention queue ("dueDate <= end of today")
+    // Undated so signal 1 of the attention queue ("dueDate <= today")
     // never matches these, whatever their status.
     const makeTask = (animalId: string, title: string, status: TaskStatus) =>
       prisma.task.create({
@@ -5165,14 +5184,20 @@ async function assertAnimalLifecycleConsistency() {
   });
 
   const violations: string[] = [];
-  const now = new Date();
+  const today = shelterToday(seedTimezone);
 
   for (const animal of animals) {
     const events = [
-      ...animal.intake.map((i) => ({ kind: "intake" as const, date: i.intakeDate })),
-      ...animal.Outcome.map((o) => ({ kind: "outcome" as const, date: o.outcomeDate })),
+      ...animal.intake.map((i) => ({
+        kind: "intake" as const,
+        date: calendarDay(i.intakeDate),
+      })),
+      ...animal.Outcome.map((o) => ({
+        kind: "outcome" as const,
+        date: calendarDay(o.outcomeDate),
+      })),
     ];
-    const { isInCare, stays } = computeStays(events, now);
+    const { isInCare, stays } = computeStays(events, today);
     const lastStay = stays[stays.length - 1];
     const isArchived = animal.listingStatus === AnimalListingStatus.ARCHIVED;
     const label = `"${animal.name}" (${animal.id})`;
@@ -5183,25 +5208,21 @@ async function assertAnimalLifecycleConsistency() {
     // seed timeline — it would just quietly re-pair around the gap. So walk
     // the same chronologically-sorted events here and assert they strictly
     // alternate intake -> outcome -> intake -> ..., starting with an intake,
-    // with only the final event allowed to be an unclosed intake. Same tie
-    // -break as `computeStays` (outcome before intake on equal timestamps).
-    const kindRank = (kind: "intake" | "outcome") => (kind === "outcome" ? 0 : 1);
-    const sortedEvents = [...events].sort((a, b) => {
-      const byDate = a.date.getTime() - b.date.getTime();
-      return byDate !== 0 ? byDate : kindRank(a.kind) - kindRank(b.kind);
-    });
+    // with only the final event allowed to be an unclosed intake. Ordered
+    // exactly as `computeStays` orders them.
+    const sortedEvents = orderStayEvents(events);
 
     let expectingIntake = true;
     for (const event of sortedEvents) {
       if (expectingIntake && event.kind !== "intake") {
         violations.push(
-          `${label} has an outcome (${event.date.toISOString()}) with no preceding open intake.`,
+          `${label} has an outcome (${event.date}) with no preceding open intake.`,
         );
         break;
       }
       if (!expectingIntake && event.kind !== "outcome") {
         violations.push(
-          `${label} has two consecutive intakes with no outcome between them (around ${event.date.toISOString()}).`,
+          `${label} has two consecutive intakes with no outcome between them (around ${event.date}).`,
         );
         break;
       }
@@ -6141,6 +6162,8 @@ async function seedReadinessFixtures() {
   console.log(`Removed photos from ${animalsWithoutPhotos.join(", ")}.`);
 }
 
+let seedTimezone = fallbackShelterSettings().timezone;
+
 export async function main() {
   const restoreRandom = installDeterministicRandom();
   // Drain any leftover deal queues so a second main() in the same process
@@ -6159,6 +6182,23 @@ export async function main() {
 async function seedAll() {
   console.log("Start seeding new data...");
   await clearDatabase();
+  const settings = fallbackShelterSettings();
+  const row = await prisma.shelterSettings.upsert({
+    where: { id: "shelter" },
+    create: {
+      id: "shelter",
+      ...settings,
+      phoneIndexCountry: settings.defaultPhoneCountry,
+    },
+    update: {},
+  });
+  // All people were just cleared, so the new phone indexes will use this country.
+  const resolvedSettings = resolveShelterSettings(row);
+  await prisma.shelterSettings.update({
+    where: { id: "shelter" },
+    data: { phoneIndexCountry: resolvedSettings.defaultPhoneCountry },
+  });
+  seedTimezone = resolvedSettings.timezone;
   await seedPersonsAndUsers();
   await seedWalkInPersons();
   await seedLookupTables();

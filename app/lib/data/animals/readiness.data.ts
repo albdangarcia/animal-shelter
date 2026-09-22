@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import { AnimalListingStatus } from "@/prisma/generated/enums";
@@ -20,6 +21,10 @@ import {
   type ReadinessBlocker,
   type ReadinessCharacteristicClaim,
 } from "../../readiness/compute-readiness";
+import {
+  calendarDay,
+  startOfShelterDay,
+} from "@/app/lib/utils/shelter-day";
 
 // Live (non-deleted) assessments, shaped for both readiness's own signals
 // (template key, signal) and the characteristic-contradiction logic
@@ -69,10 +74,11 @@ const ANIMAL_IDENTITY_SELECT = {
   species: { select: { name: true } },
   _count: { select: { animalImages: true } },
   // The latest intake starts the current stay; a returned animal's clock
-  // restarts with its new intake.
+  // restarts with its new intake. Two intakes on one day tie on the date
+  // alone, so `createdAt` settles which of them is the later one.
   intake: {
     select: { intakeDate: true },
-    orderBy: { intakeDate: "desc" },
+    orderBy: [{ intakeDate: "desc" }, { createdAt: "desc" }],
     take: 1,
   },
 } satisfies Prisma.AnimalSelect;
@@ -127,9 +133,11 @@ function readinessFor(
   animal: AnimalIdentityRow,
   assessmentRows: ReadinessAssessmentRow[],
   claimRows: ReadinessClaimRow[],
+  timezone: string,
 ): ReadinessBlocker[] {
+  const latestIntake = animal.intake[0];
   const recordedAssessments = assessmentRows.map(toRecordedAssessment);
-  const contradictions = contradictionsByCharacteristic(recordedAssessments);
+  const contradictions = contradictionsByCharacteristic(recordedAssessments, timezone);
 
   const assessments: ReadinessAssessment[] = assessmentRows.map((row) => ({
     id: row.id,
@@ -173,7 +181,12 @@ function readinessFor(
     isSpayedNeutered: animal.isSpayedNeutered,
     hasPhoto: animal._count.animalImages > 0,
     healthStatus: animal.healthStatus,
-    inCareSince: animal.intake[0]?.intakeDate ?? animal.createdAt,
+    // Blockers are dated by instants, so a latest intake — which is a day —
+    // is read as the moment that day begins on the shelter's calendar. With
+    // no intake at all there is nothing better than when the row was written.
+    inCareSince: latestIntake
+      ? startOfShelterDay(calendarDay(latestIntake.intakeDate), timezone)
+      : animal.createdAt,
   });
 }
 
@@ -204,7 +217,7 @@ const readinessOfAnimal = async (
 
   return {
     animal: toReadinessAnimal(animal),
-    blockers: readinessFor(animal, assessmentRows, claimRows),
+    blockers: readinessFor(animal, assessmentRows, claimRows, (await getShelterSettings()).timezone),
   };
 };
 
@@ -279,12 +292,14 @@ const _fetchReadinessForAnimals = async (): Promise<AnimalReadiness[]> => {
     claimsByAnimal.set(animalId, list);
   }
 
+  const timezone = (await getShelterSettings()).timezone;
   return animals.map((animal) => ({
     animal: toReadinessAnimal(animal),
     blockers: readinessFor(
       animal,
       assessmentsByAnimal.get(animal.id) ?? [],
       claimsByAnimal.get(animal.id) ?? [],
+      timezone,
     ),
   }));
 };

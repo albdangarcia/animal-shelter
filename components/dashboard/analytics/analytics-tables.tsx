@@ -2,8 +2,9 @@ import {
   fetchAnimalsRequiringAttention,
   fetchAnalyticsTaskTableData,
 } from "@/app/lib/data/analytics.data";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 
-import { recentTasksColumns } from "@/components/dashboard/analytics/tables/tasks/recent-tasks-columns";
+import { getRecentTasksColumns } from "@/components/dashboard/analytics/tables/tasks/recent-tasks-columns";
 import { healthColumns } from "@/components/dashboard/analytics/tables/animal-health/recent-health-columns";
 import DataTable from "@/components/dashboard/analytics/tables/data-table-client";
 import { DataTableViewToolbarClient } from "@/components/dashboard/analytics/tables/data-table-view-toolbar-client";
@@ -18,9 +19,10 @@ import {
 } from "@/components/ui/card";
 
 const AnalyticsTables = async () => {
-  const [tasks, animalHealth] = await Promise.all([
+  const [tasks, animalHealth, today] = await Promise.all([
     fetchAnalyticsTaskTableData(),
     fetchAnimalsRequiringAttention(),
+    getShelterToday(),
   ]);
 
   return (
@@ -40,7 +42,8 @@ const AnalyticsTables = async () => {
           <CardContent>
             <DataTable
               data={tasks}
-              columns={recentTasksColumns}
+              getColumns={getRecentTasksColumns}
+              columnProps={{ today }}
               ToolbarComponent={DataTableViewToolbarClient}
             />
           </CardContent>

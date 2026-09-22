@@ -54,14 +54,22 @@ const _fetchAnimalTasks = async (
   const { query, currentPage, category, status, pageSize, sort, animalId } =
     validatedArgs.data;
 
-  const orderBy: Prisma.TaskOrderByWithRelationInput = (() => {
-    if (!sort) return { createdAt: "desc" }; // Default sort
+  // An array, always ending in `id`: `dueDate` holds a calendar day, so two
+  // tasks due the same day tie, and without a final tie-break the database is
+  // free to return a tied row on two different pages of this offset pagination
+  // — or on neither.
+  const orderBy: Prisma.TaskOrderByWithRelationInput[] = (() => {
+    const withId = (
+      order: Prisma.TaskOrderByWithRelationInput,
+    ): Prisma.TaskOrderByWithRelationInput[] => [order, { id: "asc" }];
+
+    if (!sort) return withId({ createdAt: "desc" }); // Default sort
 
     const [id, dir] = sort.split(".");
     const direction: "asc" | "desc" = dir === "desc" ? "desc" : "asc";
 
     if (id === "assignee") {
-      return { assignee: { name: direction } };
+      return withId({ assignee: { name: direction } });
     }
 
     const sortableFields = new Set([
@@ -73,10 +81,10 @@ const _fetchAnimalTasks = async (
       "createdAt",
     ]);
     if (sortableFields.has(id)) {
-      return { [id]: direction };
+      return withId({ [id]: direction });
     }
 
-    return { createdAt: "desc" };
+    return withId({ createdAt: "desc" });
   })();
 
   // The where clause is updated to filter by animalId if it's provided

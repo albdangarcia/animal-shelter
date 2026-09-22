@@ -4,8 +4,14 @@ import {
   FosterPlacementType,
   FosterReturnReason,
 } from "@/prisma/generated/enums";
-import { cuidSchema, requiredNumber, usStateSchema } from "./common.schemas";
+import {
+  calendarDaySchema,
+  cuidSchema,
+  requiredNumber,
+  usStateSchema,
+} from "./common.schemas";
 import { isFosterPlacementOverdue } from "@/app/lib/utils/date-utils";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import {
   householdFieldsShape,
   householdSuperRefine,
@@ -132,26 +138,42 @@ export type FosterApplicationStatusChangeInput = z.input<
   typeof FosterApplicationStatusChangeSchema
 >;
 
-export const CreateFosterPlacementSchema = z.object({
-  animalId: cuidSchema,
-  fosterProfileId: cuidSchema,
-  type: z.enum(FosterPlacementType, {
-    error: (issue) =>
-      issue.input === undefined ? "A placement type is required." : undefined,
-  }),
-  // Optional by design: a foster ends on an outcome, not a date, and
-  // LONG_TERM / FOSTER_TO_ADOPT placements are open-ended. When a date *is*
-  // set it feeds attention-queue Signal 3, so reject a past date here — the
-  // calendar only greys out past days client-side, and a placement created
-  // already overdue is never intentional.
-  expectedEndDate: z
-    .date()
-    .refine((date) => !isFosterPlacementOverdue(date), {
-      error: "An expected return date cannot be in the past.",
-    })
-    .optional(),
-  notes: z.string().optional(),
-});
+/**
+ * `today` is a parameter because which day it is depends on the shelter's
+ * timezone, which only the server can resolve. The action builds this schema
+ * from the day it resolved, and the browser builds it from the day the server
+ * handed down with the form — so both check the same boundary, and the action
+ * is what decides.
+ */
+export const createFosterPlacementSchema = (today: CalendarDay) =>
+  z.object({
+    animalId: cuidSchema,
+    fosterProfileId: cuidSchema,
+    type: z.enum(FosterPlacementType, {
+      error: (issue) =>
+        issue.input === undefined ? "A placement type is required." : undefined,
+    }),
+    // Optional by design: a foster ends on an outcome, not a date, and
+    // LONG_TERM / FOSTER_TO_ADOPT placements are open-ended. When a day *is*
+    // set it feeds attention-queue Signal 3, so reject a past day here — the
+    // calendar only greys out past days client-side, and a placement created
+    // already overdue is never intentional.
+    expectedEndDate: calendarDaySchema("An expected return date")
+      .refine((day) => !isFosterPlacementOverdue(day, today), {
+        error: "An expected return date cannot be in the past.",
+      })
+      .optional(),
+    notes: z.string().optional(),
+  });
+
+/**
+ * The shape alone, for the values a form holds and the payload an action takes.
+ * The day it is validated against is not part of either, so this is built from
+ * an arbitrary day and only its input/output types are used.
+ */
+export type CreateFosterPlacementSchema = ReturnType<
+  typeof createFosterPlacementSchema
+>;
 
 export const ReturnFromFosterSchema = z.object({
   placementId: cuidSchema,

@@ -120,11 +120,20 @@ Typical values per environment:
 | ----------------------- | ----------- | ---------------------------------------------------------------- |
 | `BLOB_READ_WRITE_TOKEN` | ✅ Required | Read/write token for Vercel Blob Storage (stores animal images). |
 
-### Reporting
+### Shelter settings
 
-| Variable           | Required    | Description                                                                                                                                         |
-| ------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SHELTER_TIMEZONE` | ⚪ Optional | IANA timezone the shelter operates in (e.g. `America/New_York`). All report date-range boundaries are computed in this zone. Defaults to `America/New_York`. |
+The `shelter_settings` row with id `shelter` holds the timezone, weight unit
+system, and default phone country. Seeding creates it if missing. Changes to
+that row take effect on the next request without a rebuild. Changing the default
+phone country also rebuilds existing phone search indexes before the next
+indexed phone lookup. If the row is
+missing, the server uses these environment values, then their defaults:
+
+| Variable | Default |
+| --- | --- |
+| `SHELTER_TIMEZONE` | `America/New_York` |
+| `WEIGHT_UNIT_SYSTEM` | `metric` |
+| `DEFAULT_PHONE_COUNTRY` | `US` |
 
 ### AI Staff Chat
 

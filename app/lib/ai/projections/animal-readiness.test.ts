@@ -1,19 +1,22 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fromZonedTime } from "date-fns-tz";
-import { SHELTER_TIMEZONE } from "@/app/lib/constants/constants";
+const SHELTER_TIMEZONE = "America/New_York";
 import type { ReadinessBlocker } from "@/app/lib/readiness/compute-readiness";
 import type {
   AnimalReadiness,
   ReadinessViewerCan,
 } from "@/app/lib/readiness/board";
-import { toAnimalReadinessView, toReadinessLine } from "./animal-readiness";
+import { toAnimalReadinessView as rawToAnimalReadinessView, toReadinessLine as rawToReadinessLine } from "./animal-readiness";
 
 // Shelter-local wall-clock times, so day counts don't depend on the machine
 // running the tests.
 const at = (date: string, time = "12:00") =>
   fromZonedTime(`${date} ${time}`, SHELTER_TIMEZONE);
 const NOW = at("2026-09-13", "09:00");
+
+const toAnimalReadinessView = (readiness: AnimalReadiness, can: ReadinessViewerCan, now: Date) => rawToAnimalReadinessView(readiness, can, now, SHELTER_TIMEZONE);
+const toReadinessLine = (readiness: AnimalReadiness, now: Date) => rawToReadinessLine(readiness, now, SHELTER_TIMEZONE);
 
 const STAFF: ReadinessViewerCan = {
   manageAssessments: true,

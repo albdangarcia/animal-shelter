@@ -1,15 +1,27 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import type { IntakeType, OutcomeType } from "@/prisma/generated/enums";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
+import {
+  calendarDay,
+  startOfShelterDay,
+  type CalendarDay,
+} from "@/app/lib/utils/shelter-day";
 
 export type PartnerTransferDirection = "TRANSFER_IN" | "TRANSFER_OUT";
 
 export type PartnerAnimalHistoryEntry = {
   direction: PartnerTransferDirection;
+  /**
+   * The instant this entry's day begins on the shelter's calendar — a transfer
+   * is dated by a day, which carries no time to sort or count "ago" from.
+   */
   date: Date | null;
+  /** The calendar day itself, which is what the card shows in full. */
+  day: CalendarDay;
   animal: {
     id: string;
     name: string;
@@ -20,6 +32,9 @@ export type PartnerAnimalHistoryEntry = {
   intakeType?: IntakeType;
   outcomeType?: OutcomeType;
 };
+
+/** A day-valued entry's two fields: the day, and where it sorts. */
+const dated = (day: CalendarDay, timezone: string) => ({ day, date: startOfShelterDay(day, timezone) });
 
 const animalSelect = {
   id: true,
@@ -69,16 +84,17 @@ const _fetchPartnerAnimalHistory = async (
       return { history: [] };
     }
 
+    const timezone = (await getShelterSettings()).timezone;
     const history: PartnerAnimalHistoryEntry[] = [
       ...partner.transferredInAnimals.map((intake) => ({
         direction: "TRANSFER_IN" as const,
-        date: intake.intakeDate,
+        ...dated(calendarDay(intake.intakeDate), timezone),
         animal: intake.animal,
         intakeType: intake.type,
       })),
       ...partner.transferredOutAnimals.map((outcome) => ({
         direction: "TRANSFER_OUT" as const,
-        date: outcome.outcomeDate,
+        ...dated(calendarDay(outcome.outcomeDate), timezone),
         animal: outcome.animal,
         outcomeType: outcome.type,
       })),

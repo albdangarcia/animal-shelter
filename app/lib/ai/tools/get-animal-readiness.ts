@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import { tool } from "ai";
 import { z } from "zod";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -87,6 +88,8 @@ export const getAnimalReadinessTool = tool({
         readiness: toAnimalReadinessView(
           readiness,
           readinessViewerCanFor(context),
+          new Date(),
+          (await getShelterSettings()).timezone,
         ),
       };
     } catch (error) {

@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -42,6 +43,7 @@ const PageContent = async ({ searchParams }: Props) => {
     parseReadinessBoardFilters({ species, location, stage, kind }),
     new Date(),
     Number(page) || 1,
+    (await getShelterSettings()).timezone,
   );
 
   return (

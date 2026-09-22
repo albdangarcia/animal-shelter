@@ -32,7 +32,7 @@ export function toAnimalMatch(row: AiAnimalMatchRow): AnimalMatch {
     animalId: row.id,
     name: row.name,
     species: row.species.name,
-    birthDate: row.birthDate.toISOString().slice(0, 10),
+    birthDate: row.birthDate,
     currentUnit: formatUnit(row.currentUnit),
   };
 }

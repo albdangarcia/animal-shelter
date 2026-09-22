@@ -13,7 +13,7 @@ export interface BoardAnimal {
   species: string;
   breed: string | null;
   sex: Sex;
-  birthDate: Date;
+  birthDate: string;
   thumbnailUrl: string | null; // first animal image, or null for the fallback glyph
 }
 
@@ -36,7 +36,7 @@ export interface BoardLocation {
 export interface FosteredBoardAnimal extends BoardAnimal {
   fosterPersonId: string;
   fosterPersonName: string;
-  since: Date;
+  since: string;
 }
 
 export interface ShelterBoardData {
@@ -70,7 +70,7 @@ const toBoardAnimal = (animal: {
   id: string;
   name: string;
   sex: Sex;
-  birthDate: Date;
+  birthDate: string;
   species: { name: string };
   breeds: { name: string }[];
   animalImages: { url: string }[];
@@ -142,6 +142,11 @@ const _fetchShelterBoard = async (): Promise<ShelterBoardData> => {
                 select: { person: { select: { id: true, name: true } } },
               },
             },
+            orderBy: [
+              { startDate: "desc" },
+              { createdAt: "desc" },
+              { id: "desc" },
+            ],
             take: 1,
           },
         },

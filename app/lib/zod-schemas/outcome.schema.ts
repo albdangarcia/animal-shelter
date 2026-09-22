@@ -1,12 +1,10 @@
 import { z } from "zod";
 import { OutcomeType } from "@/prisma/generated/enums";
+import { calendarDaySchema } from "./common.schemas";
 
 export const OutcomeFormSchema = z
   .object({
-    outcomeDate: z.date({
-      error: (issue) =>
-        issue.input === undefined ? "An outcome date is required." : undefined,
-    }),
+    outcomeDate: calendarDaySchema("An outcome date"),
     outcomeType: z.enum(OutcomeType, {
       error: (issue) =>
         issue.input === undefined ? "An outcome type is required." : undefined,

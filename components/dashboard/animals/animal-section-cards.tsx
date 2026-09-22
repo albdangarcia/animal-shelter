@@ -1,3 +1,7 @@
+import {
+  getShelterSettings,
+  getShelterToday,
+} from "@/app/lib/data/shelter-settings.data";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -20,6 +24,10 @@ import {
   Sex,
 } from "@/prisma/generated/enums";
 import { calculateAgeString, formatTimeAgo } from "@/app/lib/utils/date-utils";
+import {
+  calendarDay,
+  startOfShelterDay,
+} from "@/app/lib/utils/shelter-day";
 import {
   formatSingleEnumOption,
   formatAnimalSize,
@@ -74,6 +82,8 @@ const AnimalSectionCards = async ({ params }: Props) => {
     notFound();
   }
 
+  const settings = await getShelterSettings();
+  const today = await getShelterToday();
   const canManage = await hasPermission(AppPermissions.ANIMAL_INFO_MANAGE);
   const canReadFosters = await hasPermission(AppPermissions.FOSTERS_READ);
   const canManageFosters = await hasPermission(AppPermissions.FOSTERS_MANAGE);
@@ -86,8 +96,10 @@ const AnimalSectionCards = async ({ params }: Props) => {
     !openPlacement &&
     animal.listingStatus !== AnimalListingStatus.ARCHIVED;
 
+  // The intake is a calendar day, and a relative "ago" needs an instant, so
+  // the day enters at the moment it begins on the shelter's calendar.
   const daysSinceIntake = animal.intake?.[0]?.intakeDate
-    ? formatTimeAgo(animal.intake[0].intakeDate)
+    ? formatTimeAgo(startOfShelterDay(calendarDay(animal.intake[0].intakeDate), settings.timezone))
     : null;
 
   const firstImage = animal.animalImages?.[0]?.url;
@@ -99,12 +111,13 @@ const AnimalSectionCards = async ({ params }: Props) => {
   const [latestVitals, previousVitals] = animal.vitalsLogs;
   const weightTrend = (() => {
     if (!latestVitals?.weightGrams) return null;
-    const label = formatWeight(latestVitals.weightGrams);
+    const label = formatWeight(latestVitals.weightGrams, settings.weightUnitSystem);
     if (!previousVitals?.weightGrams) return label;
     const delta = latestVitals.weightGrams - previousVitals.weightGrams;
     if (delta === 0) return label;
     return `${label} — ${delta > 0 ? "up" : "down"} ${formatWeight(
       Math.abs(delta),
+      settings.weightUnitSystem,
     )} since ${format(previousVitals.recordedAt, "MMM d")}`;
   })();
 
@@ -140,6 +153,7 @@ const AnimalSectionCards = async ({ params }: Props) => {
           placement={openPlacement}
           canReadFosters={canReadFosters}
           canManageFosters={canManageFosters}
+          today={today}
         />
       )}
 
@@ -191,7 +205,7 @@ const AnimalSectionCards = async ({ params }: Props) => {
                   <div className="rounded-md p-2.5">
                     <p className="text-xs text-muted-foreground mb-0.5">Age</p>
                     <p className="font-semibold">
-                      {calculateAgeString({ birthDate: animal.birthDate })}
+                      {calculateAgeString({ birthDate: calendarDay(animal.birthDate) })}
                     </p>
                   </div>
                   <div className="rounded-md p-2.5">

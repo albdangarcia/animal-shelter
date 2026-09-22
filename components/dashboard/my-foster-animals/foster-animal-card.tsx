@@ -1,3 +1,8 @@
+import {
+  calendarDay,
+  formatShelterDayOrNA,
+  type CalendarDay,
+} from "@/app/lib/utils/shelter-day";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimalListingStatus } from "@/prisma/generated/enums";
@@ -5,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   calculateAgeString,
-  formatDateOrNA,
   isFosterPlacementOverdue,
 } from "@/app/lib/utils/date-utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
@@ -18,9 +22,11 @@ const publiclyListedStatuses: AnimalListingStatus[] = [
 
 interface Props {
   placement: MyFosterPlacementPayload;
+  /** Today on the shelter's calendar, resolved on the server. */
+  today: CalendarDay;
 }
 
-export function FosterAnimalCard({ placement }: Props) {
+export function FosterAnimalCard({ placement, today }: Props) {
   const { animal } = placement;
   const photo = animal.animalImages[0]?.url;
   const breedString = animal.breeds.map((b) => b.name).join(", ");
@@ -65,19 +71,19 @@ export function FosterAnimalCard({ placement }: Props) {
           <p className="text-muted-foreground">
             {animal.species.name}
             {breedString && ` · ${breedString}`} ·{" "}
-            {calculateAgeString({ birthDate: animal.birthDate, simple: true })}
+            {calculateAgeString({ birthDate: calendarDay(animal.birthDate), simple: true })}
           </p>
 
           <p className="text-muted-foreground">
-            Since {formatDateOrNA(placement.startDate)}
+            Since {formatShelterDayOrNA(placement.startDate)}
             {placement.expectedEndDate && (
               <>
                 {" · "}Expected return{" "}
-                {formatDateOrNA(placement.expectedEndDate)}
+                {formatShelterDayOrNA(placement.expectedEndDate)}
                 {/* The foster's own view, not staff's: the date is an estimate
                     the shelter set, so state the fact plainly rather than
                     flagging a volunteer as "Overdue". */}
-                {isFosterPlacementOverdue(placement.expectedEndDate) && (
+                {isFosterPlacementOverdue(placement.expectedEndDate, today) && (
                   <span className="text-foreground/80"> (date passed)</span>
                 )}
               </>

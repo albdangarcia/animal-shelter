@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { calendarDaySchema } from "./common.schemas";
+import type { CalendarDay } from "../utils/shelter-day";
 import {
   Sex,
   AnimalSize,
@@ -115,12 +117,7 @@ const animalFieldsShape = {
   // as null). A Radix Select cannot hold null cleanly, so "" is kept at the
   // schema boundary and mapped to null in toAnimalData().
   size: z.enum(AnimalSize).optional().or(z.literal("")),
-  estimatedBirthDate: z.date({
-    error: (issue) =>
-      issue.input === undefined
-        ? "Estimated birth date is required."
-        : undefined,
-  }),
+  estimatedBirthDate: calendarDaySchema("Estimated birth date"),
   healthStatus: z.enum(AnimalHealthStatus, {
     error: (issue) =>
       issue.input === undefined ? "Health status is required." : undefined,
@@ -208,13 +205,11 @@ export const TaskFormSchema = z.object({
       issue.input === undefined ? "Category is required." : undefined,
   }),
   priority: z.enum(TaskPriority).optional(),
- 
-  // Was z.coerce.date(). Coercion existed to parse the ISO string produced by
-  // the old hand-built FormData; the client now sends a real Date. Zod 4 types
-  // a coerced field's INPUT as `unknown`, which would make z.input unusable as
-  // the react-hook-form values type — without coerce, input and output match.
-  dueDate: z.date().optional(),
- 
+
+  // A deadline is a calendar day, so the picker submits `yyyy-MM-dd` and the
+  // field travels as that string. See docs/calendar-days.md.
+  dueDate: calendarDaySchema("A due date").optional(),
+
   assigneeId: z
     .cuid2({
       error: "Valid assignee ID is required.",
@@ -222,15 +217,20 @@ export const TaskFormSchema = z.object({
     .optional(),
 });
  
-export const CreateTaskFormSchema = TaskFormSchema.refine(
-  (data) => {
-    if (!data.dueDate) return true;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return data.dueDate >= today;
-  },
-  { path: ["dueDate"], error: "Due date cannot be in the past." },
-);
+/**
+ * The create form's extra rule: a new task cannot be born already overdue.
+ *
+ * `today` is a parameter because which day it is depends on the shelter's
+ * timezone, which only the server can resolve. The action builds this schema
+ * from the day it resolved, and the browser builds it from the day the server
+ * handed down with the form — so both check the same boundary, and the action
+ * is what decides.
+ */
+export const createTaskFormSchema = (today: CalendarDay) =>
+  TaskFormSchema.refine((data) => !data.dueDate || data.dueDate >= today, {
+    path: ["dueDate"],
+    error: "Due date cannot be in the past.",
+  });
 
 export const NoteFormSchema = z.object({
   category: z.enum(NoteCategory),

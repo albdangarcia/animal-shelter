@@ -7,11 +7,13 @@ import clsx from "clsx";
 import { Image as PhotoIcon } from "lucide-react";
 import type { SpotlightAnimal } from "@/app/lib/data/public.data";
 import { PET_PHOTO_COMING_SOON_IMAGE } from "@/app/lib/constants/constants";
+import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { formatWeight } from "@/app/lib/utils/weight-format";
 import FavoriteButton from "../favorite-button";
 
 interface SpotlightHeroProps {
   animals: SpotlightAnimal[];
+  unitSystem: WeightUnitSystem;
   /** Total PUBLISHED animals — drives the "+N" circle. */
   availableCount: number;
   currentUserPersonId: string | undefined;
@@ -35,6 +37,7 @@ interface SpotlightHeroProps {
  */
 const SpotlightHero = ({
   animals,
+  unitSystem,
   availableCount,
   currentUserPersonId,
 }: SpotlightHeroProps) => {
@@ -95,7 +98,7 @@ const SpotlightHero = ({
   const meta = [
     animal.breedString,
     animal.ageString,
-    formatWeight(animal.weightGrams),
+    formatWeight(animal.weightGrams, unitSystem),
   ].filter((part): part is string => Boolean(part));
 
   return (

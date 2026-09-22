@@ -1,3 +1,4 @@
+import { resolveShelterSettings } from "@/app/lib/utils/shelter-settings";
 import { PrismaClient } from "@/prisma/generated/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import pg from "pg";
@@ -10,8 +11,12 @@ const connectionString = resolveDatabaseUrl("pooled");
 const prismaClientSingleton = () => {
   const pool = new pg.Pool({ connectionString });
   const adapter = new PrismaPg(pool);
-  return new PrismaClient({ adapter })
-    .$extends(phoneNormalizationExtension)
+  const client = new PrismaClient({ adapter });
+  const readCountry = async () => resolveShelterSettings(
+    await client.shelterSettings.findUnique({ where: { id: "shelter" } }),
+  ).defaultPhoneCountry;
+  return client
+    .$extends(phoneNormalizationExtension(readCountry))
     .$extends(emailNormalizationExtension);
 };
 

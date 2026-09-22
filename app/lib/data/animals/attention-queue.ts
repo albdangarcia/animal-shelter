@@ -5,6 +5,7 @@
 // `docs/specs/ai-chat/03-attention-queue.md` §Acceptance.
 
 import type { AnimalHealthStatus, TaskPriority } from "@/prisma/generated/enums";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 
 /**
  * Health statuses that count as "acute" for signal 2. Named constant, not
@@ -46,7 +47,7 @@ export type TaskDueRow = {
   animal: AttentionAnimal;
   taskId: string;
   title: string;
-  dueDate: Date;
+  dueDate: CalendarDay;
   priority: TaskPriority;
 };
 
@@ -58,7 +59,7 @@ export type AcuteHealthRow = {
 export type FosterOverdueRow = {
   animal: AttentionAnimal;
   placementId: string;
-  expectedEndDate: Date;
+  expectedEndDate: CalendarDay;
   fosterName: string; // person's display name only — no email/phone/address
 };
 
@@ -69,14 +70,14 @@ export type AttentionReason =
       kind: "TASK_DUE";
       taskId: string;
       title: string;
-      dueDate: Date;
+      dueDate: CalendarDay;
       priority: TaskPriority;
     }
   | { kind: "UNTASKED_ACUTE_HEALTH"; healthStatus: AnimalHealthStatus }
   | {
       kind: "FOSTER_OVERDUE";
       placementId: string;
-      expectedEndDate: Date;
+      expectedEndDate: CalendarDay;
       fosterName: string;
     };
 
@@ -101,7 +102,8 @@ function compareReasons(a: AttentionReason, b: AttentionReason): number {
   const byTier = reasonTier(a) - reasonTier(b);
   if (byTier !== 0) return byTier;
   if (a.kind === "TASK_DUE" && b.kind === "TASK_DUE") {
-    const byDue = a.dueDate.getTime() - b.dueDate.getTime();
+    // `yyyy-MM-dd` days sort chronologically as plain strings.
+    const byDue = a.dueDate.localeCompare(b.dueDate);
     if (byDue !== 0) return byDue;
     const byPriority = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
     if (byPriority !== 0) return byPriority;
@@ -184,8 +186,7 @@ export function buildAttentionQueue(input: {
     if (a.tier !== b.tier) return a.tier - b.tier;
 
     if (a.tier === TIER.TASK_DUE && a.firstTask && b.firstTask) {
-      const byDue =
-        a.firstTask.dueDate.getTime() - b.firstTask.dueDate.getTime();
+      const byDue = a.firstTask.dueDate.localeCompare(b.firstTask.dueDate);
       if (byDue !== 0) return byDue;
       const byPriority =
         PRIORITY_RANK[a.firstTask.priority] - PRIORITY_RANK[b.firstTask.priority];
@@ -193,9 +194,9 @@ export function buildAttentionQueue(input: {
     }
 
     if (a.tier === TIER.FOSTER_OVERDUE && a.firstFoster && b.firstFoster) {
-      const byExpected =
-        a.firstFoster.expectedEndDate.getTime() -
-        b.firstFoster.expectedEndDate.getTime();
+      const byExpected = a.firstFoster.expectedEndDate.localeCompare(
+        b.firstFoster.expectedEndDate,
+      );
       if (byExpected !== 0) return byExpected;
     }
 

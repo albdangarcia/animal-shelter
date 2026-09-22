@@ -16,6 +16,7 @@
 //   keys=$(rg --no-filename -o '^\s+(\w+)\s+(Person|User)\??\s+@relation' -r '$1' prisma/schema.prisma | sort -u | paste -sd'|' -)
 //   rg -U -n "\b($keys)\s*:\s*\{\s*(create|createMany|update|upsert|connectOrCreate)\s*:" app prisma/*.ts scripts --glob '!app/lib/prisma-extensions/*'
 import { Prisma } from "@/prisma/generated/client";
+import type { CountryCode } from "libphonenumber-js";
 import { normalizePhone } from "@/app/lib/utils/phone";
 
 // A scalar update arrives either flat (`phone: "..."`) or wrapped in an
@@ -32,12 +33,12 @@ function unwrapPhone(value: unknown): string | null {
 // Exported for unit testing: every arg shape can be checked without a database.
 // Mutates in place, which is safe — the `args` handed to a query extension is
 // already a deep clone of the caller's object, so this cannot leak back out.
-export function derivePhoneNormalized(data: unknown): void {
+export function derivePhoneNormalized(data: unknown, country: CountryCode = "US"): void {
   if (!data || typeof data !== "object") return;
 
   // createMany / createManyAndReturn take an array.
   if (Array.isArray(data)) {
-    for (const row of data) derivePhoneNormalized(row);
+    for (const row of data) derivePhoneNormalized(row, country);
     return;
   }
 
@@ -47,41 +48,42 @@ export function derivePhoneNormalized(data: unknown): void {
   if (!("phone" in data)) return;
 
   const row = data as Record<string, unknown>;
-  row.phoneNormalized = normalizePhone(unwrapPhone(row.phone));
+  row.phoneNormalized = normalizePhone(unwrapPhone(row.phone), country);
 }
 
-export const phoneNormalizationExtension = Prisma.defineExtension({
+export const phoneNormalizationExtension = (readCountry: () => Promise<CountryCode>) => Prisma.defineExtension({
   name: "phone-normalization",
   query: {
     person: {
-      create({ args, query }) {
-        derivePhoneNormalized(args.data);
+      async create({ args, query }) {
+        derivePhoneNormalized(args.data, await readCountry());
         return query(args);
       },
-      createMany({ args, query }) {
-        derivePhoneNormalized(args.data);
+      async createMany({ args, query }) {
+        derivePhoneNormalized(args.data, await readCountry());
         return query(args);
       },
-      createManyAndReturn({ args, query }) {
-        derivePhoneNormalized(args.data);
+      async createManyAndReturn({ args, query }) {
+        derivePhoneNormalized(args.data, await readCountry());
         return query(args);
       },
-      update({ args, query }) {
-        derivePhoneNormalized(args.data);
+      async update({ args, query }) {
+        derivePhoneNormalized(args.data, await readCountry());
         return query(args);
       },
-      updateMany({ args, query }) {
-        derivePhoneNormalized(args.data);
+      async updateMany({ args, query }) {
+        derivePhoneNormalized(args.data, await readCountry());
         return query(args);
       },
-      updateManyAndReturn({ args, query }) {
-        derivePhoneNormalized(args.data);
+      async updateManyAndReturn({ args, query }) {
+        derivePhoneNormalized(args.data, await readCountry());
         return query(args);
       },
       // upsert carries two independent payloads.
-      upsert({ args, query }) {
-        derivePhoneNormalized(args.create);
-        derivePhoneNormalized(args.update);
+      async upsert({ args, query }) {
+        const country = await readCountry();
+        derivePhoneNormalized(args.create, country);
+        derivePhoneNormalized(args.update, country);
         return query(args);
       },
     },

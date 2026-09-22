@@ -1,11 +1,12 @@
+import {
+  formatShelterDayOrNA,
+  type CalendarDay,
+} from "@/app/lib/utils/shelter-day";
 import Link from "next/link";
 import { Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  formatDateOrNA,
-  isFosterPlacementOverdue,
-} from "@/app/lib/utils/date-utils";
+import { isFosterPlacementOverdue } from "@/app/lib/utils/date-utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { AnimalSectionCardPayload } from "@/app/lib/types";
 import { FosterPlacementType } from "@/prisma/generated/enums";
@@ -18,6 +19,8 @@ interface Props {
   // but the foster's identity (name, link) is gated behind FOSTERS_READ.
   canReadFosters: boolean;
   canManageFosters: boolean;
+  /** Today on the shelter's calendar, resolved on the server. */
+  today: CalendarDay;
 }
 
 // Layout-header banner shown whenever an animal has an open foster placement.
@@ -27,11 +30,12 @@ export function FosterPlacementBanner({
   placement,
   canReadFosters,
   canManageFosters,
+  today,
 }: Props) {
   const fosterName = placement.fosterProfile.person.name;
   // Staff-facing surface: this is the same condition that puts the placement
   // in the attention queue, so the two always agree on the same animal.
-  const isOverdue = isFosterPlacementOverdue(placement.expectedEndDate);
+  const isOverdue = isFosterPlacementOverdue(placement.expectedEndDate, today);
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/40 @xl/main:flex-row @xl/main:items-center @xl/main:justify-between">
@@ -49,12 +53,12 @@ export function FosterPlacementBanner({
           ) : (
             <span className="font-semibold">a foster</span>
           )}{" "}
-          since {formatDateOrNA(placement.startDate)} ·{" "}
+          since {formatShelterDayOrNA(placement.startDate)} ·{" "}
           {formatSingleEnumOption(placement.type)}
           {placement.expectedEndDate && (
             <>
               {" · "}expected return{" "}
-              {formatDateOrNA(placement.expectedEndDate)}
+              {formatShelterDayOrNA(placement.expectedEndDate)}
               {isOverdue && (
                 <Badge
                   variant="outline"

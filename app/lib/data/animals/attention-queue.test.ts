@@ -8,6 +8,7 @@ import {
   type FosterOverdueRow,
   type TaskDueRow,
 } from "./attention-queue";
+import { calendarDay, shiftDayKey } from "@/app/lib/utils/shelter-day";
 
 const animal = (id: string, overrides: Partial<AttentionAnimal> = {}): AttentionAnimal => ({
   id,
@@ -24,7 +25,7 @@ const taskRow = (
   animal: a,
   taskId: `task-${a.id}`,
   title: "Do the thing",
-  dueDate: new Date("2026-08-20T09:00:00Z"),
+  dueDate: calendarDay("2026-08-20"),
   priority: "MEDIUM",
   ...overrides,
 });
@@ -44,7 +45,7 @@ const fosterRow = (
 ): FosterOverdueRow => ({
   animal: a,
   placementId: `placement-${a.id}`,
-  expectedEndDate: new Date("2026-08-15T00:00:00Z"),
+  expectedEndDate: calendarDay("2026-08-15"),
   fosterName: "Jane Doe",
   ...overrides,
 });
@@ -88,13 +89,13 @@ test("acute health with an open task never reaches signal 2 — but the pure mer
   );
 });
 
-test("multiple overdue tasks on one animal each contribute a reason, ordered by due date", () => {
+test("multiple overdue tasks on one animal each contribute a reason, ordered by due day", () => {
   const bruno = animal("bruno");
   const queue = buildAttentionQueue({
     ...empty,
     tasksDue: [
-      taskRow(bruno, { taskId: "later", dueDate: new Date("2026-08-25T09:00:00Z") }),
-      taskRow(bruno, { taskId: "earlier", dueDate: new Date("2026-08-18T09:00:00Z") }),
+      taskRow(bruno, { taskId: "later", dueDate: calendarDay("2026-08-25") }),
+      taskRow(bruno, { taskId: "earlier", dueDate: calendarDay("2026-08-18") }),
     ],
   });
 
@@ -137,9 +138,9 @@ test("within tier 1, earlier due date wins; then higher priority", () => {
   const queue = buildAttentionQueue({
     ...empty,
     tasksDue: [
-      taskRow(animal("due-late"), { dueDate: new Date("2026-08-24T09:00:00Z"), priority: "HIGH" }),
-      taskRow(animal("due-early-low"), { dueDate: new Date("2026-08-20T09:00:00Z"), priority: "LOW" }),
-      taskRow(animal("due-early-high"), { dueDate: new Date("2026-08-20T09:00:00Z"), priority: "HIGH" }),
+      taskRow(animal("due-late"), { dueDate: calendarDay("2026-08-24"), priority: "HIGH" }),
+      taskRow(animal("due-early-low"), { dueDate: calendarDay("2026-08-20"), priority: "LOW" }),
+      taskRow(animal("due-early-high"), { dueDate: calendarDay("2026-08-20"), priority: "HIGH" }),
     ],
   });
 
@@ -153,8 +154,8 @@ test("within tier 3, the earliest expected end date sorts first", () => {
   const queue = buildAttentionQueue({
     ...empty,
     fostersOverdue: [
-      fosterRow(animal("b"), { expectedEndDate: new Date("2026-08-10T00:00:00Z") }),
-      fosterRow(animal("a"), { expectedEndDate: new Date("2026-08-01T00:00:00Z") }),
+      fosterRow(animal("b"), { expectedEndDate: calendarDay("2026-08-10") }),
+      fosterRow(animal("a"), { expectedEndDate: calendarDay("2026-08-01") }),
     ],
   });
 
@@ -165,7 +166,7 @@ test("within tier 3, the earliest expected end date sorts first", () => {
 });
 
 test("ties break on name then id, so the queue is identical between identical inputs", () => {
-  const sameDue = new Date("2026-08-20T09:00:00Z");
+  const sameDue = calendarDay("2026-08-20");
   const queue = buildAttentionQueue({
     ...empty,
     tasksDue: [
@@ -183,7 +184,7 @@ test("ties break on name then id, so the queue is identical between identical in
 test("the queue is capped at ATTENTION_QUEUE_CAP", () => {
   const tasksDue = Array.from({ length: ATTENTION_QUEUE_CAP + 5 }, (_, i) =>
     taskRow(animal(`a${String(i).padStart(2, "0")}`), {
-      dueDate: new Date(2026, 7, 1 + i),
+      dueDate: shiftDayKey(calendarDay("2026-08-01"), i),
     }),
   );
 
@@ -199,11 +200,11 @@ test("reason payloads carry the fields each consumer needs, and no more", () => 
   const bruno = animal("bruno", { name: "Bruno", species: "Dog", currentUnit: "Medical wing · MED-1" });
   const [item] = buildAttentionQueue({
     tasksDue: [
-      taskRow(bruno, { taskId: "task-9", title: "Dental follow-up", priority: "HIGH", dueDate: new Date("2026-08-19T00:00:00Z") }),
+      taskRow(bruno, { taskId: "task-9", title: "Dental follow-up", priority: "HIGH", dueDate: calendarDay("2026-08-19") }),
     ],
     acuteHealth: [acuteRow(bruno, { healthStatus: "HOSPITALISED" })],
     fostersOverdue: [
-      fosterRow(bruno, { placementId: "fp-3", fosterName: "Sam Rivera", expectedEndDate: new Date("2026-08-12T00:00:00Z") }),
+      fosterRow(bruno, { placementId: "fp-3", fosterName: "Sam Rivera", expectedEndDate: calendarDay("2026-08-12") }),
     ],
   });
 
@@ -217,14 +218,14 @@ test("reason payloads carry the fields each consumer needs, and no more", () => 
         kind: "TASK_DUE",
         taskId: "task-9",
         title: "Dental follow-up",
-        dueDate: new Date("2026-08-19T00:00:00Z"),
+        dueDate: calendarDay("2026-08-19"),
         priority: "HIGH",
       },
       { kind: "UNTASKED_ACUTE_HEALTH", healthStatus: "HOSPITALISED" },
       {
         kind: "FOSTER_OVERDUE",
         placementId: "fp-3",
-        expectedEndDate: new Date("2026-08-12T00:00:00Z"),
+        expectedEndDate: calendarDay("2026-08-12"),
         fosterName: "Sam Rivera",
       },
     ],

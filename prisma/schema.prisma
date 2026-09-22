@@ -337,6 +337,20 @@ model PartnerContact {
   @@map("partner_contacts")
 }
 
+// A fixed id and database constraint keep organization settings to one row.
+// A missing row is valid during initial setup; readers use environment defaults.
+model ShelterSettings {
+  id                  String   @id @default("shelter")
+  timezone            String
+  weightUnitSystem    String
+  defaultPhoneCountry String
+  // Country used for the derived Person.phoneNormalized index.
+  phoneIndexCountry   String?
+  updatedAt           DateTime @updatedAt
+
+  @@map("shelter_settings")
+}
+
 // ═══════════════════════════════════════════════════
 // LOCATION MANAGEMENT
 // ═══════════════════════════════════════════════════
@@ -434,7 +448,7 @@ enum CharacteristicCategory {
 model Animal {
   id                 String              @id @default(cuid())
   name               String
-  birthDate          DateTime            @map(name: "birth_date")
+  birthDate          String            @map(name: "birth_date")
   sex                Sex
   /// Expected ADULT size, set by staff. Never derived from current weight — a puppy's
   /// current weight does not predict its adult size. Nullable: "unknown" is the honest
@@ -659,9 +673,13 @@ enum OutcomeType {
 }
 
 model Intake {
-  id         String     @id @default(cuid())
-  intakeDate DateTime   @default(now())
-  type       IntakeType
+  id String @id @default(cuid())
+
+  // The calendar day the animal arrived, as `yyyy-MM-dd`. Not an instant, and
+  // no default: every writer states the day. See docs/calendar-days.md.
+  intakeDate String
+
+  type IntakeType
 
   animalId String
 
@@ -675,7 +693,7 @@ model Intake {
   surrenderingPerson   Person? @relation(name: "SurrenderedBy", fields: [surrenderingPersonId], references: [id])
 
   // For STRAY
-  dateLost        DateTime?
+  dateLost        String?
   foundAddress    String?
   foundCity       String?
   foundState      String?
@@ -702,9 +720,13 @@ model Intake {
 }
 
 model Outcome {
-  id          String      @id @default(cuid())
-  outcomeDate DateTime    @default(now())
-  type        OutcomeType
+  id String @id @default(cuid())
+
+  // The calendar day the animal left, as `yyyy-MM-dd`. Not an instant, and no
+  // default: every writer states the day. See docs/calendar-days.md.
+  outcomeDate String
+
+  type OutcomeType
 
   animalId String
   // The animal leaving the shelter. A one-to-one relationship.
@@ -757,7 +779,7 @@ model MedicalRecord {
   type         MedicalRecordType
   title        String // e.g., "Rabies Vaccine", "Annual Checkup"
   details      String? // Longer notes from the vet or staff
-  dateOfRecord DateTime          @map(name: "date_of_record") // The date the event occurred
+  dateOfRecord String          @map(name: "date_of_record") // The date the event occurred
   documentUrl  String?           @map(name: "document_url") // link to a PDF or image of the vet record
 
   animalId String @map(name: "animal_id")
@@ -778,7 +800,9 @@ model VitalsLog {
 
   /// When the measurement was TAKEN (backdatable — fosters report late).
   /// Distinct from createdAt, which is when the row was written.
-  /// Same convention as Intake.intakeDate and MedicalRecord.dateOfRecord.
+  /// An instant, not a calendar day: a measurement is taken at a time, so unlike
+  /// Intake.intakeDate and MedicalRecord.dateOfRecord (days, no time of day) it
+  /// is a DateTime. See docs/calendar-days.md.
   recordedAt DateTime @default(now()) @map(name: "recorded_at")
 
   /// At least one of the three measurement fields must be present. `notes` does NOT
@@ -819,12 +843,15 @@ model MedicationSchedule {
   instructions   String?
   isActive       Boolean @default(true)
 
-  // Recurrence Info
-  startDate      DateTime
+  // The calendar day this schedule starts, as `yyyy-MM-dd`. Not an instant,
+  // and no default: every writer states the day. See docs/calendar-days.md.
+  startDate      String
   repeatInterval Int // e.g., 1
   repeatUnit     String // "Days", "Weeks"
   timesPerDay    Int       @default(1) // How many times within that day
-  endByDate      DateTime?
+  // The optional calendar day this schedule ends, as `yyyy-MM-dd`. Not an
+  // instant. See docs/calendar-days.md.
+  endByDate      String?
 
   animalId String @map("animal_id")
   animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
@@ -1247,9 +1274,9 @@ model FosterPlacement {
   id   String              @id @default(cuid())
   type FosterPlacementType
 
-  startDate       DateTime  @default(now()) @map(name: "start_date")
-  expectedEndDate DateTime? @map(name: "expected_end_date")
-  endDate         DateTime? @map(name: "end_date")
+  startDate       String    @map(name: "start_date")
+  expectedEndDate String?   @map(name: "expected_end_date")
+  endDate         String?   @map(name: "end_date")
 
   returnReason FosterReturnReason? @map(name: "return_reason")
   returnNotes  String?             @map(name: "return_notes")
@@ -1367,7 +1394,7 @@ model Task {
   status   TaskStatus   @default(TODO)
   priority TaskPriority @default(MEDIUM)
   category TaskCategory
-  dueDate  DateTime?    @map(name: "due_date") // Optional due date for the task
+  dueDate  String?      @map(name: "due_date") // Optional due date for the task (yyyy-MM-dd)
 
   animalId String @map(name: "animal_id")
   animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)

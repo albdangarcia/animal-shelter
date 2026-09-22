@@ -1,5 +1,6 @@
 import { fetchPartners } from "@/app/lib/data/animals/animal.data";
 import { OutcomeForm } from "@/components/dashboard/outcomes/outcome-form";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { fetchOutcomeById } from "@/app/lib/data/animals/outcome.data";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -46,6 +47,7 @@ const EditOutcomePage = async ({ params }: Props) => {
         application={application || undefined}
         partners={partners}
         canCreatePerson={canCreatePerson}
+        today={await getShelterToday()}
       />
     </main>
   );

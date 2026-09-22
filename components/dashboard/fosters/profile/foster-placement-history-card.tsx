@@ -1,3 +1,4 @@
+import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,7 +16,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDateOrNA } from "@/app/lib/utils/date-utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { FosterProfileForTab } from "@/app/lib/data/fosters/fosters.data";
 
@@ -68,10 +68,10 @@ export function FosterPlacementHistoryCard({
                       {formatSingleEnumOption(placement.type)}
                     </Badge>
                   </TableCell>
-                  <TableCell>{formatDateOrNA(placement.startDate)}</TableCell>
+                  <TableCell>{formatShelterDayOrNA(placement.startDate)}</TableCell>
                   <TableCell>
                     {placement.endDate ? (
-                      formatDateOrNA(placement.endDate)
+                      formatShelterDayOrNA(placement.endDate)
                     ) : (
                       <span className="text-muted-foreground italic">
                         Ongoing

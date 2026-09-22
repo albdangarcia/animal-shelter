@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import type {
   IntakeType,
@@ -8,6 +9,10 @@ import type {
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
+import {
+  calendarDay,
+  startOfShelterDay,
+} from "@/app/lib/utils/shelter-day";
 
 const PER_SOURCE_LIMIT = 15;
 
@@ -129,16 +134,20 @@ const _fetchPersonActivity = async (
       return { activity: [] };
     }
 
+    const timezone = (await getShelterSettings()).timezone;
     const activity: PersonActivityEntry[] = [
+      // An intake and an outcome are dated by a calendar day; everything else
+      // in this feed is a timestamp. They share one sorted list, so each day
+      // is placed at the instant it begins on the shelter's calendar.
       ...person.processedIntakes.map((intake) => ({
         kind: "INTAKE_PROCESSED" as const,
-        date: intake.intakeDate,
+        date: startOfShelterDay(calendarDay(intake.intakeDate), timezone),
         animal: intake.animal,
         intakeType: intake.type,
       })),
       ...person.processedOutcomes.map((outcome) => ({
         kind: "OUTCOME_PROCESSED" as const,
-        date: outcome.outcomeDate,
+        date: startOfShelterDay(calendarDay(outcome.outcomeDate), timezone),
         animal: outcome.animal,
         outcomeType: outcome.type,
       })),

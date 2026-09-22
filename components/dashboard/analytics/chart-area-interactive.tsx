@@ -31,6 +31,16 @@ type ChartAreaInteractiveProps = {
   data: ChartData;
 };
 
+// The axis value is a `yyyy-MM-dd` shelter day. `new Date` reads it as UTC
+// midnight, so it is formatted in UTC too — in the viewer's zone it would drift
+// to the previous day anywhere west of Greenwich.
+const formatChartDay = (day: string) =>
+  new Date(day).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
+
 const chartConfig = {
   intakes: {
     label: "Intakes",
@@ -141,11 +151,7 @@ export function ChartAreaInteractive({ data }: ChartAreaInteractiveProps) {
               tickMargin={8}
               minTickGap={32}
               tickFormatter={(value) => {
-                const date = new Date(value);
-                return date.toLocaleDateString("en-US", {
-                  month: "short",
-                  day: "numeric",
-                });
+                return formatChartDay(value);
               }}
             />
             <ChartTooltip
@@ -153,13 +159,7 @@ export function ChartAreaInteractive({ data }: ChartAreaInteractiveProps) {
               content={
                 <ChartTooltipContent
                   labelFormatter={(value) => {
-                    return new Date(value as string).toLocaleDateString(
-                      "en-US",
-                      {
-                        month: "short",
-                        day: "numeric",
-                      },
-                    );
+                    return formatChartDay(value as string);
                   }}
                   indicator="dot"
                 />

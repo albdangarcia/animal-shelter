@@ -1,12 +1,12 @@
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { format, parseISO } from "date-fns";
-import { formatInTimeZone } from "date-fns-tz";
 
 import prisma from "@/app/lib/prisma";
 import { IntakeType } from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import { resolveReportRange } from "@/app/lib/utils/report-date-utils";
-import { SHELTER_TIMEZONE } from "@/app/lib/constants/constants";
+import { calendarDay } from "@/app/lib/utils/shelter-day";
 import { parseSpeciesIds, speciesWhere } from "./report-shared.data";
 
 // Maximum number of source partners listed in the transfers-in table.
@@ -50,8 +50,7 @@ export type IntakeReport = {
 
 /**
  * Continuous list of `"yyyy-MM"` month keys from `fromLabel`'s month through
- * `toLabel`'s month, inclusive. The labels are already resolved in the shelter
- * timezone, so their month prefix is the correct calendar month for that zone.
+ * `toLabel`'s month, inclusive.
  */
 function monthKeysInRange(fromLabel: string, toLabel: string): string[] {
   let [year, month] = fromLabel.slice(0, 7).split("-").map(Number);
@@ -86,10 +85,10 @@ const _fetchIntakeReport = async (
   species?: string,
 ): Promise<IntakeReport> => {
   try {
-    const range = resolveReportRange(from, to);
+    const range = resolveReportRange(from, to, await getShelterToday());
     const speciesIds = parseSpeciesIds(species);
     const where = {
-      intakeDate: { gte: range.gte, lt: range.lt },
+      intakeDate: { gte: range.fromLabel, lte: range.toLabel },
       ...speciesWhere(speciesIds),
     };
 
@@ -133,12 +132,12 @@ const _fetchIntakeReport = async (
         ? { type: byType[0].type, count: byType[0].count }
         : null;
 
-    // Bucket intakes by calendar month in the shelter timezone, then emit a
-    // continuous zero-filled series so the chart has no gaps. Grouping by month
-    // in the DB can't express timezone-aware truncation, so we do it in JS.
+    // Bucket intakes by calendar month, then emit a continuous zero-filled
+    // series so the chart has no gaps. A day's month is the first seven
+    // characters of the day itself.
     const bucket = new Map<string, number>();
     for (const { intakeDate } of intakeDates) {
-      const key = formatInTimeZone(intakeDate, SHELTER_TIMEZONE, "yyyy-MM");
+      const key = calendarDay(intakeDate).slice(0, 7);
       bucket.set(key, (bucket.get(key) ?? 0) + 1);
     }
     const monthlySeries: MonthlyIntakePoint[] = monthKeysInRange(

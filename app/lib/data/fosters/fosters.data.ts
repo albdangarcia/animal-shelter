@@ -1,3 +1,4 @@
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import { AnimalListingStatus, FosterStatus } from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
@@ -11,6 +12,7 @@ import {
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { computeStays, type StayEvent } from "@/app/lib/utils/stay-utils";
+import { calendarDay } from "@/app/lib/utils/shelter-day";
 import { ANIMAL_IMAGE_ORDER } from "@/app/lib/utils/animal-image-order";
 
 export type FosterPickerOption = {
@@ -57,7 +59,7 @@ export type FosterableAnimalOption = {
   name: string;
   speciesName: string;
   breed: string | null;
-  birthDate: Date;
+  birthDate: string;
   thumbnailUrl: string | null; // first animal image, or null for the fallback glyph
 };
 
@@ -94,24 +96,24 @@ const _fetchAnimalsEligibleForFosterPlacement = async (): Promise<
       orderBy: { name: "asc" },
     });
 
-    const now = new Date();
+    const today = await getShelterToday();
     return animals
       .filter((animal) => {
         const events: StayEvent[] = [
           ...animal.intake.map(
             (intake): StayEvent => ({
               kind: "intake",
-              date: intake.intakeDate,
+              date: calendarDay(intake.intakeDate),
             }),
           ),
           ...animal.Outcome.map(
             (outcome): StayEvent => ({
               kind: "outcome",
-              date: outcome.outcomeDate,
+              date: calendarDay(outcome.outcomeDate),
             }),
           ),
         ];
-        return computeStays(events, now).isInCare;
+        return computeStays(events, today).isInCare;
       })
       .map((animal) => ({
         id: animal.id,
@@ -169,12 +171,15 @@ const _fetchAnimalForFosterPlacement = async (
 
     const events: StayEvent[] = [
       ...animal.intake.map(
-        (intake): StayEvent => ({ kind: "intake", date: intake.intakeDate }),
+        (intake): StayEvent => ({
+          kind: "intake",
+          date: calendarDay(intake.intakeDate),
+        }),
       ),
       ...animal.Outcome.map(
         (outcome): StayEvent => ({
           kind: "outcome",
-          date: outcome.outcomeDate,
+          date: calendarDay(outcome.outcomeDate),
         }),
       ),
     ];
@@ -184,7 +189,7 @@ const _fetchAnimalForFosterPlacement = async (
       name: animal.name,
       listingStatus: animal.listingStatus,
       currentUnitId: animal.currentUnitId,
-      isInCare: computeStays(events, new Date()).isInCare,
+      isInCare: computeStays(events, await getShelterToday()).isInCare,
       hasOpenPlacement: animal.fosterPlacements.length > 0,
     };
   } catch (error) {
@@ -434,7 +439,7 @@ export const fetchFosters = RequirePermission(AppPermissions.FOSTERS_READ)(
 const fosterProfileForTabInclude = {
   speciesCapabilities: { select: { id: true, name: true } },
   placements: {
-    orderBy: { startDate: "desc" },
+    orderBy: [{ startDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     include: { animal: { select: { id: true, name: true } } },
   },
 } satisfies Prisma.FosterProfileInclude;

@@ -48,7 +48,7 @@ async function createFixture() {
   const animal = await prisma.animal.create({
     data: {
       name: `Audit Animal ${tag}`,
-      birthDate: new Date("2020-01-01"),
+      birthDate: "2020-01-01",
       sex: Sex.UNKNOWN,
       speciesId: species.id,
       primaryColorId: color.id,

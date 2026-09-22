@@ -3,6 +3,7 @@ import { z } from "zod";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { requireFor } from "@/app/lib/auth/actor";
 import { _fetchAttentionQueue } from "@/app/lib/data/animals/attention-queue.data";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { actorContextSchema } from "../context";
 import {
   toAttentionQueueView,
@@ -42,8 +43,11 @@ export const getAttentionQueueTool = tool({
       for (const permission of GET_ATTENTION_QUEUE_PERMISSIONS) {
         requireFor(context, permission);
       }
-      const items = await _fetchAttentionQueue();
-      return { ok: true, queue: toAttentionQueueView(items) };
+      const [items, today] = await Promise.all([
+        _fetchAttentionQueue(),
+        getShelterToday(),
+      ]);
+      return { ok: true, queue: toAttentionQueueView(items, today) };
     } catch (error) {
       return toolFailure(describeToolError(error));
     }

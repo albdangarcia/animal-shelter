@@ -6,7 +6,9 @@ import { categories, priorities, statuses } from "./task-options";
 import { DataTableRowActions } from "./task-table-row-actions";
 import { FetchAnimalTasksPayload } from "@/app/lib/data/animals/animal-task.data";
 import { TaskAssignee } from "@/app/lib/types";
-import { formatDateOrNA, formatDueDate } from "@/app/lib/utils/date-utils";
+import { formatDueDay } from "@/app/lib/utils/date-utils";
+import { FormattedDate } from "@/components/common/formatted-date";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { DataTableColumnHeader } from "@/components/table-common/data-table-column-header";
 import { AssigneeCell } from "@/components/table-common/assignee-cell";
 import { updateAnimalTaskAssignee } from "@/app/lib/actions/animal-task.actions";
@@ -15,12 +17,19 @@ export interface GetColumnsProps {
   animalId: string;
   assigneeList: TaskAssignee[];
   canManage: boolean;
+  /**
+   * Today on the shelter's calendar, resolved on the server and handed down.
+   * A due date is a calendar day and the browser is not told the shelter's
+   * timezone, so "is this overdue" cannot be answered here without it.
+   */
+  today: CalendarDay;
 }
 
 export const getColumns = ({
   animalId,
   assigneeList,
   canManage,
+  today,
 }: GetColumnsProps): ColumnDef<StockFeatures, FetchAnimalTasksPayload>[] => [
   {
     accessorKey: "title",
@@ -154,7 +163,9 @@ export const getColumns = ({
     },
     cell: ({ row }) => {
       const task = row.original;
-      const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
+      // Two calendar days compared as the plain strings they are, against the
+      // shelter's day rather than this browser's clock.
+      const isOverdue = task.dueDate !== null && task.dueDate < today;
 
       const activeStatuses = ["TODO", "IN_PROGRESS"];
       const isOverdueAndActive =
@@ -162,10 +173,10 @@ export const getColumns = ({
 
       return isOverdueAndActive ? (
         <Badge variant="destructive">
-          {formatDueDate(task.dueDate, task.status)}
+          {formatDueDay(task.dueDate, task.status, today)}
         </Badge>
       ) : (
-        <span>{formatDueDate(task.dueDate, task.status)}</span>
+        <span>{formatDueDay(task.dueDate, task.status, today)}</span>
       );
     },
   },
@@ -179,7 +190,7 @@ export const getColumns = ({
     },
     cell: ({ row }) => {
       const date = row.getValue("createdAt") as string | Date | null;
-      return <span>{formatDateOrNA(date)}</span>;
+      return <FormattedDate date={date} />;
     },
   },
   {
@@ -190,6 +201,7 @@ export const getColumns = ({
         assigneeList={assigneeList}
         animalId={animalId}
         canManage={canManage}
+        today={today}
       />
     ),
   },

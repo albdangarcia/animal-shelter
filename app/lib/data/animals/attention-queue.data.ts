@@ -2,6 +2,8 @@ import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import { AnimalListingStatus, TaskStatus } from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
+import { calendarDay } from "@/app/lib/utils/shelter-day";
 import { RequireAllPermissions } from "../../auth/protected-actions";
 import {
   ACUTE_HEALTH_STATUSES,
@@ -19,7 +21,7 @@ export type { AttentionQueueItem, AttentionReason } from "./attention-queue";
 // exist on purpose — changing either would break the other's consumer.
 //
 // Signals:
-//   1. Task overdue or due today (status TODO/IN_PROGRESS, dueDate <= end of today)
+//   1. Task overdue or due today (status TODO/IN_PROGRESS, dueDate <= today)
 //   2. Acute health status (see ACUTE_HEALTH_STATUSES) with no open task
 //   3. Open foster placement past its expectedEndDate
 //
@@ -68,24 +70,14 @@ const toAttentionAnimal = (animal: AttentionAnimalRow): AttentionAnimal => ({
 // export below stays for server components.
 export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
   try {
-    const now = new Date();
-    // Signal 1 counts a task due at any point today ("<= end of today").
-    const endOfToday = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      23,
-      59,
-      59,
-      999,
-    );
-    // Signal 3 is "expectedEndDate < today" — strictly before today, so a
-    // placement expected to end today is not yet overdue.
-    const startOfToday = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-    );
+    // Both deadline columns hold a calendar day, so both boundaries are one
+    // day compared as a plain string — resolved on the shelter's calendar,
+    // which is the only place "today" means anything here.
+    //
+    // Signal 1 counts a task due at any point today, so `<= today`. Signal 3
+    // is strictly before today, so a placement expected to end today is not
+    // yet overdue.
+    const today = await getShelterToday();
 
     const notArchived = {
       listingStatus: { not: AnimalListingStatus.ARCHIVED },
@@ -97,7 +89,7 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
       prisma.task.findMany({
         where: {
           status: { in: OPEN_TASK_STATUSES },
-          dueDate: { lte: endOfToday },
+          dueDate: { lte: today },
           animal: notArchived,
         },
         select: {
@@ -124,7 +116,7 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
       prisma.fosterPlacement.findMany({
         where: {
           endDate: null,
-          expectedEndDate: { lt: startOfToday },
+          expectedEndDate: { lt: today },
           animal: notArchived,
         },
         select: {
@@ -143,8 +135,8 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
         animal: toAttentionAnimal(task.animal),
         taskId: task.id,
         title: task.title,
-        // `lte: endOfToday` guarantees a non-null dueDate here.
-        dueDate: task.dueDate as Date,
+        // `lte: today` guarantees a non-null dueDate here.
+        dueDate: calendarDay(task.dueDate!),
         priority: task.priority,
       })),
       acuteHealth: acuteHealth.map((animal) => ({
@@ -155,7 +147,7 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
       fostersOverdue: fostersOverdue.map((placement) => ({
         animal: toAttentionAnimal(placement.animal),
         placementId: placement.id,
-        expectedEndDate: placement.expectedEndDate as Date,
+        expectedEndDate: calendarDay(placement.expectedEndDate!),
         fosterName: placement.fosterProfile.person.name,
       })),
     });

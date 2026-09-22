@@ -2,7 +2,7 @@
 
 import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
-import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import { DataTableColumnHeader } from "@/components/table-common/data-table-column-header";
 import { AnimalsRequiringAttentionPayload } from "@/app/lib/data/analytics.data";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
@@ -48,8 +48,9 @@ export const healthColumns: ColumnDef<StockFeatures, AnimalsRequiringAttentionPa
       displayName: "Intake Date",
     },
     cell: ({ row }) => {
-      const date = row.getValue("intakeDate") as string | Date | null;
-      return <span>{formatDateOrNA(date)}</span>;
+      // The column holds a calendar day; a table cell reads it untyped.
+      const day = row.getValue("intakeDate") as string | null;
+      return <span>{formatShelterDayOrNA(day)}</span>;
     },
   },
   {

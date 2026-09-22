@@ -90,7 +90,7 @@ export type AnimalSectionCardPayload = Prisma.AnimalGetPayload<{
     };
     intake: {
       select: { intakeDate: true };
-      orderBy: { intakeDate: "desc" };
+      orderBy: [{ intakeDate: "desc" }, { createdAt: "desc" }];
       take: 1;
     };
     // Last two weigh-ins (non-deleted, non-null weight), newest first — enough

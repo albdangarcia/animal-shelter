@@ -3,6 +3,7 @@ import {
   fetchAnimalForOutcomeForm,
 } from "@/app/lib/data/animals/animal.data";
 import { OutcomeForm } from "@/components/dashboard/outcomes/outcome-form";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { fetchAdoptionApplicationById } from "@/app/lib/data/user-adoption-application.data";
 import { SearchParamsType } from "@/app/lib/types";
 import { notFound } from "next/navigation";
@@ -76,6 +77,7 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
           suggestedOwnerId={suggestedOwner?.id}
           suggestedOwnerLabel={suggestedOwner?.name}
           canCreatePerson={canCreatePerson}
+          today={await getShelterToday()}
         />
       )}
     </main>

@@ -13,6 +13,7 @@ import { fetchAllAnimalsTasks } from "@/app/lib/data/all-animal-tasks.data";
 import { fetchTaskAssigneeList } from "@/app/lib/data/animals/animal-task.data";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -34,17 +35,19 @@ const Page = async ({ searchParams }: Props) => {
   // Whether the current user can manage tasks (edit assignee/status, delete, edit form).
   // Volunteers have ANIMAL_TASK_READ only; staff/admin have ANIMAL_TASK_MANAGE.
   // fetchAllAnimalsTasks doesn't depend on canManage, so run them in parallel.
-  const [canManage, { tasks, totalPages, totalRows }] = await Promise.all([
-    hasPermission(AppPermissions.ANIMAL_TASK_MANAGE),
-    fetchAllAnimalsTasks(
-      query,
-      currentPage,
-      category,
-      status,
-      currentPageSize,
-      sort
-    ),
-  ]);
+  const [canManage, { tasks, totalPages, totalRows }, today] =
+    await Promise.all([
+      hasPermission(AppPermissions.ANIMAL_TASK_MANAGE),
+      fetchAllAnimalsTasks(
+        query,
+        currentPage,
+        category,
+        status,
+        currentPageSize,
+        sort
+      ),
+      getShelterToday(),
+    ]);
 
   // Only fetch the assignee list when the user can manage tasks.
   // fetchTaskAssigneeList is itself gated behind ANIMAL_TASK_MANAGE and would
@@ -70,7 +73,7 @@ const Page = async ({ searchParams }: Props) => {
                 getColumns={getColumns}
                 ToolbarComponent={TasksDataTableToolbar}
                 totalPages={totalPages}
-                columnProps={{ assigneeList, canManage }}
+                columnProps={{ assigneeList, canManage, today }}
                 totalRows={totalRows}
               />
             </div>

@@ -1,5 +1,7 @@
 "use server";
 
+import { getPhoneSearchSettings } from "@/app/lib/data/shelter-settings.data";
+
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
@@ -95,8 +97,9 @@ const findDuplicate = async (
 
   const emailMatches =
     Boolean(values.email && duplicate.email?.toLowerCase() === values.email.toLowerCase());
-  const normalizedInputPhone = normalizePhone(values.phone);
-  const normalizedDuplicatePhone = normalizePhone(duplicate.phone);
+  const country = (await getPhoneSearchSettings()).defaultPhoneCountry;
+  const normalizedInputPhone = normalizePhone(values.phone, country);
+  const normalizedDuplicatePhone = normalizePhone(duplicate.phone, country);
   const phoneMatches =
     Boolean(normalizedInputPhone && normalizedInputPhone === normalizedDuplicatePhone);
 

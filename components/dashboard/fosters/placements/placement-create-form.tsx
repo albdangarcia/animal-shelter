@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
+import { parseISO } from "date-fns";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -34,10 +35,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { DateField } from "@/components/forms/date-field";
-import { isFosterPlacementOverdue } from "@/app/lib/utils/date-utils";
+import { DayField } from "@/components/forms/day-field";
 import { createFosterPlacement } from "@/app/lib/actions/foster-placement.actions";
-import { CreateFosterPlacementSchema } from "@/app/lib/zod-schemas/foster.schemas";
+import { createFosterPlacementSchema } from "@/app/lib/zod-schemas/foster.schemas";
+import { type CalendarDay } from "@/app/lib/utils/shelter-day";
 import { fosterPlacementTypeOptions } from "@/app/lib/utils/enum-formatter";
 import {
   FosterPickerOption,
@@ -46,7 +47,11 @@ import {
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { AnimalCombobox } from "./animal-combobox";
 
-type PlacementCreateFormValues = z.input<typeof CreateFosterPlacementSchema>;
+// The INPUT side: while the form is being filled in, the expected return date
+// is still the plain `yyyy-MM-dd` string the picker writes.
+type PlacementCreateFormValues = z.input<
+  ReturnType<typeof createFosterPlacementSchema>
+>;
 
 interface PlacementCreateFormProps {
   // Exactly one side is "fixed" (the entry point) — the other is chosen from
@@ -55,6 +60,13 @@ interface PlacementCreateFormProps {
   fixedFoster?: { id: string; personName: string };
   fosterOptions?: FosterPickerOption[];
   animalOptions?: FosterableAnimalOption[];
+  /**
+   * Today, on the shelter's calendar, resolved on the server and handed down.
+   * The browser is not told the shelter's timezone, so it cannot work this out
+   * for itself. The action re-checks the same rule against the day it resolves
+   * itself, and that is the check that decides.
+   */
+  today: CalendarDay;
 }
 
 export function PlacementCreateForm({
@@ -62,6 +74,7 @@ export function PlacementCreateForm({
   fixedFoster,
   fosterOptions = [],
   animalOptions = [],
+  today,
 }: PlacementCreateFormProps) {
   const [isPending, startSubmitTransition] = useTransition();
   const router = useRouter();
@@ -71,7 +84,7 @@ export function PlacementCreateForm({
     : "/dashboard/fosters";
 
   const form = useForm<PlacementCreateFormValues>({
-    resolver: standardSchemaResolver(CreateFosterPlacementSchema),
+    resolver: standardSchemaResolver(createFosterPlacementSchema(today)),
     defaultValues: {
       animalId: fixedAnimal?.id ?? "",
       fosterProfileId: fixedFoster?.id ?? "",
@@ -221,7 +234,7 @@ export function PlacementCreateForm({
               )}
             />
 
-            <DateField
+            <DayField
               control={form.control}
               name="expectedEndDate"
               label="Expected Return Date"
@@ -230,9 +243,10 @@ export function PlacementCreateForm({
               placeholder="No expected date"
               iconPosition="leading"
               clearable
-              // The same rule the schema and the overdue badge use, so the
-              // picker can't offer a date the server would reject.
-              disabledDates={isFosterPlacementOverdue}
+              // The same boundary the schema and the overdue badge use, so the
+              // picker can't offer a day the server would reject. The grid
+              // works in local dates, so the shelter's day is read as one.
+              disabledDates={(date) => date < parseISO(today)}
             />
 
             <FormField

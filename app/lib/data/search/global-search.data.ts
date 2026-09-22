@@ -1,3 +1,4 @@
+import { getPhoneSearchSettings } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import {
   runGlobalSearch,
@@ -14,6 +15,7 @@ export const searchEverything = async (
   groups: readonly GlobalSearchGroup[],
 ): Promise<GlobalSearchResults> => {
   try {
+    if (groups.includes("people")) await getPhoneSearchSettings();
     return await runGlobalSearch(prisma, query, groups);
   } catch (error) {
     console.error("Error running global search.", error);

@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import {
@@ -14,7 +15,6 @@ import type { ReadinessBlocker } from "@/app/lib/readiness/compute-readiness";
 import {
   blockerAction,
   describeBlocker,
-  formatShelterDate,
   stageLabel,
   type ReadinessBlockerKind,
   type ReadinessBoard as ReadinessBoardData,
@@ -23,6 +23,10 @@ import {
   type ReadinessPlacement,
   type ReadinessViewerCan,
 } from "@/app/lib/readiness/board";
+import {
+  formatShelterDay,
+  shelterDayKey,
+} from "@/app/lib/utils/shelter-day";
 import { SimplePagination } from "@/components/simple-pagination";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -140,7 +144,7 @@ function boardHref(
   return query ? `/dashboard/readiness?${query}` : "/dashboard/readiness";
 }
 
-function BlockedFor({ row }: { row: ReadinessBoardRow }) {
+function BlockedFor({ row, timezone }: { row: ReadinessBoardRow; timezone: string }) {
   if (row.since === null || row.blockedDays === null) {
     return (
       <span className="text-muted-foreground" title="The app doesn't record when this began.">
@@ -158,7 +162,7 @@ function BlockedFor({ row }: { row: ReadinessBoardRow }) {
         dateTime={row.since.toISOString()}
         className="text-xs text-muted-foreground"
       >
-        since {formatShelterDate(row.since)}
+        since {formatShelterDay(shelterDayKey(row.since, timezone))}
       </time>
     </div>
   );
@@ -174,7 +178,9 @@ function GroupSection({
   totalCount,
   can,
   footer,
+  timezone,
 }: {
+  timezone: string;
   kind: ReadinessBlockerKind;
   rows: ReadinessBoardRow[];
   totalCount: number;
@@ -240,7 +246,7 @@ function GroupSection({
                   <TableCell>{placementLabel(row.animal.placement)}</TableCell>
                   <TableCell>{stageLabel(row.animal.listingStatus)}</TableCell>
                   <TableCell>
-                    <BlockedFor row={row} />
+                    <BlockedFor row={row} timezone={timezone} />
                   </TableCell>
                   <TableCell className="pr-4 whitespace-normal">
                     <ul
@@ -264,7 +270,7 @@ function GroupSection({
                             key={blockerKey(blocker)}
                             className="flex flex-wrap items-baseline gap-x-2"
                           >
-                            {!named && <span>{describeBlocker(blocker)}</span>}
+                            {!named && <span>{describeBlocker(blocker, timezone)}</span>}
                             <Link
                               href={action.href}
                               className="inline-flex items-center gap-1 text-sm font-medium text-primary underline decoration-primary/30 underline-offset-4 hover:decoration-primary"
@@ -347,10 +353,12 @@ function OverviewGroups({
   board,
   can,
   filterParams,
+  timezone,
 }: {
   board: Extract<ReadinessBoardData, { view: "overview" }>;
   can: ReadinessViewerCan;
   filterParams: ReadinessFilterParams;
+  timezone: string;
 }) {
   const groups = board.groups.filter((g) => g.totalCount > 0);
 
@@ -366,6 +374,7 @@ function OverviewGroups({
             rows={group.rows}
             totalCount={group.totalCount}
             can={can}
+            timezone={timezone}
             footer={
               group.totalCount > group.rows.length ? (
                 <div className="border-t px-4 py-2.5">
@@ -397,9 +406,11 @@ function OverviewGroups({
 function DetailGroup({
   board,
   can,
+  timezone,
 }: {
   board: Extract<ReadinessBoardData, { view: "detail" }>;
   can: ReadinessViewerCan;
+  timezone: string;
 }) {
   return (
     <GroupSection
@@ -407,6 +418,7 @@ function DetailGroup({
       rows={board.rows}
       totalCount={board.totalRows}
       can={can}
+      timezone={timezone}
       footer={
         board.totalPages > 1 ? (
           <div className="border-t px-4 py-3">
@@ -425,7 +437,8 @@ interface Props {
   filterParams: ReadinessFilterParams;
 }
 
-export function ReadinessBoard({ board, filterOptions, can, filterParams }: Props) {
+export async function ReadinessBoard({ board, filterOptions, can, filterParams }: Props) {
+  const timezone = (await getShelterSettings()).timezone;
   const ready = board.animalCount - board.blockedCount;
 
   return (
@@ -454,9 +467,9 @@ export function ReadinessBoard({ board, filterOptions, can, filterParams }: Prop
         </div>
 
         {board.view === "overview" ? (
-          <OverviewGroups board={board} can={can} filterParams={filterParams} />
+          <OverviewGroups board={board} can={can} filterParams={filterParams} timezone={timezone} />
         ) : (
-          <DetailGroup board={board} can={can} />
+          <DetailGroup board={board} can={can} timezone={timezone} />
         )}
       </CardContent>
     </Card>

@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import {
@@ -162,6 +163,7 @@ export const loadAssessmentCharacteristicsSummary = async (
     assessment: found.recorded,
     deleted: found.deletedAt !== null,
     ...findings,
+    timezone: (await getShelterSettings()).timezone,
   });
   return { ...summary, assessment: found.recorded, deletedAt: found.deletedAt };
 };

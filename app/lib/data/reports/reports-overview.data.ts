@@ -1,3 +1,4 @@
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import type { IntakeType, OutcomeType } from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -41,13 +42,13 @@ const _fetchOutcomeSummary = async (
   species?: string,
 ): Promise<OutcomeSummary> => {
   try {
-    const range = resolveReportRange(from, to);
+    const range = resolveReportRange(from, to, await getShelterToday());
     const speciesIds = parseSpeciesIds(species);
 
     const grouped = await prisma.outcome.groupBy({
       by: ["type"],
       where: {
-        outcomeDate: { gte: range.gte, lt: range.lt },
+        outcomeDate: { gte: range.fromLabel, lte: range.toLabel },
         ...speciesWhere(speciesIds),
       },
       _count: { id: true },
@@ -85,13 +86,13 @@ const _fetchIntakeSummary = async (
   species?: string,
 ): Promise<IntakeSummary> => {
   try {
-    const range = resolveReportRange(from, to);
+    const range = resolveReportRange(from, to, await getShelterToday());
     const speciesIds = parseSpeciesIds(species);
 
     const grouped = await prisma.intake.groupBy({
       by: ["type"],
       where: {
-        intakeDate: { gte: range.gte, lt: range.lt },
+        intakeDate: { gte: range.fromLabel, lte: range.toLabel },
         ...speciesWhere(speciesIds),
       },
       _count: { id: true },
@@ -126,16 +127,16 @@ const _fetchBalanceSummary = async (
   species?: string,
 ): Promise<BalanceSummary> => {
   try {
-    const range = resolveReportRange(from, to);
+    const range = resolveReportRange(from, to, await getShelterToday());
     const speciesIds = parseSpeciesIds(species);
     const filter = speciesWhere(speciesIds);
 
     const [intakes, outcomes] = await Promise.all([
       prisma.intake.count({
-        where: { intakeDate: { gte: range.gte, lt: range.lt }, ...filter },
+        where: { intakeDate: { gte: range.fromLabel, lte: range.toLabel }, ...filter },
       }),
       prisma.outcome.count({
-        where: { outcomeDate: { gte: range.gte, lt: range.lt }, ...filter },
+        where: { outcomeDate: { gte: range.fromLabel, lte: range.toLabel }, ...filter },
       }),
     ]);
 
@@ -162,9 +163,9 @@ const _fetchLengthOfStaySummary = async (
   species?: string,
 ): Promise<LengthOfStaySummary> => {
   try {
-    const range = resolveReportRange(from, to);
+    const today = await getShelterToday();
+    const range = resolveReportRange(from, to, today);
     const speciesIds = parseSpeciesIds(species);
-    const now = new Date();
 
     // PERF: this walks every animal's full intake/outcome history in memory
     // (O(animals)). Acceptable at current shelter scale; if the animal count
@@ -178,15 +179,15 @@ const _fetchLengthOfStaySummary = async (
     for (const animal of animals) {
       const { stays, isInCare, currentStayDays } = computeStays(
         animal.events,
-        now,
+        today,
       );
 
       // Headline median counts completed stays whose outcome falls in-range.
       for (const stay of stays) {
         if (
           stay.outcomeDate &&
-          stay.outcomeDate >= range.gte &&
-          stay.outcomeDate < range.lt
+          stay.outcomeDate >= range.fromLabel &&
+          stay.outcomeDate <= range.toLabel
         ) {
           completedStayDays.push(stay.days);
         }

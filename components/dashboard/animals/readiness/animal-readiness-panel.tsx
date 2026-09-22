@@ -1,3 +1,4 @@
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import Link from "next/link";
 import { IconArrowRight, IconCircleCheck } from "@tabler/icons-react";
 import type { ReadinessBlocker } from "@/app/lib/readiness/compute-readiness";
@@ -26,7 +27,8 @@ interface Props {
   can: ReadinessViewerCan;
 }
 
-export function AnimalReadinessPanel({ animalId, blockers, can }: Props) {
+export async function AnimalReadinessPanel({ animalId, blockers, can }: Props) {
+  const timezone = (await getShelterSettings()).timezone;
   const ordered = orderBlockers(blockers);
 
   return (
@@ -65,7 +67,7 @@ export function AnimalReadinessPanel({ animalId, blockers, can }: Props) {
                     aria-hidden
                   />
                   <div className="flex flex-wrap items-baseline gap-x-2">
-                    <span>{describeBlocker(blocker)}</span>
+                    <span>{describeBlocker(blocker, timezone)}</span>
                     <Link
                       href={action.href}
                       className="inline-flex items-center gap-1 font-medium text-primary underline decoration-primary/30 underline-offset-4 hover:decoration-primary"

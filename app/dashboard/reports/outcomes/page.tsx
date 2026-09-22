@@ -9,7 +9,10 @@ import {
   formatRangeLabel,
   resolveReportRange,
 } from "@/app/lib/utils/report-date-utils";
-import { SHELTER_TIMEZONE } from "@/app/lib/constants/constants";
+import {
+  getShelterSettings,
+  getShelterToday,
+} from "@/app/lib/data/shelter-settings.data";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { fetchSpecies } from "@/app/lib/data/animals/animal.data";
 import { fetchOutcomeReport } from "@/app/lib/data/reports/outcome-report.data";
@@ -85,7 +88,8 @@ const PageContent = async ({ searchParams }: Props) => {
   const parsed = ReportParamsSchema.safeParse(raw);
   const { from, to, species } = parsed.success ? parsed.data : {};
 
-  const range = resolveReportRange(from, to);
+  const timezone = (await getShelterSettings()).timezone;
+  const range = resolveReportRange(from, to, await getShelterToday());
   const [speciesList, report] = await Promise.all([
     fetchSpecies(),
     fetchOutcomeReport(from, to, species),
@@ -126,7 +130,7 @@ const PageContent = async ({ searchParams }: Props) => {
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{formatRangeLabel(range)}</span>
           <span className="text-muted-foreground text-xs">
-            · Times counted in {SHELTER_TIMEZONE}
+            · Times counted in {timezone}
           </span>
           <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
             <ReportRangePicker />
@@ -224,7 +228,7 @@ const PageContent = async ({ searchParams }: Props) => {
         Live release rate = (adoption + return to owner + transfer out) ÷ total
         outcomes, following Shelter Animals Count conventions. Euthanized,
         deceased, and other count as non-live. Date boundaries computed in{" "}
-        {SHELTER_TIMEZONE}.
+        {timezone}.
       </p>
     </div>
   );

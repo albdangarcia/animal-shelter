@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DataTableColumnHeader } from "@/components/table-common/data-table-column-header";
-import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { FormattedDate } from "@/components/common/formatted-date";
 import { toolLabel } from "@/app/lib/data/ai-activity";
 import type { AiActivityLogRow } from "@/app/lib/data/ai-activity.data";
 import type { TaskStatus } from "@/prisma/generated/enums";
@@ -41,9 +41,10 @@ export const getColumns = ({
       <DataTableColumnHeader column={column} title="When" />
     ),
     cell: ({ row }) => (
-      <span className="whitespace-nowrap">
-        {formatDateOrNA(row.original.createdAt)}
-      </span>
+      <FormattedDate
+        date={row.original.createdAt}
+        className="whitespace-nowrap"
+      />
     ),
   },
   {

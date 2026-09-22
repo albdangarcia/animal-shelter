@@ -1,5 +1,7 @@
 "use client";
 
+import { calendarDay } from "@/app/lib/utils/shelter-day";
+
 import { useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,7 +36,7 @@ interface AnimalComboboxProps {
 // "Species · age · breed" — the line every row shares regardless of
 // whether it ends up being an ambiguous match.
 const detailLine = (animal: FosterableAnimalOption) => {
-  const age = calculateAgeString({ birthDate: animal.birthDate, simple: true });
+  const age = calculateAgeString({ birthDate: calendarDay(animal.birthDate), simple: true });
   return [animal.speciesName, age, animal.breed].filter(Boolean).join(" · ");
 };
 

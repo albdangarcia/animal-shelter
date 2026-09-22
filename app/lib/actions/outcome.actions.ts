@@ -27,7 +27,11 @@ import {
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import { CLOSURE_REASON_BY_OUTCOME } from "../utils/application-status";
-import { formatDateOrNA } from "../utils/date-utils";
+import {
+  calendarDay,
+  formatShelterDay,
+  type CalendarDay,
+} from "../utils/shelter-day";
 
 const OUTCOMES_PATH = "/dashboard/outcomes";
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
@@ -245,19 +249,11 @@ const _createOutcome = async (
 };
 
 interface OutcomeCorrectionFields {
-  outcomeDate: Date;
+  outcomeDate: CalendarDay;
   notes: string | null;
   destinationPartnerId: string | null;
   ownerId: string | null;
 }
-
-// The picker only offers whole days, and every surface that shows an outcome
-// date renders the day alone, so two dates that print the same are the same
-// date as far as a correction is concerned. Comparing what is rendered rather
-// than the instants themselves is what keeps a summary from ever naming a
-// change between two identical dates.
-const outcomeDateReadsTheSame = (before: Date, after: Date) =>
-  formatDateOrNA(before) === formatDateOrNA(after);
 
 // Names the fields that differ between the stored outcome and the submitted
 // one, in the register of the other activity summaries. Returns null when
@@ -270,9 +266,9 @@ const describeOutcomeCorrection = async (
 ): Promise<string | null> => {
   const changes: string[] = [];
 
-  if (!outcomeDateReadsTheSame(before.outcomeDate, after.outcomeDate)) {
+  if (before.outcomeDate !== after.outcomeDate) {
     changes.push(
-      `the date changed from ${formatDateOrNA(before.outcomeDate)} to ${formatDateOrNA(after.outcomeDate)}`,
+      `the date changed from ${formatShelterDay(before.outcomeDate)} to ${formatShelterDay(after.outcomeDate)}`,
     );
   }
 
@@ -392,17 +388,13 @@ const _updateOutcome = async (
 
     // The partner only applies to a transfer and the owner only to a return to
     // owner, so each is dropped for any other type.
+    //
+    // Re-picking the day already on record submits the same day back, so the
+    // comparison below finds nothing changed and no correction is logged for
+    // it. The picker cannot express anything finer than a day, which is what
+    // makes the comparison exact.
     const nextValues: OutcomeCorrectionFields = {
-      // Re-opening the picker and landing back on the stored day hands back a
-      // fresh local midnight rather than the instant on record. That is not a
-      // correction, so the recorded time of day is kept rather than being
-      // quietly overwritten by an edit to some other field.
-      outcomeDate: outcomeDateReadsTheSame(
-        existingOutcome.outcomeDate,
-        outcomeDate,
-      )
-        ? existingOutcome.outcomeDate
-        : outcomeDate,
+      outcomeDate,
       notes: notes || null,
       destinationPartnerId:
         outcomeType === OutcomeType.TRANSFER_OUT
@@ -413,7 +405,7 @@ const _updateOutcome = async (
     };
 
     const changeSummary = await describeOutcomeCorrection(
-      existingOutcome,
+      { ...existingOutcome, outcomeDate: calendarDay(existingOutcome.outcomeDate) },
       nextValues,
     );
 

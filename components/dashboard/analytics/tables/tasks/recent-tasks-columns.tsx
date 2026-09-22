@@ -2,7 +2,9 @@
 
 import type { ColumnDef, StockFeatures } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
-import { formatDateOrNA, formatDueDate } from "@/app/lib/utils/date-utils";
+import { formatDueDay } from "@/app/lib/utils/date-utils";
+import { FormattedDate } from "@/components/common/formatted-date";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { DataTableColumnHeader } from "@/components/table-common/data-table-column-header";
 import {
   categories,
@@ -12,10 +14,18 @@ import {
 import Link from "next/link";
 import { TaskAnalyticsPayload } from "@/app/lib/data/analytics.data";
 
-export const recentTasksColumns: ColumnDef<
-  StockFeatures,
-  TaskAnalyticsPayload
->[] = [
+export interface GetColumnsProps {
+  /**
+   * Today on the shelter's calendar, resolved on the server and handed down.
+   * A due date is a calendar day and the browser is not told the shelter's
+   * timezone, so "is this overdue" cannot be answered here without it.
+   */
+  today: CalendarDay;
+}
+
+export const getRecentTasksColumns = ({
+  today,
+}: GetColumnsProps): ColumnDef<StockFeatures, TaskAnalyticsPayload>[] => [
   {
     accessorKey: "title",
     header: ({ column }) => (
@@ -137,15 +147,17 @@ export const recentTasksColumns: ColumnDef<
     meta: { displayName: "Due Date" },
     cell: ({ row }) => {
       const task = row.original;
-      const isOverdue = task.dueDate && new Date(task.dueDate) < new Date();
+      // Two calendar days compared as the plain strings they are, against the
+      // shelter's day rather than this browser's clock.
+      const isOverdue = task.dueDate !== null && task.dueDate < today;
       const isOverdueAndActive =
         isOverdue && ["TODO", "IN_PROGRESS"].includes(task.status);
       return isOverdueAndActive ? (
         <Badge variant="destructive">
-          {formatDueDate(task.dueDate, task.status)}
+          {formatDueDay(task.dueDate, task.status, today)}
         </Badge>
       ) : (
-        <span>{formatDueDate(task.dueDate, task.status)}</span>
+        <span>{formatDueDay(task.dueDate, task.status, today)}</span>
       );
     },
   },
@@ -157,7 +169,7 @@ export const recentTasksColumns: ColumnDef<
     meta: { displayName: "Created At" },
     cell: ({ row }) => {
       const date = row.getValue("createdAt") as string | Date | null;
-      return <span>{formatDateOrNA(date)}</span>;
+      return <FormattedDate date={date} />;
     },
   },
 ];

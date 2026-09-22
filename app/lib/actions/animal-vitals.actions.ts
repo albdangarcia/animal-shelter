@@ -1,5 +1,7 @@
 "use server";
 
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
+
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
@@ -76,6 +78,7 @@ const _createVitalsEntry = async (
   const { weightGrams, recordedAt } = validatedFields.data;
 
   try {
+    const unitSystem = (await getShelterSettings()).weightUnitSystem;
     await prisma.$transaction(async (tx) => {
       // Captured before the insert so the activity log can note the change since
       // the prior weigh-in. This is a display convenience, not part of the cache
@@ -106,12 +109,13 @@ const _createVitalsEntry = async (
 
       let changeSummary = "Vitals recorded.";
       if (weightGrams != null) {
-        changeSummary = `Weight recorded: ${formatWeight(weightGrams)}`;
+        changeSummary = `Weight recorded: ${formatWeight(weightGrams, unitSystem)}`;
         if (previousWeighIn?.weightGrams != null) {
           const delta = weightGrams - previousWeighIn.weightGrams;
           if (delta !== 0) {
             changeSummary += ` (${delta > 0 ? "up" : "down"} ${formatWeight(
-              Math.abs(delta)
+              Math.abs(delta),
+              unitSystem,
             )})`;
           }
         }

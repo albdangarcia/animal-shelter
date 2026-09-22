@@ -1,6 +1,7 @@
 import prisma from "@/app/lib/prisma";
 import { OutcomeType } from "@/prisma/generated/enums";
 import { type StayEvent } from "@/app/lib/utils/stay-utils";
+import { calendarDay } from "@/app/lib/utils/shelter-day";
 import { cuidSchema } from "@/app/lib/zod-schemas/common.schemas";
 
 /**
@@ -90,12 +91,15 @@ export const _fetchAnimalStayEvents = async (
       speciesName: animal.species.name,
       events: [
         ...animal.intake.map(
-          (intake): StayEvent => ({ kind: "intake", date: intake.intakeDate }),
+          (intake): StayEvent => ({
+            kind: "intake",
+            date: calendarDay(intake.intakeDate),
+          }),
         ),
         ...animal.Outcome.map(
           (outcome): StayEvent => ({
             kind: "outcome",
-            date: outcome.outcomeDate,
+            date: calendarDay(outcome.outcomeDate),
           }),
         ),
       ],

@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
-import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import type {
   BoardAnimal,
   BoardLocation,
@@ -366,7 +366,7 @@ function FosterRow({
       <AnimalChip animal={animal} />
       <p className="truncate pl-8 text-[10px] text-muted-foreground">
         With {canReadFosters ? animal.fosterPersonName : "a foster"} · since{" "}
-        {formatDateOrNA(animal.since)}
+        {formatShelterDayOrNA(animal.since)}
       </p>
     </Link>
   );
