@@ -12,6 +12,7 @@ const iconMap = {
   ),
   FOSTER_PLACED: <Home className="h-5 w-5 text-muted-foreground" />,
   FOSTER_RETURNED: <Undo2 className="h-5 w-5 text-muted-foreground" />,
+  OUTCOME_REVERSED: <Undo2 className="h-5 w-5 text-muted-foreground" />,
 };
 
 const getIcon = (activityType: string) => {

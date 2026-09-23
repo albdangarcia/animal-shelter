@@ -356,6 +356,7 @@ const _updateOutcome = async (
         notes: true,
         destinationPartnerId: true,
         ownerId: true,
+        reversedAt: true,
       },
     });
 
@@ -365,25 +366,33 @@ const _updateOutcome = async (
 
     animalId = existingOutcome.animalId;
 
+    // A reversed outcome is kept as it stood when it was voided. Correcting
+    // it afterwards would change a record that no longer counts for anything,
+    // and blur what the reversal was a reversal of.
+    if (existingOutcome.reversedAt) {
+      return {
+        ok: false,
+        message: "This outcome was reversed, so it can no longer be corrected.",
+      };
+    }
+
     // The form disables the type select in edit mode, so a different type
     // here means the client and server disagree about what is editable. That
     // is refused outright rather than ignored, so the disagreement surfaces.
     //
-    // The type is frozen because:
-    //  - Compliance reports count outcomes by type, so changing it in place
-    //    rewrites a figure that may already have been reported, with no
-    //    record that it moved.
-    //  - For an adoption, the type also carries the link to the winning
-    //    application, and only an adoption's link makes that application
-    //    adopted. Moving it off ADOPTION would turn the adopter's application
-    //    into one the outcome closed, with nothing recording why.
-    //  - Fixing a wrongly-typed outcome is a reversal, not an edit, and there
-    //    is no reversal path yet. Freezing the type beats half-correcting it.
+    // The date, notes, partner and owner correct an attribute of the event
+    // that happened. The type asserts a different event happened, and carries
+    // structure the others do not: an adoption's link to the winning
+    // application (which is what makes that application adopted and closes
+    // the rest), the archive reason, and the partner or owner that only mean
+    // something under one type. Retyping in place would have to rewire all of
+    // that. Reversing the outcome and recording the right one does it through
+    // the path that already knows how, and keeps the mistake on the record.
     if (outcomeType !== existingOutcome.type) {
       return {
         ok: false,
         message:
-          "The outcome type can't be changed once an outcome is recorded.",
+          "The outcome type can't be changed once an outcome is recorded. To fix a wrong type, reverse this outcome and record the right one.",
       };
     }
 
@@ -420,10 +429,17 @@ const _updateOutcome = async (
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.outcome.update({
-        where: { id: parsedId.data },
+      // Guarded, since the outcome could be reversed between the read above
+      // and this write.
+      const updated = await tx.outcome.updateMany({
+        where: { id: parsedId.data, reversedAt: null },
         data: nextValues,
       });
+      if (updated.count === 0) {
+        throw new ConflictError(
+          "This outcome was reversed, so it can no longer be corrected.",
+        );
+      }
 
       await tx.animalActivityLog.create({
         data: {
@@ -436,7 +452,7 @@ const _updateOutcome = async (
     });
   } catch (error) {
     console.error("Database error updating outcome:", error);
-    if (error instanceof NotFoundError) {
+    if (error instanceof NotFoundError || error instanceof ConflictError) {
       return { ok: false, message: error.message };
     }
     return { ok: false, message: "Database Error: Failed to update outcome." };
@@ -517,9 +533,17 @@ const _reverseOutcome = async (
     revalidatePath("/dashboard/fosters");
   }
 
+  // The outcome took the animal out of its unit, and nothing kept which one,
+  // so an animal back in care is not in any kennel until staff place it. A
+  // reopened foster placement is where it is instead.
+  const unitHint =
+    reversal.restoredListingStatus && !reversal.reopenedPlacementId
+      ? " It has no unit now; place it from its record."
+      : "";
+
   return {
     ok: true,
-    message: `Outcome reversed. ${reversal.effects}`,
+    message: `Outcome reversed. ${reversal.effects}${unitHint}`,
     redirectTo: OUTCOMES_PATH,
   };
 };

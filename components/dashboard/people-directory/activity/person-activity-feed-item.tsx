@@ -12,6 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PersonActivityEntry } from "@/app/lib/data/people-directory/person-activity.data";
 import { TimeAgo } from "@/components/common/time-ago";
+import { ReversedOutcomeBadge } from "@/components/dashboard/outcomes/reversed-outcome-badge";
 import {
   formatSingleEnumOption,
   noteCategoryOptions,
@@ -87,6 +88,10 @@ export default function PersonActivityFeedItem({ entry }: Props) {
           <span className="ml-2 text-muted-foreground/70 whitespace-nowrap">
             &bull; <TimeAgo date={entry.date} />
           </span>
+
+          {entry.kind === "OUTCOME_PROCESSED" && entry.reversed && (
+            <ReversedOutcomeBadge className="ml-2" />
+          )}
         </div>
 
         {/* Inline summary for task entries */}

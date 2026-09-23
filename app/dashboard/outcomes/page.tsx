@@ -50,7 +50,10 @@ const PageContent = async ({ searchParams }: Props) => {
     currentPageSize,
   );
 
-  const canManage = await hasPermission(AppPermissions.OUTCOMES_MANAGE);
+  const [canManage, canReverse] = await Promise.all([
+    hasPermission(AppPermissions.OUTCOMES_MANAGE),
+    hasPermission(AppPermissions.OUTCOMES_REVERSE),
+  ]);
 
   return (
     <Card className="@container/card">
@@ -71,7 +74,7 @@ const PageContent = async ({ searchParams }: Props) => {
               <DataTable
                 data={outcomes}
                 getColumns={getColumns}
-                columnProps={{ canManage }}
+                columnProps={{ canManage, canReverse }}
                 ToolbarComponent={OutcomeTableToolbar}
                 totalPages={totalPages}
                 totalRows={totalRows}
