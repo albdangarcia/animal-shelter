@@ -55,10 +55,11 @@ export function DataTableRowActions({
   const isReversed = !!outcome.reversedAt;
   const showEdit = canManage && !isReversed;
   const showReverse = canReverse && !isReversed;
+  const showViewReversal = isReversed;
 
-  // Volunteers (read-only) get no row actions — every field is already
-  // visible in the table, and all actions here are mutations.
-  if (!showEdit && !showReverse) {
+  // Volunteers can view a reversed outcome's reason, but have no mutation
+  // actions. For a live outcome, they still have no row menu.
+  if (!showEdit && !showReverse && !showViewReversal) {
     return null;
   }
 
@@ -118,6 +119,13 @@ export function DataTableRowActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-40">
+          {showViewReversal && (
+            <DropdownMenuItem asChild>
+              <Link href={`/dashboard/outcomes/${outcome.id}/edit`}>
+                View reversal
+              </Link>
+            </DropdownMenuItem>
+          )}
           {showEdit && (
             <Link href={`/dashboard/outcomes/${outcome.id}/edit`}>
               <DropdownMenuItem>Edit</DropdownMenuItem>

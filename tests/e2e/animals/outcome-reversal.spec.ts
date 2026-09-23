@@ -5,6 +5,7 @@ import {
   bootstrapStorageState,
   fillStable,
   rowMenuItemHref,
+  SEEDED_USER_PASSWORD,
   storageStatePathFor,
   waitForPathname,
 } from "../support/applications";
@@ -14,6 +15,9 @@ const adminPassword = process.env.ADMIN_PASSWORD;
 test.describe.configure({ mode: "serial" });
 
 const storageStatePath = storageStatePathFor("outcome-reversal.state.json");
+const volunteerStatePath = storageStatePathFor(
+  "outcome-reversal-volunteer.state.json",
+);
 
 test.beforeAll(async ({ browser }) => {
   if (!adminPassword) {
@@ -26,6 +30,11 @@ test.beforeAll(async ({ browser }) => {
     email: "admin@example.com",
     password: adminPassword,
     storageStatePath,
+  });
+  await bootstrapStorageState(browser, {
+    email: "volunteer1@example.com",
+    password: SEEDED_USER_PASSWORD,
+    storageStatePath: volunteerStatePath,
   });
 });
 
@@ -445,11 +454,42 @@ test("a reversed adoption un-adopts, reopens, drops out of the report, and can b
   await expect(page.getByText(/^Outcome reversed\./)).toBeVisible();
   await expect(dialog).toBeHidden();
 
-  // The row stays on the list, marked, with nothing left to do to it.
+  // The row stays on the list, marked, and links to its read-only record.
   await expect(firstRow.getByText("Reversed", { exact: true })).toBeVisible();
-  await expect(firstRow.getByRole("button", { name: "Open menu" })).toHaveCount(
-    0,
-  );
+  const viewReversal = await openRowMenu(firstRow, "View reversal");
+  await expect(page.getByRole("menuitem", { name: "Edit" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: /^Reverse/ })).toHaveCount(0);
+  await viewReversal.click();
+  await expect(page).toHaveURL(editHref!);
+  await expect(
+    page.getByRole("heading", { name: "Outcome Reversed" }),
+  ).toBeVisible();
+  await expect(page.getByText(`Reason: ${reason}`)).toBeVisible();
+  await expect(page.locator("main form")).toHaveCount(0);
+
+  // A volunteer has the same read permissions as this record requires.
+  const volunteerContext = await page.context().browser()!.newContext({
+    storageState: volunteerStatePath,
+  });
+  const volunteer = await volunteerContext.newPage();
+  try {
+    const volunteerRow = (
+      await gotoOutcomeRows(volunteer, candidate.animalId)
+    ).first();
+    await expect(volunteerRow.getByText("Reversed", { exact: true })).toBeVisible();
+    const volunteerView = await openRowMenu(volunteerRow, "View reversal");
+    await expect(volunteer.getByRole("menuitem", { name: "Edit" })).toHaveCount(0);
+    await expect(volunteer.getByRole("menuitem", { name: /^Reverse/ })).toHaveCount(0);
+    await volunteerView.click();
+    await expect(volunteer).toHaveURL(editHref!);
+    await expect(
+      volunteer.getByRole("heading", { name: "Outcome Reversed" }),
+    ).toBeVisible();
+    await expect(volunteer.getByText(`Reason: ${reason}`)).toBeVisible();
+    await expect(volunteer.locator("main form")).toHaveCount(0);
+  } finally {
+    await volunteerContext.close();
+  }
 
   // A second reversal of the same outcome is refused.
   await staleDialog.getByRole("button", { name: "Reverse Outcome" }).click();
@@ -457,12 +497,10 @@ test("a reversed adoption un-adopts, reopens, drops out of the report, and can b
     secondReverser.getByText("This outcome has already been reversed."),
   ).toBeVisible();
   // The refusal refreshes the list, so the row it was refused on now shows
-  // what happened, and offers nothing more.
+  // what happened, with only the record link available.
   await expect(staleDialog).toBeHidden();
   await expect(staleRow.getByText("Reversed", { exact: true })).toBeVisible();
-  await expect(staleRow.getByRole("button", { name: "Open menu" })).toHaveCount(
-    0,
-  );
+  await expect(staleRow.getByRole("button", { name: "Open menu" })).toBeVisible();
   await secondReverser.close();
 
   // So is a correction to it, from a form opened before it was reversed.
@@ -479,16 +517,6 @@ test("a reversed adoption un-adopts, reopens, drops out of the report, and can b
   // each as it stood before; the report no longer counts the adoption.
   await expectStatuses(page, candidate, "Approved", "as before");
   expect(await reportedAdoptions(page)).toBe(baseline);
-
-  // The edit page now shows the reversal rather than a form.
-  await page.goto(editHref!);
-  await expect(
-    page.getByRole("heading", { name: "Outcome Reversed" }),
-  ).toBeVisible();
-  await expect(page.getByText(`Reason: ${reason}`)).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Update Outcome" }),
-  ).toHaveCount(0);
 
   // --- The same application takes a new adoption. ---
   await recordAdoption(page, candidate);
