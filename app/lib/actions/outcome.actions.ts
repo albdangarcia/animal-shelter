@@ -10,7 +10,9 @@ import {
 import { AppPermissions } from "../auth/permissions";
 import {
   OutcomeFormSchema,
+  ReverseOutcomeSchema,
   type OutcomeFormInput,
+  type ReverseOutcomeInput,
 } from "../zod-schemas/outcome.schema";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
@@ -29,7 +31,13 @@ import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import {
   DERIVATION_APPLICATION_SELECT,
   effectiveApplicationStatus,
+  lockAnimal,
 } from "../data/application-status.data";
+import {
+  assertNoLiveAdoptionOutcome,
+  recordOutcomeReversal,
+  type OutcomeReversal,
+} from "../services/outcome-reversal";
 import {
   calendarDay,
   formatShelterDay,
@@ -81,6 +89,15 @@ const _createOutcome = async (
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Held until commit, so the listing status read here is still the
+      // animal's when the update below archives it. It is stored on the
+      // outcome, and is what a reversal of the outcome restores.
+      await lockAnimal(tx, animalId);
+      const animal = await tx.animal.findUnique({
+        where: { id: animalId },
+        select: { listingStatus: true },
+      });
+
       // Attempt to archive the animal first.
       // This update will only succeed if the animal is not already archived.
       const updateResult = await tx.animal.updateMany({
@@ -102,7 +119,7 @@ const _createOutcome = async (
       });
 
       // Check if the update succeeded.
-      if (updateResult.count === 0) {
+      if (!animal || updateResult.count === 0) {
         // If count is 0, another process archived the animal first. Abort.
         throw new ConflictError(
           "This animal has already been processed for an outcome.",
@@ -138,6 +155,9 @@ const _createOutcome = async (
             "Cannot process adoption: The application is for a different animal.",
           );
         }
+        if (application) {
+          await assertNoLiveAdoptionOutcome(tx, application.id);
+        }
         // Approved as the application effectively is, not as the column
         // says: one approved during an earlier stay, and adopted or closed by
         // that stay's outcome, still stores APPROVED. Archiving the animal
@@ -162,6 +182,7 @@ const _createOutcome = async (
           // `notes` now arrives as "" from a cleared textarea rather than
           // undefined, so it has to be mapped to null for the nullable column.
           notes: notes || null,
+          previousListingStatus: animal.listingStatus,
           animal: { connect: { id: animalId } },
           staffMember: { connect: { id: staffMemberId } },
           // Conditionally connect relationships
@@ -431,10 +452,86 @@ const _updateOutcome = async (
   };
 };
 
+/**
+ * Reverse an outcome recorded in error. The work, and why a reversal voids the
+ * outcome rather than deleting it, is in `outcome-reversal`; this is the
+ * authorization, the transaction and the cache invalidation around it.
+ */
+const _reverseOutcome = async (
+  user: SessionUser,
+  outcomeId: string,
+  values: ReverseOutcomeInput,
+): Promise<FormResult<ReverseOutcomeInput>> => {
+  const parsedId = cuidSchema.safeParse(outcomeId);
+  if (!parsedId.success) {
+    return { ok: false, message: "Invalid outcome ID format." };
+  }
+
+  const validatedFields = ReverseOutcomeSchema.safeParse(values);
+  if (!validatedFields.success) {
+    return {
+      ok: false,
+      message: "Missing or Invalid Fields. Failed to Reverse Outcome.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<ReverseOutcomeInput>,
+    };
+  }
+
+  let reversal: OutcomeReversal;
+  try {
+    reversal = await prisma.$transaction((tx) =>
+      recordOutcomeReversal(
+        tx,
+        parsedId.data,
+        validatedFields.data.reason,
+        user.personId,
+      ),
+    );
+  } catch (error) {
+    if (
+      error instanceof NotFoundError ||
+      error instanceof ConflictError ||
+      error instanceof PreconditionFailedError
+    ) {
+      return { ok: false, message: error.message };
+    }
+    console.error("Database error reversing outcome:", error);
+    return {
+      ok: false,
+      message: "Database Error: Failed to reverse outcome.",
+    };
+  }
+
+  revalidatePath(OUTCOMES_PATH);
+  revalidatePath("/dashboard/animals");
+  revalidatePath(`/dashboard/animals/${reversal.animalId}`);
+  // Every application on the animal can read differently now: the adopter's
+  // is no longer adopted, and the ones the outcome closed are open again.
+  revalidatePath(ADOPTION_APPLICATIONS_PATH);
+  if (reversal.adoptionApplicationId) {
+    revalidatePath(
+      `${ADOPTION_APPLICATIONS_PATH}/${reversal.adoptionApplicationId}/edit`,
+    );
+  }
+  if (reversal.reopenedPlacementId) {
+    revalidatePath("/dashboard/fosters");
+  }
+
+  return {
+    ok: true,
+    message: `Outcome reversed. ${reversal.effects}`,
+    redirectTo: OUTCOMES_PATH,
+  };
+};
+
 export const createOutcome = withAuthenticatedUser(
   RequirePermission(AppPermissions.OUTCOMES_MANAGE)(_createOutcome),
 );
 
 export const updateOutcome = withAuthenticatedUser(
   RequirePermission(AppPermissions.OUTCOMES_MANAGE)(_updateOutcome),
+);
+
+export const reverseOutcome = withAuthenticatedUser(
+  RequirePermission(AppPermissions.OUTCOMES_REVERSE)(_reverseOutcome),
 );

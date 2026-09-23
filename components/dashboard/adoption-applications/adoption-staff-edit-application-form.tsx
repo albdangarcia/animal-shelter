@@ -83,7 +83,7 @@ export function StaffApplicationUpdateForm({
   // outcomes by the fetch: the column alone never says adopted or closed.
   const isAdopted = application.status === "ADOPTED";
   const isApproved = application.status === "APPROVED";
-  const outcome = application.outcome;
+  const outcome = application.outcomes[0];
   const canEditFields = STAFF_EDITABLE_STATUSES.includes(application.status);
 
   // The provenance of the text in the read-only cards below. `source` says who

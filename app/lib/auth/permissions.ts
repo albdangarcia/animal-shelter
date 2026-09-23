@@ -13,6 +13,11 @@ export const AppPermissions = {
   // Outcome Management
   OUTCOMES_READ: "outcomes:read",
   OUTCOMES_MANAGE: "outcomes:manage",
+  // Voiding a recorded outcome (admins only). Held apart from OUTCOMES_MANAGE
+  // because it is a different authority: a reversal un-archives an animal and
+  // changes which applications read as adopted or closed, and nobody holding
+  // OUTCOMES_MANAGE can un-archive an animal by hand.
+  OUTCOMES_REVERSE: "outcomes:reverse",
 
   // Animal Info Permissions
   ANIMAL_INFO_READ: "animal_info:read",

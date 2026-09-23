@@ -41,3 +41,16 @@ export const OutcomeFormSchema = z
   );
 
 export type OutcomeFormInput = z.input<typeof OutcomeFormSchema>;
+
+// A reversal voids a closed record, and a void with no explanation is the
+// first thing anyone auditing the record will ask about, so the reason is
+// required. It is kept on the outcome and repeated in the animal's activity.
+export const ReverseOutcomeSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(1, { error: "A reason for reversing this outcome is required." })
+    .max(1000, { error: "The reason cannot exceed 1000 characters." }),
+});
+
+export type ReverseOutcomeInput = z.input<typeof ReverseOutcomeSchema>;

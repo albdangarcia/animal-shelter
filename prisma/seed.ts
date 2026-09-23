@@ -2121,6 +2121,9 @@ async function seedAdoption(opts: {
       // application was submitted, and the default `now()` would put every
       // seeded outcome after every seeded application.
       createdAt: opts.outcomeDate,
+      // What `_createOutcome` stores for a reversal to restore. Every caller
+      // leaves the animal listed until its adoption is recorded.
+      previousListingStatus: AnimalListingStatus.PUBLISHED,
       staffMemberId: approvingStaff.id,
       adoptionApplicationId: winnerAppId,
     },
@@ -2864,6 +2867,8 @@ async function seedAnimalsAndRelations() {
               outcomeDate: shelterDayKey(stay.outcomeDate as Date, seedTimezone),
               // Recorded when it happened, as `seedAdoption` explains.
               createdAt: stay.outcomeDate as Date,
+              // The interim listing the animal was created with above.
+              previousListingStatus: AnimalListingStatus.PUBLISHED,
               staffMemberId: outcomeStaff.id,
               ownerId,
               destinationPartnerId,
@@ -3452,6 +3457,8 @@ async function seedFostering() {
         outcomeDate: shelterDayKey(adoptedAt, seedTimezone),
         // Recorded when it happened, as `seedAdoption` explains.
         createdAt: adoptedAt,
+        // The placement set it pending adoption above.
+        previousListingStatus: AnimalListingStatus.PENDING_ADOPTION,
         staffMemberId: approver.id,
         adoptionApplicationId: applicationId,
       },

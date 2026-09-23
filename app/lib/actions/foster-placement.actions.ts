@@ -37,7 +37,9 @@ import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import {
   DERIVATION_APPLICATION_SELECT,
   effectiveApplicationStatus,
+  lockAnimal,
 } from "../data/application-status.data";
+import { assertNoLiveAdoptionOutcome } from "../services/outcome-reversal";
 
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
 
@@ -388,9 +390,16 @@ const _convertFosterToAdoption = async (
         );
       }
 
-      // Same ordering as outcome.actions.ts's createOutcome: archive the
-      // animal first (guarded, mirroring its "already processed" check),
-      // then validate the optional application, then create the outcome.
+      // Same ordering as outcome.actions.ts's createOutcome: lock the animal
+      // and read the listing status the outcome stores for a reversal to
+      // restore, archive the animal (guarded, mirroring its "already
+      // processed" check), then validate the optional application, then
+      // create the outcome.
+      await lockAnimal(tx, placement.animalId);
+      const animal = await tx.animal.findUnique({
+        where: { id: placement.animalId },
+        select: { listingStatus: true },
+      });
       const archiveResult = await tx.animal.updateMany({
         where: {
           id: placement.animalId,
@@ -401,7 +410,7 @@ const _convertFosterToAdoption = async (
           archiveReason: OutcomeType.ADOPTION,
         },
       });
-      if (archiveResult.count === 0) {
+      if (!animal || archiveResult.count === 0) {
         throw new ConflictError(
           "This animal has already been processed for an outcome.",
         );
@@ -428,6 +437,7 @@ const _convertFosterToAdoption = async (
             "That adoption application does not belong to this foster.",
           );
         }
+        await assertNoLiveAdoptionOutcome(tx, application.id);
         // Effective, not the column, for the same reason as createOutcome:
         // an application an earlier stay's outcome adopted or closed still
         // stores APPROVED.
@@ -448,6 +458,7 @@ const _convertFosterToAdoption = async (
           // shelter's calendar. Nothing in the placement records the day the
           // foster decided, and inventing one from its dates would be a guess.
           outcomeDate: await getShelterToday(),
+          previousListingStatus: animal.listingStatus,
           animal: { connect: { id: placement.animalId } },
           staffMember: { connect: { id: staffMemberId } },
           ...(adoptionApplicationId && {

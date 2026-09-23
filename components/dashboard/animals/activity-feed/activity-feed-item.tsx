@@ -62,6 +62,10 @@ const activityConfig: Record<
     icon: Pencil,
     text: "corrected an outcome",
   },
+  [AnimalActivityType.OUTCOME_REVERSED]: {
+    icon: Undo2,
+    text: "reversed an outcome",
+  },
   [AnimalActivityType.MEDICAL_RECORD_ADDED]: {
     icon: HeartPulse,
     text: "added a medical record",

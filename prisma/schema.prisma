@@ -3,8 +3,12 @@
 // ═══════════════════════════════════════════════════
 
 generator client {
-  provider = "prisma-client"
-  output   = "./generated"
+  provider        = "prisma-client"
+  output          = "./generated"
+  // For `@@unique(..., where: ...)`: without it a partial index can only live
+  // in a migration's raw SQL, and `db push` (which provisions the e2e and DB
+  // test databases) would never create it.
+  previewFeatures = ["partialIndexes"]
 }
 
 datasource db {
@@ -62,6 +66,7 @@ model Person {
   tasksCreated               Task[]                           @relation("TasksCreatedBy")
   reclaimedAnimalsAsOwner    Outcome[]                        @relation("ReclaimedByOwner")
   processedOutcomes          Outcome[]                        @relation("ProcessedOutcome")
+  reversedOutcomes           Outcome[]                        @relation("ReversedOutcome")
   surrenderedAnimals         Intake[]                         @relation("SurrenderedBy")
   foundAnimals               Intake[]                         @relation("FoundBy")
   processedIntakes           Intake[]                         @relation("ProcessedBy")
@@ -334,6 +339,10 @@ model PartnerContact {
   updatedAt DateTime @updatedAt
 
   @@unique([partnerId, personId])
+  // At most one primary contact per partner. Declared here so that `db push`
+  // creates it too; a `findUnique` by `partnerId` alone compiles but does not
+  // find the primary.
+  @@unique([partnerId], map: "partner_contact_one_primary", where: { isPrimary: true })
   @@map("partner_contacts")
 }
 
@@ -734,8 +743,11 @@ model Outcome {
 
   // Optional fields depending on the outcome type
 
-  // For ADOPTION
-  adoptionApplicationId String?              @unique
+  // For ADOPTION. A reversed outcome keeps its link, since the link is part of
+  // what was recorded, so one application can be linked from several adoption
+  // outcomes over time: at most one that is not reversed (the unique index
+  // below).
+  adoptionApplicationId String?
   adoptionApplication   AdoptionApplication? @relation(fields: [adoptionApplicationId], references: [id])
 
   // Set when this outcome was created via a FOSTER_TO_ADOPT placement conversion.
@@ -754,9 +766,31 @@ model Outcome {
   staffMember   Person  @relation(name: "ProcessedOutcome", fields: [staffMemberId], references: [id])
   notes         String?
 
+  // The animal's listingStatus just before this outcome archived it, restored
+  // if the outcome is reversed. Listing status is not derivable from intakes
+  // and outcomes (it also carries DRAFT and publication), so this records a
+  // fact rather than caching one. Null on outcomes recorded before it was
+  // kept.
+  previousListingStatus AnimalListingStatus?
+
+  // A reversal voids an outcome that should never have been recorded: a
+  // reversed outcome is kept, but counts for nothing. Write-once: nothing
+  // clears `reversedAt`, so a reversal made in error is answered by recording
+  // the outcome again, and the record still shows this one was voided, when
+  // and by whom. The reason is required whenever `reversedAt` is set.
+  reversedAt     DateTime?
+  reversedById   String?
+  reversedBy     Person?   @relation(name: "ReversedOutcome", fields: [reversedById], references: [id])
+  reversalReason String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // At most one live adoption outcome per application. Prisma still offers a
+  // partial index to `findUnique`, but a lookup by `adoptionApplicationId`
+  // ignores its `where` and can return a reversed outcome: use `findFirst`
+  // with `reversedAt: null`.
+  @@unique([adoptionApplicationId], where: { reversedAt: null })
   @@index([animalId])
   @@map("outcomes")
 }
@@ -1139,7 +1173,7 @@ model AdoptionApplication {
   lastEditedBy   Person?   @relation("AdoptionApplicationLastEditor", fields: [lastEditedById], references: [id], onDelete: SetNull)
   lastEditedAt   DateTime? @map(name: "last_edited_at")
 
-  outcome         Outcome?
+  outcomes        Outcome[]
   history         ApplicationStatusHistory[]
   fosterPlacement FosterPlacement?
 
@@ -1538,6 +1572,7 @@ enum AnimalActivityType {
   NOTE_DELETED // A note was soft-deleted
   NOTE_RESTORED // A soft-deleted note was restored
   OUTCOME_CORRECTED // An existing outcome's date, notes, partner or owner was edited
+  OUTCOME_REVERSED // An outcome was voided as recorded in error
 }
 
 model AnimalActivityLog {
