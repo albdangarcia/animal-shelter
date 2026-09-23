@@ -1,10 +1,12 @@
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
+import { ApplicationStatus, OutcomeType } from "@/prisma/generated/enums";
 import type { StatusHistoryEntry } from "@/app/lib/types";
 import {
   ApplicationConsequence,
   deriveApplicationConsequence,
   deriveApplicationStatuses,
+  isReviewStatus,
   toDerivationOutcome,
   type EffectiveApplicationStatus,
 } from "../utils/derive-application-status";
@@ -108,21 +110,25 @@ export async function effectiveApplicationStatus(
 }
 
 /**
- * An application's effective status, and its status history with the outcome
- * that adopted or closed it, if one did, as an entry of its own.
+ * An application's effective status, and its status history with the live
+ * outcome that adopted or closed it, if one did, as an entry of its own.
  *
  * The history table records decisions: who moved the application, when and
  * why. Nobody decides that an application was adopted or closed, so nothing
  * writes that into the table; the entry is read off the outcome that caused
  * it, with the staff member who recorded the outcome, the moment it was
  * recorded, and the reason that outcome gives the applicant. `history` is
- * expected newest first, and stays that way.
+ * expected newest first, and stays that way. Staff can also request the
+ * original consequence and reversal events for voided outcomes.
  */
 export async function withConsequenceInHistory<
   Row extends DerivationApplicationRow & { history: StatusHistoryEntry[] },
 >(
   application: Row,
-  db: OutcomeReader = prisma,
+  { includeReversals = false, db = prisma }: {
+    includeReversals?: boolean;
+    db?: OutcomeReader;
+  } = {},
 ): Promise<
   Omit<Row, "status" | "history"> & {
     status: EffectiveApplicationStatus;
@@ -139,6 +145,8 @@ export async function withConsequenceInHistory<
       staffMember: { select: { name: true } },
       fosterPlacement: { select: { id: true } },
       reversedAt: true,
+      reversedBy: { select: { name: true } },
+      reversalReason: true,
     },
     // Two outcomes recorded in the same millisecond would otherwise leave
     // which one closed the application to the order the rows came back in.
@@ -146,36 +154,163 @@ export async function withConsequenceInHistory<
     // generated and a per-process counter, so it was generated first.
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
+  const derivationApplication = {
+    id: application.id,
+    reviewStatus: application.status,
+    submittedAt: application.submittedAt,
+  };
+  const reviewStatusAt = (at: Date): ApplicationStatus => {
+    const earlier = application.history
+      .filter(
+        (entry) =>
+          entry.changedAt.getTime() <= at.getTime() &&
+          isReviewStatus(entry.status),
+      )
+      .sort((a, b) => b.changedAt.getTime() - a.changedAt.getTime())[0];
+    if (earlier) return earlier.status as ApplicationStatus;
+
+    // A later decision cannot describe the application before it was made.
+    // Applications begin pending; older rows may have no submission history.
+    return application.history.some((entry) => entry.changedAt > at)
+      ? ApplicationStatus.PENDING
+      : application.status;
+  };
+  const applicationAt = (at: Date) => ({
+    ...derivationApplication,
+    reviewStatus: reviewStatusAt(at),
+  });
+  const derivationOutcomes = outcomes.map(toDerivationOutcome);
   const consequence = deriveApplicationConsequence(
-    {
-      id: application.id,
-      reviewStatus: application.status,
-      submittedAt: application.submittedAt,
-    },
-    outcomes.map(toDerivationOutcome),
+    derivationApplication,
+    derivationOutcomes,
   );
-  if (!consequence) {
+  if (!consequence && !includeReversals) {
     return { ...application, status: application.status };
   }
 
-  const { status, outcome } = consequence;
-  const byFoster = outcome.fosterPlacement !== null;
-  const entry: StatusHistoryEntry = {
+  const outcomeEntry = (
+    outcome: Pick<
+      (typeof outcomes)[number],
+      "id" | "type" | "fosterPlacement" | "createdAt" | "staffMember"
+    >,
+    status: ApplicationConsequence,
+  ): StatusHistoryEntry => ({
     id: `outcome-${outcome.id}`,
     status,
     statusChangeReason:
       status === ApplicationConsequence.ADOPTED
-        ? adoptionReason({ byFoster })
-        : closureReason({ type: outcome.type, byFoster }),
+        ? adoptionReason({ byFoster: outcome.fosterPlacement !== null })
+        : closureReason({
+            type: outcome.type,
+            byFoster: outcome.fosterPlacement !== null,
+          }),
     changedAt: outcome.createdAt,
     changedBy: outcome.staffMember,
-  };
+  });
+  const events: { entry: StatusHistoryEntry; order: number }[] = [];
+  if (consequence) {
+    events.push({
+      entry: outcomeEntry(consequence.outcome, consequence.status),
+      order:
+        outcomes.findIndex((outcome) => outcome.id === consequence.outcome.id) *
+        2,
+    });
+  }
+
+  if (includeReversals) {
+    for (const [index, outcome] of outcomes.entries()) {
+      const reversedAt = outcome.reversedAt;
+      if (!reversedAt) continue;
+      // Check when this outcome was recorded and just before it was reversed.
+      // An earlier outcome reversed later was still live at recording time;
+      // this one can become the consequence after that earlier reversal.
+      const atRecording = deriveApplicationConsequence(
+        applicationAt(outcome.createdAt),
+        derivationOutcomes.slice(0, index + 1).map((row, rowIndex) =>
+          rowIndex === index
+            ? { ...row, reversed: false }
+            : {
+                ...row,
+                reversed:
+                  outcomes[rowIndex].reversedAt !== null &&
+                  outcomes[rowIndex].reversedAt <= outcome.createdAt,
+              },
+        ),
+      );
+      const beforeReversal = deriveApplicationConsequence(
+        applicationAt(reversedAt),
+        outcomes
+          .filter((row) => row.createdAt <= reversedAt)
+          .map((row) => ({
+            ...toDerivationOutcome(row),
+            reversed:
+              row.id !== outcome.id &&
+              row.reversedAt !== null &&
+              row.reversedAt <= reversedAt,
+          })),
+      );
+      const caused =
+        atRecording?.outcome.id === outcome.id
+          ? atRecording
+          : beforeReversal;
+      if (caused?.outcome.id !== outcome.id) continue;
+
+      const statusAfterReversal = reviewStatusAt(reversedAt);
+      const remainingConsequence = deriveApplicationConsequence(
+        applicationAt(reversedAt),
+        outcomes
+          .filter((row) => row.createdAt <= reversedAt)
+          .map((row) => ({
+            ...toDerivationOutcome(row),
+            reversed: row.reversedAt !== null && row.reversedAt <= reversedAt,
+          })),
+      );
+      const reopened =
+        caused.status === ApplicationConsequence.CLOSED &&
+        remainingConsequence === null &&
+        statusAfterReversal !== ApplicationStatus.REJECTED &&
+        statusAfterReversal !== ApplicationStatus.WITHDRAWN;
+      const reason = outcome.reversalReason ?? "Reason not recorded.";
+      events.push({
+        entry: outcomeEntry(outcome, caused.status),
+        order: index * 2,
+      });
+      events.push({
+        entry: {
+          id: `reversal-${outcome.id}`,
+          status: caused.status,
+          event: reopened ? "reopened" : "reversal",
+          statusChangeReason:
+            caused.status === ApplicationConsequence.ADOPTED
+              ? `Adoption outcome reversed: ${reason}`
+              : reopened
+                ? outcome.type === OutcomeType.ADOPTION
+                  ? `Reopened: the adoption that closed this application was reversed: ${reason}`
+                  : `Reopened: the outcome that closed this application was reversed: ${reason}`
+                : outcome.type === OutcomeType.ADOPTION
+                  ? `The adoption that closed this application was reversed: ${reason}`
+                  : `The outcome that closed this application was reversed: ${reason}`,
+          changedAt: reversedAt,
+          changedBy: outcome.reversedBy,
+        },
+        order: index * 2 + 1,
+      });
+    }
+  }
+
   return {
     ...application,
-    status,
-    history: [entry, ...application.history].sort(
-      (a, b) => b.changedAt.getTime() - a.changedAt.getTime(),
-    ),
+    status: consequence?.status ?? application.status,
+    history: [
+      ...events,
+      ...application.history.map((entry) => ({ entry, order: -1 })),
+    ]
+      .sort(
+        (a, b) =>
+          b.entry.changedAt.getTime() - a.entry.changedAt.getTime() ||
+          b.order - a.order,
+      )
+      .map(({ entry }) => entry),
   };
 }
 

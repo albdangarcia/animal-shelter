@@ -467,6 +467,12 @@ test("a reversed adoption un-adopts, reopens, drops out of the report, and can b
   await expect(page.getByText(`Reason: ${reason}`)).toBeVisible();
   await expect(page.locator("main form")).toHaveCount(0);
 
+  await page.goto(candidate.winnerReviewHref);
+  await expect(
+    page.getByText(`Adoption outcome reversed: ${reason}`),
+  ).toBeVisible();
+  await expect(page.getByText("Reversed", { exact: true })).toBeVisible();
+
   // A volunteer has the same read permissions as this record requires.
   const volunteerContext = await page.context().browser()!.newContext({
     storageState: volunteerStatePath,

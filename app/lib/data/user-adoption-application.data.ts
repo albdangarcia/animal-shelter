@@ -49,8 +49,8 @@ export type AdoptionApplicationWithAnimal = WithEffectiveStatus<
   }>
 >;
 
-// `history` also ends with the outcome that adopted or closed the application,
-// if one did (`withConsequenceInHistory`).
+// `history` includes the outcomes that adopted or closed the application and
+// their reversals, if any (`withConsequenceInHistory`).
 export type AdoptionApplicationWithOutcome = Omit<
   Prisma.AdoptionApplicationGetPayload<{
     include: {
@@ -272,7 +272,8 @@ const _fetchAdoptionApplicationById = async (
         },
       },
     });
-    return application && (await withConsequenceInHistory(application));
+    return application &&
+      (await withConsequenceInHistory(application, { includeReversals: true }));
   } catch (error) {
     console.error("Error fetching application by ID.", error);
     throw new Error("Error fetching application by ID.");

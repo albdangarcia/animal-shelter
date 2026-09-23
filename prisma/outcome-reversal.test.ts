@@ -522,7 +522,7 @@ test("a reversed adoption's application can take a new adoption outcome", async 
   await prisma.$transaction((tx) =>
     assertNoLiveAdoptionOutcome(tx, applicationId),
   );
-  const second = await adopt(hoursAgo(1));
+  const second = await adopt(new Date());
 
   const { outcomes } = await prisma.adoptionApplication.findUniqueOrThrow({
     where: { id: applicationId },
@@ -539,6 +539,30 @@ test("a reversed adoption's application can take a new adoption outcome", async 
       [first, true],
       [second, false],
     ],
+  );
+
+  const application = await prisma.adoptionApplication.findUniqueOrThrow({
+    where: { id: applicationId },
+    select: DERIVATION_APPLICATION_SELECT,
+  });
+  const staff = await withConsequenceInHistory(
+    { ...application, history: [] },
+    { includeReversals: true },
+  );
+  assert.equal(staff.status, "ADOPTED");
+  assert.deepEqual(
+    staff.history.map(({ id, status, event }) => [id, status, event]),
+    [
+      [`outcome-${second}`, "ADOPTED", undefined],
+      [`reversal-${first}`, "ADOPTED", "reversal"],
+      [`outcome-${first}`, "ADOPTED", undefined],
+    ],
+  );
+  assert.deepEqual(
+    (await withConsequenceInHistory({ ...application, history: [] })).history.map(
+      ({ id }) => id,
+    ),
+    [`outcome-${second}`],
   );
 
   // And the second is now the one live adoption.
@@ -574,8 +598,7 @@ test("a reversed adoption adopts and closes nothing, and no status is rewritten"
     });
   const effective = async () =>
     byId(await effectiveApplicationStatuses(await rows()));
-  // What the staff and applicant timelines show: the review history, plus the
-  // outcome that adopted or closed the application as an entry, if one did.
+  // The applicant timeline keeps only the live consequence.
   const timelines = async () =>
     byId(
       await Promise.all(
@@ -613,6 +636,34 @@ test("a reversed adoption adopts and closes nothing, and no status is rewritten"
     ["APPROVED", 0],
     ["REVIEWING", 0],
   ]);
+  const reversedAt = (await readOutcome(outcomeId)).reversedAt;
+  const staffTimelines = await Promise.all(
+    (await rows()).map(async (row) => [
+      row.id,
+      await withConsequenceInHistory(
+        { ...row, history: [] },
+        { includeReversals: true },
+      ),
+    ] as const),
+  );
+  for (const [id, result] of staffTimelines) {
+    const adopted = id === winnerId;
+    assert.equal(result.status, adopted ? "APPROVED" : "REVIEWING");
+    assert.deepEqual(result.history.map(({ id }) => id), [
+      `reversal-${outcomeId}`,
+      `outcome-${outcomeId}`,
+    ]);
+    assert.equal(result.history[0].event, adopted ? "reversal" : "reopened");
+    assert.equal(result.history[0].changedAt.getTime(), reversedAt!.getTime());
+    assert.equal(result.history[0].changedBy?.name, `Reversal admin ${runId}`);
+    assert.equal(
+      result.history[0].statusChangeReason,
+      adopted
+        ? `Adoption outcome reversed: ${REASON}`
+        : `Reopened: the adoption that closed this application was reversed: ${REASON}`,
+    );
+    assert.equal(result.history[1].status, adopted ? "ADOPTED" : "CLOSED");
+  }
   assert.deepEqual(await searchHits(), ["APPROVED", "REVIEWING"]);
   // The gate both outcome-recording paths use: the winner is approved again,
   // so it can take a new adoption.

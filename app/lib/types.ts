@@ -207,6 +207,7 @@ export type AdoptionApplicationPayload = WithEffectiveStatus<
 export type StatusHistoryEntry = {
   id: string;
   status: EffectiveApplicationStatus;
+  event?: "reversal" | "reopened";
   statusChangeReason: string;
   changedAt: Date;
   changedBy: { name: string | null } | null;

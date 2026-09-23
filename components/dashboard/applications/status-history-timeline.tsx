@@ -2,6 +2,7 @@ import type { StatusHistoryEntry } from "@/app/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { TimeAgo } from "@/components/common/time-ago";
 import { ApplicationStatuses } from "@/components/dashboard/my-adoption-applications/table/my-applications-options";
+import { RotateCcw } from "lucide-react";
 
 export const StatusHistoryTimeline = ({
   history,
@@ -11,7 +12,13 @@ export const StatusHistoryTimeline = ({
   <div className="space-y-6">
     {history.map((entry) => {
       const meta = ApplicationStatuses.find((s) => s.value === entry.status);
-      const Icon = meta?.icon;
+      const Icon = entry.event ? RotateCcw : meta?.icon;
+      const label =
+        entry.event
+          ? entry.event === "reopened"
+            ? "Reopened"
+            : "Reversed"
+          : (meta?.label ?? entry.status);
       return (
         <div key={entry.id} className="relative flex items-start space-x-4">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted ring-4 ring-card">
@@ -19,7 +26,7 @@ export const StatusHistoryTimeline = ({
           </div>
           <div className="min-w-0 grow">
             <div className="flex flex-wrap items-center gap-x-2 text-sm">
-              <Badge variant="outline">{meta?.label ?? entry.status}</Badge>
+              <Badge variant="outline">{label}</Badge>
               {entry.changedBy && (
                 <span className="text-muted-foreground">
                   by {entry.changedBy.name}

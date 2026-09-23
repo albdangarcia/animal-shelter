@@ -461,3 +461,235 @@ test("of two outcomes recorded in the same millisecond, the one generated first 
   );
 });
 
+test("staff history reopens only applications the reversed outcome closed", async () => {
+  const animalId = await makeAnimal("Reversed closure");
+  const open = await makeApplication(animalId, {
+    status: ApplicationStatus.WAITLISTED,
+    submittedAt: hoursAgo(3),
+  });
+  const settled = await makeApplication(animalId, {
+    status: ApplicationStatus.REJECTED,
+    submittedAt: hoursAgo(3),
+  });
+  const later = await makeApplication(animalId, { submittedAt: hoursAgo(1) });
+  const recordedAt = hoursAgo(2);
+  const reversedAt = new Date();
+  const outcome = await prisma.outcome.create({
+    data: {
+      animalId,
+      type: OutcomeType.TRANSFER_OUT,
+      outcomeDate: "2026-01-01",
+      staffMemberId: staffId,
+      createdAt: recordedAt,
+      reversedAt,
+      reversedById: staffId,
+      reversalReason: "Transfer entered in error.",
+    },
+  });
+
+  const staff = await withConsequenceInHistory(
+    { ...open, history: [] },
+    { includeReversals: true },
+  );
+  assert.equal(staff.status, ApplicationStatus.WAITLISTED);
+  assert.deepEqual(staff.history.map(({ id }) => id), [
+    `reversal-${outcome.id}`,
+    `outcome-${outcome.id}`,
+  ]);
+  assert.equal(
+    staff.history[0].statusChangeReason,
+    "Reopened: the outcome that closed this application was reversed: Transfer entered in error.",
+  );
+  assert.equal(staff.history[0].changedAt.getTime(), reversedAt.getTime());
+  assert.equal(staff.history[0].changedBy?.name, `Status staff ${runId}`);
+  assert.equal(
+    staff.history[1].statusChangeReason,
+    "This animal was transferred to another organization.",
+  );
+  assert.deepEqual(
+    (await withConsequenceInHistory({ ...open, history: [] })).history,
+    [],
+  );
+  for (const application of [settled, later]) {
+    assert.deepEqual(
+      (await withConsequenceInHistory(
+        { ...application, history: [] },
+        { includeReversals: true },
+      )).history,
+      [],
+    );
+  }
+});
+
+test("later review decisions keep earlier outcome reversals in staff history", async () => {
+  const animalId = await makeAnimal("Decided after reversal");
+  const winner = await makeApplication(animalId, {
+    status: ApplicationStatus.REJECTED,
+    submittedAt: hoursAgo(5),
+  });
+  const other = await makeApplication(animalId, {
+    status: ApplicationStatus.WITHDRAWN,
+    submittedAt: hoursAgo(5),
+  });
+  for (const [applicationId, before, after] of [
+    [winner.id, ApplicationStatus.APPROVED, ApplicationStatus.REJECTED],
+    [other.id, ApplicationStatus.REVIEWING, ApplicationStatus.WITHDRAWN],
+  ] as const) {
+    for (const [status, changedAt] of [
+      [before, hoursAgo(4)],
+      [after, hoursAgo(1)],
+    ] as const) {
+      await prisma.applicationStatusHistory.create({
+        data: {
+          applicationId,
+          status,
+          changedAt,
+          changedById: staffId,
+          statusChangeReason: `Moved to ${status}.`,
+        },
+      });
+    }
+  }
+  const outcome = await prisma.outcome.create({
+    data: {
+      animalId,
+      type: OutcomeType.ADOPTION,
+      outcomeDate: "2026-01-01",
+      staffMemberId: staffId,
+      adoptionApplicationId: winner.id,
+      createdAt: hoursAgo(3),
+      reversedAt: hoursAgo(2),
+      reversedById: staffId,
+      reversalReason: "Adoption recorded in error.",
+    },
+  });
+
+  for (const [application, status] of [
+    [winner, ApplicationStatus.REJECTED],
+    [other, ApplicationStatus.WITHDRAWN],
+  ] as const) {
+    const history = await prisma.applicationStatusHistory.findMany({
+      where: { applicationId: application.id },
+      orderBy: { changedAt: "desc" },
+      include: { changedBy: { select: { name: true } } },
+    });
+    const staff = await withConsequenceInHistory(
+      { ...application, history },
+      { includeReversals: true },
+    );
+    assert.equal(staff.status, status);
+    assert.deepEqual(staff.history.map(({ id }) => id), [
+      history[0].id,
+      `reversal-${outcome.id}`,
+      `outcome-${outcome.id}`,
+      history[1].id,
+    ]);
+    assert.deepEqual(
+      (await withConsequenceInHistory({ ...application, history })).history,
+      history,
+    );
+  }
+});
+
+test("a later reversed outcome did not close while an earlier outcome was live", async () => {
+  const animalId = await makeAnimal("Overlapping reversals");
+  const application = await makeApplication(animalId, {
+    submittedAt: hoursAgo(5),
+  });
+  const makeOutcome = (
+    createdAt: Date,
+    reversedAt: Date,
+    reversalReason: string,
+  ) =>
+    prisma.outcome.create({
+      data: {
+        animalId,
+        type: OutcomeType.TRANSFER_OUT,
+        outcomeDate: "2026-01-01",
+        staffMemberId: staffId,
+        createdAt,
+        reversedAt,
+        reversedById: staffId,
+        reversalReason,
+      },
+    });
+  const first = await makeOutcome(hoursAgo(4), new Date(), "First transfer was wrong.");
+  const second = await makeOutcome(hoursAgo(2), hoursAgo(1), "Second transfer was wrong.");
+
+  const staff = await withConsequenceInHistory(
+    { ...application, history: [] },
+    { includeReversals: true },
+  );
+  assert.equal(staff.status, ApplicationStatus.PENDING);
+  assert.deepEqual(staff.history.map(({ id }) => id), [
+    `reversal-${first.id}`,
+    `outcome-${first.id}`,
+  ]);
+  assert.ok(!staff.history.some(({ id }) => id.includes(second.id)));
+});
+
+test("reversing one closing outcome does not claim to reopen an application another keeps closed", async () => {
+  const animalId = await makeAnimal("Still closed after reversal");
+  const application = await makeApplication(animalId, {
+    submittedAt: hoursAgo(5),
+  });
+  const first = await prisma.outcome.create({
+    data: {
+      animalId,
+      type: OutcomeType.TRANSFER_OUT,
+      outcomeDate: "2026-01-01",
+      staffMemberId: staffId,
+      createdAt: hoursAgo(4),
+      reversedAt: hoursAgo(1),
+      reversedById: staffId,
+      reversalReason: "First transfer was wrong.",
+    },
+  });
+  const second = await prisma.outcome.create({
+    data: {
+      animalId,
+      type: OutcomeType.RETURN_TO_OWNER,
+      outcomeDate: "2026-01-01",
+      staffMemberId: staffId,
+      createdAt: hoursAgo(2),
+    },
+  });
+
+  const staff = await withConsequenceInHistory(
+    { ...application, history: [] },
+    { includeReversals: true },
+  );
+  assert.equal(staff.status, "CLOSED");
+  assert.deepEqual(staff.history.map(({ id }) => id), [
+    `reversal-${first.id}`,
+    `outcome-${second.id}`,
+    `outcome-${first.id}`,
+  ]);
+  assert.equal(staff.history[0].event, "reversal");
+  assert.equal(
+    staff.history[0].statusChangeReason,
+    "The outcome that closed this application was reversed: First transfer was wrong.",
+  );
+
+  await prisma.outcome.update({
+    where: { id: second.id },
+    data: {
+      reversedAt: new Date(),
+      reversedById: staffId,
+      reversalReason: "The later outcome was also wrong.",
+    },
+  });
+  const afterBoth = await withConsequenceInHistory(
+    { ...application, history: [] },
+    { includeReversals: true },
+  );
+  assert.equal(afterBoth.status, ApplicationStatus.PENDING);
+  assert.deepEqual(afterBoth.history.map(({ id }) => id), [
+    `reversal-${second.id}`,
+    `reversal-${first.id}`,
+    `outcome-${second.id}`,
+    `outcome-${first.id}`,
+  ]);
+  assert.equal(afterBoth.history[0].event, "reopened");
+  assert.equal(afterBoth.history[1].event, "reversal");
+});
