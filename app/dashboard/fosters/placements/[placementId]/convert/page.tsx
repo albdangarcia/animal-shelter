@@ -5,7 +5,10 @@ import StatusPage from "@/components/StatusPage";
 import ActionBlockedMessage from "@/components/action-blocked-message";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { FosterPlacementType } from "@/prisma/generated/enums";
-import { fetchFosterPlacementById } from "@/app/lib/data/fosters/fosters.data";
+import {
+  fetchApprovedFosterApplications,
+  fetchFosterPlacementById,
+} from "@/app/lib/data/fosters/fosters.data";
 import { ConvertFosterToAdoptionForm } from "@/components/dashboard/fosters/placements/convert-foster-to-adoption-form";
 
 interface Props {
@@ -58,14 +61,26 @@ const PageContent = async ({ params }: Props) => {
     );
   }
 
+  const approvedApplications = await fetchApprovedFosterApplications(
+    placement.fosterProfile.person.id,
+    placement.animal.id,
+  );
+
   return (
     <main className="container mx-auto">
       <ConvertFosterToAdoptionForm
+        // Keyed so a client-side navigation between two placements' convert
+        // pages remounts the form instead of reusing the instance — without
+        // this, react-hook-form's defaultValues (which set the initial
+        // application picker selection) would keep the previous placement's
+        // value, since a new placementId alone does not force a React remount.
+        key={placement.id}
         placement={{
           id: placement.id,
           animal: placement.animal,
           fosterProfile: { person: { name: placement.fosterProfile.person.name } },
         }}
+        approvedApplications={approvedApplications}
       />
     </main>
   );

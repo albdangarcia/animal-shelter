@@ -1,6 +1,10 @@
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
-import { AnimalListingStatus, FosterStatus } from "@/prisma/generated/enums";
+import {
+  AnimalListingStatus,
+  ApplicationStatus,
+  FosterStatus,
+} from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
 import { z } from "zod";
 import {
@@ -14,6 +18,10 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { computeStays, type StayEvent } from "@/app/lib/utils/stay-utils";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
 import { ANIMAL_IMAGE_ORDER } from "@/app/lib/utils/animal-image-order";
+import {
+  DERIVATION_APPLICATION_SELECT,
+  effectiveApplicationStatuses,
+} from "@/app/lib/data/application-status.data";
 
 export type FosterPickerOption = {
   id: string;
@@ -288,6 +296,38 @@ const _fetchFosterPlacementById = async (
   }
 };
 
+export type ApprovedFosterApplicationOption = {
+  id: string;
+  applicantName: string;
+};
+
+// The convert-to-adoption form's application picker: this foster's own
+// applications for the placement's animal that are effectively APPROVED,
+// derived rather than filtered by the column for the same reason as every
+// other read site — a stored APPROVED can be stale (an earlier stay's outcome
+// already adopted or closed it), and only a live APPROVED is eligible to be
+// linked.
+const _fetchApprovedFosterApplications = async (
+  personId: string,
+  animalId: string,
+): Promise<ApprovedFosterApplicationOption[]> => {
+  const applications = await prisma.adoptionApplication.findMany({
+    where: { applicantId: personId, animalId },
+    select: { ...DERIVATION_APPLICATION_SELECT, applicantName: true },
+  });
+  if (applications.length === 0) {
+    return [];
+  }
+
+  const statuses = await effectiveApplicationStatuses(applications);
+  return applications
+    .filter(
+      (application) =>
+        statuses.get(application.id) === ApplicationStatus.APPROVED,
+    )
+    .map(({ id, applicantName }) => ({ id, applicantName }));
+};
+
 // Roster table
 
 const fosterRosterInclude = {
@@ -493,3 +533,7 @@ export const fetchFosterProfileForPlacement = RequirePermission(
 export const fetchFosterPlacementById = RequirePermission(
   AppPermissions.FOSTERS_READ,
 )(_fetchFosterPlacementById);
+
+export const fetchApprovedFosterApplications = RequirePermission(
+  AppPermissions.FOSTERS_READ,
+)(_fetchApprovedFosterApplications);

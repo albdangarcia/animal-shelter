@@ -370,7 +370,9 @@ const _convertFosterToAdoption = async (
           endDate: true,
           type: true,
           animalId: true,
-          fosterProfile: { select: { person: { select: { name: true } } } },
+          fosterProfile: {
+            select: { person: { select: { id: true, name: true } } },
+          },
         },
       });
 
@@ -408,11 +410,22 @@ const _convertFosterToAdoption = async (
       if (adoptionApplicationId) {
         const application = await tx.adoptionApplication.findUnique({
           where: { id: adoptionApplicationId },
-          select: DERIVATION_APPLICATION_SELECT,
+          select: { ...DERIVATION_APPLICATION_SELECT, applicantId: true },
         });
         if (!application || application.animalId !== placement.animalId) {
           throw new PreconditionFailedError(
             "That adoption application does not belong to this animal.",
+          );
+        }
+        // This is the foster's own conversion, so the application has to be
+        // theirs — nothing else names an adopter for this outcome, the way a
+        // standard adoption outcome's adopter is always its linked
+        // application's applicant. Without this, any approved application for
+        // the animal (another applicant's) could be linked here and credited
+        // to the wrong person.
+        if (application.applicantId !== placement.fosterProfile.person.id) {
+          throw new PreconditionFailedError(
+            "That adoption application does not belong to this foster.",
           );
         }
         // Effective, not the column, for the same reason as createOutcome:
