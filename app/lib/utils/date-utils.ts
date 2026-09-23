@@ -111,19 +111,23 @@ export function formatDateToLongString(date: Date): string {
 }
 
 /**
- * Formats a date input (string, Date, undefined, or null) into a "MMM d, yyyy" string  (e.g., "Jan 15, 2023").
+ * Formats a date input (string, Date, undefined, or null) into a date string.
+ * Defaults to "MMM d, yyyy" (e.g., "Jan 15, 2023").
  * Returns "N/A" for null/undefined inputs and "Invalid Date" for invalid date values.
  *
  * @param dateInput The date input to format. Can be a string, Date object, undefined, or null.
  * @returns A formatted date string, "N/A", or "Invalid Date".
  */
-export const formatDateOrNA = (dateInput: string | Date | undefined | null): string => {
+export const formatDateOrNA = (
+  dateInput: string | Date | undefined | null,
+  pattern = "MMM d, yyyy",
+): string => {
   if (dateInput === null || dateInput === undefined) {
     return "N/A";
   }
 
   try {
-    return format(dateInput, 'MMM d, yyyy');
+    return format(dateInput, pattern);
   } catch (error) {
     console.error("Error formatting date:", error);
     return "Invalid Date";
@@ -133,10 +137,11 @@ export const formatDateOrNA = (dateInput: string | Date | undefined | null): str
 /** A stable first render for instant dates, independent of the runtime's zone. */
 export const formatUtcDateOrNA = (
   dateInput: string | Date | undefined | null,
+  pattern = "MMM d, yyyy",
 ): string => {
   if (dateInput === null || dateInput === undefined) return "N/A";
   try {
-    return formatInTimeZone(dateInput, "UTC", "MMM d, yyyy");
+    return formatInTimeZone(dateInput, "UTC", pattern);
   } catch {
     return "Invalid Date";
   }

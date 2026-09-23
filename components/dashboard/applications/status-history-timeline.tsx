@@ -1,6 +1,6 @@
 import type { StatusHistoryEntry } from "@/app/lib/types";
 import { Badge } from "@/components/ui/badge";
-import { formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { TimeAgo } from "@/components/common/time-ago";
 import { ApplicationStatuses } from "@/components/dashboard/my-adoption-applications/table/my-applications-options";
 
 export const StatusHistoryTimeline = ({
@@ -26,7 +26,7 @@ export const StatusHistoryTimeline = ({
                 </span>
               )}
               <span className="text-muted-foreground/70">
-                &bull; {formatTimeAgo(entry.changedAt)}
+                &bull; <TimeAgo date={entry.changedAt} />
               </span>
             </div>
             <p className="mt-1 text-sm text-muted-foreground">

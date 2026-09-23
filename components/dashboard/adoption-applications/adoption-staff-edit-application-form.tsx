@@ -24,7 +24,8 @@ import {
   STAFF_EDITABLE_STATUSES,
 } from "@/app/lib/utils/application-status";
 import { isReviewStatus } from "@/app/lib/utils/derive-application-status";
-import { formatDateToLongString, formatTimeAgo } from "@/app/lib/utils/date-utils";
+import { FormattedDate } from "@/components/common/formatted-date";
+import { TimeAgo } from "@/components/common/time-ago";
 import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import {
   formatSingleEnumOption,
@@ -325,8 +326,8 @@ export function StaffApplicationUpdateForm({
                     {application.lastEditedBy
                       ? ` by ${application.lastEditedBy.name}`
                       : ""}{" "}
-                    on {formatDateToLongString(lastEditedAt)} (
-                    {formatTimeAgo(lastEditedAt)}). Anything you read before
+                    on <FormattedDate date={lastEditedAt} long /> (
+                    <TimeAgo date={lastEditedAt} />). Anything you read before
                     then may no longer be what it says now.
                   </AlertDescription>
                 </Alert>

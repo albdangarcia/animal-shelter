@@ -103,18 +103,10 @@ const readAllPages = async (
 };
 
 // Radix SelectTrigger renders role="combobox"; the shadcn Form wiring gives
-// the FormField-backed ones a real label association. On the review page a
-// click can land while React replaces markup that failed to hydrate, and is
-// lost, so the trigger is clicked again until the list is open.
+// the FormField-backed ones a real label association.
 const chooseFromSelect = async (page: Page, label: string, option: string) => {
-  const item = page.getByRole("option", { name: option }).first();
-  await expect(async () => {
-    if (!(await item.isVisible())) {
-      await page.getByLabel(label, { exact: true }).click();
-    }
-    await expect(item).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 20_000 });
-  await item.click();
+  await page.getByLabel(label, { exact: true }).click();
+  await page.getByRole("option", { name: option }).first().click();
 };
 
 // The yard and children radio labels are plain <div>s, not associated with
@@ -348,14 +340,7 @@ const reportedAdoptions = async (page: Page) => {
 // Records the adoption from the winner's review page, the way staff do.
 const recordAdoption = async (page: Page, candidate: Candidate) => {
   await page.goto(candidate.winnerReviewHref);
-  // Followed by its href rather than clicked: the review page's status
-  // timeline can fail to hydrate for an entry only seconds old, and a click
-  // that lands while React replaces the page is lost.
-  const createHref = await page
-    .getByRole("link", { name: "Create Outcome" })
-    .getAttribute("href");
-  expect(createHref).toMatch(/^\/dashboard\/outcomes\/create\?/);
-  await page.goto(createHref!);
+  await page.getByRole("link", { name: "Create Outcome" }).click();
   await page.getByRole("button", { name: "Process Outcome" }).click();
   await expect(page.getByText("Outcome processed successfully.")).toBeVisible();
   await waitForPathname(page, OUTCOMES_PATH);

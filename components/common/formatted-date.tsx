@@ -10,6 +10,7 @@ const subscribe = () => () => {};
 
 interface FormattedDateProps extends React.ComponentPropsWithoutRef<"span"> {
   date: string | Date | undefined | null;
+  long?: boolean;
 }
 
 /**
@@ -21,11 +22,12 @@ interface FormattedDateProps extends React.ComponentPropsWithoutRef<"span"> {
 export const FormattedDate = React.forwardRef<
   HTMLSpanElement,
   FormattedDateProps
->(({ date, ...props }, ref) => {
+>(({ date, long = false, ...props }, ref) => {
+  const pattern = long ? "MMMM d, yyyy" : "MMM d, yyyy";
   const text = React.useSyncExternalStore(
     subscribe,
-    () => formatDateOrNA(date),
-    () => formatUtcDateOrNA(date),
+    () => formatDateOrNA(date, pattern),
+    () => formatUtcDateOrNA(date, pattern),
   );
 
   return (
