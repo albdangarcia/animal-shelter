@@ -113,20 +113,9 @@ export type FosterApplicationFormInput = z.input<
   typeof FosterApplicationFormSchema
 >;
 
-// Reuses the existing ApplicationStatus enum; ADOPTED is never used for
-// foster applications.
-const updatableFosterApplicationStatuses = [
-  ApplicationStatus.PENDING,
-  ApplicationStatus.REVIEWING,
-  ApplicationStatus.WAITLISTED,
-  ApplicationStatus.APPROVED,
-  ApplicationStatus.REJECTED,
-  ApplicationStatus.WITHDRAWN,
-] as const;
-
 export const FosterApplicationStatusChangeSchema = z.object({
   applicationId: cuidSchema,
-  status: z.enum(updatableFosterApplicationStatuses, {
+  status: z.enum(ApplicationStatus, {
     error: "Invalid application status.",
   }),
   statusChangeReason: z.string().min(1, {

@@ -37,7 +37,7 @@ import { lockPerson } from "../data/application-status.data";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 // Non-terminal statuses block a new application from being submitted, mirroring
-// the "one active adoption application" convention (ADOPTED is never used here).
+// the "one active adoption application" convention.
 const nonTerminalFosterStatuses: ApplicationStatus[] = [
   ApplicationStatus.PENDING,
   ApplicationStatus.REVIEWING,

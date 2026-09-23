@@ -36,6 +36,7 @@ import {
   STAFF_EDITABLE_STATUSES,
 } from "../utils/application-status";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
+import type { EffectiveApplicationStatus } from "../utils/derive-application-status";
 import {
   DERIVATION_APPLICATION_SELECT,
   effectiveApplicationStatus,
@@ -100,7 +101,7 @@ const _staffUpdateAdoptionApp = async (
   // What the application is, not what the column holds: an application the
   // animal's outcome has adopted or closed has no transitions, whatever review
   // decision sits underneath it.
-  let currentStatus: ApplicationStatus;
+  let currentStatus: EffectiveApplicationStatus;
   try {
     existingApplication = await prisma.adoptionApplication.findUnique({
       where: { id: validatedAdoptionAppId },
@@ -521,7 +522,7 @@ const _staffEditPersonApplication = async (
 
   // Verify the application exists and belongs to this person.
   let existingApplication;
-  let currentStatus: ApplicationStatus | undefined;
+  let currentStatus: EffectiveApplicationStatus | undefined;
   try {
     existingApplication = await prisma.adoptionApplication.findUnique({
       where: { id: validatedAppId, applicantId: validatedPersonId },
@@ -572,18 +573,13 @@ const _staffEditPersonApplication = async (
         );
       }
 
-      // Still conditional on the column, for the writers that change a review
-      // decision without taking the animal lock (the applicant's own
-      // withdrawal). Matching this list against the column is sound because it
-      // holds decisions only, and a column holding none of them is ADOPTED or
-      // CLOSED, which the cascade only writes where the derivation agrees:
-      // after an outcome for the application's own animal. A count of 0 means
-      // one of those writers got there first.
+      // Unconditional on the status: everything that changes it — a review
+      // decision, a withdrawal, a reactivation — takes the animal lock too, so
+      // the status just derived is still the status at this write.
       const { count } = await tx.adoptionApplication.updateMany({
         where: {
           id: validatedAppId,
           applicantId: validatedPersonId,
-          status: { in: STAFF_EDITABLE_STATUSES },
         },
         data: {
           ...toAdoptionApplicantData(validatedFields.data),
@@ -597,9 +593,7 @@ const _staffEditPersonApplication = async (
         },
       });
       if (count === 0) {
-        throw new ConflictError(
-          "This application has moved to a status staff cannot edit.",
-        );
+        throw new ConflictError("Application not found.");
       }
 
       const editStamp = householdEditStamp(session.user.personId);

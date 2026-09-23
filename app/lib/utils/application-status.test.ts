@@ -13,7 +13,10 @@ import {
   formatStatusList,
   isAllowedTransition,
 } from "./application-status";
-import { isReviewStatus } from "./derive-application-status";
+import {
+  EffectiveApplicationStatus,
+  isReviewStatus,
+} from "./derive-application-status";
 
 test("an applicant can only edit an application nobody has picked up yet", () => {
   assert.deepEqual(APPLICANT_EDITABLE_STATUSES, [ApplicationStatus.PENDING]);
@@ -45,7 +48,7 @@ test("a transition only ever leads to a review decision", () => {
 });
 
 test("an application an outcome has adopted or closed has nothing left to review", () => {
-  for (const status of [ApplicationStatus.ADOPTED, ApplicationStatus.CLOSED]) {
+  for (const status of [EffectiveApplicationStatus.ADOPTED, EffectiveApplicationStatus.CLOSED]) {
     assert.deepEqual(allowedNextStatuses(status), [], status);
     for (const target of Object.values(ApplicationStatus)) {
       assert.ok(!isAllowedTransition(status, target), `${status} -> ${target}`);
@@ -86,16 +89,16 @@ test("staff cannot edit rejected, withdrawn, adopted or closed applications", ()
   for (const status of [
     ApplicationStatus.REJECTED,
     ApplicationStatus.WITHDRAWN,
-    ApplicationStatus.ADOPTED,
-    ApplicationStatus.CLOSED,
+    EffectiveApplicationStatus.ADOPTED,
+    EffectiveApplicationStatus.CLOSED,
   ]) {
     assert.ok(!STAFF_EDITABLE_STATUSES.includes(status), status);
   }
 });
 
 test("a closed application never stands in the way of a new one", () => {
-  assert.ok(!BLOCKING_APPLICATION_STATUSES.includes(ApplicationStatus.CLOSED));
-  assert.ok(!ACTIVE_APPLICATION_STATUSES.includes(ApplicationStatus.CLOSED));
+  assert.ok(!BLOCKING_APPLICATION_STATUSES.includes(EffectiveApplicationStatus.CLOSED));
+  assert.ok(!ACTIVE_APPLICATION_STATUSES.includes(EffectiveApplicationStatus.CLOSED));
 });
 
 test("only the statuses staff may override separate active from blocking", () => {
@@ -113,7 +116,7 @@ test("every status an application can be worked in is active", () => {
     ApplicationStatus.REVIEWING,
     ApplicationStatus.WAITLISTED,
     ApplicationStatus.APPROVED,
-    ApplicationStatus.ADOPTED,
+    EffectiveApplicationStatus.ADOPTED,
   ]) {
     assert.ok(ACTIVE_APPLICATION_STATUSES.includes(status), status);
   }
@@ -132,5 +135,5 @@ test("a withdrawn application never blocks reviving another one", () => {
   assert.ok(
     !REACTIVATION_BLOCKING_STATUSES.includes(ApplicationStatus.WITHDRAWN),
   );
-  assert.ok(!REACTIVATION_BLOCKING_STATUSES.includes(ApplicationStatus.CLOSED));
+  assert.ok(!REACTIVATION_BLOCKING_STATUSES.includes(EffectiveApplicationStatus.CLOSED));
 });

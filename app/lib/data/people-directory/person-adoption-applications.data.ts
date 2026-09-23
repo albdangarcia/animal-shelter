@@ -1,5 +1,6 @@
 import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
+import type { WithEffectiveStatus } from "../../utils/derive-application-status";
 import {
   cuidSchema,
   currentPageSchema,
@@ -16,7 +17,7 @@ import z from "zod";
 
 // Both payloads carry the application's effective status in `status`,
 // derived from the animal's outcomes, not the column's value.
-export type AdoptionApplicationForEditPayload =
+export type AdoptionApplicationForEditPayload = WithEffectiveStatus<
   Prisma.AdoptionApplicationGetPayload<{
     select: {
       id: true;
@@ -47,9 +48,10 @@ export type AdoptionApplicationForEditPayload =
         };
       };
     };
-  }>;
+  }>
+>;
 
-export type PersonAdoptionApplicationPayload =
+export type PersonAdoptionApplicationPayload = WithEffectiveStatus<
   Prisma.AdoptionApplicationGetPayload<{
     select: {
       id: true;
@@ -70,7 +72,8 @@ export type PersonAdoptionApplicationPayload =
         };
       };
     };
-  }>;
+  }>
+>;
 
 const PersonAdoptionApplicationsSchema = z.object({
   currentPage: currentPageSchema,

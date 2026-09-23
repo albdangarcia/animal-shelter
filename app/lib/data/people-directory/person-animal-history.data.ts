@@ -5,6 +5,10 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
 import {
+  DERIVATION_APPLICATION_SELECT,
+  effectiveApplicationStatuses,
+} from "../application-status.data";
+import {
   calendarDay,
   startOfShelterDay,
   type CalendarDay,
@@ -38,7 +42,8 @@ export type PersonAnimalHistoryEntry = {
     animalImages: { url: string }[];
     listingStatus: string;
   };
-  // Only populated for APPLICANT entries
+  // Only populated for APPLICANT entries: the application's effective status,
+  // derived from the animal's outcomes.
   applicationStatus?: string;
 };
 
@@ -92,8 +97,7 @@ const _fetchPersonAnimalHistory = async (
         },
         adoptionApplications: {
           select: {
-            submittedAt: true,
-            status: true,
+            ...DERIVATION_APPLICATION_SELECT,
             animal: { select: animalSelect },
           },
         },
@@ -115,6 +119,9 @@ const _fetchPersonAnimalHistory = async (
     }
 
     const timezone = (await getShelterSettings()).timezone;
+    const applicationStatuses = await effectiveApplicationStatuses(
+      person.adoptionApplications,
+    );
     const history: PersonAnimalHistoryEntry[] = [
       ...person.surrenderedAnimals.map((intake) => ({
         role: "SURRENDERER" as const,
@@ -135,7 +142,7 @@ const _fetchPersonAnimalHistory = async (
         role: "APPLICANT" as const,
         date: application.submittedAt,
         animal: application.animal,
-        applicationStatus: application.status,
+        applicationStatus: applicationStatuses.get(application.id),
       })),
       ...(person.fosterProfile?.placements.map((placement) => ({
         role: "FOSTER_CARER" as const,

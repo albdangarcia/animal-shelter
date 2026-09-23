@@ -1075,6 +1075,10 @@ model AssessmentAnswer {
 // ADOPTION WORKFLOW
 // ═══════════════════════════════════════════════════
 
+/// The review decisions: someone chose each one. Whether an adoption
+/// application was adopted, or closed because its animal left the shelter, is
+/// not a decision and is not stored here. It follows from the animal's
+/// outcomes and is derived from them (`deriveApplicationStatus`).
 enum ApplicationStatus {
   PENDING // Application submitted, awaiting review
   REVIEWING // Application is actively being reviewed
@@ -1082,8 +1086,6 @@ enum ApplicationStatus {
   APPROVED // Application approved
   REJECTED // Application rejected
   WITHDRAWN // Application withdrawn by the user
-  ADOPTED // animal has been adopted through this application (final state)
-  CLOSED // Closed administratively because the animal left the shelter, not a judgment on the applicant. Never set by staff review; only the outcome cascade sets it, and it is the one status that does not block re-applying.
 }
 
 /// Who entered an application. Informational, for reviewers — never a
@@ -1157,6 +1159,9 @@ model AdoptionApplication {
   @@map(name: "adoption_applications")
 }
 
+/// An adoption application's review decisions, in order: who moved it, when
+/// and why. Only decisions are recorded here. The outcome that adopted or
+/// closed an application appears in its timeline read off the outcome itself.
 model ApplicationStatusHistory {
   id            String              @id @default(cuid())
   applicationId String              @map(name: "application_id")
@@ -1179,8 +1184,8 @@ model ApplicationStatusHistory {
 // ═══════════════════════════════════════════════════
 
 /// Represents a person's request to become an approved foster. This is a snapshot-in-time
-/// record, same convention as `AdoptionApplication`. Reuses `ApplicationStatus` (the
-/// `ADOPTED` value is simply never used here). Approval creates/activates the
+/// record, same convention as `AdoptionApplication`, and moves through the same
+/// review decisions (`ApplicationStatus`). Approval creates/activates the
 /// `FosterProfile` from this application's capability snapshot.
 model FosterApplication {
   id String @id @default(cuid())

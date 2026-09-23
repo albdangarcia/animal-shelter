@@ -1,18 +1,21 @@
 import { ApplicationStatus, OutcomeType } from "@/prisma/generated/enums";
 import { formatSingleEnumOption } from "./enum-formatter";
-import { isReviewStatus, type ReviewStatus } from "./derive-application-status";
+import {
+  EffectiveApplicationStatus,
+  isReviewStatus,
+} from "./derive-application-status";
 
 // Every rule in this file is about an application's effective status: the
 // answer `deriveApplicationStatus` gives, never the status column read on its
 // own. ADOPTED and CLOSED are consequences of an Outcome recorded for the
-// animal, and the derivation is what says whether one holds. The column still
-// carries them for now, but a rule that reads the column is reading a copy.
+// animal, and the column never holds them, so a rule that reads the column
+// cannot see an application an outcome has closed.
 
 // Shared by adoption and foster application status-change actions so both
-// enforce the same pipeline instead of accepting any status change. Keyed by
-// the review decisions only, because a transition is a decision: staff move an
-// application from one decision to the next, and never into or out of a
-// consequence. See `allowedNextStatuses` for an application an outcome holds.
+// enforce the same pipeline instead of accepting any status change. A
+// transition is a decision: staff move an application from one decision to the
+// next, and never into or out of a consequence. See `allowedNextStatuses` for
+// an application an outcome has adopted or closed.
 //
 // WAITLISTED is grouped with PENDING/REVIEWING as a non-terminal "in
 // progress" state — other in-progress states can move into it, and from
@@ -28,8 +31,8 @@ import { isReviewStatus, type ReviewStatus } from "./derive-application-status";
 // the "approved applicant backs out" path (adoption additionally releases the
 // animal back to PUBLISHED).
 export const ALLOWED_APPLICATION_TRANSITIONS: Record<
-  ReviewStatus,
-  readonly ReviewStatus[]
+  ApplicationStatus,
+  readonly ApplicationStatus[]
 > = {
   [ApplicationStatus.PENDING]: [
     ApplicationStatus.REVIEWING,
@@ -61,8 +64,8 @@ export const ALLOWED_APPLICATION_TRANSITIONS: Record<
 // application an outcome has adopted or closed has nothing left for review to
 // decide: the animal has left, and no review decision brings it back.
 export const allowedNextStatuses = (
-  status: ApplicationStatus,
-): readonly ReviewStatus[] =>
+  status: EffectiveApplicationStatus,
+): readonly ApplicationStatus[] =>
   isReviewStatus(status) ? ALLOWED_APPLICATION_TRANSITIONS[status] : [];
 
 // The statuses that stop this person applying for this animal again.
@@ -78,14 +81,14 @@ export const allowedNextStatuses = (
 // status, and so is every list below that is built from this one: test
 // membership against what `deriveApplicationStatus` returns. The column is not
 // what says an application is closed.
-export const BLOCKING_APPLICATION_STATUSES: ApplicationStatus[] = [
-  ApplicationStatus.PENDING,
-  ApplicationStatus.REVIEWING,
-  ApplicationStatus.WAITLISTED,
-  ApplicationStatus.APPROVED,
-  ApplicationStatus.REJECTED,
-  ApplicationStatus.WITHDRAWN,
-  ApplicationStatus.ADOPTED,
+export const BLOCKING_APPLICATION_STATUSES: EffectiveApplicationStatus[] = [
+  EffectiveApplicationStatus.PENDING,
+  EffectiveApplicationStatus.REVIEWING,
+  EffectiveApplicationStatus.WAITLISTED,
+  EffectiveApplicationStatus.APPROVED,
+  EffectiveApplicationStatus.REJECTED,
+  EffectiveApplicationStatus.WITHDRAWN,
+  EffectiveApplicationStatus.ADOPTED,
 ];
 
 // The blocking statuses staff may enter a new application over anyway. The
@@ -100,7 +103,7 @@ export const BLOCKING_APPLICATION_STATUSES: ApplicationStatus[] = [
 // application for the animal is active.
 //
 // CLOSED is not listed because it is not in BLOCKING_APPLICATION_STATUSES.
-export const STAFF_OVERRIDABLE_APPLICATION_STATUSES: ApplicationStatus[] = [
+export const STAFF_OVERRIDABLE_APPLICATION_STATUSES: EffectiveApplicationStatus[] = [
   ApplicationStatus.REJECTED,
   ApplicationStatus.WITHDRAWN,
 ];
@@ -111,7 +114,7 @@ export const STAFF_OVERRIDABLE_APPLICATION_STATUSES: ApplicationStatus[] = [
 // would create or revive one — the staff create action, and the applicant's own
 // reactivation of a withdrawn application. Derived so a status added to
 // BLOCKING_APPLICATION_STATUSES is active here until someone decides otherwise.
-export const ACTIVE_APPLICATION_STATUSES: ApplicationStatus[] =
+export const ACTIVE_APPLICATION_STATUSES: EffectiveApplicationStatus[] =
   BLOCKING_APPLICATION_STATUSES.filter(
     (status) => !STAFF_OVERRIDABLE_APPLICATION_STATUSES.includes(status),
   );
@@ -128,7 +131,7 @@ export const ACTIVE_APPLICATION_STATUSES: ApplicationStatus[] =
 // blocker would strand someone whose two applications for one animal were both
 // withdrawn — and a withdrawn application is inert, so reviving one beside it
 // creates nothing this guard exists to prevent.
-export const REACTIVATION_BLOCKING_STATUSES: ApplicationStatus[] =
+export const REACTIVATION_BLOCKING_STATUSES: EffectiveApplicationStatus[] =
   BLOCKING_APPLICATION_STATUSES.filter(
     (status) => status !== ApplicationStatus.WITHDRAWN,
   );
@@ -140,7 +143,7 @@ export const REACTIVATION_BLOCKING_STATUSES: ApplicationStatus[] =
 // signal to the reviewer. An allow-list rather than a deny-list so a status
 // added to the enum is non-editable until someone decides otherwise. The edit
 // page, the Edit link and the update action all read this.
-export const APPLICANT_EDITABLE_STATUSES: ApplicationStatus[] = [
+export const APPLICANT_EDITABLE_STATUSES: EffectiveApplicationStatus[] = [
   ApplicationStatus.PENDING,
 ];
 
@@ -153,28 +156,22 @@ export const APPLICANT_EDITABLE_STATUSES: ApplicationStatus[] = [
 // has adopted or closed is a record of what happened, so rewriting the
 // snapshot behind any of them would leave the outcome resting on text that no
 // longer says what it said.
-export const STAFF_EDITABLE_STATUSES: ApplicationStatus[] = [
+export const STAFF_EDITABLE_STATUSES: EffectiveApplicationStatus[] = [
   ApplicationStatus.PENDING,
   ApplicationStatus.REVIEWING,
   ApplicationStatus.WAITLISTED,
   ApplicationStatus.APPROVED,
 ];
 
-// The applicant-visible reason written onto every application the outcome
-// cascade closes. Keyed by all six OutcomeTypes because the cascade runs for
-// every one of them — an animal that was transferred, reunited with its owner
-// or that died closes open applications exactly the same way an adoption does,
-// so this text can never be narrowed to adoption wording.
+// The applicant-visible reason the status history gives for an application an
+// outcome closed. Keyed by all six OutcomeTypes because every one of them
+// closes open applications — an animal that was transferred, reunited with its
+// owner or that died closes them exactly the same way an adoption does, so
+// this text can never be narrowed to adoption wording.
 //
-// DECEASED and EUTHANIZED deliberately share the non-specific line: a bulk
-// auto-generated history row is the wrong channel for that news, and staff can
-// phone the people who need to hear it properly.
-//
-// This lives here rather than next to the cascade in `outcome.actions.ts`
-// because that file is `"use server"`, where every export must be an async
-// function — a const export there is a build error. `prisma/seed.ts` mirrors
-// the cascade and reads the same map, so seeded closures and real ones cannot
-// drift apart.
+// DECEASED and EUTHANIZED deliberately share the non-specific line: a status
+// history entry is the wrong channel for that news, and staff can phone the
+// people who need to hear it properly.
 export const CLOSURE_REASON_BY_OUTCOME: Record<OutcomeType, string> = {
   [OutcomeType.ADOPTION]: "This animal was adopted by another applicant.",
   [OutcomeType.TRANSFER_OUT]:
@@ -185,12 +182,39 @@ export const CLOSURE_REASON_BY_OUTCOME: Record<OutcomeType, string> = {
   [OutcomeType.OTHER]: "This animal is no longer available for adoption.",
 };
 
+// The reason the status history gives for an application an outcome closed.
+// A foster-to-adopt conversion gets its own line: its adopter is the foster,
+// and the conversion does not link their application, so one it closes may be
+// the adopter's own, where "another applicant" would be false.
+export const closureReason = ({
+  type,
+  byFoster,
+}: {
+  type: OutcomeType;
+  byFoster: boolean;
+}): string =>
+  byFoster
+    ? "This animal was adopted by the family fostering them."
+    : CLOSURE_REASON_BY_OUTCOME[type];
+
+// The reason the status history gives for the application an adoption was
+// recorded against: through the ordinary outcome form, or by converting the
+// foster-to-adopt placement the adopter was fostering the animal on.
+export const adoptionReason = ({
+  byFoster,
+}: {
+  byFoster: boolean;
+}): string =>
+  byFoster ? "Animal adopted by their foster." : "Animal adopted by applicant.";
+
 // Joins a status list for a refusal message ("pending", "pending or
 // waitlisted"). A message that spells its rule out by hand goes stale the
 // moment someone edits the list it is reporting — which is how the old
 // "PENDING is the only status the action accepts" comment came to be false —
 // so every sentence that names these statuses derives them from the array.
-export const formatStatusList = (statuses: ApplicationStatus[]): string => {
+export const formatStatusList = (
+  statuses: EffectiveApplicationStatus[],
+): string => {
   const labels = statuses.map((status) =>
     formatSingleEnumOption(status).toLowerCase(),
   );
@@ -200,12 +224,12 @@ export const formatStatusList = (statuses: ApplicationStatus[]): string => {
 };
 
 export const isAllowedTransition = (
-  from: ApplicationStatus,
+  from: EffectiveApplicationStatus,
   to: ApplicationStatus,
-): boolean => (allowedNextStatuses(from) as readonly ApplicationStatus[]).includes(to);
+): boolean => allowedNextStatuses(from).includes(to);
 
 export const illegalTransitionMessage = (
-  from: ApplicationStatus,
+  from: EffectiveApplicationStatus,
   to: ApplicationStatus,
 ): string =>
   `Cannot change a${/^[aeiou]/i.test(from) ? "n" : ""} ${formatSingleEnumOption(from).toLowerCase()} application to ${formatSingleEnumOption(to).toLowerCase()}.`;

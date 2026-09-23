@@ -2,51 +2,48 @@
 // trivially unit-testable and reusable. This is the SINGLE SOURCE OF TRUTH for
 // an adoption application's effective status: whether it was adopted, or closed
 // because the animal left, is derived from the animal's Outcome events, never
-// read from a stored consequence.
+// stored.
 //
 // An application's status mixes two kinds of fact. PENDING through WITHDRAWN
-// are decisions: someone chose each one. ADOPTED and CLOSED are consequences:
-// nobody chooses them, an Outcome recorded elsewhere causes them. A stored
-// consequence is a copy of a relation that sits right next to it, and a copy
-// can disagree with what it copies. Deriving it cannot.
+// are decisions: someone chose each one, and they are what the status column
+// holds. ADOPTED and CLOSED are consequences: nobody chooses them, an Outcome
+// recorded elsewhere causes them. Storing one would copy a relation that sits
+// right next to it, and a copy can disagree with what it copies. Deriving it
+// cannot.
 
 import { ApplicationStatus, OutcomeType } from "@/prisma/generated/enums";
 
-// The statuses someone decides. What an application's own status column
-// means once the consequences are derived rather than stored.
-export type ReviewStatus = Exclude<
-  ApplicationStatus,
-  typeof ApplicationStatus.ADOPTED | typeof ApplicationStatus.CLOSED
->;
+// The statuses an Outcome causes. The status column never holds them.
+export const ApplicationConsequence = {
+  ADOPTED: "ADOPTED",
+  CLOSED: "CLOSED",
+} as const;
+
+export type ApplicationConsequence =
+  (typeof ApplicationConsequence)[keyof typeof ApplicationConsequence];
+
+// What an adoption application effectively is: its review decision, unless an
+// outcome has adopted or closed it. This is the status every screen shows and
+// every rule tests; `ApplicationStatus` alone is only what the column holds.
+export const EffectiveApplicationStatus = {
+  ...ApplicationStatus,
+  ...ApplicationConsequence,
+} as const;
+
+export type EffectiveApplicationStatus =
+  | ApplicationStatus
+  | ApplicationConsequence;
+
+// A row read from the database, carrying its effective status in place of the
+// column's.
+export type WithEffectiveStatus<Row extends { status: ApplicationStatus }> =
+  Omit<Row, "status"> & { status: EffectiveApplicationStatus };
 
 export const isReviewStatus = (
-  status: ApplicationStatus,
-): status is ReviewStatus =>
-  status !== ApplicationStatus.ADOPTED && status !== ApplicationStatus.CLOSED;
-
-/**
- * The review decision to derive from, given what the status column holds.
- *
- * The outcome cascade still writes ADOPTED and CLOSED onto the column, over
- * the decision that was there. Neither loss matters to the derivation:
- *  - ADOPTED only ever replaced APPROVED. Both paths that record an adoption
- *    refuse an application that is not approved, or that belongs to another
- *    animal, so the adoption outcome that set it is among its own animal's
- *    outcomes and derives ADOPTED again. A row written before that refusal
- *    existed may not.
- *  - CLOSED replaced whichever open status the application had, and every open
- *    status derives the same way: the outcome that closed it was recorded
- *    after the application was submitted, so the derivation closes it again
- *    whichever open status stands in here.
- * Only feed this to `deriveApplicationStatus`. It is not the decision staff
- * made, and never something to show. Once the column holds only decisions, a
- * stored status is its own review status and this goes.
- */
-export function reviewStatusOf(stored: ApplicationStatus): ReviewStatus {
-  if (stored === ApplicationStatus.ADOPTED) return ApplicationStatus.APPROVED;
-  if (stored === ApplicationStatus.CLOSED) return ApplicationStatus.PENDING;
-  return stored;
-}
+  status: EffectiveApplicationStatus,
+): status is ApplicationStatus =>
+  status !== ApplicationConsequence.ADOPTED &&
+  status !== ApplicationConsequence.CLOSED;
 
 // The review decisions an Outcome does not override: staff rejected the
 // application or the applicant withdrew it, and the animal leaving afterwards
@@ -59,7 +56,7 @@ const SETTLED_REVIEW_STATUSES: ReadonlySet<ApplicationStatus> = new Set([
 
 export type DerivationApplication = {
   id: string;
-  reviewStatus: ReviewStatus;
+  reviewStatus: ApplicationStatus;
   submittedAt: Date;
 };
 
@@ -81,8 +78,9 @@ export type DerivationOutcome = {
  *     reversed one does not count, so voiding the adoption un-adopts the
  *     application with nothing to rewrite.
  *  2. Otherwise a settled review decision (REJECTED, WITHDRAWN) stands.
- *  3. Otherwise CLOSED iff some live outcome for the animal was recorded after
- *     this application was submitted: the animal left while it was open.
+ *  3. Otherwise CLOSED iff some live outcome for the animal was recorded at or
+ *     after the moment this application was submitted: the animal left while
+ *     it was open.
  *  4. Otherwise the review status, unchanged.
  *
  * "Recorded after" compares the outcome's `createdAt`, never its
@@ -98,7 +96,16 @@ export type DerivationOutcome = {
  *    application submitted on the 5th was open when the adoption was recorded,
  *    so it is closed; by `outcomeDate` it would read as open, for an animal
  *    already gone.
- * `createdAt` is written by the database and never edited.
+ * `createdAt` is set when the outcome is recorded and never edited.
+ *
+ * "At or after", because with a clock that only moves forward a tie means the
+ * application came first. Submitting refuses an animal that is not listed,
+ * and recording an outcome unlists it, both behind the animal's row lock. An
+ * application submitted after the outcome was recorded had to wait for the
+ * animal to come back and be listed again, so it shares the outcome's
+ * millisecond only if the clock was wound back by that whole interval to the
+ * millisecond. Both timestamps come from the application's clock as each row
+ * is written, so the derivation is only as good as that clock.
  *
  * Anchoring on the order of two recorded events, rather than on whether the
  * animal is in care now, is what keeps a re-intake from reviving old
@@ -112,31 +119,90 @@ export type DerivationOutcome = {
 export function deriveApplicationStatus(
   application: DerivationApplication,
   outcomes: readonly DerivationOutcome[],
-): ApplicationStatus {
+): EffectiveApplicationStatus {
+  return (
+    deriveApplicationConsequence(application, outcomes)?.status ??
+    application.reviewStatus
+  );
+}
+
+/**
+ * `deriveApplicationStatus` for many applications at once, keyed by id, given
+ * the outcomes of every animal they belong to.
+ */
+export function deriveApplicationStatuses(
+  applications: readonly {
+    id: string;
+    animalId: string;
+    status: ApplicationStatus;
+    submittedAt: Date;
+  }[],
+  outcomes: readonly (DerivationOutcome & { animalId: string })[],
+): Map<string, EffectiveApplicationStatus> {
+  const outcomesByAnimal = new Map<string, DerivationOutcome[]>();
+  for (const outcome of outcomes) {
+    const list = outcomesByAnimal.get(outcome.animalId) ?? [];
+    list.push(outcome);
+    outcomesByAnimal.set(outcome.animalId, list);
+  }
+
+  return new Map(
+    applications.map((application) => [
+      application.id,
+      deriveApplicationStatus(
+        {
+          id: application.id,
+          reviewStatus: application.status,
+          submittedAt: application.submittedAt,
+        },
+        outcomesByAnimal.get(application.animalId) ?? [],
+      ),
+    ]),
+  );
+}
+
+/**
+ * The consequence an outcome has for this application, and which outcome it
+ * was, or null if the review status stands. The same rule as
+ * `deriveApplicationStatus`, for a reader that has to say what happened as
+ * well as what the status is: the status history shows the outcome that
+ * adopted or closed an application as the last entry in its timeline.
+ *
+ * An application closes when the first live outcome recorded at or after its
+ * submission is written, so that is the outcome returned. A later one found
+ * it already closed. Ties between outcomes go to the one that comes first in
+ * `outcomes`, so pass them in a stable order.
+ */
+export function deriveApplicationConsequence<
+  Outcome extends DerivationOutcome,
+>(
+  application: DerivationApplication,
+  outcomes: readonly Outcome[],
+): { status: ApplicationConsequence; outcome: Outcome } | null {
   const live = outcomes.filter((outcome) => !outcome.reversed);
 
-  if (
-    live.some(
-      (outcome) =>
-        outcome.type === OutcomeType.ADOPTION &&
-        outcome.adoptionApplicationId === application.id,
-    )
-  ) {
-    return ApplicationStatus.ADOPTED;
+  const adoption = live.find(
+    (outcome) =>
+      outcome.type === OutcomeType.ADOPTION &&
+      outcome.adoptionApplicationId === application.id,
+  );
+  if (adoption) {
+    return { status: ApplicationConsequence.ADOPTED, outcome: adoption };
   }
 
   if (SETTLED_REVIEW_STATUSES.has(application.reviewStatus)) {
-    return application.reviewStatus;
+    return null;
   }
 
-  if (
-    live.some(
+  const closedBy = live
+    .filter(
       (outcome) =>
-        outcome.createdAt.getTime() > application.submittedAt.getTime(),
+        outcome.createdAt.getTime() >= application.submittedAt.getTime(),
     )
-  ) {
-    return ApplicationStatus.CLOSED;
-  }
-
-  return application.reviewStatus;
+    .reduce<Outcome | null>(
+      (first, outcome) =>
+        first === null || outcome.createdAt < first.createdAt ? outcome : first,
+      null,
+    );
+  return closedBy && { status: ApplicationConsequence.CLOSED, outcome: closedBy };
 }

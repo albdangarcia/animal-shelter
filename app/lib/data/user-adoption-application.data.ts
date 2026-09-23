@@ -9,81 +9,93 @@ import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import z from "zod";
 import type { Prisma } from "@/prisma/generated/client";
+import type { StatusHistoryEntry } from "@/app/lib/types";
+import type {
+  EffectiveApplicationStatus,
+  WithEffectiveStatus,
+} from "../utils/derive-application-status";
 import {
-  effectiveApplicationStatus,
   inPageOrder,
   pageApplicationsByEffectiveStatus,
+  withConsequenceInHistory,
 } from "./application-status.data";
 
 // Both shapes below carry the application's effective status in `status`,
 // derived from the animal's outcomes, not the column's value.
-export type AdoptionApplicationWithAnimal = Prisma.AdoptionApplicationGetPayload<{
-  select: {
-    id: true;
-    applicantId: true;
-    applicantName: true;
-    applicantEmail: true;
-    applicantPhone: true;
-    applicantCity: true;
-    applicantState: true;
-    status: true;
-    submittedAt: true;
-    animal: {
-      select: {
-        id: true;
-        name: true;
-        species: {
-          select: {
-            name: true;
+export type AdoptionApplicationWithAnimal = WithEffectiveStatus<
+  Prisma.AdoptionApplicationGetPayload<{
+    select: {
+      id: true;
+      applicantId: true;
+      applicantName: true;
+      applicantEmail: true;
+      applicantPhone: true;
+      applicantCity: true;
+      applicantState: true;
+      status: true;
+      submittedAt: true;
+      animal: {
+        select: {
+          id: true;
+          name: true;
+          species: {
+            select: {
+              name: true;
+            };
           };
         };
       };
     };
-  };
-}>;
+  }>
+>;
 
-export type AdoptionApplicationWithOutcome = Prisma.AdoptionApplicationGetPayload<{
-  include: {
-    animal: {
-      select: {
-        id: true;
-        name: true;
-        breeds: {
-          select: {
-            name: true;
+// `history` also ends with the outcome that adopted or closed the application,
+// if one did (`withConsequenceInHistory`).
+export type AdoptionApplicationWithOutcome = Omit<
+  Prisma.AdoptionApplicationGetPayload<{
+    include: {
+      animal: {
+        select: {
+          id: true;
+          name: true;
+          breeds: {
+            select: {
+              name: true;
+            };
+          };
+          species: {
+            select: {
+              name: true;
+            };
+          };
+          adoptionApplications: {
+            select: {
+              id: true;
+            };
           };
         };
-        species: {
-          select: {
-            name: true;
-          };
+      };
+      outcome: {
+        select: {
+          id: true;
+          outcomeDate: true;
         };
-        adoptionApplications: {
-          select: {
-            id: true;
+      };
+      lastEditedBy: {
+        select: { name: true };
+      };
+      history: {
+        orderBy: { changedAt: "desc" };
+        include: {
+          changedBy: {
+            select: { name: true };
           };
         };
       };
     };
-    outcome: {
-      select: {
-        id: true;
-        outcomeDate: true;
-      };
-    };
-    lastEditedBy: {
-      select: { name: true };
-    };
-    history: {
-      orderBy: { changedAt: "desc" };
-      include: {
-        changedBy: {
-          select: { name: true };
-        };
-      };
-    };
-  };
-}>;
+  }>,
+  "status" | "history"
+> & { status: EffectiveApplicationStatus; history: StatusHistoryEntry[] };
 
 export const fetchUserAdoptionApplicationsSchema = z.object({
   query: searchQuerySchema,
@@ -255,12 +267,7 @@ const _fetchAdoptionApplicationById = async (
         },
       },
     });
-    return (
-      application && {
-        ...application,
-        status: await effectiveApplicationStatus(application),
-      }
-    );
+    return application && (await withConsequenceInHistory(application));
   } catch (error) {
     console.error("Error fetching application by ID.", error);
     throw new Error("Error fetching application by ID.");

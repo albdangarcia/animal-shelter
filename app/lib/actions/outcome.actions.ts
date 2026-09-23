@@ -26,7 +26,10 @@ import {
 } from "../utils/errors";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
-import { CLOSURE_REASON_BY_OUTCOME } from "../utils/application-status";
+import {
+  DERIVATION_APPLICATION_SELECT,
+  effectiveApplicationStatus,
+} from "../data/application-status.data";
 import {
   calendarDay,
   formatShelterDay,
@@ -127,7 +130,7 @@ const _createOutcome = async (
 
         const application = await tx.adoptionApplication.findUnique({
           where: { id: adoptionApplicationId },
-          select: { status: true, animalId: true },
+          select: DERIVATION_APPLICATION_SELECT,
         });
 
         if (application && application.animalId !== animalId) {
@@ -135,7 +138,16 @@ const _createOutcome = async (
             "Cannot process adoption: The application is for a different animal.",
           );
         }
-        if (application?.status !== ApplicationStatus.APPROVED) {
+        // Approved as the application effectively is, not as the column
+        // says: one approved during an earlier stay, and adopted or closed by
+        // that stay's outcome, still stores APPROVED. Archiving the animal
+        // above holds the lock every application status change takes, so
+        // this cannot move before the outcome is written.
+        if (
+          !application ||
+          (await effectiveApplicationStatus(application, tx)) !==
+            ApplicationStatus.APPROVED
+        ) {
           throw new PreconditionFailedError(
             "Cannot process adoption: The application has not been approved.",
           );
@@ -179,59 +191,10 @@ const _createOutcome = async (
         },
       });
 
-      // If this is an adoption, update the winning application's status
-      if (adoptionApplicationId) {
-        await tx.adoptionApplication.update({
-          where: { id: adoptionApplicationId },
-          data: { status: ApplicationStatus.ADOPTED },
-        });
-
-        await tx.applicationStatusHistory.create({
-          data: {
-            applicationId: adoptionApplicationId,
-            status: ApplicationStatus.ADOPTED,
-            statusChangeReason: "Animal adopted by applicant.",
-            changedById: staffMemberId,
-          },
-        });
-      }
-
-      // Close ALL other open applications for this animal
-      const otherAppsToClose = await tx.adoptionApplication.findMany({
-        where: {
-          animalId: animalId,
-          // Exclude the winning application if this is an adoption
-          id: { not: adoptionApplicationId },
-          status: {
-            in: [
-              ApplicationStatus.PENDING,
-              ApplicationStatus.REVIEWING,
-              ApplicationStatus.WAITLISTED,
-              ApplicationStatus.APPROVED, // Also close previously approved apps
-            ],
-          },
-        },
-        select: { id: true },
-      });
-
-      const appIdsToClose = otherAppsToClose.map((app) => app.id);
-
-      if (appIdsToClose.length > 0) {
-        await tx.adoptionApplication.updateMany({
-          where: { id: { in: appIdsToClose } },
-          data: { status: ApplicationStatus.CLOSED },
-        });
-
-        const historyRecords = appIdsToClose.map((appId) => ({
-          applicationId: appId,
-          status: ApplicationStatus.CLOSED,
-          statusChangeReason: CLOSURE_REASON_BY_OUTCOME[outcomeType],
-          changedById: staffMemberId,
-        }));
-        await tx.applicationStatusHistory.createMany({
-          data: historyRecords,
-        });
-      }
+      // Nothing is written onto the applications. The one this outcome links
+      // to now reads as adopted, and every other application still open on
+      // the animal reads as closed, because both are derived from this
+      // outcome (`deriveApplicationStatus`).
     });
   } catch (error) {
     console.error("Database error processing outcome:", error);
@@ -390,8 +353,9 @@ const _updateOutcome = async (
     //    rewrites a figure that may already have been reported, with no
     //    record that it moved.
     //  - For an adoption, the type also carries the link to the winning
-    //    application. Moving it off ADOPTION would clear that link and strand
-    //    the application at ADOPTED, which has no allowed transitions out.
+    //    application, and only an adoption's link makes that application
+    //    adopted. Moving it off ADOPTION would turn the adopter's application
+    //    into one the outcome closed, with nothing recording why.
     //  - Fixing a wrongly-typed outcome is a reversal, not an edit, and there
     //    is no reversal path yet. Freezing the type beats half-correcting it.
     if (outcomeType !== existingOutcome.type) {

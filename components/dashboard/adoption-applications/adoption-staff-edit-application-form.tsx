@@ -80,8 +80,7 @@ export function StaffApplicationUpdateForm({
   returnTo,
 }: StaffApplicationUpdateFormProps) {
   // `application.status` is the effective status, derived from the animal's
-  // outcomes by the fetch, so adopted and closed here mean what the outcomes
-  // say rather than what the column holds.
+  // outcomes by the fetch: the column alone never says adopted or closed.
   const isAdopted = application.status === "ADOPTED";
   const isApproved = application.status === "APPROVED";
   const outcome = application.outcome;

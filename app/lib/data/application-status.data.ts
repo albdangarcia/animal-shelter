@@ -1,11 +1,13 @@
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
-import type { ApplicationStatus } from "@/prisma/generated/enums";
+import type { StatusHistoryEntry } from "@/app/lib/types";
 import {
-  deriveApplicationStatus,
-  reviewStatusOf,
-  type DerivationOutcome,
+  ApplicationConsequence,
+  deriveApplicationConsequence,
+  deriveApplicationStatuses,
+  type EffectiveApplicationStatus,
 } from "../utils/derive-application-status";
+import { adoptionReason, closureReason } from "../utils/application-status";
 
 // How a read site gets an adoption application's effective status out of the
 // database. The rule itself is `deriveApplicationStatus`; this file only feeds
@@ -68,13 +70,13 @@ export const lockAnimal = (tx: TransactionClient, animalId: string) =>
  * The effective status of each application, keyed by id.
  *
  * One query fetches the outcomes of every animal involved, however many
- * applications there are. Nothing reverses an outcome yet, so every recorded
- * one is live. Pass the transaction client to derive behind `lockAnimal`.
+ * applications there are. Pass the transaction client to derive behind
+ * `lockAnimal`.
  */
 export async function effectiveApplicationStatuses(
   applications: readonly DerivationApplicationRow[],
   db: OutcomeReader = prisma,
-): Promise<Map<string, ApplicationStatus>> {
+): Promise<Map<string, EffectiveApplicationStatus>> {
   const animalIds = [...new Set(applications.map((a) => a.animalId))];
   const outcomes =
     animalIds.length === 0
@@ -89,34 +91,91 @@ export async function effectiveApplicationStatuses(
           },
         });
 
-  const outcomesByAnimal = new Map<string, DerivationOutcome[]>();
-  for (const { animalId, ...outcome } of outcomes) {
-    const list = outcomesByAnimal.get(animalId) ?? [];
-    list.push({ ...outcome, reversed: false });
-    outcomesByAnimal.set(animalId, list);
-  }
-
-  return new Map(
-    applications.map((application) => [
-      application.id,
-      deriveApplicationStatus(
-        {
-          id: application.id,
-          reviewStatus: reviewStatusOf(application.status),
-          submittedAt: application.submittedAt,
-        },
-        outcomesByAnimal.get(application.animalId) ?? [],
-      ),
-    ]),
+  // Nothing reverses an outcome yet, so every recorded one is live.
+  return deriveApplicationStatuses(
+    applications,
+    outcomes.map((outcome) => ({ ...outcome, reversed: false })),
   );
 }
 
 export async function effectiveApplicationStatus(
   application: DerivationApplicationRow,
   db: OutcomeReader = prisma,
-): Promise<ApplicationStatus> {
+): Promise<EffectiveApplicationStatus> {
   const statuses = await effectiveApplicationStatuses([application], db);
   return statuses.get(application.id)!;
+}
+
+/**
+ * An application's effective status, and its status history with the outcome
+ * that adopted or closed it, if one did, as an entry of its own.
+ *
+ * The history table records decisions: who moved the application, when and
+ * why. Nobody decides that an application was adopted or closed, so nothing
+ * writes that into the table; the entry is read off the outcome that caused
+ * it, with the staff member who recorded the outcome, the moment it was
+ * recorded, and the reason that outcome gives the applicant. `history` is
+ * expected newest first, and stays that way.
+ */
+export async function withConsequenceInHistory<
+  Row extends DerivationApplicationRow & { history: StatusHistoryEntry[] },
+>(
+  application: Row,
+  db: OutcomeReader = prisma,
+): Promise<
+  Omit<Row, "status" | "history"> & {
+    status: EffectiveApplicationStatus;
+    history: StatusHistoryEntry[];
+  }
+> {
+  const outcomes = await db.outcome.findMany({
+    where: { animalId: application.animalId },
+    select: {
+      id: true,
+      createdAt: true,
+      type: true,
+      adoptionApplicationId: true,
+      staffMember: { select: { name: true } },
+      fosterPlacement: { select: { id: true } },
+    },
+    // Two outcomes recorded in the same millisecond would otherwise leave
+    // which one closed the application to the order the rows came back in.
+    // The smaller id goes first: a cuid begins with the millisecond it was
+    // generated and a per-process counter, so it was generated first.
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  });
+  // Nothing reverses an outcome yet, so every recorded one is live.
+  const consequence = deriveApplicationConsequence(
+    {
+      id: application.id,
+      reviewStatus: application.status,
+      submittedAt: application.submittedAt,
+    },
+    outcomes.map((outcome) => ({ ...outcome, reversed: false })),
+  );
+  if (!consequence) {
+    return { ...application, status: application.status };
+  }
+
+  const { status, outcome } = consequence;
+  const byFoster = outcome.fosterPlacement !== null;
+  const entry: StatusHistoryEntry = {
+    id: `outcome-${outcome.id}`,
+    status,
+    statusChangeReason:
+      status === ApplicationConsequence.ADOPTED
+        ? adoptionReason({ byFoster })
+        : closureReason({ type: outcome.type, byFoster }),
+    changedAt: outcome.createdAt,
+    changedBy: outcome.staffMember,
+  };
+  return {
+    ...application,
+    status,
+    history: [entry, ...application.history].sort(
+      (a, b) => b.changedAt.getTime() - a.changedAt.getTime(),
+    ),
+  };
 }
 
 /**
@@ -127,7 +186,7 @@ export async function effectiveApplicationStatus(
 export async function effectiveStatusBehindLock(
   tx: TransactionClient,
   application: { id: string; animalId: string },
-): Promise<ApplicationStatus | null> {
+): Promise<EffectiveApplicationStatus | null> {
   await lockAnimal(tx, application.animalId);
   const row = await tx.adoptionApplication.findUnique({
     where: { id: application.id },
@@ -140,7 +199,7 @@ export async function effectiveStatusBehindLock(
 // through, then the consequences. A record rather than a list so that a status
 // added to or removed from the enum is a type error here until someone places
 // it.
-const STATUS_SORT_RANK: Record<ApplicationStatus, number> = {
+const STATUS_SORT_RANK: Record<EffectiveApplicationStatus, number> = {
   PENDING: 0,
   REVIEWING: 1,
   WAITLISTED: 2,
@@ -153,7 +212,7 @@ const STATUS_SORT_RANK: Record<ApplicationStatus, number> = {
 
 export type ApplicationPage = {
   ids: string[];
-  statusById: Map<string, ApplicationStatus>;
+  statusById: Map<string, EffectiveApplicationStatus>;
   totalRows: number;
 };
 
@@ -241,10 +300,10 @@ export async function pageApplicationsByEffectiveStatus({
 
 // The page's full rows in page order, each carrying its effective status in
 // place of the column's.
-export function inPageOrder<Row extends { id: string; status: ApplicationStatus }>(
+export function inPageOrder<Row extends { id: string }>(
   rows: readonly Row[],
   page: ApplicationPage,
-): Row[] {
+): (Omit<Row, "status"> & { status: EffectiveApplicationStatus })[] {
   const byId = new Map(rows.map((row) => [row.id, row]));
   return page.ids.flatMap((id) => {
     const row = byId.get(id);

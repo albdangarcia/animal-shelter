@@ -10,6 +10,7 @@ import {
   AnimalListingStatus,
   ApplicationSource,
   ApplicationStatus,
+  FosterPlacementType,
   LivingSituation,
   OutcomeType,
   Sex,
@@ -21,7 +22,9 @@ import {
   lockAnimal,
   lockPerson,
   pageApplicationsByEffectiveStatus,
+  withConsequenceInHistory,
 } from "@/app/lib/data/application-status.data";
+import { EffectiveApplicationStatus } from "@/app/lib/utils/derive-application-status";
 
 const runId = Date.now().toString(36);
 const HOUR = 60 * 60 * 1000;
@@ -60,6 +63,8 @@ before(async () => {
 });
 
 after(async () => {
+  await prisma.fosterPlacement.deleteMany({ where: { placedById: staffId } });
+  await prisma.fosterProfile.deleteMany({ where: { personId: staffId } });
   await prisma.outcome.deleteMany({ where: { staffMemberId: staffId } });
   await prisma.adoptionApplication.deleteMany({ where: { applicantId } });
   await prisma.animal.deleteMany({ where: { speciesId } });
@@ -194,7 +199,7 @@ test("a read that takes no lock misses an outcome still being recorded", async (
   await outcome.committed;
   assert.equal(
     await effectiveApplicationStatus(application),
-    ApplicationStatus.CLOSED,
+    EffectiveApplicationStatus.CLOSED,
   );
 });
 
@@ -211,7 +216,7 @@ test("a read behind the animal lock waits for the outcome and sees it", async ()
 
   outcome.commit();
   await outcome.committed;
-  assert.equal(await read, ApplicationStatus.CLOSED);
+  assert.equal(await read, EffectiveApplicationStatus.CLOSED);
 });
 
 // Staff entering an application holds the person, then waits for the animal.
@@ -241,8 +246,8 @@ test("entering an application does not deadlock with an outcome it waits for", a
   assert.equal(entryResult.status, "fulfilled", String((entryResult as PromiseRejectedResult).reason));
 });
 
-// The shape every row takes once the status column holds only decisions: an
-// application an outcome closed still stores the open status it had. Here the
+// The status column holds only decisions, so an application an outcome closed
+// still stores the open status it had. Here the
 // column says PENDING for two applications and the outcomes say one of them is
 // closed, so a filter or sort that read the column would get these wrong.
 test("the status filter, sort and pages follow the outcomes, not the column", async () => {
@@ -288,7 +293,171 @@ test("the status filter, sort and pages follow the outcomes, not the column", as
   assert.deepEqual((await page([], "asc", 1, 1)).ids, [withdrawn.id]);
 
   const unfiltered = await page([]);
-  assert.equal(unfiltered.statusById.get(closed.id), ApplicationStatus.CLOSED);
+  assert.equal(unfiltered.statusById.get(closed.id), EffectiveApplicationStatus.CLOSED);
   assert.equal(unfiltered.statusById.get(open.id), ApplicationStatus.PENDING);
   assert.equal(unfiltered.totalRows, 3);
 });
+
+// The history table records decisions only. What an outcome did to an
+// application is read off the outcome itself, so the timeline still says who
+// recorded it, when, and why, in its place after the decisions.
+test("the status history ends with the outcome that adopted or closed the application", async () => {
+  const animalId = await makeAnimal("History");
+  const adopter = await makeApplication(animalId, {
+    status: ApplicationStatus.APPROVED,
+    submittedAt: hoursAgo(5),
+  });
+  const other = await makeApplication(animalId, {
+    status: ApplicationStatus.REVIEWING,
+    submittedAt: hoursAgo(4),
+  });
+  const reviewedAt = hoursAgo(3);
+  await prisma.applicationStatusHistory.create({
+    data: {
+      applicationId: other.id,
+      status: ApplicationStatus.REVIEWING,
+      statusChangeReason: "Application moved to review.",
+      changedAt: reviewedAt,
+      changedById: staffId,
+    },
+  });
+  const recordedAt = hoursAgo(2);
+  await prisma.outcome.create({
+    data: {
+      animalId,
+      type: OutcomeType.ADOPTION,
+      outcomeDate: "2026-01-01",
+      staffMemberId: staffId,
+      adoptionApplicationId: adopter.id,
+      createdAt: recordedAt,
+    },
+  });
+  const later = await makeApplication(animalId, { submittedAt: hoursAgo(1) });
+
+  const withHistory = async (application: typeof adopter) =>
+    withConsequenceInHistory({
+      ...application,
+      history: await prisma.applicationStatusHistory.findMany({
+        where: { applicationId: application.id },
+        orderBy: { changedAt: "desc" },
+        include: { changedBy: { select: { name: true } } },
+      }),
+    });
+  const timeline = (entries: Awaited<ReturnType<typeof withHistory>>["history"]) =>
+    entries.map((entry) => [
+      entry.status,
+      entry.statusChangeReason,
+      entry.changedAt.getTime(),
+      entry.changedBy?.name,
+    ]);
+  const staffName = `Status staff ${runId}`;
+
+  const closed = await withHistory(other);
+  assert.equal(closed.status, EffectiveApplicationStatus.CLOSED);
+  assert.deepEqual(timeline(closed.history), [
+    [
+      EffectiveApplicationStatus.CLOSED,
+      "This animal was adopted by another applicant.",
+      recordedAt.getTime(),
+      staffName,
+    ],
+    [
+      ApplicationStatus.REVIEWING,
+      "Application moved to review.",
+      reviewedAt.getTime(),
+      staffName,
+    ],
+  ]);
+
+  const adopted = await withHistory(adopter);
+  assert.equal(adopted.status, EffectiveApplicationStatus.ADOPTED);
+  assert.deepEqual(timeline(adopted.history), [
+    [
+      EffectiveApplicationStatus.ADOPTED,
+      "Animal adopted by applicant.",
+      recordedAt.getTime(),
+      staffName,
+    ],
+  ]);
+
+  // Submitted after the adoption was recorded: nothing closed it.
+  const live = await withHistory(later);
+  assert.equal(live.status, ApplicationStatus.PENDING);
+  assert.deepEqual(live.history, []);
+});
+
+test("a foster-to-adopt conversion's closure does not name another applicant", async () => {
+  const animalId = await makeAnimal("Converted");
+  const application = await makeApplication(animalId, {
+    submittedAt: hoursAgo(3),
+  });
+  // The conversion page links no application, so one it closes may be the
+  // foster's own.
+  const outcome = await prisma.outcome.create({
+    data: {
+      animalId,
+      type: OutcomeType.ADOPTION,
+      outcomeDate: "2026-01-01",
+      staffMemberId: staffId,
+      createdAt: hoursAgo(2),
+    },
+    select: { id: true },
+  });
+  const fosterProfile = await prisma.fosterProfile.create({
+    data: { personId: staffId },
+    select: { id: true },
+  });
+  await prisma.fosterPlacement.create({
+    data: {
+      type: FosterPlacementType.FOSTER_TO_ADOPT,
+      startDate: "2025-12-01",
+      animalId,
+      fosterProfileId: fosterProfile.id,
+      placedById: staffId,
+      outcomeId: outcome.id,
+    },
+  });
+
+  const closed = await withConsequenceInHistory({ ...application, history: [] });
+  assert.equal(closed.status, EffectiveApplicationStatus.CLOSED);
+  assert.equal(
+    closed.history[0].statusChangeReason,
+    "This animal was adopted by the family fostering them.",
+  );
+});
+
+// Two outcomes recorded in the same millisecond. A cuid begins with the
+// millisecond it was generated and a per-process counter, so the smaller id
+// was generated first and is the one that closed the application. The `a…` id
+// stands for the outcome generated first; it is inserted second, so the order
+// the rows come back in cannot be what decides.
+test("of two outcomes recorded in the same millisecond, the one generated first closes", async () => {
+  const animalId = await makeAnimal("Tied outcomes");
+  const application = await makeApplication(animalId, {
+    submittedAt: hoursAgo(3),
+  });
+  const recordedAt = hoursAgo(2);
+  for (const [id, type] of [
+    [`z${runId}tied`, OutcomeType.DECEASED],
+    [`a${runId}tied`, OutcomeType.TRANSFER_OUT],
+  ] as const) {
+    await prisma.outcome.create({
+      data: {
+        id,
+        animalId,
+        type,
+        outcomeDate: "2026-01-01",
+        staffMemberId: staffId,
+        createdAt: recordedAt,
+      },
+    });
+  }
+
+  const closed = await withConsequenceInHistory({ ...application, history: [] });
+  assert.equal(closed.history[0].id, `outcome-a${runId}tied`);
+  assert.equal(
+    closed.history[0].statusChangeReason,
+    "This animal was transferred to another organization.",
+  );
+});
+

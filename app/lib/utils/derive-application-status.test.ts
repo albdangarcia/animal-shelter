@@ -2,19 +2,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { ApplicationStatus, OutcomeType } from "@/prisma/generated/enums";
 import {
+  ApplicationConsequence,
+  deriveApplicationConsequence,
   deriveApplicationStatus,
-  isReviewStatus,
-  reviewStatusOf,
   type DerivationApplication,
   type DerivationOutcome,
-  type ReviewStatus,
 } from "./derive-application-status";
 
 const at = (iso: string) => new Date(iso);
 
 const application = (
   id: string,
-  reviewStatus: ReviewStatus,
+  reviewStatus: ApplicationStatus,
   submittedAt: string,
 ): DerivationApplication => ({ id, reviewStatus, submittedAt: at(submittedAt) });
 
@@ -60,7 +59,7 @@ test("the application an adoption links to is adopted", () => {
   const winner = application("a", ApplicationStatus.APPROVED, "2026-09-01T10:00Z");
   assert.equal(
     deriveApplicationStatus(winner, [adoptionOf("a", "2026-09-10T10:00Z")]),
-    ApplicationStatus.ADOPTED,
+    ApplicationConsequence.ADOPTED,
   );
 });
 
@@ -77,7 +76,7 @@ test("every other open application on the animal is closed by the adoption", () 
         application("other", status, "2026-09-02T10:00Z"),
         outcomes,
       ),
-      ApplicationStatus.CLOSED,
+      ApplicationConsequence.CLOSED,
       status,
     );
   }
@@ -91,7 +90,7 @@ test("any outcome type closes open applications, not only an adoption", () => {
         application("a", ApplicationStatus.REVIEWING, "2026-09-02T10:00Z"),
         [outcome("2026-09-10T10:00Z", { type })],
       ),
-      ApplicationStatus.CLOSED,
+      ApplicationConsequence.CLOSED,
       type,
     );
   }
@@ -121,7 +120,7 @@ test("a link on an outcome that is not an adoption does not adopt", () => {
       application("a", ApplicationStatus.APPROVED, "2026-09-01T10:00Z"),
       [outcome("2026-09-10T10:00Z", { adoptionApplicationId: "a" })],
     ),
-    ApplicationStatus.CLOSED,
+    ApplicationConsequence.CLOSED,
   );
 });
 
@@ -137,7 +136,7 @@ test("the re-intake case: closed stays closed, and a later application is live",
   );
   assert.equal(
     deriveApplicationStatus(closedBeforeReturn, outcomes),
-    ApplicationStatus.CLOSED,
+    ApplicationConsequence.CLOSED,
   );
 
   const submittedAfterReturn = application(
@@ -157,7 +156,7 @@ test("the re-intake case: closed stays closed, and a later application is live",
       application("winner", ApplicationStatus.APPROVED, "2026-09-01T10:00Z"),
       outcomes,
     ),
-    ApplicationStatus.ADOPTED,
+    ApplicationConsequence.ADOPTED,
   );
 });
 
@@ -171,7 +170,7 @@ test("an application submitted between two stays' outcomes is closed by the seco
       application("between", ApplicationStatus.WAITLISTED, "2026-09-22T10:00Z"),
       outcomes,
     ),
-    ApplicationStatus.CLOSED,
+    ApplicationConsequence.CLOSED,
   );
 });
 
@@ -186,7 +185,19 @@ test("a late-entered outcome closes an application submitted before it was enter
       application("a", ApplicationStatus.PENDING, "2026-09-05T10:00Z"),
       [lateEntered],
     ),
-    ApplicationStatus.CLOSED,
+    ApplicationConsequence.CLOSED,
+  );
+});
+
+// Submitting needs the animal listed and recording an outcome unlists it, so
+// an application that shares the outcome's millisecond was submitted first.
+test("an outcome recorded in the same instant as the submission closes it", () => {
+  assert.equal(
+    deriveApplicationStatus(
+      application("a", ApplicationStatus.PENDING, "2026-09-10T10:00:00.000Z"),
+      [outcome("2026-09-10T10:00:00.000Z")],
+    ),
+    ApplicationConsequence.CLOSED,
   );
 });
 
@@ -236,52 +247,70 @@ test("an adoption re-recorded after a reversal adopts the same application again
       application("winner", ApplicationStatus.APPROVED, "2026-09-01T10:00Z"),
       outcomes,
     ),
-    ApplicationStatus.ADOPTED,
+    ApplicationConsequence.ADOPTED,
   );
   assert.equal(
     deriveApplicationStatus(
       application("other", ApplicationStatus.PENDING, "2026-09-02T10:00Z"),
       outcomes,
     ),
-    ApplicationStatus.CLOSED,
+    ApplicationConsequence.CLOSED,
   );
 });
 
-// While the cascade still writes consequences onto the status column, a read
-// site derives from `reviewStatusOf(stored)`. It must hand back exactly what
-// the cascade stores. That holds because an adoption is only recorded against
-// an application for the same animal, which these cases take as given.
-test("a stored review decision is its own review status", () => {
-  for (const status of Object.values(ApplicationStatus).filter(isReviewStatus)) {
-    assert.equal(reviewStatusOf(status), status);
-  }
+// The status history names the outcome behind a consequence, so which outcome
+// the derivation picks is as much a rule as the status it returns.
+test("an application is closed by the first outcome recorded after it was submitted", () => {
+  const before = outcome("2026-09-01T10:00Z", { type: OutcomeType.DECEASED });
+  const first = outcome("2026-09-10T10:00Z", { type: OutcomeType.TRANSFER_OUT });
+  const later = adoptionOf("winner", "2026-09-30T10:00Z");
+
+  const consequence = deriveApplicationConsequence(
+    application("a", ApplicationStatus.REVIEWING, "2026-09-05T10:00Z"),
+    // Out of order on purpose: the rule is about when each was recorded.
+    [later, before, first],
+  );
+  assert.equal(consequence?.status, ApplicationConsequence.CLOSED);
+  assert.equal(consequence?.outcome, first);
 });
 
-test("a stored adoption derives adopted again from its outcome", () => {
-  const applicationA = application(
-    "a",
-    reviewStatusOf(ApplicationStatus.ADOPTED),
-    "2026-01-01T10:00:00Z",
+test("a reversed outcome is never the one that closed an application", () => {
+  const reversed = outcome("2026-09-10T10:00Z", { reversed: true });
+  const live = outcome("2026-09-20T10:00Z");
+  assert.equal(
+    deriveApplicationConsequence(
+      application("a", ApplicationStatus.PENDING, "2026-09-05T10:00Z"),
+      [reversed, live],
+    )?.outcome,
+    live,
+  );
+});
+
+test("an adopted application's consequence is the adoption that links to it", () => {
+  const closedEarlier = outcome("2026-09-10T10:00Z");
+  const adoption = adoptionOf("a", "2026-09-30T10:00Z");
+  const consequence = deriveApplicationConsequence(
+    application("a", ApplicationStatus.APPROVED, "2026-09-01T10:00Z"),
+    [closedEarlier, adoption],
+  );
+  assert.equal(consequence?.status, ApplicationConsequence.ADOPTED);
+  assert.equal(consequence?.outcome, adoption);
+});
+
+test("an application whose review status stands has no consequence", () => {
+  const outcomes = [adoptionOf("winner", "2026-09-10T10:00Z")];
+  assert.equal(
+    deriveApplicationConsequence(
+      application("a", ApplicationStatus.WITHDRAWN, "2026-09-01T10:00Z"),
+      outcomes,
+    ),
+    null,
   );
   assert.equal(
-    deriveApplicationStatus(applicationA, [adoptionOf("a", "2026-01-05T10:00:00Z")]),
-    ApplicationStatus.ADOPTED,
+    deriveApplicationConsequence(
+      application("b", ApplicationStatus.PENDING, "2026-09-20T10:00Z"),
+      outcomes,
+    ),
+    null,
   );
-});
-
-test("a stored closure derives closed again from the outcome that closed it", () => {
-  const applicationA = application(
-    "a",
-    reviewStatusOf(ApplicationStatus.CLOSED),
-    "2026-01-01T10:00:00Z",
-  );
-  for (const closedBy of [
-    adoptionOf("b", "2026-01-05T10:00:00Z"),
-    outcome("2026-01-05T10:00:00Z", { type: OutcomeType.RETURN_TO_OWNER }),
-  ]) {
-    assert.equal(
-      deriveApplicationStatus(applicationA, [closedBy]),
-      ApplicationStatus.CLOSED,
-    );
-  }
 });

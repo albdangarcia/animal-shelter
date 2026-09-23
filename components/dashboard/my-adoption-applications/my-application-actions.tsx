@@ -8,6 +8,7 @@ import {
   AnimalListingStatus,
   ApplicationStatus,
 } from "@/prisma/generated/enums";
+import { EffectiveApplicationStatus } from "@/app/lib/utils/derive-application-status";
 import {
   reactivateMyAdoptionApplication,
   withdrawMyAdoptionApplication,
@@ -29,11 +30,11 @@ import { Button } from "@/components/ui/button";
 // The statuses the withdraw action refuses, mirrored from
 // `withdrawMyAdoptionApplication` so the button is absent rather than present
 // and guaranteed to fail.
-const NON_WITHDRAWABLE_STATUSES: ApplicationStatus[] = [
-  ApplicationStatus.ADOPTED,
-  ApplicationStatus.WITHDRAWN,
-  ApplicationStatus.REJECTED,
-  ApplicationStatus.CLOSED,
+const NON_WITHDRAWABLE_STATUSES: EffectiveApplicationStatus[] = [
+  EffectiveApplicationStatus.ADOPTED,
+  EffectiveApplicationStatus.WITHDRAWN,
+  EffectiveApplicationStatus.REJECTED,
+  EffectiveApplicationStatus.CLOSED,
 ];
 
 export const MyApplicationActions = ({
@@ -43,7 +44,7 @@ export const MyApplicationActions = ({
   animalListingStatus,
 }: {
   applicationId: string;
-  status: ApplicationStatus;
+  status: EffectiveApplicationStatus;
   animalName: string;
   animalListingStatus: AnimalListingStatus;
 }) => {

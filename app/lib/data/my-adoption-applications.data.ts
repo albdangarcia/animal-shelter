@@ -14,10 +14,10 @@ import { ANIMAL_IMAGE_ORDER } from "../utils/animal-image-order";
 import { BLOCKING_APPLICATION_STATUSES } from "../utils/application-status";
 import {
   DERIVATION_APPLICATION_SELECT,
-  effectiveApplicationStatus,
   effectiveApplicationStatuses,
   inPageOrder,
   pageApplicationsByEffectiveStatus,
+  withConsequenceInHistory,
 } from "./application-status.data";
 
 const _fetchMyAdoptionApplications = async (
@@ -192,12 +192,7 @@ const _fetchMyAdoptionAppById = async (
       },
     });
 
-    return (
-      myApplication && {
-        ...myApplication,
-        status: await effectiveApplicationStatus(myApplication),
-      }
-    );
+    return myApplication && (await withConsequenceInHistory(myApplication));
   } catch (error) {
     console.error("Error fetching Application.", error);
     throw new Error("Error fetching application.");

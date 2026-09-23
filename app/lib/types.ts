@@ -1,4 +1,8 @@
 import type { Prisma } from "@/prisma/generated/client";
+import type {
+  EffectiveApplicationStatus,
+  WithEffectiveStatus,
+} from "@/app/lib/utils/derive-application-status";
 
 export type SearchParamsType = Promise<{ [key: string]: string | undefined }>;
 export type IDParamType = Promise<{ id: string }>;
@@ -32,88 +36,94 @@ export type OutcomePayload = Prisma.OutcomeGetPayload<{
   };
 }>;
 
-export type AnimalSectionCardPayload = Prisma.AnimalGetPayload<{
-  select: {
-    id: true;
-    name: true;
-    birthDate: true;
-    sex: true;
-    size: true;
-    microchipNumber: true;
-    listingStatus: true;
-    isSpayedNeutered: true;
-    healthStatus: true;
-    animalImages: {
-      select: {
-        url: true;
+export type AnimalSectionCardPayload = Omit<
+  Prisma.AnimalGetPayload<{
+    select: {
+      id: true;
+      name: true;
+      birthDate: true;
+      sex: true;
+      size: true;
+      microchipNumber: true;
+      listingStatus: true;
+      isSpayedNeutered: true;
+      healthStatus: true;
+      animalImages: {
+        select: {
+          url: true;
+        };
+        // Mirrors ANIMAL_IMAGE_ORDER (app/lib/utils/animal-image-order.ts) — keep
+        // in sync; this type documents the shape the fetcher actually queries.
+        orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }];
+        take: 1;
       };
-      // Mirrors ANIMAL_IMAGE_ORDER (app/lib/utils/animal-image-order.ts) — keep
-      // in sync; this type documents the shape the fetcher actually queries.
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }];
-      take: 1;
-    };
-    species: {
-      select: { name: true };
-    };
-    breeds: {
-      select: { name: true };
-    };
-    primaryColor: {
-      select: { name: true };
-    };
-    colors: {
-      select: { name: true };
-    };
-    currentUnit: {
-      select: {
-        name: true;
-        location: { select: { name: true } };
+      species: {
+        select: { name: true };
       };
-    };
-    // Open foster placement (endDate == null), if any — "currently
-    // in foster" is derived, never stored. At most one can exist per animal.
-    fosterPlacements: {
-      where: { endDate: null };
-      select: {
-        id: true;
-        type: true;
-        startDate: true;
-        expectedEndDate: true;
-        fosterProfile: {
-          select: { person: { select: { id: true; name: true } } };
+      breeds: {
+        select: { name: true };
+      };
+      primaryColor: {
+        select: { name: true };
+      };
+      colors: {
+        select: { name: true };
+      };
+      currentUnit: {
+        select: {
+          name: true;
+          location: { select: { name: true } };
         };
       };
-      take: 1;
-    };
-    adoptionApplications: {
-      select: { status: true };
-    };
-    intake: {
-      select: { intakeDate: true };
-      orderBy: [{ intakeDate: "desc" }, { createdAt: "desc" }];
-      take: 1;
-    };
-    // Last two weigh-ins (non-deleted, non-null weight), newest first — enough
-    // to show a trend ("3.4 kg — up 40 g since Mar 14") without pulling the
-    // whole vitals history onto the overview.
-    vitalsLogs: {
-      where: { deletedAt: null; weightGrams: { not: null } };
-      select: { recordedAt: true; weightGrams: true };
-      orderBy: { recordedAt: "desc" };
-      take: 2;
-    };
-    _count: {
-      select: {
-        favorites: true;
-        tasks: {
-          where: {
-            status: { in: ["TODO", "IN_PROGRESS"] };
+      // Open foster placement (endDate == null), if any — "currently
+      // in foster" is derived, never stored. At most one can exist per animal.
+      fosterPlacements: {
+        where: { endDate: null };
+        select: {
+          id: true;
+          type: true;
+          startDate: true;
+          expectedEndDate: true;
+          fosterProfile: {
+            select: { person: { select: { id: true; name: true } } };
+          };
+        };
+        take: 1;
+      };
+      adoptionApplications: {
+        select: { status: true };
+      };
+      intake: {
+        select: { intakeDate: true };
+        orderBy: [{ intakeDate: "desc" }, { createdAt: "desc" }];
+        take: 1;
+      };
+      // Last two weigh-ins (non-deleted, non-null weight), newest first — enough
+      // to show a trend ("3.4 kg — up 40 g since Mar 14") without pulling the
+      // whole vitals history onto the overview.
+      vitalsLogs: {
+        where: { deletedAt: null; weightGrams: { not: null } };
+        select: { recordedAt: true; weightGrams: true };
+        orderBy: { recordedAt: "desc" };
+        take: 2;
+      };
+      _count: {
+        select: {
+          favorites: true;
+          tasks: {
+            where: {
+              status: { in: ["TODO", "IN_PROGRESS"] };
+            };
           };
         };
       };
     };
-  };
-}>;
+  }>,
+  "adoptionApplications"
+> & {
+  // Each application's effective status, derived from the animal's outcomes.
+  adoptionApplications: { status: EffectiveApplicationStatus }[];
+};
 
 export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{
   select: {
@@ -158,35 +168,53 @@ export type ActionResult = {
   message: string | null;
 };
 
-export type AdoptionApplicationPayload = Prisma.AdoptionApplicationGetPayload<{
-  include: {
-    animal: {
-      select: {
-        id: true;
-        name: true;
-        breeds: {
-          select: {
-            name: true;
+// Typed with the effective status because the applicant's edit page and the
+// outcome create page pass an application whose status was derived. Neither
+// form that takes this reads `status`.
+export type AdoptionApplicationPayload = WithEffectiveStatus<
+  Prisma.AdoptionApplicationGetPayload<{
+    include: {
+      animal: {
+        select: {
+          id: true;
+          name: true;
+          breeds: {
+            select: {
+              name: true;
+            };
           };
-        };
-        species: {
-          select: {
-            name: true;
+          species: {
+            select: {
+              name: true;
+            };
           };
-        };
-        adoptionApplications: {
-          select: {
-            id: true;
+          adoptionApplications: {
+            select: {
+              id: true;
+            };
           };
         };
       };
     };
-  };
-}>;
+  }>
+>;
+
+// One entry in an application's status history, as `StatusHistoryTimeline`
+// renders it. `ApplicationStatusHistory` and `FosterApplicationStatusHistory`
+// rows both fit, including the `changedBy: { name }` selection both queries
+// add, and so does the entry an adoption application's history gains from the
+// outcome that adopted or closed it (`withConsequenceInHistory`).
+export type StatusHistoryEntry = {
+  id: string;
+  status: EffectiveApplicationStatus;
+  statusChangeReason: string;
+  changedAt: Date;
+  changedBy: { name: string | null } | null;
+};
 
 // Applicant detail view / edit form: `AdoptionApplicationPayload` plus the
 // status-history trail rendered by the shared `StatusHistoryTimeline`.
-export type MyAdoptionApplicationDetailPayload =
+export type MyAdoptionApplicationDetailPayload = Omit<
   Prisma.AdoptionApplicationGetPayload<{
     include: {
       animal: {
@@ -223,7 +251,14 @@ export type MyAdoptionApplicationDetailPayload =
         };
       };
     };
-  }>;
+  }>,
+  "status" | "history"
+> & {
+  // The effective status, and a history ending with the outcome that adopted
+  // or closed the application if one did.
+  status: EffectiveApplicationStatus;
+  history: StatusHistoryEntry[];
+};
 
 export type AnimalForAdoptionApplicationPayload = Prisma.AnimalGetPayload<{
   select: {
@@ -290,32 +325,36 @@ export type MyFosterApplicationPayload = Prisma.FosterApplicationGetPayload<{
   };
 }>;
 
-export type MyAdoptionApplicationPayload = Prisma.AdoptionApplicationGetPayload<{
-  select: {
-    id: true;
-    status: true;
-    applicantName: true;
-    applicantPhone: true;
-    submittedAt: true;
-    animal: {
-      select: {
-        id: true;
-        name: true;
-        species: {
-          select: {
-            name: true;
+// The applicant's own list. `status` is the effective status, derived from
+// the animal's outcomes.
+export type MyAdoptionApplicationPayload = WithEffectiveStatus<
+  Prisma.AdoptionApplicationGetPayload<{
+    select: {
+      id: true;
+      status: true;
+      applicantName: true;
+      applicantPhone: true;
+      submittedAt: true;
+      animal: {
+        select: {
+          id: true;
+          name: true;
+          species: {
+            select: {
+              name: true;
+            };
           };
-        };
-        animalImages: {
-          select: {
-            url: true;
+          animalImages: {
+            select: {
+              url: true;
+            };
+            take: 1;
           };
-          take: 1;
         };
       };
     };
-  };
-}>;
+  }>
+>;
 
 export type ApplicationsPayload = Prisma.AdoptionApplicationGetPayload<{
   select: {

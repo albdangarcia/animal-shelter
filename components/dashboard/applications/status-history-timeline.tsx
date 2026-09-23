@@ -1,18 +1,7 @@
-import type { ApplicationStatus } from "@/prisma/generated/enums";
+import type { StatusHistoryEntry } from "@/app/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { formatTimeAgo } from "@/app/lib/utils/date-utils";
 import { ApplicationStatuses } from "@/components/dashboard/my-adoption-applications/table/my-applications-options";
-
-// `ApplicationStatusHistory` and `FosterApplicationStatusHistory` are
-// field-for-field identical; this is the shared shape both timelines render,
-// including the `changedBy: { name }` selection both queries add.
-export type StatusHistoryEntry = {
-  id: string;
-  status: ApplicationStatus;
-  statusChangeReason: string;
-  changedAt: Date;
-  changedBy: { name: string | null } | null;
-};
 
 export const StatusHistoryTimeline = ({
   history,

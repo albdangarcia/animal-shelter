@@ -16,7 +16,10 @@ import {
 } from "../utils/application-status";
 import { ConflictError } from "../utils/errors";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
-import { deriveApplicationStatus } from "../utils/derive-application-status";
+import {
+  deriveApplicationStatus,
+  EffectiveApplicationStatus,
+} from "../utils/derive-application-status";
 import {
   DERIVATION_APPLICATION_SELECT,
   effectiveApplicationStatus,
@@ -142,22 +145,17 @@ const _updateMyAdoptionApp = async (
         );
       }
 
-      // Still conditional on the column, the same reasoning as the staff
-      // edit action: it holds decisions only, so a column not in this list is
-      // ADOPTED or CLOSED, which only the outcome cascade writes for this
-      // animal, behind the same lock. A count of 0 means it got there first.
+      // Unconditional on the status, the same as the staff edit action:
+      // everything that changes it takes the animal lock too.
       const { count } = await tx.adoptionApplication.updateMany({
         where: {
           id: validatedApplicationId,
           applicantId: user.personId,
-          status: { in: APPLICANT_EDITABLE_STATUSES },
         },
         data: dataToUpdate,
       });
       if (count === 0) {
-        throw new ConflictError(
-          "This application can no longer be edited. Its status changed while you were editing it.",
-        );
+        throw new ConflictError("Adoption Application not found.");
       }
     });
   } catch (error) {
@@ -224,12 +222,12 @@ const _withdrawMyAdoptionApplication = async (
     return { success: false, message: "Adoption Application not found." };
   }
 
-  const nonWithdrawableStatuses: ApplicationStatus[] = [
-    ApplicationStatus.ADOPTED,
-    ApplicationStatus.WITHDRAWN,
-    ApplicationStatus.REJECTED,
+  const nonWithdrawableStatuses: EffectiveApplicationStatus[] = [
+    EffectiveApplicationStatus.ADOPTED,
+    EffectiveApplicationStatus.WITHDRAWN,
+    EffectiveApplicationStatus.REJECTED,
     // Nothing left to withdraw from: the animal has already left the shelter.
-    ApplicationStatus.CLOSED,
+    EffectiveApplicationStatus.CLOSED,
   ];
 
   // What the application effectively is, not what the column holds.
@@ -414,7 +412,7 @@ const _reactivateMyAdoptionApplication = async (
           },
           outcomes.map((outcome) => ({ ...outcome, reversed: false })),
         );
-        if (statusIfReactivated === ApplicationStatus.CLOSED) {
+        if (statusIfReactivated === EffectiveApplicationStatus.CLOSED) {
           throw new ConflictError(
             "Cannot reactivate application. This animal is no longer available for adoption.",
           );
