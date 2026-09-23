@@ -44,6 +44,12 @@ export const _fetchOutcomeById = async (outcomeId: string) => {
             name: true,
           },
         },
+        reversedBy: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         adoptionApplication: {
           include: {
             animal: {
@@ -94,6 +100,9 @@ export type OutcomeWithDetails = Prisma.OutcomeGetPayload<{
     };
     adoptionApplication: {
       select: { id: true; applicantName: true };
+    };
+    reversedBy: {
+      select: { id: true; name: true };
     };
   };
 }>;
@@ -156,6 +165,9 @@ export const _fetchOutcomes = async (
     return [{ outcomeDate: "desc" }, { createdAt: "desc" }];
   })().concat({ id: "asc" });
 
+  // Reversed outcomes stay in this list: it is the record of what was
+  // entered, and a voided entry is shown marked rather than dropped. Counting
+  // them out is the reports' business.
   const whereClause: Prisma.OutcomeWhereInput = {
     // Add filtering by outcome type if provided
     ...(type && {
@@ -199,6 +211,7 @@ export const _fetchOutcomes = async (
           destinationPartner: { select: { id: true, name: true } },
           owner: { select: { id: true, name: true } },
           adoptionApplication: { select: { id: true, applicantName: true } },
+          reversedBy: { select: { id: true, name: true } },
         },
         orderBy,
         take: pageSize,

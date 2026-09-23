@@ -49,6 +49,8 @@ const _fetchOutcomeSummary = async (
       by: ["type"],
       where: {
         outcomeDate: { gte: range.fromLabel, lte: range.toLabel },
+        // A reversed outcome was recorded in error; it counts for nothing.
+        reversedAt: null,
         ...speciesWhere(speciesIds),
       },
       _count: { id: true },
@@ -136,7 +138,11 @@ const _fetchBalanceSummary = async (
         where: { intakeDate: { gte: range.fromLabel, lte: range.toLabel }, ...filter },
       }),
       prisma.outcome.count({
-        where: { outcomeDate: { gte: range.fromLabel, lte: range.toLabel }, ...filter },
+        where: {
+          outcomeDate: { gte: range.fromLabel, lte: range.toLabel },
+          reversedAt: null,
+          ...filter,
+        },
       }),
     ]);
 

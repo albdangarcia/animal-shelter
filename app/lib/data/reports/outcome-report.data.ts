@@ -62,6 +62,8 @@ const _fetchOutcomeReport = async (
       by: ["type"],
       where: {
         outcomeDate: { gte: range.fromLabel, lte: range.toLabel },
+        // A reversed outcome was recorded in error; it counts for nothing.
+        reversedAt: null,
         ...speciesWhere(speciesIds),
       },
       _count: { id: true },

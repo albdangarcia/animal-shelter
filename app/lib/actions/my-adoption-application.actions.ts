@@ -19,6 +19,7 @@ import { formatSingleEnumOption } from "../utils/enum-formatter";
 import {
   deriveApplicationStatus,
   EffectiveApplicationStatus,
+  toDerivationOutcome,
 } from "../utils/derive-application-status";
 import {
   DERIVATION_APPLICATION_SELECT,
@@ -402,6 +403,7 @@ const _reactivateMyAdoptionApplication = async (
             createdAt: true,
             type: true,
             adoptionApplicationId: true,
+            reversedAt: true,
           },
         });
         const statusIfReactivated = deriveApplicationStatus(
@@ -410,7 +412,7 @@ const _reactivateMyAdoptionApplication = async (
             reviewStatus: ApplicationStatus.PENDING,
             submittedAt: application.submittedAt,
           },
-          outcomes.map((outcome) => ({ ...outcome, reversed: false })),
+          outcomes.map(toDerivationOutcome),
         );
         if (statusIfReactivated === EffectiveApplicationStatus.CLOSED) {
           throw new ConflictError(

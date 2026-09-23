@@ -5,6 +5,7 @@ import {
   ApplicationConsequence,
   deriveApplicationConsequence,
   deriveApplicationStatuses,
+  toDerivationOutcome,
   type EffectiveApplicationStatus,
 } from "../utils/derive-application-status";
 import { adoptionReason, closureReason } from "../utils/application-status";
@@ -88,13 +89,13 @@ export async function effectiveApplicationStatuses(
             createdAt: true,
             type: true,
             adoptionApplicationId: true,
+            reversedAt: true,
           },
         });
 
-  // Nothing reverses an outcome yet, so every recorded one is live.
   return deriveApplicationStatuses(
     applications,
-    outcomes.map((outcome) => ({ ...outcome, reversed: false })),
+    outcomes.map(toDerivationOutcome),
   );
 }
 
@@ -137,6 +138,7 @@ export async function withConsequenceInHistory<
       adoptionApplicationId: true,
       staffMember: { select: { name: true } },
       fosterPlacement: { select: { id: true } },
+      reversedAt: true,
     },
     // Two outcomes recorded in the same millisecond would otherwise leave
     // which one closed the application to the order the rows came back in.
@@ -144,14 +146,13 @@ export async function withConsequenceInHistory<
     // generated and a per-process counter, so it was generated first.
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-  // Nothing reverses an outcome yet, so every recorded one is live.
   const consequence = deriveApplicationConsequence(
     {
       id: application.id,
       reviewStatus: application.status,
       submittedAt: application.submittedAt,
     },
-    outcomes.map((outcome) => ({ ...outcome, reversed: false })),
+    outcomes.map(toDerivationOutcome),
   );
   if (!consequence) {
     return { ...application, status: application.status };

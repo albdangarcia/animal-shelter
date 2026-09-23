@@ -76,6 +76,7 @@ export type AdoptionApplicationWithOutcome = Omit<
         };
       };
       outcomes: {
+        where: { reversedAt: null };
         select: {
           id: true;
           outcomeDate: true;
@@ -251,15 +252,15 @@ const _fetchAdoptionApplicationById = async (
             },
           },
         },
-        // The adoption outcomes linked to this application, newest first. A
-        // reversed one keeps its link, so there can be several, and at most
-        // one that is not reversed.
+        // The adoption outcome that adopted this application, if one did. A
+        // reversed one keeps its link, so several can be linked, but at most
+        // one is not reversed, and only that one finalized the application.
         outcomes: {
+          where: { reversedAt: null },
           select: {
             id: true,
             outcomeDate: true,
           },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         },
         // Who last rewrote the snapshot. The review screen shows it beside
         // `lastEditedAt` so a reviewer can see the text moved after they read

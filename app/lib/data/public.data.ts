@@ -619,7 +619,7 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
           take: 1,
         },
         intake: { select: { intakeDate: true } },
-        Outcome: { select: { outcomeDate: true } },
+        Outcome: { where: { reversedAt: null }, select: { outcomeDate: true } },
         ...(personId && {
           favorites: {
             select: { userId: true },

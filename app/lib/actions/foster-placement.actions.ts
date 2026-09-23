@@ -112,7 +112,7 @@ const _createFosterPlacement = async (
             currentUnitId: true,
             listingStatus: true,
             intake: { select: { intakeDate: true } },
-            Outcome: { select: { outcomeDate: true } },
+            Outcome: { where: { reversedAt: null }, select: { outcomeDate: true } },
             fosterPlacements: {
               where: { endDate: null },
               select: { id: true },

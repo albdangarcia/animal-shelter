@@ -9,6 +9,7 @@ import type {
 } from "@/prisma/generated/enums";
 import {
   deriveApplicationStatuses,
+  toDerivationOutcome,
   type EffectiveApplicationStatus,
 } from "@/app/lib/utils/derive-application-status";
 import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
@@ -265,9 +266,10 @@ export const runGlobalSearch = async (
                           createdAt: true,
                           type: true,
                           adoptionApplicationId: true,
+                          reversedAt: true,
                         },
                       })
-                    ).map((outcome) => ({ ...outcome, reversed: false })),
+                    ).map(toDerivationOutcome),
               );
               return rows.map(
                 (row): AdoptionAppHit => ({

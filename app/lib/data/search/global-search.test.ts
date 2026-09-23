@@ -166,6 +166,7 @@ test("an adoption application hit shows its effective status", async () => {
         createdAt: new Date("2026-09-10T10:00Z"),
         type: "ADOPTION",
         adoptionApplicationId: "adopter",
+        reversedAt: null,
       },
     ],
   });
@@ -176,6 +177,47 @@ test("an adoption application hit shows its effective status", async () => {
     [
       ["adopter", "ADOPTED"],
       ["other", "CLOSED"],
+    ],
+  );
+});
+
+test("a reversed outcome neither adopts nor closes a hit", async () => {
+  const { db } = fakeDb({
+    adoptionApplication: [
+      {
+        id: "adopter",
+        applicantName: "Jane Doe",
+        status: "APPROVED",
+        submittedAt: new Date("2026-09-01T10:00Z"),
+        animalId: "a1",
+        animal: { name: "Bella" },
+      },
+      {
+        id: "other",
+        applicantName: "Jane Roe",
+        status: "REVIEWING",
+        submittedAt: new Date("2026-09-02T10:00Z"),
+        animalId: "a1",
+        animal: { name: "Bella" },
+      },
+    ],
+    outcome: [
+      {
+        animalId: "a1",
+        createdAt: new Date("2026-09-10T10:00Z"),
+        type: "ADOPTION",
+        adoptionApplicationId: "adopter",
+        reversedAt: new Date("2026-09-11T10:00Z"),
+      },
+    ],
+  });
+  const results = await runGlobalSearch(db, "bella", ["adoptionApplications"]);
+
+  assert.deepEqual(
+    results.adoptionApplications?.map((hit) => [hit.id, hit.status]),
+    [
+      ["adopter", "APPROVED"],
+      ["other", "REVIEWING"],
     ],
   );
 });

@@ -40,6 +40,9 @@ export type PersonActivityEntry =
       date: Date;
       animal: AnimalRef;
       outcomeType: OutcomeType;
+      // The outcome was later reversed. It stays in the feed, marked: this
+      // person did record it.
+      reversed: boolean;
     }
   | {
       kind: "TASK_CREATED";
@@ -91,6 +94,7 @@ const _fetchPersonActivity = async (
           select: {
             outcomeDate: true,
             type: true,
+            reversedAt: true,
             animal: { select: animalSelect },
           },
           orderBy: { outcomeDate: "desc" },
@@ -150,6 +154,7 @@ const _fetchPersonActivity = async (
         date: startOfShelterDay(calendarDay(outcome.outcomeDate), timezone),
         animal: outcome.animal,
         outcomeType: outcome.type,
+        reversed: outcome.reversedAt !== null,
       })),
       ...person.tasksCreated.map((task) => ({
         kind: "TASK_CREATED" as const,

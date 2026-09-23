@@ -45,6 +45,10 @@ export type PersonAnimalHistoryEntry = {
   // Only populated for APPLICANT entries: the application's effective status,
   // derived from the animal's outcomes.
   applicationStatus?: string;
+  // Only populated for OWNER_RECLAIMED entries: true when the outcome was
+  // reversed. It stays in the history, marked, since staff reading it need to
+  // see what was recorded and voided, not a gap.
+  reversed?: boolean;
 };
 
 /** A day-valued entry's two fields: the day, and where it sorts. */
@@ -92,6 +96,7 @@ const _fetchPersonAnimalHistory = async (
         reclaimedAnimalsAsOwner: {
           select: {
             outcomeDate: true,
+            reversedAt: true,
             animal: { select: animalSelect },
           },
         },
@@ -137,6 +142,7 @@ const _fetchPersonAnimalHistory = async (
         role: "OWNER_RECLAIMED" as const,
         ...dated(calendarDay(outcome.outcomeDate), timezone),
         animal: outcome.animal,
+        reversed: outcome.reversedAt !== null,
       })),
       ...person.adoptionApplications.map((application) => ({
         role: "APPLICANT" as const,

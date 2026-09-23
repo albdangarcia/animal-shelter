@@ -5,6 +5,7 @@ import {
   ApplicationConsequence,
   deriveApplicationConsequence,
   deriveApplicationStatus,
+  toDerivationOutcome,
   type DerivationApplication,
   type DerivationOutcome,
 } from "./derive-application-status";
@@ -312,5 +313,21 @@ test("an application whose review status stands has no consequence", () => {
       outcomes,
     ),
     null,
+  );
+});
+
+test("an outcome row is reversed exactly when reversedAt is set", () => {
+  const row = {
+    createdAt: new Date("2026-09-10T10:00Z"),
+    type: OutcomeType.ADOPTION,
+    adoptionApplicationId: "app",
+  };
+  assert.deepEqual(toDerivationOutcome({ ...row, reversedAt: null }), {
+    ...row,
+    reversed: false,
+  });
+  assert.deepEqual(
+    toDerivationOutcome({ ...row, reversedAt: new Date("2026-09-11T10:00Z") }),
+    { ...row, reversed: true },
   );
 });

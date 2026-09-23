@@ -57,9 +57,11 @@ const _fetchAnimalCardData = async (): Promise<PetCardDataType> => {
       todoTasksCount,
     ] = await Promise.all([
       prisma.animal.count(),
+      // A reversed outcome was recorded in error, so none of these counts it.
       prisma.outcome.count({
         where: {
           type: OutcomeType.ADOPTION,
+          reversedAt: null,
         },
       }),
       prisma.animal.count({
@@ -96,6 +98,7 @@ const _fetchAnimalCardData = async (): Promise<PetCardDataType> => {
       prisma.outcome.count({
         where: {
           type: OutcomeType.ADOPTION,
+          reversedAt: null,
           outcomeDate: {
             gte: currentMonthFromDay,
           },
@@ -136,6 +139,7 @@ const _fetchAnimalCardData = async (): Promise<PetCardDataType> => {
       prisma.outcome.count({
         where: {
           type: OutcomeType.ADOPTION,
+          reversedAt: null,
           outcomeDate: {
             gte: lastMonthFromDay,
             lte: lastMonthToDay,
@@ -215,7 +219,7 @@ const _fetchChartData = async (): Promise<ChartData> => {
         select: { intakeDate: true },
       }),
       prisma.outcome.findMany({
-        where: { outcomeDate: { gte: startKey } },
+        where: { outcomeDate: { gte: startKey }, reversedAt: null },
         select: { outcomeDate: true },
       }),
     ]);

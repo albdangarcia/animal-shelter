@@ -16,6 +16,7 @@ import {
   ApplicationStatus,
   FosterPlacementType,
   FosterReturnReason,
+  IntakeType,
   LivingSituation,
   OutcomeType,
   Sex,
@@ -24,7 +25,17 @@ import {
   assertNoLiveAdoptionOutcome,
   recordOutcomeReversal,
 } from "@/app/lib/services/outcome-reversal";
-import { lockAnimal } from "@/app/lib/data/application-status.data";
+import {
+  DERIVATION_APPLICATION_SELECT,
+  effectiveApplicationStatuses,
+  effectiveStatusBehindLock,
+  lockAnimal,
+  withConsequenceInHistory,
+} from "@/app/lib/data/application-status.data";
+import { _fetchAnimalStayEvents } from "@/app/lib/data/reports/report-shared.data";
+import { runGlobalSearch } from "@/app/lib/data/search/global-search";
+import { computeStays } from "@/app/lib/utils/stay-utils";
+import { calendarDay } from "@/app/lib/utils/shelter-day";
 import {
   ConflictError,
   NotFoundError,
@@ -81,6 +92,7 @@ after(async () => {
   await prisma.fosterPlacement.deleteMany({ where: { placedById: staffId } });
   await prisma.fosterProfile.deleteMany({ where: { id: fosterProfileId } });
   await prisma.outcome.deleteMany({ where: { staffMemberId: staffId } });
+  await prisma.intake.deleteMany({ where: { staffMemberId: staffId } });
   await prisma.adoptionApplication.deleteMany({ where: { applicantId } });
   // Takes the activity rows with it.
   await prisma.animal.deleteMany({ where: { speciesId } });
@@ -107,7 +119,10 @@ const makeAnimal = async (label: string, listingStatus: AnimalListingStatus) =>
     })
   ).id;
 
-const makeApplication = async (animalId: string) =>
+const makeApplication = async (
+  animalId: string,
+  status: ApplicationStatus = ApplicationStatus.APPROVED,
+) =>
   (
     await prisma.adoptionApplication.create({
       data: {
@@ -121,7 +136,7 @@ const makeApplication = async (animalId: string) =>
         livingSituation: LivingSituation.OWN_HOME,
         householdSize: 1,
         reasonForAdoption: "Test",
-        status: ApplicationStatus.APPROVED,
+        status,
         source: ApplicationSource.STAFF,
         applicantId,
         animalId,
@@ -532,4 +547,116 @@ test("a reversed adoption's application can take a new adoption outcome", async 
 
 test("reversing an outcome that does not exist is refused", async () => {
   await assert.rejects(reverse("cmtn2bxpz00gancgsd6hyf79q"), NotFoundError);
+});
+
+// Everything below reads a reversed outcome back through the code the app
+// reads it with, rather than through the reversal's own result.
+
+test("a reversed adoption adopts and closes nothing, and no status is rewritten", async () => {
+  const animalId = await makeAnimal("Un-adopted", AnimalListingStatus.PENDING_ADOPTION);
+  const winnerId = await makeApplication(animalId);
+  const otherId = await makeApplication(animalId, ApplicationStatus.REVIEWING);
+  const outcomeId = await recordOutcome(animalId, {
+    type: OutcomeType.ADOPTION,
+    previousListingStatus: AnimalListingStatus.PENDING_ADOPTION,
+    adoptionApplicationId: winnerId,
+  });
+
+  // Each reader's answer for [winner, other].
+  const byId = <T>(entries: Iterable<readonly [string, T]>) => {
+    const map = new Map(entries);
+    return [map.get(winnerId), map.get(otherId)];
+  };
+  const rows = () =>
+    prisma.adoptionApplication.findMany({
+      where: { id: { in: [winnerId, otherId] } },
+      select: DERIVATION_APPLICATION_SELECT,
+    });
+  const effective = async () =>
+    byId(await effectiveApplicationStatuses(await rows()));
+  // What the staff and applicant timelines show: the review history, plus the
+  // outcome that adopted or closed the application as an entry, if one did.
+  const timelines = async () =>
+    byId(
+      await Promise.all(
+        (await rows()).map(async (row) => {
+          const { status, history } = await withConsequenceInHistory({
+            ...row,
+            history: [],
+          });
+          return [row.id, [status, history.length]] as const;
+        }),
+      ),
+    );
+  const searchHits = async () =>
+    byId(
+      (
+        await runGlobalSearch(prisma, `Un-adopted ${runId}`, [
+          "adoptionApplications",
+        ])
+      ).adoptionApplications!.map((hit) => [hit.id, hit.status] as const),
+    );
+  const stored = async () =>
+    byId((await rows()).map((row) => [row.id, row.status] as const));
+
+  assert.deepEqual(await effective(), ["ADOPTED", "CLOSED"]);
+  assert.deepEqual(await timelines(), [
+    ["ADOPTED", 1],
+    ["CLOSED", 1],
+  ]);
+  assert.deepEqual(await searchHits(), ["ADOPTED", "CLOSED"]);
+
+  await reverse(outcomeId);
+
+  assert.deepEqual(await effective(), ["APPROVED", "REVIEWING"]);
+  assert.deepEqual(await timelines(), [
+    ["APPROVED", 0],
+    ["REVIEWING", 0],
+  ]);
+  assert.deepEqual(await searchHits(), ["APPROVED", "REVIEWING"]);
+  // The gate both outcome-recording paths use: the winner is approved again,
+  // so it can take a new adoption.
+  assert.equal(
+    await prisma.$transaction((tx) =>
+      effectiveStatusBehindLock(tx, { id: winnerId, animalId }),
+    ),
+    ApplicationStatus.APPROVED,
+  );
+  // Nothing was written onto the applications.
+  assert.deepEqual(await stored(), [
+    ApplicationStatus.APPROVED,
+    ApplicationStatus.REVIEWING,
+  ]);
+});
+
+test("a reversed outcome ends no stay", async () => {
+  const animalId = await makeAnimal("Stay reopened", AnimalListingStatus.PUBLISHED);
+  await prisma.intake.create({
+    data: {
+      animalId,
+      type: IntakeType.STRAY,
+      intakeDate: "2026-08-01",
+      staffMemberId: staffId,
+    },
+  });
+  const outcomeId = await recordOutcome(animalId, {
+    previousListingStatus: AnimalListingStatus.PUBLISHED,
+  });
+  const stays = async () => {
+    const animal = (await _fetchAnimalStayEvents([speciesId])).find(
+      (a) => a.id === animalId,
+    )!;
+    return computeStays(animal.events, calendarDay("2026-09-22"));
+  };
+
+  const recorded = await stays();
+  assert.equal(recorded.isInCare, false);
+  assert.equal(recorded.stays[0].outcomeDate, "2026-09-01");
+
+  await reverse(outcomeId);
+
+  const reversed = await stays();
+  assert.equal(reversed.isInCare, true);
+  assert.equal(reversed.stays.length, 1);
+  assert.equal(reversed.stays[0].outcomeDate, null);
 });

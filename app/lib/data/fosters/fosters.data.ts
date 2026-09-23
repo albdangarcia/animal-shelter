@@ -99,7 +99,7 @@ const _fetchAnimalsEligibleForFosterPlacement = async (): Promise<
           orderBy: ANIMAL_IMAGE_ORDER,
         },
         intake: { select: { intakeDate: true } },
-        Outcome: { select: { outcomeDate: true } },
+        Outcome: { where: { reversedAt: null }, select: { outcomeDate: true } },
       },
       orderBy: { name: "asc" },
     });
@@ -170,7 +170,7 @@ const _fetchAnimalForFosterPlacement = async (
         listingStatus: true,
         currentUnitId: true,
         intake: { select: { intakeDate: true } },
-        Outcome: { select: { outcomeDate: true } },
+        Outcome: { where: { reversedAt: null }, select: { outcomeDate: true } },
         fosterPlacements: { where: { endDate: null }, select: { id: true } },
       },
     });

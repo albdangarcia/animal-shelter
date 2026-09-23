@@ -3849,6 +3849,7 @@ async function seedRegisteredUserApplicationFixtures() {
           take: 1,
         },
         Outcome: {
+          where: { reversedAt: null },
           select: { outcomeDate: true },
           orderBy: [{ outcomeDate: "desc" }, { createdAt: "desc" }],
           take: 1,
@@ -5083,6 +5084,7 @@ async function assertAnimalLifecycleConsistency() {
       archiveReason: true,
       intake: { select: { intakeDate: true } },
       Outcome: {
+        where: { reversedAt: null },
         select: {
           outcomeDate: true,
           type: true,

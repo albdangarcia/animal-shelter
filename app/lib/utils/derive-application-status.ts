@@ -70,6 +70,14 @@ export type DerivationOutcome = {
   reversed: boolean;
 };
 
+// An outcome row as the derivation reads it. Every reader selects
+// `reversedAt` and passes the row through here rather than filtering reversed
+// rows out itself, so what a reversal changes is decided in one place.
+export const toDerivationOutcome = <Row extends { reversedAt: Date | null }>({
+  reversedAt,
+  ...row
+}: Row) => ({ ...row, reversed: reversedAt !== null });
+
 /**
  * The status an adoption application effectively has, given its own review
  * status and every outcome recorded for its animal.
