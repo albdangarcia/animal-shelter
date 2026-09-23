@@ -210,8 +210,8 @@ const _fetchSectionCardsAnimalData = async (
         // section cards count approved applications to decide whether to
         // offer "Complete Adoption", and the stored column is a copy of the
         // cascade's decision that stops being written once layer 4 removes
-        // it. Mapped back to `{ status }` below so this function's return
-        // shape does not change.
+        // it. Keep the ID alongside the derived status below so the section
+        // card can link to the approved application.
         adoptionApplications: {
           select: DERIVATION_APPLICATION_SELECT,
         },
@@ -255,6 +255,7 @@ const _fetchSectionCardsAnimalData = async (
     return {
       ...animal,
       adoptionApplications: animal.adoptionApplications.map((application) => ({
+        id: application.id,
         status: statuses.get(application.id)!,
       })),
     };

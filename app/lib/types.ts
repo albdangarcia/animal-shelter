@@ -121,8 +121,9 @@ export type AnimalSectionCardPayload = Omit<
   }>,
   "adoptionApplications"
 > & {
-  // Each application's effective status, derived from the animal's outcomes.
-  adoptionApplications: { status: EffectiveApplicationStatus }[];
+  // Each application's effective status, derived from the animal's outcomes,
+  // and its ID so the profile can open the matching adoption outcome form.
+  adoptionApplications: { id: string; status: EffectiveApplicationStatus }[];
 };
 
 export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{

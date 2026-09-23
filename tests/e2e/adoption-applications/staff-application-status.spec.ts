@@ -192,6 +192,57 @@ test("the animal's own application list derives status the same way", async ({
   );
 });
 
+test("the animal profile opens the approved application's adoption form", async ({
+  page,
+}) => {
+  await gotoTable(page, `${APPLICATIONS_PATH}?status=APPROVED`);
+  const reviewHref = await rowMenuItemHref(page, 0, "Review");
+  const applicationId = reviewHref.match(/\/adoption-applications\/([^/]+)\/review$/)?.[1];
+  expect(applicationId).toBeTruthy();
+
+  const animalHref = await page
+    .locator("tbody tr")
+    .first()
+    .getByRole("link")
+    .last()
+    .getAttribute("href");
+  expect(animalHref).toMatch(/^\/dashboard\/animals\/[^/]+$/);
+
+  await gotoTable(page, `${animalHref}/adoption-applications?status=APPROVED`);
+  await expect(statusCells(page)).toHaveText(["Approved"]);
+
+  await page.goto(animalHref!);
+  const completeAdoption = page.getByRole("link", { name: "Complete Adoption" });
+  await expect(completeAdoption).toHaveAttribute(
+    "href",
+    `/dashboard/outcomes/create?applicationId=${applicationId}`,
+  );
+  await completeAdoption.click();
+  await expect(page.getByText("Process Animal Outcome", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Outcome Type")).toBeDisabled();
+  await expect(page.getByLabel("Outcome Type")).toContainText("Adoption");
+});
+
+test("an adopted animal offers re-intake instead of completing adoption again", async ({
+  page,
+}) => {
+  await gotoTable(page, janeDoeApplications({ status: "ADOPTED" }));
+  const animalHref = await page
+    .locator("tbody tr")
+    .first()
+    .getByRole("link")
+    .last()
+    .getAttribute("href");
+  expect(animalHref).toMatch(/^\/dashboard\/animals\/[^/]+$/);
+
+  await page.goto(animalHref!);
+  await expect(page.getByRole("link", { name: "Create Re-Intake" })).toHaveAttribute(
+    "href",
+    `${animalHref}/intake/create`,
+  );
+  await expect(page.getByRole("link", { name: "Complete Adoption" })).toHaveCount(0);
+});
+
 // The form used to submit the application's current status with every save.
 // For a closed application that is a status the form schema refuses, so its
 // internal notes could not be saved at all.

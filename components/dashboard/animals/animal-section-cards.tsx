@@ -123,8 +123,31 @@ const AnimalSectionCards = async ({ params }: Props) => {
 
   const applicationCount = animal.adoptionApplications?.length || 0;
   const approvedApplications =
-    animal.adoptionApplications?.filter((a) => a.status === "APPROVED")
-      .length || 0;
+    animal.adoptionApplications?.filter((a) => a.status === "APPROVED") ?? [];
+  const outcomeAction = (() => {
+    if (animal.listingStatus === AnimalListingStatus.ARCHIVED) {
+      return {
+        href: `/dashboard/animals/${animal.id}/intake/create`,
+        label: "Create Re-Intake",
+      };
+    }
+    if (approvedApplications.length === 1) {
+      return {
+        href: `/dashboard/outcomes/create?applicationId=${approvedApplications[0].id}`,
+        label: "Complete Adoption",
+      };
+    }
+    if (approvedApplications.length > 1) {
+      return {
+        href: `/dashboard/animals/${animal.id}/adoption-applications?status=APPROVED`,
+        label: "Choose Application",
+      };
+    }
+    return {
+      href: `/dashboard/outcomes/create?animalId=${animal.id}`,
+      label: "Create Outcome",
+    };
+  })();
 
   // Health status info for rendering
   const getHealthStatusBadge = () => {
@@ -267,19 +290,11 @@ const AnimalSectionCards = async ({ params }: Props) => {
                   )}
                 >
                   <Link
-                    href={
-                      animal.listingStatus !== AnimalListingStatus.ARCHIVED
-                        ? `/dashboard/outcomes/create?animalId=${animal.id}`
-                        : `/dashboard/animals/${animal.id}/intake/create`
-                    }
+                    href={outcomeAction.href}
                     aria-disabled={!canManage}
                     tabIndex={canManage ? undefined : -1}
                   >
-                    {approvedApplications > 0
-                      ? "Complete Adoption"
-                      : animal.listingStatus === AnimalListingStatus.ARCHIVED
-                        ? "Create Re-Intake"
-                        : "Create Outcome"}
+                    {outcomeAction.label}
                   </Link>
                 </Button>
               </span>
