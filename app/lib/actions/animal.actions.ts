@@ -27,6 +27,7 @@ import {
 } from "@/prisma/generated/enums";
 import { buildLocationChangeSummary } from "../utils/location-activity";
 import { ConflictError, NotFoundError } from "../utils/errors";
+import { findLiveUnitForPlacement } from "../services/unit-housing";
 import { del } from "@vercel/blob";
 import { isDemo } from "@/lib/flags";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
@@ -154,21 +155,15 @@ const _createAnimal = async (
 
       // verify the chosen unit still exists and isn't
       // soft-deleted. Treat a stale/deleted unit as Unplaced rather than
-      // erroring. Capacity is never enforced.
+      // erroring. Capacity is never enforced. Read behind the unit's lock, so
+      // a delete of it at the same moment either sees this animal or is seen.
       let resolvedUnitId: string | null = null;
       let resolvedUnitLabel: {
         name: string;
         location: { name: string };
       } | null = null;
       if (mapped.currentUnitId) {
-        const unit = await tx.unit.findFirst({
-          where: { id: mapped.currentUnitId, deletedAt: null },
-          select: {
-            id: true,
-            name: true,
-            location: { select: { name: true } },
-          },
-        });
+        const unit = await findLiveUnitForPlacement(tx, mapped.currentUnitId);
         resolvedUnitId = unit?.id ?? null;
         resolvedUnitLabel = unit
           ? { name: unit.name, location: unit.location }
@@ -450,7 +445,8 @@ const _updateAnimal = async (
 
       // verify the chosen unit still exists and isn't
       // soft-deleted. Treat a stale/deleted unit as Unplaced rather than
-      // erroring. Capacity is never enforced.
+      // erroring. Capacity is never enforced. Read behind the unit's lock, as
+      // on create.
       let resolvedUnitId: string | null = null;
       let resolvedUnitLabel: {
         name: string;
@@ -461,14 +457,7 @@ const _updateAnimal = async (
       // trust the client — coerce to Unplaced here regardless of what was
       // submitted.
       if (mapped.currentUnitId && !isArchived) {
-        const unit = await tx.unit.findFirst({
-          where: { id: mapped.currentUnitId, deletedAt: null },
-          select: {
-            id: true,
-            name: true,
-            location: { select: { name: true } },
-          },
-        });
+        const unit = await findLiveUnitForPlacement(tx, mapped.currentUnitId);
         resolvedUnitId = unit?.id ?? null;
         resolvedUnitLabel = unit
           ? { name: unit.name, location: unit.location }

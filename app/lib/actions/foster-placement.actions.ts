@@ -40,6 +40,7 @@ import {
   lockAnimal,
 } from "../data/application-status.data";
 import { assertNoLiveAdoptionOutcome } from "../services/outcome-reversal";
+import { findLiveUnitForPlacement } from "../services/unit-housing";
 
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
 
@@ -259,10 +260,16 @@ const _returnFromFoster = async (
         throw new ConflictError("This foster placement has already ended.");
       }
 
-      const unit = await tx.unit.findFirst({
-        where: { id: unitId, deletedAt: null },
-        select: { id: true },
-      });
+      // Taken before the placement is written, in the order a conversion of
+      // this placement takes them: the conversion holds the animal and then
+      // closes the placement, so closing it here first and then writing the
+      // animal could leave each waiting for the other. A placement's animal
+      // never changes, so the read above needs no lock.
+      await lockAnimal(tx, placement.animalId);
+
+      // Read behind the unit's lock, so a delete of it at the same moment
+      // either sees the animal come back or is seen here.
+      const unit = await findLiveUnitForPlacement(tx, unitId);
       if (!unit) {
         throw new PreconditionFailedError(
           "That unit is no longer available. Please choose a different unit.",
