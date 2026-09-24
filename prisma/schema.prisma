@@ -399,6 +399,9 @@ model Unit {
   // Informational only — a placement's `previousUnitId`, set null if the unit is deleted.
   fosterPlacementsAsPrevious FosterPlacement[]
 
+  // Informational only — an outcome's `previousUnitId`, set null if the unit is deleted.
+  outcomesAsPrevious Outcome[]
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map(name: "deleted_at")
@@ -772,6 +775,14 @@ model Outcome {
   // fact rather than caching one. Null on outcomes recorded before it was
   // kept.
   previousListingStatus AnimalListingStatus?
+
+  // The unit the animal was housed in just before this outcome took it out,
+  // put back if the outcome is reversed. Informational only: the unit is not
+  // reserved while the animal is away. Null when the animal was unhoused or in
+  // foster, on outcomes recorded before it was kept, and if the unit is
+  // hard-deleted.
+  previousUnitId String?
+  previousUnit   Unit?   @relation(fields: [previousUnitId], references: [id], onDelete: SetNull)
 
   // A reversal voids an outcome that should never have been recorded: a
   // reversed outcome is kept, but counts for nothing. Write-once: nothing

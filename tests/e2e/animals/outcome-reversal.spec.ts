@@ -547,3 +547,100 @@ test("a reversed adoption un-adopts, reopens, drops out of the report, and can b
     page.getByText("Outcome: Reversed", { exact: true }),
   ).toBeVisible();
 });
+
+// The Location row on an animal's record: the unit as "Location · Unit",
+// "In foster", or "Unplaced".
+const locationRow = (page: Page) =>
+  page
+    .locator("div.text-sm")
+    .filter({ has: page.getByText("Location", { exact: true }) })
+    .first();
+
+/**
+ * A published animal housed in a unit, with no open application, that no
+ * other spec names. Nothing on the applications moves when its outcome is
+ * recorded, and no other spec's animal leaves its kennel. The seed's
+ * placements are random, so the animal is found rather than named.
+ */
+const findHousedAnimal = async (page: Page) => {
+  const published = await readAllPages(
+    page,
+    "/dashboard/animals?listingStatus=PUBLISHED",
+    (rows) =>
+      rows.map((row) => {
+        const link = row.querySelector("a");
+        return `${link?.getAttribute("href") ?? ""}\t${link?.textContent?.trim() ?? ""}`;
+      }),
+  );
+  const withOpenApplications = new Set(
+    await readAllPages(
+      page,
+      "/dashboard/adoption-applications?status=PENDING,REVIEWING,WAITLISTED,APPROVED",
+      (rows) =>
+        rows.map((row) => {
+          const links = row.querySelectorAll("a");
+          return links[links.length - 1]?.getAttribute("href") ?? "";
+        }),
+    ),
+  );
+  for (const entry of published) {
+    const [href, name] = entry.split("\t");
+    if (withOpenApplications.has(href) || isNamedElsewhere(name)) continue;
+    await page.goto(href);
+    const location = locationRow(page);
+    await expect(location).toBeVisible();
+    const label = (await location.innerText()).replace(/^Location\s*/, "").trim();
+    if (label.includes(" · ")) {
+      return { animalId: href.split("/").pop() as string, unitLabel: label };
+    }
+  }
+  throw new Error(
+    "No published animal is housed in a unit, free of open applications, and unnamed by another spec.",
+  );
+};
+
+test("a reversed outcome puts the animal back in its unit, and the feed shows the move", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+
+  const { animalId, unitLabel } = await findHousedAnimal(page);
+  const recordPath = `/dashboard/animals/${animalId}`;
+
+  // A deceased outcome needs no partner or owner. It takes the animal out of
+  // its unit.
+  await page.goto(`${OUTCOMES_PATH}/create?animalId=${animalId}`);
+  await page.getByLabel("Outcome Type *", { exact: true }).click();
+  await page.getByRole("option", { name: "Deceased" }).click();
+  await page.getByRole("button", { name: "Process Outcome" }).click();
+  await expect(page.getByText("Outcome processed successfully.")).toBeVisible();
+  await waitForPathname(page, OUTCOMES_PATH);
+  await page.goto(recordPath);
+  await expect(locationRow(page)).toContainText("Unplaced");
+
+  const row = (await gotoOutcomeRows(page, animalId)).first();
+  const dialog = await openReverseDialog(row);
+  await dialog
+    .getByLabel("Reason for reversal")
+    .fill(`Recorded against the wrong animal ${Date.now()}`);
+  await dialog.getByRole("button", { name: "Reverse Outcome" }).click();
+  await expect(page.getByText(/^Outcome reversed\./)).toBeVisible();
+  await expect(
+    page.getByText(`It was put back in ${unitLabel}.`, { exact: false }),
+  ).toBeVisible();
+
+  // Back in the same unit, on its record...
+  await page.goto(recordPath);
+  await expect(locationRow(page)).toContainText(unitLabel);
+
+  // ...and its feed has the move, as its own entry, beside the reversal.
+  await expect(page.getByText("reversed an outcome").first()).toBeVisible();
+  // Newest first, so the first move is the one the reversal made.
+  const move = page
+    .locator("div.relative.flex.items-start")
+    .filter({ has: page.getByText("moved this animal") })
+    .first();
+  await expect(move).toBeVisible();
+  await move.getByRole("button", { name: "Show details" }).click();
+  await expect(move.getByText(`Moved to ${unitLabel}.`)).toBeVisible();
+});

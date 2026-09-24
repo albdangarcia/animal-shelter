@@ -9,6 +9,10 @@ import {
   NotFoundError,
   PreconditionFailedError,
 } from "@/app/lib/utils/errors";
+import {
+  buildLocationChangeSummary,
+  formatUnitLabel,
+} from "@/app/lib/utils/location-activity";
 
 /**
  * Reversing an outcome that should never have been recorded, for when the
@@ -20,6 +24,10 @@ import {
  * one to undo a mistake records an intake that never happened. Intakes and
  * outcomes feed the reports directly, so both counts go up and one real stay
  * becomes two short ones.
+ *
+ * A reversal puts the animal back as it was before the outcome: its listing,
+ * its foster placement if the outcome closed one, and otherwise the unit it
+ * was housed in, each only when nothing has moved the animal since.
  *
  * A reversal voids the row rather than deleting it or posting an opposite
  * entry. The outcome is kept, with who reversed it, when and why, and from
@@ -42,7 +50,9 @@ export interface OutcomeReversal {
   restoredListingStatus: AnimalListingStatus | null;
   /** The foster placement put back to open, when the outcome closed one. */
   reopenedPlacementId: string | null;
-  /** What happened to the listing and placement, as sentences for staff. */
+  /** The unit the animal was put back in, or null when it was not placed. */
+  restoredUnitId: string | null;
+  /** What happened to the listing, placement and unit, as sentences for staff. */
   effects: string;
 }
 
@@ -84,6 +94,17 @@ export const recordOutcomeReversal = async (
       reversedAt: true,
       previousListingStatus: true,
       adoptionApplicationId: true,
+      // Read through the relation even when soft-deleted, so the message can
+      // name a unit that can no longer be used.
+      previousUnit: {
+        select: {
+          id: true,
+          name: true,
+          capacity: true,
+          deletedAt: true,
+          location: { select: { name: true, deletedAt: true } },
+        },
+      },
       fosterPlacement: {
         select: {
           id: true,
@@ -107,10 +128,11 @@ export const recordOutcomeReversal = async (
   // the animal is archived and this is the latest live outcome recorded for
   // it. Otherwise something has moved the animal since: a re-intake, and
   // perhaps a later outcome. The snapshot is stale then, and restoring it
-  // would overwrite what happened after, so the listing is left alone.
+  // would overwrite what happened after, so the listing and unit are left
+  // alone.
   const animal = await tx.animal.findUnique({
     where: { id: animalId },
-    select: { listingStatus: true },
+    select: { listingStatus: true, currentUnitId: true },
   });
   const latestLive = await tx.outcome.findFirst({
     where: { animalId, reversedAt: null },
@@ -138,8 +160,13 @@ export const recordOutcomeReversal = async (
   const effects: string[] = [];
   let restoredListingStatus: AnimalListingStatus | null = null;
   let reopenedPlacementId: string | null = null;
+  let restoredUnit: NonNullable<typeof outcome.previousUnit> | null = null;
 
   if (archivedByThisOutcome) {
+    // The listing and the animal's place, a foster or a unit, come back
+    // together under this one guard, so neither is restored without the
+    // other.
+    //
     // An outcome recorded before the before-value was kept has none. The
     // animal still has to come out of the archive, since nothing else would
     // take it out short of a re-intake, and a draft publishes nothing staff
@@ -179,6 +206,48 @@ export const recordOutcomeReversal = async (
         `The foster placement with ${outcome.fosterPlacement.fosterProfile.person.name} was reopened.`,
       );
     }
+
+    // Otherwise the animal goes back in the unit the outcome took it out of.
+    // The unit was not reserved while the outcome stood, so it can have been
+    // deleted since, or its location, and then the animal waits for staff to
+    // place it. An animal given a unit while archived keeps it: that was
+    // someone's placement decision, and the stored unit is older. Capacity is
+    // advisory here as on the board: the animal is placed, and a full unit is
+    // reported.
+    const previousUnit = outcome.previousUnit;
+    if (!outcome.fosterPlacement && !animal.currentUnitId) {
+      if (
+        previousUnit &&
+        !previousUnit.deletedAt &&
+        !previousUnit.location.deletedAt
+      ) {
+        restoredUnit = previousUnit;
+        await tx.animal.update({
+          where: { id: animalId },
+          data: { currentUnitId: previousUnit.id },
+        });
+        const label = formatUnitLabel(previousUnit);
+        effects.push(`It was put back in ${label}.`);
+        // The animal counts itself, since its listing is no longer archived.
+        const occupancy = await tx.animal.count({
+          where: {
+            currentUnitId: previousUnit.id,
+            listingStatus: { not: AnimalListingStatus.ARCHIVED },
+          },
+        });
+        if (occupancy > previousUnit.capacity) {
+          effects.push(
+            `${label} is now over capacity (${occupancy}/${previousUnit.capacity}).`,
+          );
+        }
+      } else if (previousUnit) {
+        effects.push(
+          `It has no unit now, since ${formatUnitLabel(previousUnit)} has been deleted; place it from its record.`,
+        );
+      } else {
+        effects.push("It has no unit now; place it from its record.");
+      }
+    }
   } else {
     effects.push(
       "The listing was left as it is, since this outcome is no longer what archived the animal.",
@@ -187,20 +256,41 @@ export const recordOutcomeReversal = async (
 
   const effectsText = effects.join(" ");
 
-  await tx.animalActivityLog.create({
+  const reversalRow = await tx.animalActivityLog.create({
     data: {
       animalId,
       activityType: AnimalActivityType.OUTCOME_REVERSED,
       changedById: actorId,
       changeSummary: `Outcome was reversed: ${describe(outcome.type)}. ${effectsText} Reason: ${trimmedReason}`,
     },
+    select: { changedAt: true },
   });
+
+  // Its own row, so the animal's location history does not depend on reading
+  // the reversal's text. The feed orders by time alone, newest first, and
+  // shows the move above the reversal that caused it only if the move is
+  // later. Two rows written back to back can share a millisecond, so the
+  // move is stamped at least a millisecond after the reversal.
+  if (restoredUnit) {
+    await tx.animalActivityLog.create({
+      data: {
+        animalId,
+        activityType: AnimalActivityType.LOCATION_CHANGE,
+        changedById: actorId,
+        changeSummary: buildLocationChangeSummary(null, restoredUnit),
+        changedAt: new Date(
+          Math.max(Date.now(), reversalRow.changedAt.getTime() + 1),
+        ),
+      },
+    });
+  }
 
   return {
     animalId,
     adoptionApplicationId: outcome.adoptionApplicationId,
     restoredListingStatus,
     reopenedPlacementId,
+    restoredUnitId: restoredUnit?.id ?? null,
     effects: effectsText,
   };
 };
