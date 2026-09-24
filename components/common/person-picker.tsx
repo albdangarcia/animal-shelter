@@ -39,8 +39,15 @@ export const PersonPicker = ({
   suggestedPersonLabel,
   canCreatePerson = false,
 }: PersonPickerProps) => {
+  // The suggestion is shown by name both when it is about to be applied and
+  // when the field already holds it: a form editing a stored record passes
+  // the person on record as the suggestion, and a field remounted after the
+  // suggestion was applied still holds it.
   const [selected, setSelected] = useState<PersonPickerOption | null>(() => {
-    if (value == null && suggestedPersonId) {
+    if (
+      suggestedPersonId &&
+      (value == null || value === suggestedPersonId)
+    ) {
       return {
         id: suggestedPersonId,
         name: suggestedPersonLabel ?? "Suggested person",
@@ -52,8 +59,10 @@ export const PersonPicker = ({
   });
 
   // Apply the suggested default once, on mount, so it's still overridable
-  // afterward without being reapplied every time value clears.
-  const suggestionAppliedRef = useRef(false);
+  // afterward without being reapplied every time value clears. A field that
+  // mounts already holding a person has nothing to apply, so clearing it
+  // later must not bring the suggestion back.
+  const suggestionAppliedRef = useRef(value != null);
   useEffect(() => {
     if (!suggestionAppliedRef.current && value == null && suggestedPersonId) {
       suggestionAppliedRef.current = true;

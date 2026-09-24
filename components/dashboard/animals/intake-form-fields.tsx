@@ -214,32 +214,37 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
           </div>
         )}
 
-        {intakeType === IntakeType.OWNER_SURRENDER && (
-          <div className="grid grid-cols-1 @[662px]:grid-cols-6 gap-x-4 gap-y-8 p-4 border rounded-md">
-            <h4 className="font-semibold col-span-full">
-              Surrendering Person Details
-            </h4>
-            <FormField
-              control={control}
-              name={"surrenderingPersonId" as Path<T>}
-              render={({ field }) => (
-                <FormItem className="col-span-full">
-                  <FormLabel>Surrendering Person</FormLabel>
-                  <FormControl>
-                    <PersonPicker
-                      value={field.value || null}
-                      onChange={(id) => field.onChange(id ?? "")}
-                      suggestedPersonId={suggestedSurrenderingPersonId}
-                      suggestedPersonLabel={suggestedSurrenderingPersonLabel}
-                      canCreatePerson={canCreatePerson}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-        )}
+        {/* Hidden rather than unmounted while another type is chosen. The
+            picker knows the chosen person's name only from its own state, so
+            a remount would show an empty search box while the field still
+            holds the person, and a save would send someone nobody can see. */}
+        <div
+          hidden={intakeType !== IntakeType.OWNER_SURRENDER}
+          className="grid grid-cols-1 @[662px]:grid-cols-6 gap-x-4 gap-y-8 p-4 border rounded-md"
+        >
+          <h4 className="font-semibold col-span-full">
+            Surrendering Person Details
+          </h4>
+          <FormField
+            control={control}
+            name={"surrenderingPersonId" as Path<T>}
+            render={({ field }) => (
+              <FormItem className="col-span-full">
+                <FormLabel>Surrendering Person</FormLabel>
+                <FormControl>
+                  <PersonPicker
+                    value={field.value || null}
+                    onChange={(id) => field.onChange(id ?? "")}
+                    suggestedPersonId={suggestedSurrenderingPersonId}
+                    suggestedPersonLabel={suggestedSurrenderingPersonLabel}
+                    canCreatePerson={canCreatePerson}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+        </div>
       </div>
     </div>
   );
