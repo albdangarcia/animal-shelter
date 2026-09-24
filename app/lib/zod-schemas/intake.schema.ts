@@ -108,3 +108,19 @@ export const ReIntakeFormSchema = z
   .superRefine(intakeSuperRefine);
 
 export type ReIntakeFormInput = z.input<typeof ReIntakeFormSchema>;
+
+// Correcting a recorded intake offers exactly the fields recording one does,
+// and no more: a correction form that took more than creation would be a new
+// feature presented as a fix. The animal facts the re-intake form also carries
+// live on the animal and have their own edit path, so this is composed from
+// the shared shape alone rather than from ReIntakeFormSchema.
+export const IntakeCorrectionFormSchema = z
+  .object(intakeFieldsShape)
+  .superRefine(intakeSuperRefine);
+
+export type IntakeCorrectionFormInput = z.input<
+  typeof IntakeCorrectionFormSchema
+>;
+export type IntakeCorrectionFormOutput = z.output<
+  typeof IntakeCorrectionFormSchema
+>;

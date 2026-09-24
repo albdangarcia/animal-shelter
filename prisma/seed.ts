@@ -38,7 +38,7 @@ import {
   generateOrderedTimeline,
   randomInt,
 } from "@/app/lib/utils/seeding-utils";
-import { computeStays, orderStayEvents } from "@/app/lib/utils/stay-utils";
+import { computeStays, findTimelineBreaks } from "@/app/lib/utils/stay-utils";
 import {
   calendarDay,
   shelterDayKey,
@@ -5118,28 +5118,19 @@ async function assertAnimalLifecycleConsistency() {
     // `computeStays` is deliberately forgiving (it silently drops a
     // duplicate intake or an orphan outcome rather than throwing), which is
     // right for the app at runtime but means it alone can't catch a broken
-    // seed timeline — it would just quietly re-pair around the gap. So walk
-    // the same chronologically-sorted events here and assert they strictly
-    // alternate intake -> outcome -> intake -> ..., starting with an intake,
-    // with only the final event allowed to be an unclosed intake. Ordered
-    // exactly as `computeStays` orders them.
-    const sortedEvents = orderStayEvents(events);
-
-    let expectingIntake = true;
-    for (const event of sortedEvents) {
-      if (expectingIntake && event.kind !== "intake") {
-        violations.push(
-          `${label} has an outcome (${event.date}) with no preceding open intake.`,
-        );
-        break;
-      }
-      if (!expectingIntake && event.kind !== "outcome") {
-        violations.push(
-          `${label} has two consecutive intakes with no outcome between them (around ${event.date}).`,
-        );
-        break;
-      }
-      expectingIntake = !expectingIntake;
+    // seed timeline — it would just quietly re-pair around the gap. So a
+    // seeded animal must have no timeline breaks at all: its events, ordered
+    // exactly as `computeStays` orders them, strictly alternate intake ->
+    // outcome -> intake -> ..., starting with an intake, with only the final
+    // event allowed to be an unclosed intake.
+    for (const timelineBreak of findTimelineBreaks(events)) {
+      violations.push(
+        timelineBreak.kind === "leading-outcome"
+          ? `${label} has an outcome (${timelineBreak.event.date}) with no preceding open intake.`
+          : `${label} has two consecutive ${timelineBreak.second.kind}s with no ${
+              timelineBreak.second.kind === "intake" ? "outcome" : "intake"
+            } between them (${timelineBreak.first.date}, ${timelineBreak.second.date}).`,
+      );
     }
 
     if (isArchived) {

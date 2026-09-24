@@ -1584,6 +1584,7 @@ enum AnimalActivityType {
   NOTE_RESTORED // A soft-deleted note was restored
   OUTCOME_CORRECTED // An existing outcome's date, notes, partner or owner was edited
   OUTCOME_REVERSED // An outcome was voided as recorded in error
+  INTAKE_CORRECTED // An existing intake's date, type, source, found address or notes was edited
 }
 
 model AnimalActivityLog {

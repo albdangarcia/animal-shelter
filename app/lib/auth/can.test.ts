@@ -57,6 +57,25 @@ test("OUTCOMES_REVERSE stops at ADMIN", () => {
   assert.equal(can(Role.ADMIN, AppPermissions.OUTCOMES_REVERSE), true);
 });
 
+// Volunteers read the intake and outcome records, as they read the rest of
+// the animal's history; recording or correcting either is staff work.
+test("INTAKE_READ and OUTCOMES_READ start at VOLUNTEER, their MANAGE at STAFF", () => {
+  for (const permission of [
+    AppPermissions.INTAKE_READ,
+    AppPermissions.OUTCOMES_READ,
+  ]) {
+    assert.equal(can(Role.USER, permission), false);
+    assert.equal(can(Role.VOLUNTEER, permission), true);
+  }
+  for (const permission of [
+    AppPermissions.INTAKE_MANAGE,
+    AppPermissions.OUTCOMES_MANAGE,
+  ]) {
+    assert.equal(can(Role.VOLUNTEER, permission), false);
+    assert.equal(can(Role.STAFF, permission), true);
+  }
+});
+
 test("the documented volunteer exception: VOLUNTEER holds ANIMAL_VITALS_MANAGE", () => {
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_VITALS_MANAGE), true);
   // ...and it is genuinely an exception: no other MANAGE permission leaks to it.

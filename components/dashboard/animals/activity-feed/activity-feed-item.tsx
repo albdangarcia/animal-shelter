@@ -58,6 +58,10 @@ const activityConfig: Record<
     icon: LogOut,
     text: "processed an outcome",
   },
+  [AnimalActivityType.INTAKE_CORRECTED]: {
+    icon: Pencil,
+    text: "corrected an intake",
+  },
   [AnimalActivityType.OUTCOME_CORRECTED]: {
     icon: Pencil,
     text: "corrected an outcome",
