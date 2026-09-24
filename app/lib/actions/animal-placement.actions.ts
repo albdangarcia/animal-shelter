@@ -12,6 +12,9 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { buildLocationChangeSummary } from "../utils/location-activity";
+import { findLiveUnitForPlacement } from "../services/unit-housing";
+import { NotFoundError, PreconditionFailedError } from "../utils/errors";
+import { lockAnimal } from "../data/application-status.data";
 
 export interface MoveAnimalResult {
   success: boolean;
@@ -39,69 +42,52 @@ const _moveAnimalToUnit = async (
   }
   const staffMemberId = user.personId;
 
-  let unit: {
-    id: string;
-    name: string;
-    capacity: number;
-    location: { name: string };
-  } | null = null;
-  
+  let parsedUnitId: string | null = null;
   if (targetUnitId !== null) {
-    const parsedUnitId = cuidSchema.safeParse(targetUnitId);
-    if (!parsedUnitId.success) {
+    const parsed = cuidSchema.safeParse(targetUnitId);
+    if (!parsed.success) {
       return { success: false, message: "Invalid unit ID format." };
     }
+    parsedUnitId = parsed.data;
+  }
 
-    try {
-      // Guard against a stale board: the unit may have been soft-deleted
-      // since the board was rendered.
-      unit = await prisma.unit.findFirst({
-        where: { id: parsedUnitId.data, deletedAt: null },
+  let unit: Awaited<ReturnType<typeof findLiveUnitForPlacement>> = null;
+  try {
+    unit = await prisma.$transaction(async (tx) => {
+      // Capture the animal's current placement before the move so the log can
+      // read "from X to Y" rather than just "to Y". Read behind the animal's
+      // lock: two moves of one animal at once would otherwise both read the
+      // same starting unit, and the second would log a move from a unit the
+      // animal had already left.
+      await lockAnimal(tx, parsedAnimalId.data);
+      const currentAnimal = await tx.animal.findUnique({
+        where: { id: parsedAnimalId.data },
         select: {
-          id: true,
-          name: true,
-          capacity: true,
-          location: { select: { name: true } },
+          currentUnitId: true,
+          currentUnit: {
+            select: { name: true, location: { select: { name: true } } },
+          },
         },
       });
-    } catch (error) {
-      console.error("Database Error looking up unit:", error);
-      return { success: false, message: "Database Error: Failed to move animal." };
-    }
+      if (!currentAnimal) {
+        throw new NotFoundError("That animal no longer exists.");
+      }
+      const previousUnitId = currentAnimal.currentUnitId;
+      const previousUnit = currentAnimal.currentUnit;
 
-    if (!unit) {
-      return { success: false, message: "That unit is no longer available." };
-    }
-  }
+      // Guard against a stale board: the unit may have been soft-deleted
+      // since the board was rendered, or be being deleted now. Read behind the
+      // unit's lock, in the transaction that writes, so a delete either waits
+      // for this move and sees the animal, or is seen by it.
+      const target =
+        parsedUnitId === null
+          ? null
+          : await findLiveUnitForPlacement(tx, parsedUnitId);
+      if (parsedUnitId !== null && !target) {
+        throw new PreconditionFailedError("That unit is no longer available.");
+      }
+      const targetUnitIdResolved = target?.id ?? null;
 
-  // Capture the animal's current placement BEFORE the move so the log can read
-  // "from X to Y" rather than just "to Y".
-  let previousUnit: { name: string; location: { name: string } } | null = null;
-  let previousUnitId: string | null = null;
-  try {
-    const currentAnimal = await prisma.animal.findUnique({
-      where: { id: parsedAnimalId.data },
-      select: {
-        currentUnitId: true,
-        currentUnit: {
-          select: { name: true, location: { select: { name: true } } },
-        },
-      },
-    });
-    if (!currentAnimal) {
-      return { success: false, message: "That animal no longer exists." };
-    }
-    previousUnitId = currentAnimal.currentUnitId;
-    previousUnit = currentAnimal.currentUnit;
-  } catch (error) {
-    console.error("Database Error looking up animal:", error);
-    return { success: false, message: "Database Error: Failed to move animal." };
-  }
-
-  const targetUnitIdResolved = unit?.id ?? null;
-
-  try {
-    await prisma.$transaction(async (tx) => {
       await tx.animal.update({
         where: { id: parsedAnimalId.data },
         data: { currentUnitId: targetUnitIdResolved },
@@ -117,13 +103,21 @@ const _moveAnimalToUnit = async (
             changedById: staffMemberId,
             changeSummary: buildLocationChangeSummary(
               previousUnit,
-              unit ? { name: unit.name, location: unit.location } : null,
+              target ? { name: target.name, location: target.location } : null,
             ),
           },
         });
       }
+
+      return target;
     });
   } catch (error) {
+    if (
+      error instanceof PreconditionFailedError ||
+      error instanceof NotFoundError
+    ) {
+      return { success: false, message: error.message };
+    }
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2025"

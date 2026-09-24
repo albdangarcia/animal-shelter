@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/prisma/generated/client";
-import prisma from "@/app/lib/prisma";
+import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -12,6 +12,12 @@ import {
   UnitFormSchema,
 } from "../zod-schemas/location.schemas";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+import {
+  deleteLocationIfEmpty,
+  deleteUnitIfEmpty,
+  lockLiveLocation,
+  restoreUnitIfLocationLive,
+} from "@/app/lib/services/unit-housing";
 
 type LocationFormInput = z.input<typeof LocationFormSchema>;
 type LocationResult = FormResult<LocationFormInput>;
@@ -140,11 +146,13 @@ const _deleteLocation = async (
 
   try {
     // Block deleting a location that still has any non-deleted unit (empty or
-    // occupied). The admin must delete or move its units first.
-    const unitCount = await prisma.unit.count({
-      where: { locationId: parsedId.data, deletedAt: null },
-    });
-    if (unitCount > 0) {
+    // occupied). The admin must delete or move its units first. Checked and
+    // written behind the location's lock, so a unit added or restored at the
+    // same moment is either counted or refused.
+    const deleted = await prisma.$transaction((tx) =>
+      deleteLocationIfEmpty(tx, parsedId.data),
+    );
+    if (!deleted) {
       return {
         success: false,
         message:
@@ -152,10 +160,6 @@ const _deleteLocation = async (
       };
     }
 
-    await prisma.location.update({
-      where: { id: parsedId.data },
-      data: { deletedAt: new Date() },
-    });
     revalidatePath("/dashboard/settings/locations");
     return { success: true, message: "Location deleted successfully." };
   } catch (error) {
@@ -196,12 +200,15 @@ const _restoreLocation = async (
 // ═══════════════════════════════════════════════════
 
 // Duplicate check scoped per location (matches @@unique([name, locationId])).
+// Inside a transaction, pass its client: the global one would wait for a
+// second connection while the transaction holds the first.
 const findDuplicateUnit = async (
   name: string,
   locationId: string,
   excludeId?: string,
+  db: Pick<TransactionClient, "unit"> = prisma,
 ) => {
-  return prisma.unit.findFirst({
+  return db.unit.findFirst({
     where: {
       locationId,
       name: { equals: name, mode: "insensitive" },
@@ -227,27 +234,29 @@ const _createUnit = async (values: UnitFormInput): Promise<UnitResult> => {
   const { name, capacity, locationId } = validatedFields.data;
 
   try {
-    const location = await prisma.location.findUnique({
-      where: { id: locationId },
-      select: { deletedAt: true },
+    // The location is checked behind its lock, so one deleted at the same
+    // moment either sees this unit or refuses it.
+    const refusal = await prisma.$transaction(async (tx) => {
+      if (!(await lockLiveLocation(tx, locationId))) {
+        return "Can't add a unit to a deleted location. Restore the location first.";
+      }
+
+      const existing = await findDuplicateUnit(
+        name,
+        locationId,
+        undefined,
+        tx,
+      );
+      if (existing) {
+        return `A unit named "${name}" already exists in this location.`;
+      }
+
+      await tx.unit.create({ data: { name, capacity, locationId } });
+      return null;
     });
-    if (!location || location.deletedAt) {
-      return {
-        ok: false,
-        message:
-          "Can't add a unit to a deleted location. Restore the location first.",
-      };
+    if (refusal) {
+      return { ok: false, message: refusal };
     }
-
-    const existing = await findDuplicateUnit(name, locationId);
-    if (existing) {
-      return {
-        ok: false,
-        message: `A unit named "${name}" already exists in this location.`,
-      };
-    }
-
-    await prisma.unit.create({ data: { name, capacity, locationId } });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -330,11 +339,13 @@ const _deleteUnit = async (
   }
 
   try {
-    // Block deleting a unit that still has an animal housed in it.
-    const animalCount = await prisma.animal.count({
-      where: { currentUnitId: parsedId.data },
-    });
-    if (animalCount > 0) {
+    // Block deleting a unit that still has an animal housed in it. Checked and
+    // written behind the unit's lock, so an animal placed at the same moment
+    // is either counted or refused the unit.
+    const deleted = await prisma.$transaction((tx) =>
+      deleteUnitIfEmpty(tx, parsedId.data),
+    );
+    if (!deleted) {
       return {
         success: false,
         message:
@@ -342,10 +353,6 @@ const _deleteUnit = async (
       };
     }
 
-    await prisma.unit.update({
-      where: { id: parsedId.data },
-      data: { deletedAt: new Date() },
-    });
     revalidatePath("/dashboard/settings/locations");
     return { success: true, message: "Unit deleted successfully." };
   } catch (error) {
@@ -366,10 +373,19 @@ const _restoreUnit = async (
   }
 
   try {
-    await prisma.unit.update({
-      where: { id: parsedId.data },
-      data: { deletedAt: null },
-    });
+    // A unit comes back only into a live location: a location is deleted only
+    // once it has no live unit, and the pickers hide a deleted one's units.
+    // Checked behind the location's lock, like adding a unit.
+    const restored = await prisma.$transaction((tx) =>
+      restoreUnitIfLocationLive(tx, parsedId.data),
+    );
+    if (!restored) {
+      return {
+        success: false,
+        message:
+          "Can't restore a unit in a deleted location. Restore the location first.",
+      };
+    }
     revalidatePath("/dashboard/settings/locations");
     return { success: true, message: "Unit restored successfully." };
   } catch (error) {

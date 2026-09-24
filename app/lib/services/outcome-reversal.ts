@@ -1,5 +1,6 @@
 import type { TransactionClient } from "@/app/lib/prisma";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
+import { findLiveUnitForPlacement } from "@/app/lib/services/unit-housing";
 import {
   AnimalActivityType,
   AnimalListingStatus,
@@ -95,14 +96,13 @@ export const recordOutcomeReversal = async (
       previousListingStatus: true,
       adoptionApplicationId: true,
       // Read through the relation even when soft-deleted, so the message can
-      // name a unit that can no longer be used.
+      // name a unit that can no longer be used. Whether it can is read again
+      // behind the unit's lock, below.
       previousUnit: {
         select: {
           id: true,
           name: true,
-          capacity: true,
-          deletedAt: true,
-          location: { select: { name: true, deletedAt: true } },
+          location: { select: { name: true } },
         },
       },
       fosterPlacement: {
@@ -160,7 +160,8 @@ export const recordOutcomeReversal = async (
   const effects: string[] = [];
   let restoredListingStatus: AnimalListingStatus | null = null;
   let reopenedPlacementId: string | null = null;
-  let restoredUnit: NonNullable<typeof outcome.previousUnit> | null = null;
+  let restoredUnit: Awaited<ReturnType<typeof findLiveUnitForPlacement>> =
+    null;
 
   if (archivedByThisOutcome) {
     // The listing and the animal's place, a foster or a unit, come back
@@ -214,30 +215,33 @@ export const recordOutcomeReversal = async (
     // someone's placement decision, and the stored unit is older. Capacity is
     // advisory here as on the board: the animal is placed, and a full unit is
     // reported.
+    //
+    // Whether the unit is live is read behind its lock, as every placement
+    // reads it, so a delete of the unit at the same moment either counts the
+    // animal put back or is seen here.
     const previousUnit = outcome.previousUnit;
     if (!outcome.fosterPlacement && !animal.currentUnitId) {
-      if (
-        previousUnit &&
-        !previousUnit.deletedAt &&
-        !previousUnit.location.deletedAt
-      ) {
-        restoredUnit = previousUnit;
+      const liveUnit = previousUnit
+        ? await findLiveUnitForPlacement(tx, previousUnit.id)
+        : null;
+      if (liveUnit) {
+        restoredUnit = liveUnit;
         await tx.animal.update({
           where: { id: animalId },
-          data: { currentUnitId: previousUnit.id },
+          data: { currentUnitId: liveUnit.id },
         });
-        const label = formatUnitLabel(previousUnit);
+        const label = formatUnitLabel(liveUnit);
         effects.push(`It was put back in ${label}.`);
         // The animal counts itself, since its listing is no longer archived.
         const occupancy = await tx.animal.count({
           where: {
-            currentUnitId: previousUnit.id,
+            currentUnitId: liveUnit.id,
             listingStatus: { not: AnimalListingStatus.ARCHIVED },
           },
         });
-        if (occupancy > previousUnit.capacity) {
+        if (occupancy > liveUnit.capacity) {
           effects.push(
-            `${label} is now over capacity (${occupancy}/${previousUnit.capacity}).`,
+            `${label} is now over capacity (${occupancy}/${liveUnit.capacity}).`,
           );
         }
       } else if (previousUnit) {
