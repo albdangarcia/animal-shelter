@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { AnimalActivityType } from "@/prisma/generated/enums";
 import { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
@@ -11,10 +10,8 @@ import {
   withAuthenticatedUser,
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { buildLocationChangeSummary } from "../utils/location-activity";
-import { findLiveUnitForPlacement } from "../services/unit-housing";
+import { AnimalArchivedError, moveAnimal } from "../services/animal-move";
 import { NotFoundError, PreconditionFailedError } from "../utils/errors";
-import { lockAnimal } from "../data/application-status.data";
 
 export interface MoveAnimalResult {
   success: boolean;
@@ -51,67 +48,18 @@ const _moveAnimalToUnit = async (
     parsedUnitId = parsed.data;
   }
 
-  let unit: Awaited<ReturnType<typeof findLiveUnitForPlacement>> = null;
+  let unit: Awaited<ReturnType<typeof moveAnimal>> = null;
   try {
-    unit = await prisma.$transaction(async (tx) => {
-      // Capture the animal's current placement before the move so the log can
-      // read "from X to Y" rather than just "to Y". Read behind the animal's
-      // lock: two moves of one animal at once would otherwise both read the
-      // same starting unit, and the second would log a move from a unit the
-      // animal had already left.
-      await lockAnimal(tx, parsedAnimalId.data);
-      const currentAnimal = await tx.animal.findUnique({
-        where: { id: parsedAnimalId.data },
-        select: {
-          currentUnitId: true,
-          currentUnit: {
-            select: { name: true, location: { select: { name: true } } },
-          },
-        },
-      });
-      if (!currentAnimal) {
-        throw new NotFoundError("That animal no longer exists.");
-      }
-      const previousUnitId = currentAnimal.currentUnitId;
-      const previousUnit = currentAnimal.currentUnit;
-
-      // Guard against a stale board: the unit may have been soft-deleted
-      // since the board was rendered, or be being deleted now. Read behind the
-      // unit's lock, in the transaction that writes, so a delete either waits
-      // for this move and sees the animal, or is seen by it.
-      const target =
-        parsedUnitId === null
-          ? null
-          : await findLiveUnitForPlacement(tx, parsedUnitId);
-      if (parsedUnitId !== null && !target) {
-        throw new PreconditionFailedError("That unit is no longer available.");
-      }
-      const targetUnitIdResolved = target?.id ?? null;
-
-      await tx.animal.update({
-        where: { id: parsedAnimalId.data },
-        data: { currentUnitId: targetUnitIdResolved },
-      });
-
-      // Only log when the unit actually changed (e.g. skip a drop back onto
-      // the same unit).
-      if (previousUnitId !== targetUnitIdResolved && staffMemberId) {
-        await tx.animalActivityLog.create({
-          data: {
-            animalId: parsedAnimalId.data,
-            activityType: AnimalActivityType.LOCATION_CHANGE,
-            changedById: staffMemberId,
-            changeSummary: buildLocationChangeSummary(
-              previousUnit,
-              target ? { name: target.name, location: target.location } : null,
-            ),
-          },
-        });
-      }
-
-      return target;
-    });
+    unit = await prisma.$transaction((tx) =>
+      moveAnimal(tx, parsedAnimalId.data, parsedUnitId, staffMemberId),
+    );
   } catch (error) {
+    if (error instanceof AnimalArchivedError) {
+      // The board that sent this still shows the animal; refresh it so the
+      // animal drops off.
+      revalidatePath("/dashboard/locations");
+      return { success: false, message: error.message };
+    }
     if (
       error instanceof PreconditionFailedError ||
       error instanceof NotFoundError
