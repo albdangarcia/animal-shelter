@@ -5,7 +5,10 @@ import { fetchOutcomeById } from "@/app/lib/data/animals/outcome.data";
 import { notFound } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Undo2 } from "lucide-react";
+import ActionBlockedMessage from "@/components/action-blocked-message";
+import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 
@@ -41,14 +44,29 @@ const EditOutcomePage = async ({ params }: Props) => {
         </Link>
       </Button>
 
-      <OutcomeForm
-        outcome={outcome}
-        animal={{ id: animal.id, name: animal.name }}
-        application={application || undefined}
-        partners={partners}
-        canCreatePerson={canCreatePerson}
-        today={await getShelterToday()}
-      />
+      {/* A reversed outcome is kept as it stood when it was voided, and the
+          server refuses to correct it, so there is no form to offer. */}
+      {outcome.reversedAt ? (
+        <ActionBlockedMessage icon={Undo2} title="Outcome Reversed">
+          <p>
+            This {formatSingleEnumOption(outcome.type).toLowerCase()} outcome
+            for <strong>{animal.name}</strong> was reversed by{" "}
+            {outcome.reversedBy?.name ?? "Unknown User"} on{" "}
+            {formatDateOrNA(outcome.reversedAt)}, and can no longer be
+            corrected.
+          </p>
+          <p>Reason: {outcome.reversalReason}</p>
+        </ActionBlockedMessage>
+      ) : (
+        <OutcomeForm
+          outcome={outcome}
+          animal={{ id: animal.id, name: animal.name }}
+          application={application || undefined}
+          partners={partners}
+          canCreatePerson={canCreatePerson}
+          today={await getShelterToday()}
+        />
+      )}
     </main>
   );
 };

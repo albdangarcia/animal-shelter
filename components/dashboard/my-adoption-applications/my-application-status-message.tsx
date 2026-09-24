@@ -1,4 +1,4 @@
-import type { ApplicationStatus } from "@/prisma/generated/enums";
+import type { EffectiveApplicationStatus } from "@/app/lib/utils/derive-application-status";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ApplicationStatuses } from "./table/my-applications-options";
 
@@ -11,15 +11,15 @@ import { ApplicationStatuses } from "./table/my-applications-options";
 //
 // WAITLISTED has to read as "assessed and held", not as a slower PENDING —
 // otherwise the applicant cannot tell the two apart and reads silence as
-// neglect. CLOSED must never read as a rejection: it is the administrative
-// cascade that runs when the animal leaves the shelter, it is not a judgment
-// about the applicant, and it is the one status that leaves them free to apply
-// again (see BLOCKING_APPLICATION_STATUSES).
+// neglect. CLOSED must never read as a rejection: it means the animal left the
+// shelter while the application was open, it is not a judgment about the
+// applicant, and it is the one status that leaves them free to apply again
+// (see BLOCKING_APPLICATION_STATUSES).
 //
 // REJECTED is the deliberate contrast to CLOSED, and it does block re-applying
 // for this animal, so it points at other animals rather than inviting an appeal.
 export const MY_APPLICATION_STATUS_MESSAGES: Record<
-  ApplicationStatus,
+  EffectiveApplicationStatus,
   { title: string; description: string }
 > = {
   PENDING: {
@@ -67,7 +67,7 @@ export const MY_APPLICATION_STATUS_MESSAGES: Record<
 export const MyApplicationStatusMessage = ({
   status,
 }: {
-  status: ApplicationStatus;
+  status: EffectiveApplicationStatus;
 }) => {
   const message = MY_APPLICATION_STATUS_MESSAGES[status];
   const Icon = ApplicationStatuses.find((s) => s.value === status)?.icon;

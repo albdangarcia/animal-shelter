@@ -27,6 +27,7 @@ const fakeDb = (rows: Record<string, unknown[]> = {}) => {
     partner: delegate("partner"),
     adoptionApplication: delegate("adoptionApplication"),
     fosterApplication: delegate("fosterApplication"),
+    outcome: delegate("outcome"),
   } as unknown as GlobalSearchDb;
   return { db, calls };
 };
@@ -112,7 +113,14 @@ test("rows are flattened to the fields the palette needs", async () => {
       { id: "p2", name: "Jane Roe", email: null, phone: "555-0100", user: null },
     ],
     adoptionApplication: [
-      { id: "ap1", applicantName: "Jane Doe", status: "PENDING", animal: { name: "Bella" } },
+      {
+        id: "ap1",
+        applicantName: "Jane Doe",
+        status: "PENDING",
+        submittedAt: new Date("2026-09-01T10:00Z"),
+        animalId: "a1",
+        animal: { name: "Bella" },
+      },
     ],
   });
   const results = await runGlobalSearch(db, "bella", GLOBAL_SEARCH_GROUPS);
@@ -127,4 +135,89 @@ test("rows are flattened to the fields the palette needs", async () => {
   assert.deepEqual(results.adoptionApplications, [
     { id: "ap1", applicantName: "Jane Doe", animalName: "Bella", status: "PENDING" },
   ]);
+});
+
+// The column holds only the review decision, so a hit read straight off it
+// would badge an adopted or closed application with whatever it was decided
+// before the animal left.
+test("an adoption application hit shows its effective status", async () => {
+  const { db } = fakeDb({
+    adoptionApplication: [
+      {
+        id: "adopter",
+        applicantName: "Jane Doe",
+        status: "APPROVED",
+        submittedAt: new Date("2026-09-01T10:00Z"),
+        animalId: "a1",
+        animal: { name: "Bella" },
+      },
+      {
+        id: "other",
+        applicantName: "Jane Roe",
+        status: "REVIEWING",
+        submittedAt: new Date("2026-09-02T10:00Z"),
+        animalId: "a1",
+        animal: { name: "Bella" },
+      },
+    ],
+    outcome: [
+      {
+        animalId: "a1",
+        createdAt: new Date("2026-09-10T10:00Z"),
+        type: "ADOPTION",
+        adoptionApplicationId: "adopter",
+        reversedAt: null,
+      },
+    ],
+  });
+  const results = await runGlobalSearch(db, "bella", ["adoptionApplications"]);
+
+  assert.deepEqual(
+    results.adoptionApplications?.map((hit) => [hit.id, hit.status]),
+    [
+      ["adopter", "ADOPTED"],
+      ["other", "CLOSED"],
+    ],
+  );
+});
+
+test("a reversed outcome neither adopts nor closes a hit", async () => {
+  const { db } = fakeDb({
+    adoptionApplication: [
+      {
+        id: "adopter",
+        applicantName: "Jane Doe",
+        status: "APPROVED",
+        submittedAt: new Date("2026-09-01T10:00Z"),
+        animalId: "a1",
+        animal: { name: "Bella" },
+      },
+      {
+        id: "other",
+        applicantName: "Jane Roe",
+        status: "REVIEWING",
+        submittedAt: new Date("2026-09-02T10:00Z"),
+        animalId: "a1",
+        animal: { name: "Bella" },
+      },
+    ],
+    outcome: [
+      {
+        animalId: "a1",
+        createdAt: new Date("2026-09-10T10:00Z"),
+        type: "ADOPTION",
+        adoptionApplicationId: "adopter",
+        reversedAt: new Date("2026-09-11T10:00Z"),
+      },
+    ],
+  });
+  const results = await runGlobalSearch(db, "bella", ["adoptionApplications"]);
+
+  assert.deepEqual(
+    results.adoptionApplications?.map((hit) => [hit.id, hit.status]),
+    [
+      ["adopter", "APPROVED"],
+      ["other", "REVIEWING"],
+    ],
+  );
 });

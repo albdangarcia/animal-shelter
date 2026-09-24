@@ -17,6 +17,19 @@ import {
 import { ConflictError } from "../utils/errors";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
 import {
+  deriveApplicationStatus,
+  EffectiveApplicationStatus,
+  toDerivationOutcome,
+} from "../utils/derive-application-status";
+import {
+  DERIVATION_APPLICATION_SELECT,
+  effectiveApplicationStatus,
+  effectiveApplicationStatuses,
+  effectiveStatusBehindLock,
+  lockAnimal,
+  lockPerson,
+} from "../data/application-status.data";
+import {
   MyAdoptionAppFormSchema,
   toAdoptionApplicantData,
   type MyAdoptionAppFormInput,
@@ -59,7 +72,7 @@ const _updateMyAdoptionApp = async (
   try {
     application = await prisma.adoptionApplication.findUnique({
       where: { id: validatedApplicationId },
-      select: { applicantId: true, status: true },
+      select: { applicantId: true, ...DERIVATION_APPLICATION_SELECT },
     });
   } catch (error) {
     console.error(
@@ -76,12 +89,17 @@ const _updateMyAdoptionApp = async (
     return { ok: false, message: "Adoption Application not found." };
   }
 
+  // What the application effectively is, not what the column holds: an
+  // outcome recorded for the animal after this was submitted can have closed
+  // or adopted it without moving the column.
+  const currentStatus = await effectiveApplicationStatus(application);
+
   // Allow-list, not a deny-list: a status added to the enum stays
   // non-editable here until it is added to APPLICANT_EDITABLE_STATUSES.
-  if (!APPLICANT_EDITABLE_STATUSES.includes(application.status)) {
+  if (!APPLICANT_EDITABLE_STATUSES.includes(currentStatus)) {
     return {
       ok: false,
-      message: `Cannot update application. Its status is currently "${formatSingleEnumOption(application.status)}". Only ${formatStatusList(APPLICANT_EDITABLE_STATUSES)} applications can be modified.`,
+      message: `Cannot update application. Its status is currently "${formatSingleEnumOption(currentStatus)}". Only ${formatStatusList(APPLICANT_EDITABLE_STATUSES)} applications can be modified.`,
     };
   }
 
@@ -115,22 +133,36 @@ const _updateMyAdoptionApp = async (
     lastEditedAt: new Date(),
   };
 
-  // Conditional rather than pre-checked: the reads above only produce the
-  // friendly errors. A reviewer picking the application up between those reads
-  // and this write would otherwise have their assessment land on text the
-  // applicant rewrote underneath them, with nothing anywhere to say so.
-  let updatedCount: number;
+  // The reads above only produce the friendly error. Behind the animal lock
+  // no outcome can adopt or close the application, and no other writer can
+  // move it, before this transaction writes — an outcome recorded on this
+  // animal, and a staff review decision, both take the same lock.
   try {
-    const { count } = await prisma.adoptionApplication.updateMany({
-      where: {
-        id: validatedApplicationId,
-        applicantId: user.personId,
-        status: { in: APPLICANT_EDITABLE_STATUSES },
-      },
-      data: dataToUpdate,
+    await prisma.$transaction(async (tx) => {
+      const statusNow = await effectiveStatusBehindLock(tx, application);
+      if (!statusNow || !APPLICANT_EDITABLE_STATUSES.includes(statusNow)) {
+        throw new ConflictError(
+          "This application can no longer be edited. Its status changed while you were editing it.",
+        );
+      }
+
+      // Unconditional on the status, the same as the staff edit action:
+      // everything that changes it takes the animal lock too.
+      const { count } = await tx.adoptionApplication.updateMany({
+        where: {
+          id: validatedApplicationId,
+          applicantId: user.personId,
+        },
+        data: dataToUpdate,
+      });
+      if (count === 0) {
+        throw new ConflictError("Adoption Application not found.");
+      }
     });
-    updatedCount = count;
   } catch (error) {
+    if (error instanceof ConflictError) {
+      return { ok: false, message: error.message };
+    }
     console.error(
       `Database Error updating adoption application ${validatedApplicationId}:`,
       error,
@@ -138,14 +170,6 @@ const _updateMyAdoptionApp = async (
     return {
       ok: false,
       message: "Database Error: Failed to Update Adoption Application.",
-    };
-  }
-
-  if (updatedCount === 0) {
-    return {
-      ok: false,
-      message:
-        "This application can no longer be edited. Its status changed while you were editing it.",
     };
   }
 
@@ -181,7 +205,7 @@ const _withdrawMyAdoptionApplication = async (
   try {
     application = await prisma.adoptionApplication.findUnique({
       where: { id: validatedApplicationId },
-      select: { applicantId: true, status: true, animalId: true },
+      select: { applicantId: true, ...DERIVATION_APPLICATION_SELECT },
     });
   } catch (error) {
     console.error(
@@ -199,24 +223,37 @@ const _withdrawMyAdoptionApplication = async (
     return { success: false, message: "Adoption Application not found." };
   }
 
-  const nonWithdrawableStatuses: ApplicationStatus[] = [
-    ApplicationStatus.ADOPTED,
-    ApplicationStatus.WITHDRAWN,
-    ApplicationStatus.REJECTED,
+  const nonWithdrawableStatuses: EffectiveApplicationStatus[] = [
+    EffectiveApplicationStatus.ADOPTED,
+    EffectiveApplicationStatus.WITHDRAWN,
+    EffectiveApplicationStatus.REJECTED,
     // Nothing left to withdraw from: the animal has already left the shelter.
-    ApplicationStatus.CLOSED,
+    EffectiveApplicationStatus.CLOSED,
   ];
 
-  if (nonWithdrawableStatuses.includes(application.status)) {
+  // What the application effectively is, not what the column holds.
+  const currentStatus = await effectiveApplicationStatus(application);
+
+  if (nonWithdrawableStatuses.includes(currentStatus)) {
     return {
       success: false,
-      message: `Cannot withdraw application. Its status is currently "${formatSingleEnumOption(application.status)}".`,
+      message: `Cannot withdraw application. Its status is currently "${formatSingleEnumOption(currentStatus)}".`,
     };
   }
 
   // Update the application status and create a history record
   try {
     await prisma.$transaction(async (tx) => {
+      // The read above only produces the friendly error. Behind the animal
+      // lock no outcome can adopt or close the application before this
+      // transaction writes.
+      const statusNow = await effectiveStatusBehindLock(tx, application);
+      if (!statusNow || nonWithdrawableStatuses.includes(statusNow)) {
+        throw new ConflictError(
+          `Cannot withdraw application. Its status is currently "${formatSingleEnumOption(statusNow ?? currentStatus)}".`,
+        );
+      }
+
       // Update the application's status to WITHDRAWN
       await tx.adoptionApplication.update({
         where: { id: validatedApplicationId },
@@ -233,7 +270,7 @@ const _withdrawMyAdoptionApplication = async (
         },
       });
 
-      if (application.status === ApplicationStatus.APPROVED) {
+      if (statusNow === ApplicationStatus.APPROVED) {
         // it will only update if the animal is PENDING_ADOPTION
         await tx.animal.updateMany({
           where: {
@@ -245,6 +282,9 @@ const _withdrawMyAdoptionApplication = async (
       }
     });
   } catch (error) {
+    if (error instanceof ConflictError) {
+      return { success: false, message: error.message };
+    }
     console.error(
       `Database Error withdrawing adoption application ${validatedApplicationId}:`,
       error,
@@ -285,8 +325,7 @@ const _reactivateMyAdoptionApplication = async (
       where: { id: validatedApplicationId },
       select: {
         applicantId: true,
-        status: true,
-        animalId: true,
+        ...DERIVATION_APPLICATION_SELECT,
         animal: { select: { listingStatus: true } },
       },
     });
@@ -322,27 +361,95 @@ const _reactivateMyAdoptionApplication = async (
   try {
     await prisma.$transaction(
       async (tx) => {
+        // Behind the animal lock, so an outcome recorded on this animal
+        // between the read above and this write cannot be missed.
+        await lockAnimal(tx, application.animalId);
+
+        // The reads above only produce the friendly errors. Re-read both
+        // behind the lock: a second reactivation, a staff review decision, or
+        // a listing change can all land between that read and here, and the
+        // unconditional write below would otherwise reactivate an application
+        // that has since moved, or one whose animal is no longer available.
+        const current = await tx.adoptionApplication.findUnique({
+          where: { id: validatedApplicationId },
+          select: { status: true, animal: { select: { listingStatus: true } } },
+        });
+        if (!current) {
+          throw new ConflictError("Adoption Application not found.");
+        }
+        if (current.animal.listingStatus !== "PUBLISHED") {
+          throw new ConflictError(
+            "Cannot reactivate application. This animal is no longer available for adoption.",
+          );
+        }
+        if (current.status !== ApplicationStatus.WITHDRAWN) {
+          throw new ConflictError(
+            `Cannot reactivate application. Its status is currently "${formatSingleEnumOption(current.status)}".`,
+          );
+        }
+
+        // Reactivating writes PENDING, and PENDING is not a settled review
+        // decision, so if an outcome was recorded for this animal after this
+        // application was submitted, the derivation would call the freshly
+        // reactivated application CLOSED the instant this transaction
+        // commits — the same outcome that would have closed it had it still
+        // been open. Checked hypothetically, against what the write is about
+        // to make the review status, rather than against the derivation of
+        // the row as it stands now (WITHDRAWN, which is itself settled and
+        // would never read as closed).
+        const outcomes = await tx.outcome.findMany({
+          where: { animalId: application.animalId },
+          select: {
+            createdAt: true,
+            type: true,
+            adoptionApplicationId: true,
+            reversedAt: true,
+          },
+        });
+        const statusIfReactivated = deriveApplicationStatus(
+          {
+            id: application.id,
+            reviewStatus: ApplicationStatus.PENDING,
+            submittedAt: application.submittedAt,
+          },
+          outcomes.map(toDerivationOutcome),
+        );
+        if (statusIfReactivated === EffectiveApplicationStatus.CLOSED) {
+          throw new ConflictError(
+            "Cannot reactivate application. This animal is no longer available for adoption.",
+          );
+        }
+
         // Reviving this application must not leave the person with two live
         // ones for the same animal, and must not walk them back out of a
         // rejection they could not re-apply past (see
         // REACTIVATION_BLOCKING_STATUSES). Staff can enter a fresh application
         // over a withdrawn one before the person has an account, and both then
         // arrive in "My Applications" together; nothing else stops the
-        // withdrawn one being reactivated alongside its replacement. Read
-        // inside the transaction and serializable, like submitting, so two
-        // withdrawn duplicates cannot both be reactivated at once.
-        const blocker = await tx.adoptionApplication.findFirst({
+        // withdrawn one being reactivated alongside its replacement. Derived,
+        // behind the animal lock just taken, rather than read off the column:
+        // a sibling application the column still calls open may already be
+        // CLOSED, which does not block, or ADOPTED, which does.
+        const siblings = await tx.adoptionApplication.findMany({
           where: {
             applicantId: user.personId,
             animalId: application.animalId,
             id: { not: validatedApplicationId },
-            status: { in: REACTIVATION_BLOCKING_STATUSES },
           },
-          select: { status: true },
+          select: DERIVATION_APPLICATION_SELECT,
         });
+        const siblingStatuses = await effectiveApplicationStatuses(
+          siblings,
+          tx,
+        );
+        const blocker = siblings.find((sibling) =>
+          REACTIVATION_BLOCKING_STATUSES.includes(
+            siblingStatuses.get(sibling.id)!,
+          ),
+        );
         if (blocker) {
           throw new ConflictError(
-            blocker.status === ApplicationStatus.REJECTED
+            siblingStatuses.get(blocker.id) === ApplicationStatus.REJECTED
               ? "Cannot reactivate application. A previous application for this animal was not approved."
               : "Cannot reactivate application. You already have an active application for this animal.",
           );
@@ -439,6 +546,16 @@ const _createMyAdoptionApp = async (
   try {
     await prisma.$transaction(
       async (tx) => {
+        // Person, then animal — the lock order every writer that takes both
+        // follows (see `lockAnimal`), because this transaction also updates
+        // the person's row below. Staff create takes them in this order too;
+        // taking animal first here would deadlock against it. An outcome
+        // recorded on this animal between the read that hid the apply form
+        // and this write must be seen, so the animal lock is still taken
+        // before either check below reads anything.
+        await lockPerson(tx, user.personId);
+        await lockAnimal(tx, validatedAnimalId);
+
         const animal = await tx.animal.findUnique({
           where: { id: validatedAnimalId },
           select: { listingStatus: true },
@@ -451,17 +568,26 @@ const _createMyAdoptionApp = async (
         // The apply page hides the form from someone who already has an
         // application for this animal, but this action is reachable without
         // going through that page: from a form left open in another tab, or by
-        // a direct POST. Checked here, in the same serializable transaction as
-        // the create, so two submissions cannot both pass it.
-        const existing = await tx.adoptionApplication.findFirst({
+        // a direct POST. Checked here, behind the animal lock just taken, so
+        // two submissions cannot both pass it. Derived rather than read off
+        // the column: a prior application the column still calls open may
+        // already be CLOSED, which does not block re-applying.
+        const existingApplications = await tx.adoptionApplication.findMany({
           where: {
             applicantId: user.personId,
             animalId: validatedAnimalId,
-            status: { in: BLOCKING_APPLICATION_STATUSES },
           },
-          select: { id: true },
+          select: DERIVATION_APPLICATION_SELECT,
         });
-        if (existing) {
+        const existingStatuses = await effectiveApplicationStatuses(
+          existingApplications,
+          tx,
+        );
+        if (
+          [...existingStatuses.values()].some((status) =>
+            BLOCKING_APPLICATION_STATUSES.includes(status),
+          )
+        ) {
           throw new ConflictError(
             "You already have an application for this animal.",
           );

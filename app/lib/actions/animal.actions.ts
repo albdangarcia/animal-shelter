@@ -31,6 +31,11 @@ import { del } from "@vercel/blob";
 import { isDemo } from "@/lib/flags";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import { startOfShelterDay } from "../utils/shelter-day";
+import {
+  DERIVATION_APPLICATION_SELECT,
+  effectiveApplicationStatuses,
+  lockAnimal,
+} from "../data/application-status.data";
 
 // Shared by create and update — the "" -> null conversion for every nullable
 // column either action writes. Not every field applies to both actions
@@ -345,6 +350,13 @@ const _updateAnimal = async (
 
   try {
     await prisma.$transaction(async (tx) => {
+      // The update below writes the listing status back whether or not it
+      // changed, so everything read here has to still be true when it does.
+      // Recording an outcome archives the animal behind this same lock; read
+      // without it, an outcome committing in between would be overwritten by
+      // the status this form loaded before it, putting an animal that has
+      // left back on the list.
+      await lockAnimal(tx, validatedAnimalId);
       const currentAnimal = await tx.animal.findUnique({
         where: { id: validatedAnimalId },
         select: {
@@ -381,14 +393,23 @@ const _updateAnimal = async (
           currentAnimal.listingStatus === AnimalListingStatus.PENDING_ADOPTION &&
           isChangingToAvailable
         ) {
-          const approvedApplication = await tx.adoptionApplication.findFirst({
+          // Approved as the application effectively is: one approved during
+          // an earlier stay, and adopted or closed by that stay's outcome,
+          // still stores APPROVED and must not hold this animal. Derived
+          // behind the animal lock taken above.
+          const approvedApplications = await tx.adoptionApplication.findMany({
             where: {
               animalId: validatedAnimalId,
               status: ApplicationStatus.APPROVED,
             },
+            select: DERIVATION_APPLICATION_SELECT,
           });
+          const statuses = await effectiveApplicationStatuses(
+            approvedApplications,
+            tx,
+          );
 
-          if (approvedApplication) {
+          if ([...statuses.values()].includes(ApplicationStatus.APPROVED)) {
             throw new ConflictError(
               "Cannot change status. This animal has an approved adoption application. Please reject or withdraw the application first."
             );

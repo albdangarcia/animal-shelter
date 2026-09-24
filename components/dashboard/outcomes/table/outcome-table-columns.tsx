@@ -10,6 +10,13 @@ import { DataTableColumnHeader } from "../../../table-common/data-table-column-h
 import { DataTableRowActions } from "./outcome-table-row-actions";
 import { OutcomeWithDetails } from "@/app/lib/data/animals/outcome.data";
 import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
+import { formatDateOrNA } from "@/app/lib/utils/date-utils";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ReversedOutcomeBadge } from "../reversed-outcome-badge";
 
 // Maps outcome types to their recipient's relationship label. Types not
 // listed here (deceased, euthanized, other) genuinely have no recipient.
@@ -21,10 +28,12 @@ const recipientRelationshipLabel: Partial<Record<OutcomeType, string>> = {
 
 export interface GetColumnsProps {
   canManage: boolean;
+  canReverse: boolean;
 }
 
 export const getColumns = ({
   canManage,
+  canReverse,
 }: GetColumnsProps): ColumnDef<StockFeatures, OutcomeWithDetails>[] => [
   {
     id: "select",
@@ -126,11 +135,30 @@ export const getColumns = ({
 
       const variant = variantMap[outcomeType.value] || "secondary";
 
+      const { reversedAt, reversedBy, reversalReason } = row.original;
+
       return (
-        <Badge variant={variant} className="whitespace-nowrap">
-          {outcomeType.icon && <outcomeType.icon className="mr-2 h-4 w-4" />}
-          {outcomeType.label}
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant={variant} className="whitespace-nowrap">
+            {outcomeType.icon && <outcomeType.icon className="mr-2 h-4 w-4" />}
+            {outcomeType.label}
+          </Badge>
+          {reversedAt && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* Focusable, so the reason is reachable from the keyboard
+                    as well as on hover. */}
+                <span tabIndex={0} className="cursor-help">
+                  <ReversedOutcomeBadge />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                Reversed by {reversedBy?.name ?? "Unknown User"} on{" "}
+                {formatDateOrNA(reversedAt)}: {reversalReason}
+              </TooltipContent>
+            </Tooltip>
+          )}
+        </div>
       );
     },
     filterFn: (row, id, value) => {
@@ -167,6 +195,12 @@ export const getColumns = ({
   },
   {
     id: "actions",
-    cell: ({ row }) => <DataTableRowActions row={row} canManage={canManage} />,
+    cell: ({ row }) => (
+      <DataTableRowActions
+        row={row}
+        canManage={canManage}
+        canReverse={canReverse}
+      />
+    ),
   },
 ];

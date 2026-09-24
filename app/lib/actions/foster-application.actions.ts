@@ -33,10 +33,11 @@ import {
   illegalTransitionMessage,
 } from "../utils/application-status";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
+import { lockPerson } from "../data/application-status.data";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 // Non-terminal statuses block a new application from being submitted, mirroring
-// the "one active adoption application" convention (ADOPTED is never used here).
+// the "one active adoption application" convention.
 const nonTerminalFosterStatuses: ApplicationStatus[] = [
   ApplicationStatus.PENDING,
   ApplicationStatus.REVIEWING,
@@ -109,6 +110,15 @@ const _createMyFosterApplication = async (
   try {
     await prisma.$transaction(
       async (tx) => {
+        // Locked first, before the household profile upsert below: the
+        // adoption application create action also writes this person's
+        // household profile, and locks the person row before it gets there.
+        // Two writers that touch the same person row and the same household
+        // profile row have to agree on which one they take first, or one can
+        // hold the profile row while waiting on the person row that the other
+        // already holds, and vice versa.
+        await lockPerson(tx, user.personId);
+
         const existing = await tx.fosterApplication.findFirst({
           where: {
             personId: user.personId,

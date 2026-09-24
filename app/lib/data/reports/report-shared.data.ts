@@ -80,7 +80,7 @@ export const _fetchAnimalStayEvents = async (
         speciesId: true,
         species: { select: { name: true } },
         intake: { select: { intakeDate: true } },
-        Outcome: { select: { outcomeDate: true } },
+        Outcome: { where: { reversedAt: null }, select: { outcomeDate: true } },
       },
     });
 

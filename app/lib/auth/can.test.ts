@@ -49,6 +49,14 @@ test("PERSON_ACCOUNT_UNLINK stops at ADMIN", () => {
   assert.equal(can(Role.ADMIN, AppPermissions.PERSON_ACCOUNT_UNLINK), true);
 });
 
+// Reversing an outcome un-archives the animal, which recording one never
+// does, so holding OUTCOMES_MANAGE is deliberately not enough for it.
+test("OUTCOMES_REVERSE stops at ADMIN", () => {
+  assert.equal(can(Role.STAFF, AppPermissions.OUTCOMES_REVERSE), false);
+  assert.equal(can(Role.STAFF, AppPermissions.OUTCOMES_MANAGE), true);
+  assert.equal(can(Role.ADMIN, AppPermissions.OUTCOMES_REVERSE), true);
+});
+
 test("the documented volunteer exception: VOLUNTEER holds ANIMAL_VITALS_MANAGE", () => {
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_VITALS_MANAGE), true);
   // ...and it is genuinely an exception: no other MANAGE permission leaks to it.

@@ -7,6 +7,11 @@ import type {
   ApplicationStatus,
   PartnerType,
 } from "@/prisma/generated/enums";
+import {
+  deriveApplicationStatuses,
+  toDerivationOutcome,
+  type EffectiveApplicationStatus,
+} from "@/app/lib/utils/derive-application-status";
 import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
 import { personSearchWhereClause } from "../people-directory/person-search";
 
@@ -66,7 +71,7 @@ export type AdoptionAppHit = {
   id: string;
   applicantName: string;
   animalName: string;
-  status: ApplicationStatus;
+  status: EffectiveApplicationStatus;
 };
 
 export type FosterAppHit = {
@@ -86,7 +91,12 @@ export type GlobalSearchResults = {
 
 export type GlobalSearchDb = Pick<
   typeof prisma,
-  "animal" | "person" | "partner" | "adoptionApplication" | "fosterApplication"
+  | "animal"
+  | "person"
+  | "partner"
+  | "adoptionApplication"
+  | "fosterApplication"
+  | "outcome"
 >;
 
 const contains = (query: string) =>
@@ -233,19 +243,43 @@ export const runGlobalSearch = async (
                 id: true,
                 applicantName: true,
                 status: true,
+                submittedAt: true,
+                animalId: true,
                 animal: { select: { name: true } },
               },
             })
-            .then((rows) =>
-              rows.map(
+            .then(async (rows) => {
+              // The badge is the application's effective status, which the
+              // column alone cannot give: adopted and closed follow from the
+              // animal's outcomes.
+              const statuses = deriveApplicationStatuses(
+                rows,
+                rows.length === 0
+                  ? []
+                  : (
+                      await db.outcome.findMany({
+                        where: {
+                          animalId: { in: rows.map((row) => row.animalId) },
+                        },
+                        select: {
+                          animalId: true,
+                          createdAt: true,
+                          type: true,
+                          adoptionApplicationId: true,
+                          reversedAt: true,
+                        },
+                      })
+                    ).map(toDerivationOutcome),
+              );
+              return rows.map(
                 (row): AdoptionAppHit => ({
                   id: row.id,
                   applicantName: row.applicantName,
                   animalName: row.animal.name,
-                  status: row.status,
+                  status: statuses.get(row.id)!,
                 }),
-              ),
-            )
+              );
+            })
         : null,
       allowed.has("fosterApplications")
         ? db.fosterApplication.findMany({

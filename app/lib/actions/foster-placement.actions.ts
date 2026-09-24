@@ -34,6 +34,12 @@ import {
   PreconditionFailedError,
 } from "../utils/errors";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+import {
+  DERIVATION_APPLICATION_SELECT,
+  effectiveApplicationStatus,
+  lockAnimal,
+} from "../data/application-status.data";
+import { assertNoLiveAdoptionOutcome } from "../services/outcome-reversal";
 
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
 
@@ -106,7 +112,7 @@ const _createFosterPlacement = async (
             currentUnitId: true,
             listingStatus: true,
             intake: { select: { intakeDate: true } },
-            Outcome: { select: { outcomeDate: true } },
+            Outcome: { where: { reversedAt: null }, select: { outcomeDate: true } },
             fosterPlacements: {
               where: { endDate: null },
               select: { id: true },
@@ -366,7 +372,9 @@ const _convertFosterToAdoption = async (
           endDate: true,
           type: true,
           animalId: true,
-          fosterProfile: { select: { person: { select: { name: true } } } },
+          fosterProfile: {
+            select: { person: { select: { id: true, name: true } } },
+          },
         },
       });
 
@@ -382,9 +390,16 @@ const _convertFosterToAdoption = async (
         );
       }
 
-      // Same ordering as outcome.actions.ts's createOutcome: archive the
-      // animal first (guarded, mirroring its "already processed" check),
-      // then validate the optional application, then create the outcome.
+      // Same ordering as outcome.actions.ts's createOutcome: lock the animal
+      // and read the listing status the outcome stores for a reversal to
+      // restore, archive the animal (guarded, mirroring its "already
+      // processed" check), then validate the optional application, then
+      // create the outcome.
+      await lockAnimal(tx, placement.animalId);
+      const animal = await tx.animal.findUnique({
+        where: { id: placement.animalId },
+        select: { listingStatus: true },
+      });
       const archiveResult = await tx.animal.updateMany({
         where: {
           id: placement.animalId,
@@ -395,7 +410,7 @@ const _convertFosterToAdoption = async (
           archiveReason: OutcomeType.ADOPTION,
         },
       });
-      if (archiveResult.count === 0) {
+      if (!animal || archiveResult.count === 0) {
         throw new ConflictError(
           "This animal has already been processed for an outcome.",
         );
@@ -404,14 +419,32 @@ const _convertFosterToAdoption = async (
       if (adoptionApplicationId) {
         const application = await tx.adoptionApplication.findUnique({
           where: { id: adoptionApplicationId },
-          select: { status: true, animalId: true },
+          select: { ...DERIVATION_APPLICATION_SELECT, applicantId: true },
         });
         if (!application || application.animalId !== placement.animalId) {
           throw new PreconditionFailedError(
             "That adoption application does not belong to this animal.",
           );
         }
-        if (application.status !== ApplicationStatus.APPROVED) {
+        // This is the foster's own conversion, so the application has to be
+        // theirs — nothing else names an adopter for this outcome, the way a
+        // standard adoption outcome's adopter is always its linked
+        // application's applicant. Without this, any approved application for
+        // the animal (another applicant's) could be linked here and credited
+        // to the wrong person.
+        if (application.applicantId !== placement.fosterProfile.person.id) {
+          throw new PreconditionFailedError(
+            "That adoption application does not belong to this foster.",
+          );
+        }
+        await assertNoLiveAdoptionOutcome(tx, application.id);
+        // Effective, not the column, for the same reason as createOutcome:
+        // an application an earlier stay's outcome adopted or closed still
+        // stores APPROVED.
+        if (
+          (await effectiveApplicationStatus(application, tx)) !==
+          ApplicationStatus.APPROVED
+        ) {
           throw new PreconditionFailedError(
             "Cannot convert: the linked adoption application has not been approved.",
           );
@@ -425,6 +458,7 @@ const _convertFosterToAdoption = async (
           // shelter's calendar. Nothing in the placement records the day the
           // foster decided, and inventing one from its dates would be a guess.
           outcomeDate: await getShelterToday(),
+          previousListingStatus: animal.listingStatus,
           animal: { connect: { id: placement.animalId } },
           staffMember: { connect: { id: staffMemberId } },
           ...(adoptionApplicationId && {
@@ -442,54 +476,10 @@ const _convertFosterToAdoption = async (
         },
       });
 
-      if (adoptionApplicationId) {
-        await tx.adoptionApplication.update({
-          where: { id: adoptionApplicationId },
-          data: { status: ApplicationStatus.ADOPTED },
-        });
-        await tx.applicationStatusHistory.create({
-          data: {
-            applicationId: adoptionApplicationId,
-            status: ApplicationStatus.ADOPTED,
-            statusChangeReason: "Animal adopted by their foster.",
-            changedById: staffMemberId,
-          },
-        });
-      }
-
-      // Reject any other still-open applications for this animal, same as
-      // any other adoption outcome.
-      const otherAppsToReject = await tx.adoptionApplication.findMany({
-        where: {
-          animalId: placement.animalId,
-          id: { not: adoptionApplicationId },
-          status: {
-            in: [
-              ApplicationStatus.PENDING,
-              ApplicationStatus.REVIEWING,
-              ApplicationStatus.WAITLISTED,
-              ApplicationStatus.APPROVED,
-            ],
-          },
-        },
-        select: { id: true },
-      });
-      const appIdsToReject = otherAppsToReject.map((app) => app.id);
-      if (appIdsToReject.length > 0) {
-        await tx.adoptionApplication.updateMany({
-          where: { id: { in: appIdsToReject } },
-          data: { status: ApplicationStatus.REJECTED },
-        });
-        await tx.applicationStatusHistory.createMany({
-          data: appIdsToReject.map((appId) => ({
-            applicationId: appId,
-            status: ApplicationStatus.REJECTED,
-            statusChangeReason:
-              "Application rejected as the animal is no longer available.",
-            changedById: staffMemberId,
-          })),
-        });
-      }
+      // Nothing is written onto the applications, the same as any other
+      // adoption outcome: the linked one now reads as adopted and every other
+      // application still open on the animal as closed, both derived from
+      // this outcome. None of them was rejected; nobody assessed them.
 
       // Guarded close, same compare-and-swap rationale as returnFromFoster.
       const updateResult = await tx.fosterPlacement.updateMany({

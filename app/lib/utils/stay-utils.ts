@@ -2,6 +2,8 @@
 // and reusable. This is the SINGLE SOURCE OF TRUTH for whether an animal is "in
 // care": presence is derived by pairing Intake and Outcome events, never from
 // `listingStatus` (which is about public visibility, not physical presence).
+// Callers pass only outcomes that are not reversed: a reversed outcome records
+// a departure that never happened, so it ends no stay.
 
 import { shelterDaysBetweenKeys, type CalendarDay } from "./shelter-day";
 

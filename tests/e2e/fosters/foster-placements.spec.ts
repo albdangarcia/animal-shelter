@@ -1,6 +1,7 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import os from "node:os";
 import path from "node:path";
+import { fillStable, waitForPathname } from "../support/applications";
 
 const adminPassword = process.env.ADMIN_PASSWORD;
 const fostersPath = "/dashboard/fosters";
@@ -313,4 +314,233 @@ test("a paused foster offers no New Placement action", async ({ page }) => {
   await expect(
     page.getByRole("menuitem", { name: "New Placement" }),
   ).toHaveCount(0);
+});
+
+// --- Conversion links the foster's own approved application ---
+
+const REVIEW_PATH = /^\/dashboard\/adoption-applications\/[^/]+\/review$/;
+
+// Mirrors staff-walk-in-adoption-application.spec.ts's animal picker for the
+// staff "new application" form — a debounced server-search combobox, distinct
+// from the placement form's locally-filtered AnimalCombobox above. Typing the
+// name only drives the search; the option is picked by id (cmdk sets
+// `data-value` from CommandItem's `value` prop, which this form sets to
+// `animal.id` — see staff-adoption-application-form.tsx). Several seeded
+// animals share a name (one readopted after a return leaves multiple rows
+// with the same name and species), and picking by displayed text could
+// silently resolve to a different animal than the one this test tracks by id.
+const pickApplicationAnimal = async (
+  page: Page,
+  animal: { id: string; name: string },
+) => {
+  await page
+    .getByRole("combobox")
+    .filter({ hasText: "Search for an animal" })
+    .click();
+  await page.getByPlaceholder("Type an animal name...").fill(animal.name);
+  const option = page.locator(`[cmdk-item][data-value="${animal.id}"]`);
+  await expect(option).toBeVisible({ timeout: 15_000 });
+  await option.click();
+  await expect(page.getByRole("button", { name: "Clear" })).toBeVisible();
+};
+
+// Mirrors staff-walk-in-adoption-application.spec.ts: the yard / children
+// radio labels are plain <div>s, not associated with the group, and there are
+// two Yes/No pairs on the form.
+const radioByGroupLabel = (
+  page: Page,
+  label: string,
+  option: "Yes" | "No",
+) =>
+  page
+    .locator("div")
+    .filter({ has: page.getByText(label, { exact: true }) })
+    .filter({ has: page.getByRole("radio") })
+    .last()
+    .getByRole("radio", { name: option });
+
+// A PUBLISHED animal to file the application against — staff create refuses
+// anything else, and the foster-to-adopt placement below moves the listing to
+// Pending Adoption, so the application has to be filed first. Both animal
+// pickers further down select by id (see pickApplicationAnimal), so a
+// same-named animal elsewhere in the seed is not a concern here.
+const firstPublishedAnimal = async (page: Page) => {
+  await page.goto("/dashboard/animals?listingStatus=PUBLISHED&pageSize=10");
+  const link = page.locator("tbody tr").first().getByRole("link").first();
+  await expect(link).toBeVisible();
+  const href = await link.getAttribute("href");
+  const name = (await link.innerText()).trim();
+  if (!href || !name) {
+    throw new Error("No PUBLISHED animal row found.");
+  }
+  return { id: href.split("/").pop() as string, name };
+};
+
+// The row's dropdown trigger occasionally swallows the first click right
+// after a navigation, before hydration settles — retry, re-clicking only when
+// the menu is actually closed so we never toggle it shut.
+const openRowMenuItem = async (row: Locator, itemName: string) => {
+  const trigger = row.getByRole("button", { name: "Open menu" });
+  const item = row.page().getByRole("menuitem", { name: itemName });
+  await expect(trigger).toBeVisible();
+  await expect(async () => {
+    if (!(await item.isVisible())) {
+      await trigger.click();
+    }
+    await expect(item).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+  await item.click();
+};
+
+test("converting with the foster's approved application linked makes it read Adopted on the staff table", async ({
+  page,
+}) => {
+  // The application has to be filed while the animal is still PUBLISHED.
+  const animal = await firstPublishedAnimal(page);
+
+  // An available foster and the person underneath the profile — the roster
+  // row links straight to their people-directory record.
+  await page.goto(`${fostersPath}?capacity=available`);
+  const firstRow = page.locator("tbody tr").first();
+  await expect(firstRow).toBeVisible();
+  const personLink = firstRow.getByRole("link").first();
+  const personHref = await personLink.getAttribute("href");
+  if (!personHref) {
+    throw new Error("No foster person link found in the roster.");
+  }
+  const fosterPersonId = personHref.split("/")[3];
+  const fosterPersonName = (await personLink.innerText()).trim();
+
+  await firstRow.locator('button[aria-haspopup="menu"]').first().click();
+  await page.getByRole("menuitem", { name: "New Placement" }).click();
+  await page.waitForURL(`**${newPlacementPath}?fosterProfileId=*`);
+  const placementFormUrl = page.url();
+
+  // File and approve an adoption application for this foster on this animal.
+  // The conversion page's picker only offers an application the derivation
+  // already calls APPROVED.
+  await page.goto(
+    `/dashboard/adoption-applications/new?personId=${fosterPersonId}&returnTo=${encodeURIComponent(
+      `/dashboard/people-directory/${fosterPersonId}/adoption-applications`,
+    )}`,
+  );
+  await pickApplicationAnimal(page, animal);
+
+  // Contact fields are prefilled from the foster's Person record, which does
+  // not always carry a phone number — fillStable overwrites whatever is
+  // there. The email is unique so the final assertion can find this exact
+  // row: several seeded animals share the name "Charlie".
+  const applicantEmail = `foster-conversion-e2e-${Date.now()}@example.com`;
+  await fillStable(page.getByLabel("Email *", { exact: true }), applicantEmail);
+  await fillStable(
+    page.getByLabel("Phone *", { exact: true }),
+    "212-555-0199",
+  );
+  await fillStable(
+    page.getByLabel("Address Line 1 *", { exact: true }),
+    "12 Test Lane",
+  );
+  await fillStable(page.getByLabel("City *", { exact: true }), "New York");
+  await fillStable(page.getByLabel("ZIP Code *", { exact: true }), "10001");
+  await chooseFromSelect(page, "State *", "New York");
+  await chooseFromSelect(page, "Living Situation *", "Own Home");
+  await fillStable(page.getByLabel("Household Size *", { exact: true }), "2");
+  await radioByGroupLabel(page, "Do they have a yard? *", "No").click();
+  await radioByGroupLabel(
+    page,
+    "Are there children in the home? *",
+    "No",
+  ).click();
+  await fillStable(
+    page.getByLabel("Animal Experience *", { exact: true }),
+    "Longtime foster, prior pet owner.",
+  );
+  await fillStable(
+    page.getByLabel("Reason for Adoption *", { exact: true }),
+    `Foster-to-adopt conversion coverage — E2E ${Date.now()}`,
+  );
+  await page.getByRole("button", { name: "Submit Application" }).click();
+  await expect(
+    page.getByText("Application submitted successfully."),
+  ).toBeVisible();
+  await waitForPathname(
+    page,
+    `/dashboard/people-directory/${fosterPersonId}/adoption-applications`,
+  );
+
+  // Matched by the animal link's href, not its displayed name — several
+  // seeded animals share a name. Also requires a status cell reading exactly
+  // "Pending" (not hasText, which would match that word anywhere in the row's
+  // text): the row is this test's own just-created application, and staff
+  // create already refuses a second active application for the same person
+  // and animal, so "Pending" rules out an old closed/rejected/withdrawn row
+  // for the same animal that the id alone would not.
+  const applicationRow = page
+    .locator("tbody tr")
+    .filter({ has: page.locator(`a[href="/dashboard/animals/${animal.id}"]`) })
+    .filter({ has: page.getByText("Pending", { exact: true }) });
+  await expect(applicationRow).toBeVisible();
+  await openRowMenuItem(applicationRow, "Review");
+  await waitForPathname(page, REVIEW_PATH);
+
+  await chooseFromSelect(page, "Application Status *", "Approved");
+  await fillStable(
+    page.getByLabel("Reason for Status Change *", { exact: true }),
+    "Approved ahead of a foster-to-adopt conversion.",
+  );
+  await page.getByRole("button", { name: "Update Application" }).click();
+  await expect(
+    page.getByText("Application updated successfully."),
+  ).toBeVisible();
+
+  // The foster-to-adopt placement, for the same foster and animal. Picked by
+  // id for the same reason as pickApplicationAnimal above: this combobox's
+  // CommandItem value is `${name} ${species} ${id}` (animal-combobox.tsx), so
+  // its data-value always contains the id regardless of name collisions.
+  await page.goto(placementFormUrl);
+  await page.getByRole("combobox", { name: /animal/i }).click();
+  await page.getByPlaceholder("Search animals…").fill(animal.name);
+  const placementAnimalOption = page.locator(
+    `[cmdk-item][data-value*="${animal.id}"]`,
+  );
+  await expect(placementAnimalOption).toBeVisible();
+  await placementAnimalOption.click();
+  await chooseFromSelect(page, "Placement Type *", "Foster To Adopt");
+  await page.getByRole("button", { name: "Place in Foster" }).click();
+  await expect(page.getByText("Placement created.")).toBeVisible();
+  await page.waitForURL("**/dashboard/animals/**");
+
+  await banner(page).getByRole("link", { name: "Convert to Adoption" }).click();
+  await page.waitForURL("**/convert");
+
+  // With exactly one approved application on offer, the form pre-selects it
+  // — asserted checked *without* clicking first, so this fails if that
+  // default regresses instead of masking it.
+  const applicationRadio = page.getByRole("radio", {
+    name: `${fosterPersonName}'s application`,
+  });
+  await expect(applicationRadio).toBeChecked();
+
+  await page.getByRole("button", { name: "Convert to Adoption" }).click();
+  await page.getByRole("button", { name: "Confirm & Convert" }).click();
+  await expect(
+    page.getByText("Foster placement converted to adoption."),
+  ).toBeVisible();
+
+  // The linked application now reads Adopted on the staff table. Several
+  // seeded animals share the name "Charlie", so the row is found by the
+  // application's unique email rather than the animal's name.
+  await page.goto(
+    `/dashboard/adoption-applications?query=${encodeURIComponent(
+      fosterPersonName,
+    )}&pageSize=20`,
+  );
+  await expect(page.getByText(/of \d+ row\(s\) selected/)).toBeVisible();
+  const staffRow = page
+    .locator("tbody tr")
+    .filter({ hasText: applicantEmail });
+  await expect(staffRow).toBeVisible();
+  await expect(
+    staffRow.getByText("Adopted", { exact: true }).first(),
+  ).toBeVisible();
 });

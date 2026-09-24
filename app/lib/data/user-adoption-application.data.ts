@@ -8,76 +8,95 @@ import prisma from "@/app/lib/prisma";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import z from "zod";
-import type { ApplicationStatus } from "@/prisma/generated/enums";
 import type { Prisma } from "@/prisma/generated/client";
+import type { StatusHistoryEntry } from "@/app/lib/types";
+import type {
+  EffectiveApplicationStatus,
+  WithEffectiveStatus,
+} from "../utils/derive-application-status";
+import {
+  inPageOrder,
+  pageApplicationsByEffectiveStatus,
+  withConsequenceInHistory,
+} from "./application-status.data";
 
-export type AdoptionApplicationWithAnimal = Prisma.AdoptionApplicationGetPayload<{
-  select: {
-    id: true;
-    applicantId: true;
-    applicantName: true;
-    applicantEmail: true;
-    applicantPhone: true;
-    applicantCity: true;
-    applicantState: true;
-    status: true;
-    submittedAt: true;
-    animal: {
-      select: {
-        id: true;
-        name: true;
-        species: {
-          select: {
-            name: true;
+// Both shapes below carry the application's effective status in `status`,
+// derived from the animal's outcomes, not the column's value.
+export type AdoptionApplicationWithAnimal = WithEffectiveStatus<
+  Prisma.AdoptionApplicationGetPayload<{
+    select: {
+      id: true;
+      applicantId: true;
+      applicantName: true;
+      applicantEmail: true;
+      applicantPhone: true;
+      applicantCity: true;
+      applicantState: true;
+      status: true;
+      submittedAt: true;
+      animal: {
+        select: {
+          id: true;
+          name: true;
+          species: {
+            select: {
+              name: true;
+            };
           };
         };
       };
     };
-  };
-}>;
+  }>
+>;
 
-export type AdoptionApplicationWithOutcome = Prisma.AdoptionApplicationGetPayload<{
-  include: {
-    animal: {
-      select: {
-        id: true;
-        name: true;
-        breeds: {
-          select: {
-            name: true;
+// `history` includes the outcomes that adopted or closed the application and
+// their reversals, if any (`withConsequenceInHistory`).
+export type AdoptionApplicationWithOutcome = Omit<
+  Prisma.AdoptionApplicationGetPayload<{
+    include: {
+      animal: {
+        select: {
+          id: true;
+          name: true;
+          breeds: {
+            select: {
+              name: true;
+            };
+          };
+          species: {
+            select: {
+              name: true;
+            };
+          };
+          adoptionApplications: {
+            select: {
+              id: true;
+            };
           };
         };
-        species: {
-          select: {
-            name: true;
-          };
+      };
+      outcomes: {
+        where: { reversedAt: null };
+        select: {
+          id: true;
+          outcomeDate: true;
         };
-        adoptionApplications: {
-          select: {
-            id: true;
+      };
+      lastEditedBy: {
+        select: { name: true };
+      };
+      history: {
+        orderBy: { changedAt: "desc" };
+        include: {
+          changedBy: {
+            select: { name: true };
           };
         };
       };
     };
-    outcome: {
-      select: {
-        id: true;
-        outcomeDate: true;
-      };
-    };
-    lastEditedBy: {
-      select: { name: true };
-    };
-    history: {
-      orderBy: { changedAt: "desc" };
-      include: {
-        changedBy: {
-          select: { name: true };
-        };
-      };
-    };
-  };
-}>;
+  }>,
+  "status" | "history"
+> & { status: EffectiveApplicationStatus; history: StatusHistoryEntry[] };
 
 export const fetchUserAdoptionApplicationsSchema = z.object({
   query: searchQuerySchema,
@@ -113,18 +132,18 @@ const _fetchUserAdoptionApplications = async (
   const { query, currentPage, sort, status, pageSize } = validatedArgs.data;
   const offset = (currentPage - 1) * pageSize;
 
-  const orderBy: Prisma.AdoptionApplicationOrderByWithRelationInput = (() => {
-    if (!sort) return { submittedAt: "desc" };
-    const [field, direction] = sort.split(".");
-    const dir = direction === "asc" ? "asc" : "desc";
+  const [sortField, sortDirection] = sort?.split(".") ?? [];
+  const dir = sortDirection === "asc" ? "asc" : "desc";
+  // Status is derived, not a column the database can sort by, so a status
+  // sort is applied after the derivation instead of here.
+  const statusSort = sortField === "status" ? dir : undefined;
 
-    switch (field) {
+  const orderBy: Prisma.AdoptionApplicationOrderByWithRelationInput = (() => {
+    switch (sortField) {
       case "applicantName":
         return { applicantName: dir };
       case "animalName":
         return { animal: { name: dir } };
-      case "status":
-        return { status: dir };
       case "submittedAt":
         return { submittedAt: dir };
       default:
@@ -151,53 +170,46 @@ const _fetchUserAdoptionApplications = async (
     ],
   };
 
-  if (status) {
-    const statuses = status.split(",") as ApplicationStatus[];
-    if (statuses.length > 1) {
-      whereClause.status = { in: statuses };
-    } else if (statuses.length === 1) {
-      whereClause.status = statuses[0];
-    }
-  }
-
   try {
-    const [userApplications, count] = await Promise.all([
-      prisma.adoptionApplication.findMany({
-        where: whereClause,
-        select: {
-          id: true,
-          applicantId: true,
-          applicantName: true,
-          applicantEmail: true,
-          applicantPhone: true,
-          applicantCity: true,
-          applicantState: true,
-          status: true,
-          submittedAt: true,
-          animal: {
-            select: {
-              name: true,
-              id: true,
-              species: {
-                select: {
-                  name: true,
-                },
+    const page = await pageApplicationsByEffectiveStatus({
+      where: whereClause,
+      orderBy,
+      statuses: status ? status.split(",") : [],
+      statusSort,
+      offset,
+      pageSize,
+    });
+    const rows = await prisma.adoptionApplication.findMany({
+      where: { id: { in: page.ids } },
+      select: {
+        id: true,
+        applicantId: true,
+        applicantName: true,
+        applicantEmail: true,
+        applicantPhone: true,
+        applicantCity: true,
+        applicantState: true,
+        status: true,
+        submittedAt: true,
+        animal: {
+          select: {
+            name: true,
+            id: true,
+            species: {
+              select: {
+                name: true,
               },
             },
           },
         },
-        orderBy: orderBy,
-        take: pageSize,
-        skip: offset,
-      }),
-      prisma.adoptionApplication.count({
-        where: whereClause,
-      }),
-    ]);
+      },
+    });
 
-    const totalPages = Math.ceil(count / pageSize);
-
-    return { userApplications, totalPages, totalRows: count };
+    return {
+      userApplications: inPageOrder(rows, page),
+      totalPages: Math.ceil(page.totalRows / pageSize),
+      totalRows: page.totalRows,
+    };
   } catch (error) {
     console.error("Error fetching user applications.", error);
     throw new Error("Error fetching user applications.");
@@ -240,7 +252,11 @@ const _fetchAdoptionApplicationById = async (
             },
           },
         },
-        outcome: {
+        // The adoption outcome that adopted this application, if one did. A
+        // reversed one keeps its link, so several can be linked, but at most
+        // one is not reversed, and only that one finalized the application.
+        outcomes: {
+          where: { reversedAt: null },
           select: {
             id: true,
             outcomeDate: true,
@@ -256,7 +272,8 @@ const _fetchAdoptionApplicationById = async (
         },
       },
     });
-    return application;
+    return application &&
+      (await withConsequenceInHistory(application, { includeReversals: true }));
   } catch (error) {
     console.error("Error fetching application by ID.", error);
     throw new Error("Error fetching application by ID.");

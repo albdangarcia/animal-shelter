@@ -10,7 +10,9 @@ import {
 import { AppPermissions } from "../auth/permissions";
 import {
   OutcomeFormSchema,
+  ReverseOutcomeSchema,
   type OutcomeFormInput,
+  type ReverseOutcomeInput,
 } from "../zod-schemas/outcome.schema";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
@@ -26,7 +28,16 @@ import {
 } from "../utils/errors";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
-import { CLOSURE_REASON_BY_OUTCOME } from "../utils/application-status";
+import {
+  DERIVATION_APPLICATION_SELECT,
+  effectiveApplicationStatus,
+  lockAnimal,
+} from "../data/application-status.data";
+import {
+  assertNoLiveAdoptionOutcome,
+  recordOutcomeReversal,
+  type OutcomeReversal,
+} from "../services/outcome-reversal";
 import {
   calendarDay,
   formatShelterDay,
@@ -78,6 +89,15 @@ const _createOutcome = async (
 
   try {
     await prisma.$transaction(async (tx) => {
+      // Held until commit, so the listing status read here is still the
+      // animal's when the update below archives it. It is stored on the
+      // outcome, and is what a reversal of the outcome restores.
+      await lockAnimal(tx, animalId);
+      const animal = await tx.animal.findUnique({
+        where: { id: animalId },
+        select: { listingStatus: true },
+      });
+
       // Attempt to archive the animal first.
       // This update will only succeed if the animal is not already archived.
       const updateResult = await tx.animal.updateMany({
@@ -99,10 +119,21 @@ const _createOutcome = async (
       });
 
       // Check if the update succeeded.
-      if (updateResult.count === 0) {
+      if (!animal || updateResult.count === 0) {
         // If count is 0, another process archived the animal first. Abort.
         throw new ConflictError(
           "This animal has already been processed for an outcome.",
+        );
+      }
+
+      // An application's adopted status is derived from an adoption outcome
+      // for its own animal that links to it. A link on any other outcome, or
+      // from another animal's outcome, would mark the application adopted
+      // here while its animal's record says otherwise. The form never sends
+      // either; a direct call must not be able to.
+      if (adoptionApplicationId && outcomeType !== OutcomeType.ADOPTION) {
+        throw new PreconditionFailedError(
+          "Only an adoption outcome can be recorded against an adoption application.",
         );
       }
 
@@ -116,10 +147,27 @@ const _createOutcome = async (
 
         const application = await tx.adoptionApplication.findUnique({
           where: { id: adoptionApplicationId },
-          select: { status: true },
+          select: DERIVATION_APPLICATION_SELECT,
         });
 
-        if (application?.status !== ApplicationStatus.APPROVED) {
+        if (application && application.animalId !== animalId) {
+          throw new PreconditionFailedError(
+            "Cannot process adoption: The application is for a different animal.",
+          );
+        }
+        if (application) {
+          await assertNoLiveAdoptionOutcome(tx, application.id);
+        }
+        // Approved as the application effectively is, not as the column
+        // says: one approved during an earlier stay, and adopted or closed by
+        // that stay's outcome, still stores APPROVED. Archiving the animal
+        // above holds the lock every application status change takes, so
+        // this cannot move before the outcome is written.
+        if (
+          !application ||
+          (await effectiveApplicationStatus(application, tx)) !==
+            ApplicationStatus.APPROVED
+        ) {
           throw new PreconditionFailedError(
             "Cannot process adoption: The application has not been approved.",
           );
@@ -134,6 +182,7 @@ const _createOutcome = async (
           // `notes` now arrives as "" from a cleared textarea rather than
           // undefined, so it has to be mapped to null for the nullable column.
           notes: notes || null,
+          previousListingStatus: animal.listingStatus,
           animal: { connect: { id: animalId } },
           staffMember: { connect: { id: staffMemberId } },
           // Conditionally connect relationships
@@ -163,59 +212,10 @@ const _createOutcome = async (
         },
       });
 
-      // If this is an adoption, update the winning application's status
-      if (adoptionApplicationId) {
-        await tx.adoptionApplication.update({
-          where: { id: adoptionApplicationId },
-          data: { status: ApplicationStatus.ADOPTED },
-        });
-
-        await tx.applicationStatusHistory.create({
-          data: {
-            applicationId: adoptionApplicationId,
-            status: ApplicationStatus.ADOPTED,
-            statusChangeReason: "Animal adopted by applicant.",
-            changedById: staffMemberId,
-          },
-        });
-      }
-
-      // Close ALL other open applications for this animal
-      const otherAppsToClose = await tx.adoptionApplication.findMany({
-        where: {
-          animalId: animalId,
-          // Exclude the winning application if this is an adoption
-          id: { not: adoptionApplicationId },
-          status: {
-            in: [
-              ApplicationStatus.PENDING,
-              ApplicationStatus.REVIEWING,
-              ApplicationStatus.WAITLISTED,
-              ApplicationStatus.APPROVED, // Also close previously approved apps
-            ],
-          },
-        },
-        select: { id: true },
-      });
-
-      const appIdsToClose = otherAppsToClose.map((app) => app.id);
-
-      if (appIdsToClose.length > 0) {
-        await tx.adoptionApplication.updateMany({
-          where: { id: { in: appIdsToClose } },
-          data: { status: ApplicationStatus.CLOSED },
-        });
-
-        const historyRecords = appIdsToClose.map((appId) => ({
-          applicationId: appId,
-          status: ApplicationStatus.CLOSED,
-          statusChangeReason: CLOSURE_REASON_BY_OUTCOME[outcomeType],
-          changedById: staffMemberId,
-        }));
-        await tx.applicationStatusHistory.createMany({
-          data: historyRecords,
-        });
-      }
+      // Nothing is written onto the applications. The one this outcome links
+      // to now reads as adopted, and every other application still open on
+      // the animal reads as closed, because both are derived from this
+      // outcome (`deriveApplicationStatus`).
     });
   } catch (error) {
     console.error("Database error processing outcome:", error);
@@ -356,6 +356,7 @@ const _updateOutcome = async (
         notes: true,
         destinationPartnerId: true,
         ownerId: true,
+        reversedAt: true,
       },
     });
 
@@ -365,24 +366,33 @@ const _updateOutcome = async (
 
     animalId = existingOutcome.animalId;
 
+    // A reversed outcome is kept as it stood when it was voided. Correcting
+    // it afterwards would change a record that no longer counts for anything,
+    // and blur what the reversal was a reversal of.
+    if (existingOutcome.reversedAt) {
+      return {
+        ok: false,
+        message: "This outcome was reversed, so it can no longer be corrected.",
+      };
+    }
+
     // The form disables the type select in edit mode, so a different type
     // here means the client and server disagree about what is editable. That
     // is refused outright rather than ignored, so the disagreement surfaces.
     //
-    // The type is frozen because:
-    //  - Compliance reports count outcomes by type, so changing it in place
-    //    rewrites a figure that may already have been reported, with no
-    //    record that it moved.
-    //  - For an adoption, the type also carries the link to the winning
-    //    application. Moving it off ADOPTION would clear that link and strand
-    //    the application at ADOPTED, which has no allowed transitions out.
-    //  - Fixing a wrongly-typed outcome is a reversal, not an edit, and there
-    //    is no reversal path yet. Freezing the type beats half-correcting it.
+    // The date, notes, partner and owner correct an attribute of the event
+    // that happened. The type asserts a different event happened, and carries
+    // structure the others do not: an adoption's link to the winning
+    // application (which is what makes that application adopted and closes
+    // the rest), the archive reason, and the partner or owner that only mean
+    // something under one type. Retyping in place would have to rewire all of
+    // that. Reversing the outcome and recording the right one does it through
+    // the path that already knows how, and keeps the mistake on the record.
     if (outcomeType !== existingOutcome.type) {
       return {
         ok: false,
         message:
-          "The outcome type can't be changed once an outcome is recorded.",
+          "The outcome type can't be changed once an outcome is recorded. To fix a wrong type, reverse this outcome and record the right one.",
       };
     }
 
@@ -419,10 +429,17 @@ const _updateOutcome = async (
     }
 
     await prisma.$transaction(async (tx) => {
-      await tx.outcome.update({
-        where: { id: parsedId.data },
+      // Guarded, since the outcome could be reversed between the read above
+      // and this write.
+      const updated = await tx.outcome.updateMany({
+        where: { id: parsedId.data, reversedAt: null },
         data: nextValues,
       });
+      if (updated.count === 0) {
+        throw new ConflictError(
+          "This outcome was reversed, so it can no longer be corrected.",
+        );
+      }
 
       await tx.animalActivityLog.create({
         data: {
@@ -435,7 +452,7 @@ const _updateOutcome = async (
     });
   } catch (error) {
     console.error("Database error updating outcome:", error);
-    if (error instanceof NotFoundError) {
+    if (error instanceof NotFoundError || error instanceof ConflictError) {
       return { ok: false, message: error.message };
     }
     return { ok: false, message: "Database Error: Failed to update outcome." };
@@ -451,10 +468,94 @@ const _updateOutcome = async (
   };
 };
 
+/**
+ * Reverse an outcome recorded in error. The work, and why a reversal voids the
+ * outcome rather than deleting it, is in `outcome-reversal`; this is the
+ * authorization, the transaction and the cache invalidation around it.
+ */
+const _reverseOutcome = async (
+  user: SessionUser,
+  outcomeId: string,
+  values: ReverseOutcomeInput,
+): Promise<FormResult<ReverseOutcomeInput>> => {
+  const parsedId = cuidSchema.safeParse(outcomeId);
+  if (!parsedId.success) {
+    return { ok: false, message: "Invalid outcome ID format." };
+  }
+
+  const validatedFields = ReverseOutcomeSchema.safeParse(values);
+  if (!validatedFields.success) {
+    return {
+      ok: false,
+      message: "Missing or Invalid Fields. Failed to Reverse Outcome.",
+      fieldErrors: z.flattenError(validatedFields.error)
+        .fieldErrors as FieldErrors<ReverseOutcomeInput>,
+    };
+  }
+
+  let reversal: OutcomeReversal;
+  try {
+    reversal = await prisma.$transaction((tx) =>
+      recordOutcomeReversal(
+        tx,
+        parsedId.data,
+        validatedFields.data.reason,
+        user.personId,
+      ),
+    );
+  } catch (error) {
+    if (
+      error instanceof NotFoundError ||
+      error instanceof ConflictError ||
+      error instanceof PreconditionFailedError
+    ) {
+      return { ok: false, message: error.message };
+    }
+    console.error("Database error reversing outcome:", error);
+    return {
+      ok: false,
+      message: "Database Error: Failed to reverse outcome.",
+    };
+  }
+
+  revalidatePath(OUTCOMES_PATH);
+  revalidatePath("/dashboard/animals");
+  revalidatePath(`/dashboard/animals/${reversal.animalId}`);
+  // Every application on the animal can read differently now: the adopter's
+  // is no longer adopted, and the ones the outcome closed are open again.
+  revalidatePath(ADOPTION_APPLICATIONS_PATH);
+  if (reversal.adoptionApplicationId) {
+    revalidatePath(
+      `${ADOPTION_APPLICATIONS_PATH}/${reversal.adoptionApplicationId}/edit`,
+    );
+  }
+  if (reversal.reopenedPlacementId) {
+    revalidatePath("/dashboard/fosters");
+  }
+
+  // The outcome took the animal out of its unit, and nothing kept which one,
+  // so an animal back in care is not in any kennel until staff place it. A
+  // reopened foster placement is where it is instead.
+  const unitHint =
+    reversal.restoredListingStatus && !reversal.reopenedPlacementId
+      ? " It has no unit now; place it from its record."
+      : "";
+
+  return {
+    ok: true,
+    message: `Outcome reversed. ${reversal.effects}${unitHint}`,
+    redirectTo: OUTCOMES_PATH,
+  };
+};
+
 export const createOutcome = withAuthenticatedUser(
   RequirePermission(AppPermissions.OUTCOMES_MANAGE)(_createOutcome),
 );
 
 export const updateOutcome = withAuthenticatedUser(
   RequirePermission(AppPermissions.OUTCOMES_MANAGE)(_updateOutcome),
+);
+
+export const reverseOutcome = withAuthenticatedUser(
+  RequirePermission(AppPermissions.OUTCOMES_REVERSE)(_reverseOutcome),
 );

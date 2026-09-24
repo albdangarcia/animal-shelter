@@ -244,12 +244,14 @@ const _fetchSectionCardsPersonData = async (
             adoptionApplications: true,
             surrenderedAnimals: true,
             foundAnimals: true,
-            reclaimedAnimalsAsOwner: true,
+            // A reversed outcome was recorded in error, so it counts for
+            // nothing here, as in the reports.
+            reclaimedAnimalsAsOwner: { where: { reversedAt: null } },
             tasksAssigned: true,
             tasksCreated: true,
             animalNotesAuthored: true,
             processedIntakes: true,
-            processedOutcomes: true,
+            processedOutcomes: { where: { reversedAt: null } },
           },
         },
       },

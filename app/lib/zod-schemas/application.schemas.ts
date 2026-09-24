@@ -4,19 +4,11 @@ import { cuidSchema } from "./common.schemas";
 import { householdSuperRefine } from "./household-profile.schemas";
 import { myAdoptionAppFieldsShape } from "./myAdoptionApplication.schema";
 
-// Exclude 'ADOPTED' from this list.
-const updatableApplicationStatuses = [
-  ApplicationStatus.PENDING,
-  ApplicationStatus.REVIEWING,
-  ApplicationStatus.WAITLISTED,
-  ApplicationStatus.APPROVED,
-  ApplicationStatus.REJECTED,
-  ApplicationStatus.WITHDRAWN,
-] as const;
-
 export const StaffUpdateAdoptionAppFormSchema = z.object({
+  // A review decision. Staff never choose adopted or closed; an outcome for
+  // the animal is what makes an application either.
   status: z
-    .enum(updatableApplicationStatuses, {
+    .enum(ApplicationStatus, {
       error: "Invalid application status.",
     })
     .optional(),

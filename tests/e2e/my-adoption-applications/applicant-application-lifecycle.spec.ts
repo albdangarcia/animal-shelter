@@ -327,8 +327,8 @@ test("a closed application reads as a closure, not a rejection", async ({
     "It is not a decision about you or your application",
   );
 
-  // The outcome-aware reason the cascade writes (CLOSURE_REASON_BY_OUTCOME),
-  // not the old single generic string.
+  // The outcome-aware reason the timeline gives (CLOSURE_REASON_BY_OUTCOME),
+  // read off the outcome that closed it, not the old single generic string.
   await expect(
     page.getByText("This animal was adopted by another applicant."),
   ).toBeVisible();

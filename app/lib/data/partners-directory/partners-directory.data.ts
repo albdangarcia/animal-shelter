@@ -215,7 +215,9 @@ const _fetchSectionCardsPartnerData = async (
           select: {
             contacts: true,
             transferredInAnimals: true,
-            transferredOutAnimals: true,
+            // A reversed outcome was recorded in error, so it counts for
+            // nothing here, as in the reports.
+            transferredOutAnimals: { where: { reversedAt: null } },
             partnerNotes: true,
           },
         },

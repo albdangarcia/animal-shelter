@@ -33,7 +33,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { updateFosterApplicationStatus } from "@/app/lib/actions/foster-application.actions";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
-import { ALLOWED_APPLICATION_TRANSITIONS } from "@/app/lib/utils/application-status";
+import { allowedNextStatuses } from "@/app/lib/utils/application-status";
 import { FosterApplicationStatusChangeSchema } from "@/app/lib/zod-schemas/foster.schemas";
 import { MyFosterApplicationPayload } from "@/app/lib/types";
 import { formatDateOrNA } from "@/app/lib/utils/date-utils";
@@ -90,7 +90,7 @@ export function FosterApplicationReview({
     (s) => s.value === application.status,
   );
 
-  const allowedNextStatuses = ALLOWED_APPLICATION_TRANSITIONS[application.status];
+  const nextStatuses = allowedNextStatuses(application.status);
 
   const [isPending, startSubmitTransition] = useTransition();
 
@@ -161,7 +161,7 @@ export function FosterApplicationReview({
                       <Select
                         onValueChange={field.onChange}
                         value={field.value ?? ""}
-                        disabled={isPending || allowedNextStatuses.length === 0}
+                        disabled={isPending || nextStatuses.length === 0}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -173,7 +173,7 @@ export function FosterApplicationReview({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {allowedNextStatuses.map((status) => {
+                          {nextStatuses.map((status) => {
                             const meta = FosterApplicationStatuses.find(
                               (s) => s.value === status,
                             );

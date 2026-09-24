@@ -31,6 +31,10 @@ export type PartnerAnimalHistoryEntry = {
   };
   intakeType?: IntakeType;
   outcomeType?: OutcomeType;
+  // Only populated for TRANSFER_OUT entries: true when the outcome was
+  // reversed. It stays in the history, marked, since staff reading it need to
+  // see what was recorded and voided, not a gap.
+  reversed?: boolean;
 };
 
 /** A day-valued entry's two fields: the day, and where it sorts. */
@@ -74,6 +78,7 @@ const _fetchPartnerAnimalHistory = async (
           select: {
             outcomeDate: true,
             type: true,
+            reversedAt: true,
             animal: { select: animalSelect },
           },
         },
@@ -97,6 +102,7 @@ const _fetchPartnerAnimalHistory = async (
         ...dated(calendarDay(outcome.outcomeDate), timezone),
         animal: outcome.animal,
         outcomeType: outcome.type,
+        reversed: outcome.reversedAt !== null,
       })),
     ];
 

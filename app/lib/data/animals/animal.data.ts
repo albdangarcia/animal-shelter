@@ -23,6 +23,10 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { LATEST_ENTRY_ORDER } from "../../utils/vitals-order";
 import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
 import { ACTIVE_APPLICATION_STATUSES } from "../../utils/application-status";
+import {
+  DERIVATION_APPLICATION_SELECT,
+  effectiveApplicationStatuses,
+} from "../application-status.data";
 
 // data for the animals table in the dashboard
 const _fetchAnimals = async (
@@ -202,10 +206,14 @@ const _fetchSectionCardsAnimalData = async (
           },
           take: 1,
         },
+        // Selected with what the derivation needs, not just `status`: the
+        // section cards count approved applications to decide whether to
+        // offer "Complete Adoption", and the stored column is a copy of the
+        // cascade's decision that stops being written once layer 4 removes
+        // it. Keep the ID alongside the derived status below so the section
+        // card can link to the approved application.
         adoptionApplications: {
-          select: {
-            status: true,
-          },
+          select: DERIVATION_APPLICATION_SELECT,
         },
         intake: {
           select: {
@@ -237,7 +245,20 @@ const _fetchSectionCardsAnimalData = async (
       },
     });
 
-    return animal;
+    if (!animal) {
+      return null;
+    }
+
+    const statuses = await effectiveApplicationStatuses(
+      animal.adoptionApplications,
+    );
+    return {
+      ...animal,
+      adoptionApplications: animal.adoptionApplications.map((application) => ({
+        id: application.id,
+        status: statuses.get(application.id)!,
+      })),
+    };
   } catch (error) {
     console.error("Error fetching animal by ID.", error);
     throw new Error("Error fetching animal details.");
@@ -476,22 +497,34 @@ const _searchPublishedAnimals = async (
   const q = parsed.success ? parsed.data : "";
 
   try {
+    // The same active list the create action's duplicate check reads, so an
+    // animal this hides is one the action would refuse anyway — and a
+    // CLOSED, REJECTED or WITHDRAWN application does not hide it. Derived
+    // rather than filtered by the column: this person's own applications are
+    // a small, bounded set regardless of how many animals are searched, so
+    // deriving all of them up front and excluding by animal id is cheap, and
+    // it is the only way this excludes an application the column still calls
+    // open but an outcome has since closed.
+    let blockedAnimalIds: string[] = [];
+    if (excludePersonId) {
+      const applications = await prisma.adoptionApplication.findMany({
+        where: { applicantId: excludePersonId },
+        select: DERIVATION_APPLICATION_SELECT,
+      });
+      const statuses = await effectiveApplicationStatuses(applications);
+      blockedAnimalIds = applications
+        .filter((application) =>
+          ACTIVE_APPLICATION_STATUSES.includes(statuses.get(application.id)!),
+        )
+        .map((application) => application.animalId);
+    }
+
     return await prisma.animal.findMany({
       where: {
         listingStatus: AnimalListingStatus.PUBLISHED,
         name: { contains: q, mode: "insensitive" },
-        // The same active list the create action's duplicate check reads, so
-        // an animal this hides is one the action would refuse anyway — and a
-        // CLOSED, REJECTED or WITHDRAWN application does not hide it.
-        ...(excludePersonId && {
-          NOT: {
-            adoptionApplications: {
-              some: {
-                applicantId: excludePersonId,
-                status: { in: ACTIVE_APPLICATION_STATUSES },
-              },
-            },
-          },
+        ...(blockedAnimalIds.length > 0 && {
+          id: { notIn: blockedAnimalIds },
         }),
       },
       select: {

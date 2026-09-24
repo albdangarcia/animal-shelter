@@ -1,8 +1,8 @@
-import { AnimalJourneyLogPayload } from "./data/animals/animal-journey.data";
-import { AnimalActivityType } from "@/prisma/generated/enums";
+import { AnimalJourneyItem } from "./data/animals/animal-journey.data";
+import { AnimalActivityType, type OutcomeType } from "@/prisma/generated/enums";
 
 export const formatJourneyItem = (
-  item: AnimalJourneyLogPayload,
+  item: AnimalJourneyItem,
 ): { title: string; description: string } | null => {
   const animalName = item.animal?.name || "The animal";
 
@@ -60,41 +60,20 @@ export const formatJourneyItem = (
           item.changeSummary || `${animalName} was returned from foster care.`,
       };
 
-    case AnimalActivityType.OUTCOME_PROCESSED:
-      const outcomeType = item.animal?.Outcome[0]?.type;
+    case AnimalActivityType.OUTCOME_REVERSED:
+      return {
+        title: "Outcome: Reversed",
+        description:
+          item.changeSummary || `An outcome for ${animalName} was reversed.`,
+      };
 
-      switch (outcomeType) {
-        case "ADOPTION":
-          return {
-            title: "Outcome: Adopted",
-            description: `${animalName} has been adopted and left the shelter.`,
-          };
-        case "TRANSFER_OUT":
-          return {
-            title: "Outcome: Transferred",
-            description: `${animalName} was transferred to a partner organization.`,
-          };
-        case "RETURN_TO_OWNER":
-          return {
-            title: "Outcome: Returned to Owner",
-            description: `${animalName} has been returned to their owner.`,
-          };
-        case "DECEASED":
-          return {
-            title: "Outcome: Deceased",
-            description: `${animalName}'s journey at the shelter has ended.`,
-          };
-        case "EUTHANIZED":
-          return {
-            title: "Outcome: Euthanized",
-            description: `${animalName}'s journey at the shelter has ended.`,
-          };
-        default:
-          return {
-            title: "Outcome Event",
-            description: `${animalName} has left the shelter.`,
-          };
-      }
+    case AnimalActivityType.OUTCOME_PROCESSED: {
+      const processed = formatOutcomeProcessed(item.outcome?.type, animalName);
+      // Kept on the journey, marked: the reversal entry after it says why.
+      return item.outcome?.reversedAt
+        ? { ...processed, title: `${processed.title} (reversed)` }
+        : processed;
+    }
 
     // No TASK_* cases by design: fetchAnimalJourney (animal-journey.data.ts)
     // filters to lifecycle events only, so TASK_CREATED / TASK_STATUS_CHANGED /
@@ -102,5 +81,43 @@ export const formatJourneyItem = (
     // shows on the animal's Activity feed, not its Journey timeline.
     default:
       return null;
+  }
+};
+
+const formatOutcomeProcessed = (
+  outcomeType: OutcomeType | undefined,
+  animalName: string,
+): { title: string; description: string } => {
+  switch (outcomeType) {
+    case "ADOPTION":
+      return {
+        title: "Outcome: Adopted",
+        description: `${animalName} has been adopted and left the shelter.`,
+      };
+    case "TRANSFER_OUT":
+      return {
+        title: "Outcome: Transferred",
+        description: `${animalName} was transferred to a partner organization.`,
+      };
+    case "RETURN_TO_OWNER":
+      return {
+        title: "Outcome: Returned to Owner",
+        description: `${animalName} has been returned to their owner.`,
+      };
+    case "DECEASED":
+      return {
+        title: "Outcome: Deceased",
+        description: `${animalName}'s journey at the shelter has ended.`,
+      };
+    case "EUTHANIZED":
+      return {
+        title: "Outcome: Euthanized",
+        description: `${animalName}'s journey at the shelter has ended.`,
+      };
+    default:
+      return {
+        title: "Outcome Event",
+        description: `${animalName} has left the shelter.`,
+      };
   }
 };

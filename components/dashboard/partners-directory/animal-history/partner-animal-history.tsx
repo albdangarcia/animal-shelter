@@ -22,6 +22,7 @@ import { TimeAgo } from "@/components/common/time-ago";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import Link from "next/link";
 import Image from "next/image";
+import { ReversedOutcomeBadge } from "@/components/dashboard/outcomes/reversed-outcome-badge";
 import {
   PartnerAnimalHistoryEntry,
   PartnerTransferDirection,
@@ -119,6 +120,7 @@ const PartnerAnimalHistory = ({ history }: Props) => {
                         <Badge variant="secondary">
                           {formatSingleEnumOption(entry.animal.listingStatus)}
                         </Badge>
+                        {entry.reversed && <ReversedOutcomeBadge />}
                       </div>
 
                       {subtype && (

@@ -25,6 +25,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -198,6 +199,12 @@ export function OutcomeForm({
                         ))}
                       </SelectContent>
                     </Select>
+                    {isEditMode && (
+                      <FormDescription>
+                        A wrong type is fixed by reversing this outcome and
+                        recording the right one.
+                      </FormDescription>
+                    )}
                     <FormMessage />
                   </FormItem>
                 )}

@@ -8,13 +8,13 @@ import {
   TaskStatus,
   TaskPriority,
   NoteCategory,
-  ApplicationStatus,
   LivingSituation,
   OutcomeType,
   LocationType,
   FosterPlacementType,
   FosterReturnReason
 } from "@/prisma/generated/enums";
+import { EffectiveApplicationStatus } from "./derive-application-status";
 
 /**
  * Formats a Prisma enum's string values for display.
@@ -105,9 +105,15 @@ export const TaskPriorityOptions = formatEnumAsOptions(TaskPriority);
 export const noteCategoryOptions = formatEnumAsOptions(NoteCategory);
 
 export const livingSituationOptions = formatEnumAsOptions(LivingSituation);
-export const myApplicationStatusOptions = formatEnumAsOptions(ApplicationStatus);
+// Filters over an adoption application's effective status, so adopted and
+// closed are offered alongside the review decisions.
+export const myApplicationStatusOptions = formatEnumAsOptions(
+  EffectiveApplicationStatus,
+);
 
-export const userApplicationStatusOptions = formatEnumAsOptions(ApplicationStatus);
+export const userApplicationStatusOptions = formatEnumAsOptions(
+  EffectiveApplicationStatus,
+);
 
 export const outcomeTypeOptions = formatEnumAsOptions(OutcomeType)
 

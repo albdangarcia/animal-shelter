@@ -47,7 +47,6 @@ import {
   startOfShelterDay,
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
-import { CLOSURE_REASON_BY_OUTCOME } from "@/app/lib/utils/application-status";
 import { recordNoteMutation } from "@/app/lib/services/note-audit";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
@@ -306,7 +305,7 @@ const NON_APPLICANT_PERSON_NAMES = new Set([
 //
 // "Jane Doe": her adoption applications are hand-written by
 // `seedRegisteredUserApplicationFixtures` rather than drawn at random. Keeping
-// her out of *every* random applicant pool — the adoption cascades in
+// her out of *every* random applicant pool — the adoptions in
 // `seedAnimalsAndRelations` as well as `seedApplicationNoise` — is what makes
 // that set exact. Both pools would otherwise hand her extra applications
 // whose statuses move whenever anything upstream shifts the random stream,
@@ -717,8 +716,8 @@ const WALK_IN_PERSON_COUNT = 50;
 // generated from that archetype, and listingStatus/archiveReason/relations
 // are all DERIVED from the timeline — nothing about an animal's state is
 // hardcoded independent of its events. ADOPTED mirrors the other closed-stay
-// archetypes but its outcome is produced via the full adoption cascade
-// (application → approval → outcome → reject-others). RETURN_READOPT layers a
+// archetypes but its outcome is produced via a full adoption (applications →
+// approval → an outcome linked to the winner). RETURN_READOPT layers a
 // second stay on top of an initial adoption, re-entering care via a re-intake.
 
 type Archetype =
@@ -2006,74 +2005,24 @@ async function seedApplicationWithHistory(opts: {
   return application.id;
 }
 
-// Closes every other open application (PENDING/REVIEWING/WAITLISTED/
-// APPROVED) on an animal, exactly as `_createOutcome` does when an outcome is
-// recorded. CLOSED, not REJECTED: nobody assessed these people, the animal
-// simply left the shelter while their application was open.
-//
-// `outcomeType` is a parameter rather than a hardcoded ADOPTION because the
-// real cascade runs for all six outcome types and picks its wording from
-// `CLOSURE_REASON_BY_OUTCOME`. Today's only caller finalizes an adoption, but
-// baking that in would rebuild exactly the single-meaning assumption the
-// CLOSED status exists to remove.
-async function closeOtherOpenApplications(opts: {
-  animalId: string;
-  excludeApplicationId: string;
-  staffMemberId: string;
-  outcomeType: OutcomeType;
-  at: Date;
-}) {
-  const others = await prisma.adoptionApplication.findMany({
-    where: {
-      animalId: opts.animalId,
-      id: { not: opts.excludeApplicationId },
-      status: {
-        in: [
-          ApplicationStatus.PENDING,
-          ApplicationStatus.REVIEWING,
-          ApplicationStatus.WAITLISTED,
-          ApplicationStatus.APPROVED,
-        ],
-      },
-    },
-    select: { id: true },
-  });
-
-  if (others.length === 0) return;
-
-  await prisma.adoptionApplication.updateMany({
-    where: { id: { in: others.map((o) => o.id) } },
-    data: { status: ApplicationStatus.CLOSED },
-  });
-
-  await prisma.applicationStatusHistory.createMany({
-    data: others.map((o) => ({
-      applicationId: o.id,
-      status: ApplicationStatus.CLOSED,
-      statusChangeReason: CLOSURE_REASON_BY_OUTCOME[opts.outcomeType],
-      changedById: opts.staffMemberId,
-      changedAt: opts.at,
-    })),
-  });
-}
-
 // Produces one full adoption for an animal's stay: a winning application
-// that goes PENDING → REVIEWING → APPROVED → ADOPTED, 0-2 other applicants
-// left in an open status, the ADOPTION Outcome linked to the winner, and the
-// cascade closing every other open application — mirroring `_createOutcome`
-// exactly (it refuses an ADOPTION outcome without an APPROVED application).
+// that goes PENDING → REVIEWING → APPROVED, 0-2 other applicants left in an
+// open status, and the ADOPTION Outcome linked to the winner — mirroring
+// `_createOutcome` exactly (it refuses an ADOPTION outcome without an APPROVED
+// application). Like `_createOutcome`, it writes nothing onto the
+// applications: the winner reads as adopted and the others as closed because
+// both are derived from that outcome.
 //
 // `winner` names the adopter and supplies their application content instead
 // of drawing both. The applicant fixture uses it to give one named account a
-// real ADOPTED application: the status on its own would be incoherent, because
-// the staff query behind that screen reads the linked Outcome, and this is the
-// only function that builds that shape. The three fields travel together
-// because a fixture that pinned the applicant but still drew random household
-// answers and a random reason would only be half-deterministic.
+// real adopted application, which takes an adoption Outcome linked to it, and
+// this is the only function that builds that shape. The three fields travel
+// together because a fixture that pinned the applicant but still drew random
+// household answers and a random reason would only be half-deterministic.
 //
 // A named winner brings no other applicants along: the fixture wants exactly
 // one row on that animal, not a random pair.
-async function seedAdoptionCascade(opts: {
+async function seedAdoption(opts: {
   animalId: string;
   intakeDate: Date;
   outcomeDate: Date;
@@ -2167,6 +2116,14 @@ async function seedAdoptionCascade(opts: {
       animalId: opts.animalId,
       type: OutcomeType.ADOPTION,
       outcomeDate: shelterDayKey(opts.outcomeDate, seedTimezone),
+      // When it was recorded, not only the day the animal left: application
+      // status is derived from whether an outcome was recorded after the
+      // application was submitted, and the default `now()` would put every
+      // seeded outcome after every seeded application.
+      createdAt: opts.outcomeDate,
+      // What `_createOutcome` stores for a reversal to restore. Every caller
+      // leaves the animal listed until its adoption is recorded.
+      previousListingStatus: AnimalListingStatus.PUBLISHED,
       staffMemberId: approvingStaff.id,
       adoptionApplicationId: winnerAppId,
     },
@@ -2185,35 +2142,14 @@ async function seedAdoptionCascade(opts: {
     },
   });
 
-  await prisma.adoptionApplication.update({
-    where: { id: winnerAppId },
-    data: { status: ApplicationStatus.ADOPTED },
-  });
-  await prisma.applicationStatusHistory.create({
-    data: {
-      applicationId: winnerAppId,
-      status: ApplicationStatus.ADOPTED,
-      statusChangeReason: "Animal adopted by applicant.",
-      changedById: approvingStaff.id,
-      changedAt: opts.outcomeDate,
-    },
-  });
-
-  await closeOtherOpenApplications({
-    animalId: opts.animalId,
-    excludeApplicationId: winnerAppId,
-    staffMemberId: approvingStaff.id,
-    outcomeType: OutcomeType.ADOPTION,
-    at: opts.outcomeDate,
-  });
 }
 
 // Full lifecycle for a return-and-re-adopt animal: an initial adoption
-// cascade (stay 1), then a re-intake mirroring `_createReIntake` (animal
-// comes back out of ARCHIVED), then stay 2 which either stays open (back in
-// care today) or closes with a second adoption cascade. Because the animal
-// moves ARCHIVED → active → (maybe) ARCHIVED again, this seeds an ordered
-// sequence of writes rather than a single final state.
+// (stay 1), then a re-intake mirroring `_createReIntake` (animal comes back
+// out of ARCHIVED), then stay 2 which either stays open (back in care today)
+// or closes with a second adoption. Because the animal moves ARCHIVED →
+// active → (maybe) ARCHIVED again, this seeds an ordered sequence of writes
+// rather than a single final state.
 async function seedReturnAndReadoptAnimal(opts: {
   blueprint: AnimalBlueprint;
   species: { id: string; name: string };
@@ -2355,7 +2291,7 @@ async function seedReturnAndReadoptAnimal(opts: {
     },
   });
 
-  await seedAdoptionCascade({
+  await seedAdoption({
     animalId: animal.id,
     intakeDate: stay1.intakeDate,
     outcomeDate: stay1.outcomeDate as Date,
@@ -2417,7 +2353,7 @@ async function seedReturnAndReadoptAnimal(opts: {
   });
 
   if (!stage2EndsOpen) {
-    await seedAdoptionCascade({
+    await seedAdoption({
       animalId: animal.id,
       intakeDate: stay2.intakeDate,
       outcomeDate: stay2.outcomeDate as Date,
@@ -2897,13 +2833,13 @@ async function seedAnimalsAndRelations() {
       }
 
       // If this archetype ends in an outcome, create it. ADOPTED runs the
-      // full application → approval → outcome → reject-others cascade
-      // (mirroring `_createOutcome` exactly); the others mirror its simpler
+      // full applications → approval → outcome sequence (mirroring
+      // `_createOutcome` exactly); the others mirror its simpler
       // relation rules (RETURN_TO_OWNER needs an ownerId, TRANSFER_OUT needs
       // a destinationPartnerId).
       if (!isInCare && outcomeType) {
         if (blueprint.archetype === "ADOPTED") {
-          await seedAdoptionCascade({
+          await seedAdoption({
             animalId: animal.id,
             intakeDate: stay.intakeDate,
             outcomeDate: stay.outcomeDate as Date,
@@ -2929,6 +2865,10 @@ async function seedAnimalsAndRelations() {
               animalId: animal.id,
               type: outcomeType,
               outcomeDate: shelterDayKey(stay.outcomeDate as Date, seedTimezone),
+              // Recorded when it happened, as `seedAdoption` explains.
+              createdAt: stay.outcomeDate as Date,
+              // The interim listing the animal was created with above.
+              previousListingStatus: AnimalListingStatus.PUBLISHED,
               staffMemberId: outcomeStaff.id,
               ownerId,
               destinationPartnerId,
@@ -3515,6 +3455,10 @@ async function seedFostering() {
         animalId: animal.id,
         type: OutcomeType.ADOPTION,
         outcomeDate: shelterDayKey(adoptedAt, seedTimezone),
+        // Recorded when it happened, as `seedAdoption` explains.
+        createdAt: adoptedAt,
+        // The placement set it pending adoption above.
+        previousListingStatus: AnimalListingStatus.PENDING_ADOPTION,
         staffMemberId: approver.id,
         adoptionApplicationId: applicationId,
       },
@@ -3528,20 +3472,6 @@ async function seedFostering() {
         changeSummary: "Animal was processed for outcome: adoption.",
       },
     });
-    await prisma.adoptionApplication.update({
-      where: { id: applicationId },
-      data: { status: ApplicationStatus.ADOPTED },
-    });
-    await prisma.applicationStatusHistory.create({
-      data: {
-        applicationId,
-        status: ApplicationStatus.ADOPTED,
-        statusChangeReason: "Animal adopted by their foster.",
-        changedById: approver.id,
-        changedAt: adoptedAt,
-      },
-    });
-
     await prisma.fosterPlacement.update({
       where: { id: placement.id },
       data: {
@@ -3811,7 +3741,7 @@ const SECOND_FIXTURE_HOUSEHOLD: HouseholdProfileData = {
 //   REJECTED   / PUBLISHED         a staff judgment, with a written reason
 //   WITHDRAWN  / PUBLISHED         reactivate is available
 //   WITHDRAWN  / ARCHIVED          reactivate is refused: the animal is gone
-//   CLOSED     / ARCHIVED          the cascade closed it, nobody judged her
+//   CLOSED     / ARCHIVED          an outcome closed it, nobody judged her
 //   ADOPTED    / ARCHIVED          terminal, with the Outcome behind it
 //   CLOSED     / PUBLISHED         the animal came back — she can apply again
 //   WITHDRAWN  / PUBLISHED         }  one animal, both entered by staff before
@@ -3904,8 +3834,8 @@ async function seedRegisteredUserApplicationFixtures() {
       // choices are not the same kind of thing: the exclusion is the guarantee
       // (other specs address `animalSeedData` animals by name — Frisco in
       // animals/edit-and-outcome, Juniper in fosters/foster-placements — and
-      // processing an outcome on one cascades every open application on it to
-      // CLOSED, which silently deletes a fixture from this set). Descending is
+      // processing an outcome on one closes every open application on it,
+      // which silently deletes a fixture from this set). Descending is
       // only separation: every other spec picks the *first* row or option of
       // some name-ordered list, so claiming from the far end keeps the two
       // sets apart by default rather than by luck.
@@ -3919,6 +3849,7 @@ async function seedRegisteredUserApplicationFixtures() {
           take: 1,
         },
         Outcome: {
+          where: { reversedAt: null },
           select: { outcomeDate: true },
           orderBy: [{ outcomeDate: "desc" }, { createdAt: "desc" }],
           take: 1,
@@ -3970,14 +3901,14 @@ async function seedRegisteredUserApplicationFixtures() {
     return new Date(stay.intakeDate.getTime() + span * fraction);
   };
 
-  // 9 — ADOPTED. First, because it is the one fixture that runs a real
-  // cascade: that writes the Outcome the staff review screen reads, and it has
+  // 9 — ADOPTED. First, because it is the one fixture that records a real
+  // adoption: the Outcome linked to it is what makes it adopted, and it has
   // to archive the animal afterwards the way `seedReturnAndReadoptAnimal` does
   // (state must never precede its events).
   const adoptedAnimal = await claimAnimal("ADOPTED", publishedWhere);
-  await seedAdoptionCascade({
+  await seedAdoption({
     animalId: adoptedAnimal.id,
-    // The cascade reads `intakeDate` only as the floor its application dates
+    // `seedAdoption` reads `intakeDate` only as the floor its application dates
     // walk forward from, so this passes the same 30-day window the open-stay
     // fixtures use rather than the animal's real intake — which, on an animal
     // admitted months ago, would leave the application approved in spring and
@@ -4165,10 +4096,10 @@ async function seedRegisteredUserApplicationFixtures() {
     ],
   });
 
-  // 8 — CLOSED. What the outcome cascade leaves behind: she was mid-review
-  // when somebody else adopted the animal. Nobody assessed her, and the reason
-  // comes from the same map `_createOutcome` writes from, so this row says
-  // exactly what a real closure would.
+  // 8 — CLOSED. She was mid-review when somebody else adopted the animal, so
+  // the adoption already recorded for it closes her application: it stays
+  // REVIEWING, and reads as closed because that outcome was recorded after
+  // she applied. Nobody assessed her.
   const closedAnimal = await claimAnimal("CLOSED", {
     listingStatus: AnimalListingStatus.ARCHIVED,
     archiveReason: OutcomeType.ADOPTION,
@@ -4185,12 +4116,6 @@ async function seedRegisteredUserApplicationFixtures() {
         reason: "Application moved to review.",
         changedById: reviewer.id,
         at: withinStay(closedAnimal, 0.5),
-      },
-      {
-        status: ApplicationStatus.CLOSED,
-        reason: CLOSURE_REASON_BY_OUTCOME[OutcomeType.ADOPTION],
-        changedById: reviewer.id,
-        at: closedAnimal.outcomeDate as Date,
       },
     ],
   });
@@ -4230,12 +4155,6 @@ async function seedRegisteredUserApplicationFixtures() {
         reason: "Application moved to review.",
         changedById: reviewer.id,
         at: withinStay(returnedAnimal, 0.5),
-      },
-      {
-        status: ApplicationStatus.CLOSED,
-        reason: CLOSURE_REASON_BY_OUTCOME[OutcomeType.ADOPTION],
-        changedById: reviewer.id,
-        at: returnedAnimal.outcomeDate as Date,
       },
     ],
   });
@@ -4392,14 +4311,7 @@ async function seedRegisteredUserApplicationFixtures() {
     reasonForAdoption: "We saw him at the adoption fair and could not stop thinking about him.",
     householdProfileData: FIXTURE_HOUSEHOLD,
     submittedByStaffId: reviewer.id,
-    transitions: [
-      {
-        status: ApplicationStatus.CLOSED,
-        reason: CLOSURE_REASON_BY_OUTCOME[OutcomeType.ADOPTION],
-        changedById: reviewer.id,
-        at: returnedAnimal.outcomeDate as Date,
-      },
-    ],
+    transitions: [],
   });
 
   // The second registered applicant. Not another edge case — the opposite:
@@ -5172,6 +5084,7 @@ async function assertAnimalLifecycleConsistency() {
       archiveReason: true,
       intake: { select: { intakeDate: true } },
       Outcome: {
+        where: { reversedAt: null },
         select: {
           outcomeDate: true,
           type: true,
