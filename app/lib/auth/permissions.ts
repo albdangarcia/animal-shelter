@@ -7,8 +7,11 @@ export const AppPermissions = {
   REPORTS_READ: "reports:read",
 
   // Intake Management
-  // INTAKE_READ: "intake:read",
-  INTAKE_MANAGE: "intake:create",
+  INTAKE_READ: "intake:read",
+  // Recording an intake and correcting a recorded one's details. Correcting
+  // fixes something typed wrong about an arrival that happened, so it needs no
+  // more authority than recording it did.
+  INTAKE_MANAGE: "intake:manage",
 
   // Outcome Management
   OUTCOMES_READ: "outcomes:read",

@@ -28,6 +28,7 @@ export type IconName =
   | "IconClipboardHeart"
   | "IconDog"
   | "IconClipboardCheck"
+  | "IconDoorEnter"
 
 export interface NavItem {
   title: string;
@@ -160,6 +161,12 @@ export const navMainItems: readonly NavItem[] = [
     url: "/dashboard/foster-applications",
     icon: "IconClipboardList",
     permission: AppPermissions.FOSTERS_READ,
+  },
+  {
+    title: "Intakes",
+    url: "/dashboard/intakes",
+    icon: "IconDoorEnter",
+    permission: AppPermissions.INTAKE_READ,
   },
   {
     title: "Outcomes",

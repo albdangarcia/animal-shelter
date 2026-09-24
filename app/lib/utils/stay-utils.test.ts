@@ -1,7 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { calendarDay } from "./shelter-day";
-import { computeStays, orderStayEvents, type StayEvent } from "./stay-utils";
+import {
+  computeStays,
+  findTimelineBreaks,
+  orderStayEvents,
+  type StayEvent,
+} from "./stay-utils";
 
 // Stays are counted in calendar days, so nothing here depends on a timezone —
 // not the shelter's, and not the one the tests happen to run in.
@@ -148,4 +153,59 @@ test("a day holding two events of one kind keeps only the outer pair", () => {
     result.stays.map((stay) => stay.days),
     [9, 8],
   );
+});
+
+test("a well-formed timeline has no breaks", () => {
+  assert.deepEqual(
+    findTimelineBreaks([
+      intake("2026-09-01"),
+      outcome(SEP_10),
+      intake(SEP_15),
+      outcome(SEP_20),
+      intake("2026-09-22"),
+    ]),
+    [],
+  );
+  assert.deepEqual(findTimelineBreaks([]), []);
+});
+
+test("an outcome before any intake is a leading break", () => {
+  const orphan = { ...outcome(SEP_10), ref: "o1" };
+  const breaks = findTimelineBreaks([intake(SEP_15), orphan]);
+  assert.deepEqual(breaks, [{ kind: "leading-outcome", event: orphan }]);
+});
+
+test("two intakes in a row are a break, naming both", () => {
+  const first = { ...intake(SEP_10), ref: "i1" };
+  const second = { ...intake(SEP_15), ref: "i2" };
+  const breaks = findTimelineBreaks([second, first, outcome(SEP_20)]);
+  assert.deepEqual(breaks, [{ kind: "repeated-kind", first, second }]);
+});
+
+test("two outcomes in a row are a break", () => {
+  const breaks = findTimelineBreaks([
+    intake("2026-09-01"),
+    outcome(SEP_10),
+    outcome(SEP_15),
+  ]);
+  assert.equal(breaks.length, 1);
+  assert.equal(breaks[0].kind, "repeated-kind");
+});
+
+test("a same-day zero-day stay is not a break", () => {
+  assert.deepEqual(findTimelineBreaks([outcome(SEP_10), intake(SEP_10)]), []);
+});
+
+test("a same-day leave-and-return is not a break", () => {
+  assert.deepEqual(
+    findTimelineBreaks([intake(SEP_10), intake(SEP_15), outcome(SEP_15)]),
+    [],
+  );
+});
+
+test("an intake moved past its stay's outcome adds a break", () => {
+  assert.equal(findTimelineBreaks([intake(SEP_10), outcome(SEP_15)]).length, 0);
+  const moved = findTimelineBreaks([intake(SEP_20), outcome(SEP_15)]);
+  assert.equal(moved.length, 1);
+  assert.equal(moved[0].kind, "leading-outcome");
 });
