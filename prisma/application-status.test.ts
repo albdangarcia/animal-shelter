@@ -5,7 +5,7 @@
 // status says something different from their outcomes.
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import prisma from "@/app/lib/prisma";
+import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import {
   AnimalListingStatus,
   ApplicationSource,
@@ -120,11 +120,16 @@ const makeApplication = (
 const makeOpenApplication = async (label: string) =>
   makeApplication(await makeAnimal(label));
 
+/** The backend a transaction runs on, so a wait can be pinned to it. */
+const backendPid = async (tx: TransactionClient) =>
+  (await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`)[0]
+    .pid;
+
 /**
  * Records an outcome the way both outcome-recording paths do, archiving the
  * animal first, and holds the transaction open between the two writes and
  * again before committing. `ownerId` makes the outcome reference a person, as
- * a return to owner does.
+ * a return to owner does. `pid` is the backend holding the animal's lock.
  */
 const recordOutcomeInSteps = (animalId: string, ownerId?: string) => {
   const gate = () => {
@@ -132,11 +137,14 @@ const recordOutcomeInSteps = (animalId: string, ownerId?: string) => {
     const opened = new Promise<void>((resolve) => (open = resolve));
     return { open, opened };
   };
+  let started!: (pid: number) => void;
+  const pid = new Promise<number>((resolve) => (started = resolve));
   const archived = gate();
   const insert = gate();
   const recorded = gate();
   const commit = gate();
   const committed = prisma.$transaction(async (tx) => {
+    started(await backendPid(tx));
     await tx.animal.updateMany({
       where: { id: animalId, listingStatus: { not: AnimalListingStatus.ARCHIVED } },
       data: { listingStatus: AnimalListingStatus.ARCHIVED },
@@ -156,6 +164,7 @@ const recordOutcomeInSteps = (animalId: string, ownerId?: string) => {
     await commit.opened;
   });
   return {
+    pid,
     isArchived: archived.opened,
     insertOutcome: insert.open,
     isRecorded: recorded.opened,
@@ -165,23 +174,24 @@ const recordOutcomeInSteps = (animalId: string, ownerId?: string) => {
 };
 
 /**
- * Resolves once some session is waiting on a row lock taken by a statement on
- * `table`, which is the only proof that a read got as far as the lock and is
- * blocked there, rather than merely not having started yet. Throws if none is
- * seen within the time limit.
+ * Resolves once some session is blocked by the transaction on backend
+ * `holderPid`, which is the only proof that a statement got as far as the
+ * lock and is blocked there, rather than merely not having started yet. Asking
+ * which sessions that backend blocks, rather than matching the lock query,
+ * keeps another test file's wait on some other row (the files run in
+ * parallel) from passing for this one. Throws if none is seen within the time
+ * limit.
  */
-const waitForLockWaitOn = async (table: "animals" | "persons") => {
+const waitForSessionBlockedBy = async (holderPid: number) => {
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
     const [{ waiting }] = await prisma.$queryRaw<{ waiting: number }[]>`
       SELECT count(*)::int AS waiting FROM pg_stat_activity
-      WHERE datname = current_database()
-        AND wait_event_type = 'Lock'
-        AND query ILIKE ${`%FROM ${table} WHERE id = $1 FOR%`}`;
+      WHERE ${holderPid}::int = ANY (pg_blocking_pids(pid))`;
     if (waiting > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error(`No session was seen waiting on a lock on ${table}.`);
+  throw new Error(`No session was seen waiting on backend ${holderPid}.`);
 };
 
 test("a read that takes no lock misses an outcome still being recorded", async () => {
@@ -212,7 +222,7 @@ test("a read behind the animal lock waits for the outcome and sees it", async ()
   const read = prisma.$transaction((tx) =>
     effectiveStatusBehindLock(tx, application),
   );
-  await waitForLockWaitOn("animals");
+  await waitForSessionBlockedBy(await outcome.pid);
 
   outcome.commit();
   await outcome.committed;
@@ -232,7 +242,7 @@ test("entering an application does not deadlock with an outcome it waits for", a
     await lockPerson(tx, applicantId);
     await lockAnimal(tx, animalId);
   });
-  await waitForLockWaitOn("animals");
+  await waitForSessionBlockedBy(await outcome.pid);
 
   outcome.insertOutcome();
   await outcome.isRecorded;

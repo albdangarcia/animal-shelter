@@ -8,7 +8,7 @@
 // check and the cache invalidation, so driving it is driving the action.
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
-import prisma from "@/app/lib/prisma";
+import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import {
   AnimalActivityType,
   AnimalListingStatus,
@@ -250,20 +250,25 @@ const readAnimal = (id: string) =>
     select: { listingStatus: true, archiveReason: true },
   });
 
-// As in application-status.test.ts: the only proof a statement reached the
-// lock and is blocked there, rather than not having started yet.
-const waitForLockWaitOnAnimal = async () => {
+/** The backend a transaction runs on, so a wait can be pinned to it. */
+const backendPid = async (tx: TransactionClient) =>
+  (await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`)[0]
+    .pid;
+
+// The only proof a statement reached the lock and is blocked there, rather
+// than not having started yet. Asking which sessions `holderPid` blocks,
+// rather than matching the lock query, keeps another test file's wait on some
+// other animal (the files run in parallel) from passing for this one.
+const waitForSessionBlockedBy = async (holderPid: number) => {
   const deadline = Date.now() + 5_000;
   while (Date.now() < deadline) {
     const [{ waiting }] = await prisma.$queryRaw<{ waiting: number }[]>`
       SELECT count(*)::int AS waiting FROM pg_stat_activity
-      WHERE datname = current_database()
-        AND wait_event_type = 'Lock'
-        AND query ILIKE '%FROM animals WHERE id = $1 FOR%'`;
+      WHERE ${holderPid}::int = ANY (pg_blocking_pids(pid))`;
     if (waiting > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error("No session was seen waiting on a lock on animals.");
+  throw new Error(`No session was seen waiting on backend ${holderPid}.`);
 };
 
 const reversalRows = (animalId: string) =>
@@ -389,17 +394,18 @@ test("a reversal waits for the animal lock", async () => {
 
   let release!: () => void;
   const released = new Promise<void>((resolve) => (release = resolve));
-  let locked!: () => void;
-  const isLocked = new Promise<void>((resolve) => (locked = resolve));
+  let locked!: (pid: number) => void;
+  const isLocked = new Promise<number>((resolve) => (locked = resolve));
   const holder = prisma.$transaction(async (tx) => {
     await lockAnimal(tx, animalId);
-    locked();
+    locked(await backendPid(tx));
     await released;
   });
-  await isLocked;
+  // `holder` settles first only when it threw before handing back its pid.
+  const holderPid = await Promise.race([isLocked, holder as Promise<never>]);
 
   const reversal = reverse(outcomeId);
-  await waitForLockWaitOnAnimal();
+  await waitForSessionBlockedBy(holderPid);
   assert.equal((await readOutcome(outcomeId)).reversedAt, null);
 
   release();
