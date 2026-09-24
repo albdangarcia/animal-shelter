@@ -89,13 +89,14 @@ const _createOutcome = async (
 
   try {
     await prisma.$transaction(async (tx) => {
-      // Held until commit, so the listing status read here is still the
-      // animal's when the update below archives it. It is stored on the
-      // outcome, and is what a reversal of the outcome restores.
+      // Held until commit, so the listing status and unit read here are
+      // still the animal's when the update below archives it and clears the
+      // unit. Both are stored on the outcome, and are what a reversal of the
+      // outcome restores.
       await lockAnimal(tx, animalId);
       const animal = await tx.animal.findUnique({
         where: { id: animalId },
-        select: { listingStatus: true },
+        select: { listingStatus: true, currentUnitId: true },
       });
 
       // Attempt to archive the animal first.
@@ -110,10 +111,9 @@ const _createOutcome = async (
           archiveReason: outcomeType,
           // An animal that has left the shelter is not in a kennel. Without
           // this, an adopted/transferred/deceased animal keeps occupying its
-          // unit indefinitely. OUTCOME_PROCESSED is already logged below and
-          // covers the relocation; a dedicated LOCATION_CHANGE would need an
-          // extra read just to name the vacated unit, so it is deliberately
-          // omitted here.
+          // unit indefinitely. The vacated unit is kept on the outcome below.
+          // OUTCOME_PROCESSED is already logged below and covers the
+          // relocation, so no LOCATION_CHANGE is written for it.
           currentUnitId: null,
         },
       });
@@ -194,6 +194,9 @@ const _createOutcome = async (
           }),
           ...(ownerId && {
             owner: { connect: { id: ownerId } },
+          }),
+          ...(animal.currentUnitId && {
+            previousUnit: { connect: { id: animal.currentUnitId } },
           }),
         },
       });
@@ -532,18 +535,13 @@ const _reverseOutcome = async (
   if (reversal.reopenedPlacementId) {
     revalidatePath("/dashboard/fosters");
   }
-
-  // The outcome took the animal out of its unit, and nothing kept which one,
-  // so an animal back in care is not in any kennel until staff place it. A
-  // reopened foster placement is where it is instead.
-  const unitHint =
-    reversal.restoredListingStatus && !reversal.reopenedPlacementId
-      ? " It has no unit now; place it from its record."
-      : "";
+  if (reversal.restoredUnitId) {
+    revalidatePath("/dashboard/locations");
+  }
 
   return {
     ok: true,
-    message: `Outcome reversed. ${reversal.effects}${unitHint}`,
+    message: `Outcome reversed. ${reversal.effects}`,
     redirectTo: OUTCOMES_PATH,
   };
 };

@@ -18,6 +18,7 @@ import {
   FosterReturnReason,
   IntakeType,
   LivingSituation,
+  LocationType,
   OutcomeType,
   Sex,
 } from "@/prisma/generated/enums";
@@ -55,6 +56,7 @@ let adminId: string;
 let applicantId: string;
 let fosterPersonId: string;
 let fosterProfileId: string;
+const locationIds: string[] = [];
 
 before(async () => {
   const person = async (name: string) =>
@@ -96,6 +98,8 @@ after(async () => {
   await prisma.adoptionApplication.deleteMany({ where: { applicantId } });
   // Takes the activity rows with it.
   await prisma.animal.deleteMany({ where: { speciesId } });
+  await prisma.unit.deleteMany({ where: { locationId: { in: locationIds } } });
+  await prisma.location.deleteMany({ where: { id: { in: locationIds } } });
   await prisma.person.deleteMany({
     where: { id: { in: [staffId, adminId, applicantId, fosterPersonId] } },
   });
@@ -104,7 +108,11 @@ after(async () => {
   await prisma.$disconnect();
 });
 
-const makeAnimal = async (label: string, listingStatus: AnimalListingStatus) =>
+const makeAnimal = async (
+  label: string,
+  listingStatus: AnimalListingStatus,
+  currentUnitId?: string,
+) =>
   (
     await prisma.animal.create({
       data: {
@@ -114,10 +122,32 @@ const makeAnimal = async (label: string, listingStatus: AnimalListingStatus) =>
         speciesId,
         primaryColorId: colorId,
         listingStatus,
+        currentUnitId,
       },
       select: { id: true },
     })
   ).id;
+
+/** A unit in a location of its own, with the label the app gives it. */
+const makeUnit = async (capacity = 2) => {
+  const location = await prisma.location.create({
+    data: {
+      name: `Reversal kennels ${runId} ${locationIds.length + 1}`,
+      type: LocationType.KENNEL,
+    },
+    select: { id: true, name: true },
+  });
+  locationIds.push(location.id);
+  const unit = await prisma.unit.create({
+    data: { name: "A3", capacity, locationId: location.id },
+    select: { id: true },
+  });
+  return {
+    id: unit.id,
+    locationId: location.id,
+    label: `${location.name} · A3`,
+  };
+};
 
 const makeApplication = async (
   animalId: string,
@@ -148,18 +178,21 @@ const makeApplication = async (
 
 /**
  * Leaves the rows an outcome-recording path leaves: the outcome, carrying the
- * listing status the animal had, and the animal archived for it.
+ * listing status and unit the animal had, and the animal archived for it and
+ * out of its unit.
  */
 const recordOutcome = async (
   animalId: string,
   {
     type = OutcomeType.TRANSFER_OUT,
     previousListingStatus,
+    previousUnitId,
     adoptionApplicationId,
     createdAt = hoursAgo(1),
   }: {
     type?: OutcomeType;
     previousListingStatus: AnimalListingStatus | null;
+    previousUnitId?: string;
     adoptionApplicationId?: string;
     createdAt?: Date;
   },
@@ -171,6 +204,7 @@ const recordOutcome = async (
       outcomeDate: "2026-09-01",
       staffMemberId: staffId,
       previousListingStatus,
+      previousUnitId,
       adoptionApplicationId,
       createdAt,
     },
@@ -178,7 +212,11 @@ const recordOutcome = async (
   });
   await prisma.animal.update({
     where: { id: animalId },
-    data: { listingStatus: AnimalListingStatus.ARCHIVED, archiveReason: type },
+    data: {
+      listingStatus: AnimalListingStatus.ARCHIVED,
+      archiveReason: type,
+      currentUnitId: null,
+    },
   });
   return outcome.id;
 };
@@ -231,8 +269,22 @@ const waitForLockWaitOnAnimal = async () => {
 const reversalRows = (animalId: string) =>
   prisma.animalActivityLog.findMany({
     where: { animalId, activityType: AnimalActivityType.OUTCOME_REVERSED },
-    select: { changedById: true, changeSummary: true },
+    select: { changedById: true, changeSummary: true, changedAt: true },
   });
+
+const locationRows = (animalId: string) =>
+  prisma.animalActivityLog.findMany({
+    where: { animalId, activityType: AnimalActivityType.LOCATION_CHANGE },
+    select: { changedById: true, changeSummary: true, changedAt: true },
+  });
+
+const unitOf = async (animalId: string) =>
+  (
+    await prisma.animal.findUniqueOrThrow({
+      where: { id: animalId },
+      select: { currentUnitId: true },
+    })
+  ).currentUnitId;
 
 test("a reversal voids the outcome, restores the listing and records why", async () => {
   const animalId = await makeAnimal("Restored", AnimalListingStatus.PENDING_ADOPTION);
@@ -417,6 +469,225 @@ test("an outcome with no recorded listing brings the animal back as a draft", as
   });
 });
 
+test("a reversal puts the animal back in the unit the outcome took it out of", async () => {
+  // Exactly full once the animal is back, which is not over capacity.
+  const unit = await makeUnit(1);
+  const animalId = await makeAnimal("Rehoused", AnimalListingStatus.PUBLISHED, unit.id);
+  const outcomeId = await recordOutcome(animalId, {
+    previousListingStatus: AnimalListingStatus.PUBLISHED,
+    previousUnitId: unit.id,
+  });
+  assert.equal(await unitOf(animalId), null);
+
+  const result = await reverse(outcomeId);
+
+  assert.equal(result.restoredUnitId, unit.id);
+  assert.equal(await unitOf(animalId), unit.id);
+  assert.match(result.effects, new RegExp(`It was put back in ${unit.label}\\.`));
+  assert.doesNotMatch(result.effects, /over capacity/);
+
+  const [reversal] = await reversalRows(animalId);
+  assert.ok(reversal.changeSummary!.includes(`It was put back in ${unit.label}.`));
+  const moves = await locationRows(animalId);
+  assert.equal(moves.length, 1);
+  assert.equal(moves[0].changedById, adminId);
+  assert.equal(moves[0].changeSummary, `Moved to ${unit.label}.`);
+  // Strictly later, so the feed, newest first, shows the move above it.
+  assert.ok(moves[0].changedAt > reversal.changedAt);
+});
+
+test("an animal is not put back in a unit that has been deleted", async () => {
+  const unit = await makeUnit();
+  const animalId = await makeAnimal("Unit gone", AnimalListingStatus.PUBLISHED, unit.id);
+  const outcomeId = await recordOutcome(animalId, {
+    previousListingStatus: AnimalListingStatus.PUBLISHED,
+    previousUnitId: unit.id,
+  });
+  await prisma.unit.update({
+    where: { id: unit.id },
+    data: { deletedAt: new Date() },
+  });
+
+  const result = await reverse(outcomeId);
+
+  const sentence = `It has no unit now, since ${unit.label} has been deleted; place it from its record.`;
+  assert.equal(result.restoredUnitId, null);
+  assert.equal(await unitOf(animalId), null);
+  // The listing still comes back.
+  assert.equal(result.restoredListingStatus, AnimalListingStatus.PUBLISHED);
+  const [row] = await reversalRows(animalId);
+  assert.ok(row.changeSummary!.includes(sentence));
+  assert.equal((await locationRows(animalId)).length, 0);
+});
+
+test("an animal is not put back in a unit whose location has been deleted", async () => {
+  const unit = await makeUnit();
+  const animalId = await makeAnimal("Location gone", AnimalListingStatus.PUBLISHED, unit.id);
+  const outcomeId = await recordOutcome(animalId, {
+    previousListingStatus: AnimalListingStatus.PUBLISHED,
+    previousUnitId: unit.id,
+  });
+  await prisma.location.update({
+    where: { id: unit.locationId },
+    data: { deletedAt: new Date() },
+  });
+
+  const result = await reverse(outcomeId);
+
+  assert.equal(result.restoredUnitId, null);
+  assert.equal(await unitOf(animalId), null);
+  const [row] = await reversalRows(animalId);
+  assert.ok(
+    row.changeSummary!.includes(
+      `It has no unit now, since ${unit.label} has been deleted; place it from its record.`,
+    ),
+  );
+  assert.equal((await locationRows(animalId)).length, 0);
+});
+
+test("an outcome with no stored unit leaves the animal unhoused, and the log says so", async () => {
+  const animalId = await makeAnimal("Never housed", AnimalListingStatus.PUBLISHED);
+  const outcomeId = await recordOutcome(animalId, {
+    previousListingStatus: AnimalListingStatus.PUBLISHED,
+  });
+
+  const result = await reverse(outcomeId);
+
+  assert.equal(result.restoredUnitId, null);
+  assert.equal(await unitOf(animalId), null);
+  const [row] = await reversalRows(animalId);
+  assert.ok(
+    row.changeSummary!.includes("It has no unit now; place it from its record."),
+  );
+  assert.equal((await locationRows(animalId)).length, 0);
+});
+
+test("the unit is left alone when the animal is no longer archived", async () => {
+  const unit = await makeUnit();
+  const elsewhere = await makeUnit();
+
+  // Placed somewhere else after the re-intake, and still unhoused.
+  for (const placedSince of [elsewhere.id, null]) {
+    const animalId = await makeAnimal("Back since", AnimalListingStatus.PUBLISHED, unit.id);
+    const outcomeId = await recordOutcome(animalId, {
+      previousListingStatus: AnimalListingStatus.PUBLISHED,
+      previousUnitId: unit.id,
+    });
+    await reIntake(animalId);
+    await prisma.animal.update({
+      where: { id: animalId },
+      data: { currentUnitId: placedSince },
+    });
+
+    const result = await reverse(outcomeId);
+
+    assert.equal(result.restoredUnitId, null);
+    assert.equal(await unitOf(animalId), placedSince);
+    const [row] = await reversalRows(animalId);
+    assert.doesNotMatch(row.changeSummary!, /\bunit\b/);
+    assert.equal((await locationRows(animalId)).length, 0);
+  }
+});
+
+test("the unit is left alone when a later outcome archived the animal", async () => {
+  const first = await makeUnit();
+  const second = await makeUnit();
+  const animalId = await makeAnimal("Out twice", AnimalListingStatus.PUBLISHED, first.id);
+  const earlier = await recordOutcome(animalId, {
+    previousListingStatus: AnimalListingStatus.PUBLISHED,
+    previousUnitId: first.id,
+    createdAt: hoursAgo(3),
+  });
+  await reIntake(animalId);
+  await prisma.animal.update({
+    where: { id: animalId },
+    data: { currentUnitId: second.id },
+  });
+  await recordOutcome(animalId, {
+    type: OutcomeType.RETURN_TO_OWNER,
+    previousListingStatus: AnimalListingStatus.DRAFT,
+    previousUnitId: second.id,
+    createdAt: hoursAgo(1),
+  });
+
+  const result = await reverse(earlier);
+
+  assert.equal(result.restoredUnitId, null);
+  assert.equal(await unitOf(animalId), null);
+  assert.equal((await locationRows(animalId)).length, 0);
+});
+
+test("an animal given a unit while archived keeps it", async () => {
+  const unit = await makeUnit();
+  const since = await makeUnit();
+  const animalId = await makeAnimal("Placed while out", AnimalListingStatus.PUBLISHED, unit.id);
+  const outcomeId = await recordOutcome(animalId, {
+    previousListingStatus: AnimalListingStatus.PUBLISHED,
+    previousUnitId: unit.id,
+  });
+  await prisma.animal.update({
+    where: { id: animalId },
+    data: { currentUnitId: since.id },
+  });
+
+  const result = await reverse(outcomeId);
+
+  assert.equal(result.restoredUnitId, null);
+  assert.equal(await unitOf(animalId), since.id);
+  // The listing still comes back; only the unit is left alone.
+  assert.equal(result.restoredListingStatus, AnimalListingStatus.PUBLISHED);
+  const [row] = await reversalRows(animalId);
+  assert.doesNotMatch(row.changeSummary!, /\bunit\b/);
+  assert.equal((await locationRows(animalId)).length, 0);
+});
+
+test("a full unit takes the animal back, and says it is over capacity", async () => {
+  const unit = await makeUnit(1);
+  const animalId = await makeAnimal("Crowded", AnimalListingStatus.PUBLISHED, unit.id);
+  const outcomeId = await recordOutcome(animalId, {
+    previousListingStatus: AnimalListingStatus.PUBLISHED,
+    previousUnitId: unit.id,
+  });
+  // The kennel was filled while the outcome stood. An archived animal
+  // placed there does not count.
+  await makeAnimal("Newcomer", AnimalListingStatus.PUBLISHED, unit.id);
+  await makeAnimal("Archived lodger", AnimalListingStatus.ARCHIVED, unit.id);
+
+  const result = await reverse(outcomeId);
+
+  assert.equal(result.restoredUnitId, unit.id);
+  assert.equal(await unitOf(animalId), unit.id);
+  const [row] = await reversalRows(animalId);
+  assert.ok(
+    row.changeSummary!.includes(
+      `It was put back in ${unit.label}. ${unit.label} is now over capacity (2/1).`,
+    ),
+  );
+  assert.equal((await locationRows(animalId)).length, 1);
+});
+
+test("a hard-deleted unit leaves nothing stored, and the animal unhoused", async () => {
+  const unit = await makeUnit();
+  const animalId = await makeAnimal("Unit erased", AnimalListingStatus.PUBLISHED, unit.id);
+  const outcomeId = await recordOutcome(animalId, {
+    previousListingStatus: AnimalListingStatus.PUBLISHED,
+    previousUnitId: unit.id,
+  });
+  await prisma.unit.delete({ where: { id: unit.id } });
+
+  const { previousUnitId } = await prisma.outcome.findUniqueOrThrow({
+    where: { id: outcomeId },
+    select: { previousUnitId: true },
+  });
+  assert.equal(previousUnitId, null);
+
+  const result = await reverse(outcomeId);
+
+  assert.equal(result.restoredUnitId, null);
+  assert.equal(await unitOf(animalId), null);
+  assert.match(result.effects, /It has no unit now; place it from its record\./);
+});
+
 /**
  * The rows a foster-to-adopt conversion leaves: an adoption outcome, the
  * placement it closed pointing at it, and the animal archived.
@@ -481,6 +752,13 @@ test("reversing a conversion reopens the placement it closed", async () => {
   );
   const [row] = await reversalRows(animalId);
   assert.match(row.changeSummary!, /foster placement with Reversal foster .* was reopened/);
+
+  // The animal is with the foster again, not in a unit, so nothing is said
+  // about one.
+  assert.equal(result.restoredUnitId, null);
+  assert.equal(await unitOf(animalId), null);
+  assert.doesNotMatch(row.changeSummary!, /\bunit\b/);
+  assert.equal((await locationRows(animalId)).length, 0);
 });
 
 test("a conversion's placement stays closed when the listing is left alone", async () => {

@@ -8,7 +8,7 @@ interface UnitLabel {
   location: { name: string };
 }
 
-const formatUnitLabel = (unit: UnitLabel): string =>
+export const formatUnitLabel = (unit: UnitLabel): string =>
   `${unit.location.name} · ${unit.name}`;
 
 /**
