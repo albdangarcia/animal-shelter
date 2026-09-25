@@ -42,6 +42,7 @@ import {
   NotFoundError,
   PreconditionFailedError,
 } from "@/app/lib/utils/errors";
+import { assertNoListingMismatch } from "./listing-consistency";
 
 const runId = Date.now().toString(36);
 const HOUR = 60 * 60 * 1000;
@@ -123,6 +124,15 @@ const makeAnimal = async (
         primaryColorId: colorId,
         listingStatus,
         currentUnitId,
+        // Every animal arrived before any outcome here is dated, so its
+        // timeline is one a listing can agree or disagree with.
+        intake: {
+          create: {
+            type: IntakeType.STRAY,
+            intakeDate: "2026-08-01",
+            staffMemberId: staffId,
+          },
+        },
       },
       select: { id: true },
     })
@@ -189,19 +199,21 @@ const recordOutcome = async (
     previousUnitId,
     adoptionApplicationId,
     createdAt = hoursAgo(1),
+    outcomeDate = "2026-09-01",
   }: {
     type?: OutcomeType;
     previousListingStatus: AnimalListingStatus | null;
     previousUnitId?: string;
     adoptionApplicationId?: string;
     createdAt?: Date;
+    outcomeDate?: string;
   },
 ) => {
   const outcome = await prisma.outcome.create({
     data: {
       animalId,
       type,
-      outcomeDate: "2026-09-01",
+      outcomeDate,
       staffMemberId: staffId,
       previousListingStatus,
       previousUnitId,
@@ -221,12 +233,21 @@ const recordOutcome = async (
   return outcome.id;
 };
 
-// The state a re-intake leaves the animal in; nothing here reads intakes.
-const reIntake = (animalId: string) =>
-  prisma.animal.update({
+// The state a re-intake leaves the animal in: the intake, and the listing.
+const reIntake = async (animalId: string, intakeDate = "2026-09-10") => {
+  await prisma.intake.create({
+    data: {
+      animalId,
+      type: IntakeType.SEIZE,
+      intakeDate,
+      staffMemberId: staffId,
+    },
+  });
+  await prisma.animal.update({
     where: { id: animalId },
     data: { listingStatus: AnimalListingStatus.DRAFT, archiveReason: null },
   });
+};
 
 const reverse = (
   outcomeId: string,
@@ -330,6 +351,7 @@ test("a reversal voids the outcome, restores the listing and records why", async
   assert.match(rows[0].changeSummary!, /^Outcome was reversed: adoption\./);
   assert.match(rows[0].changeSummary!, /restored to pending adoption/);
   assert.ok(rows[0].changeSummary!.endsWith(`Reason: ${REASON}`));
+  await assertNoListingMismatch(animalId);
 });
 
 test("a reversal needs a reason", async () => {
@@ -367,6 +389,7 @@ test("a second reversal is refused, and the first stands", async () => {
 
   assert.deepEqual(await readOutcome(outcomeId), first);
   assert.equal((await reversalRows(animalId)).length, 1);
+  await assertNoListingMismatch(animalId);
 });
 
 test("two reversals of one outcome at once: one lands, the other is refused", async () => {
@@ -386,6 +409,7 @@ test("two reversals of one outcome at once: one lands, the other is refused", as
   assert.equal(refused.length, 1);
   assert.ok(refused[0].reason instanceof ConflictError);
   assert.equal((await reversalRows(animalId)).length, 1);
+  await assertNoListingMismatch(animalId);
 });
 
 // Every write that depends on an application's effective status takes the
@@ -426,6 +450,7 @@ test("a reversal waits for the animal lock", async () => {
   await holder;
   await reversal;
   assert.ok((await readOutcome(outcomeId)).reversedAt);
+  await assertNoListingMismatch(animalId);
 });
 
 test("the listing is left alone when the animal is no longer archived", async () => {
@@ -447,6 +472,7 @@ test("the listing is left alone when the animal is no longer archived", async ()
   });
   const [row] = await reversalRows(animalId);
   assert.match(row.changeSummary!, /left as it is/);
+  await assertNoListingMismatch(animalId);
 });
 
 test("the listing is left alone when a later outcome archived the animal", async () => {
@@ -460,6 +486,7 @@ test("the listing is left alone when a later outcome archived the animal", async
     type: OutcomeType.RETURN_TO_OWNER,
     previousListingStatus: AnimalListingStatus.DRAFT,
     createdAt: hoursAgo(1),
+    outcomeDate: "2026-09-20",
   });
 
   // Archived, but by the later outcome: restoring the earlier one's snapshot
@@ -471,6 +498,7 @@ test("the listing is left alone when a later outcome archived the animal", async
     listingStatus: AnimalListingStatus.ARCHIVED,
     archiveReason: OutcomeType.RETURN_TO_OWNER,
   });
+  await assertNoListingMismatch(animalId);
 });
 
 test("an outcome with no recorded listing brings the animal back as a draft", async () => {
@@ -487,6 +515,7 @@ test("an outcome with no recorded listing brings the animal back as a draft", as
     listingStatus: AnimalListingStatus.DRAFT,
     archiveReason: null,
   });
+  await assertNoListingMismatch(animalId);
 });
 
 test("a reversal puts the animal back in the unit the outcome took it out of", async () => {
@@ -628,6 +657,7 @@ test("the unit is left alone when a later outcome archived the animal", async ()
     previousListingStatus: AnimalListingStatus.DRAFT,
     previousUnitId: second.id,
     createdAt: hoursAgo(1),
+    outcomeDate: "2026-09-20",
   });
 
   const result = await reverse(earlier);
@@ -635,6 +665,7 @@ test("the unit is left alone when a later outcome archived the animal", async ()
   assert.equal(result.restoredUnitId, null);
   assert.equal(await unitOf(animalId), null);
   assert.equal((await locationRows(animalId)).length, 0);
+  await assertNoListingMismatch(animalId);
 });
 
 test("an animal given a unit while archived keeps it", async () => {
@@ -779,6 +810,7 @@ test("reversing a conversion reopens the placement it closed", async () => {
   assert.equal(await unitOf(animalId), null);
   assert.doesNotMatch(row.changeSummary!, /\bunit\b/);
   assert.equal((await locationRows(animalId)).length, 0);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a conversion's placement stays closed when the listing is left alone", async () => {
@@ -791,6 +823,7 @@ test("a conversion's placement stays closed when the listing is left alone", asy
 
   assert.equal(result.reopenedPlacementId, null);
   assert.deepEqual(await readPlacement(placementId), before);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a reversed adoption's application can take a new adoption outcome", async () => {
@@ -980,14 +1013,6 @@ test("a reversed adoption adopts and closes nothing, and no status is rewritten"
 
 test("a reversed outcome ends no stay", async () => {
   const animalId = await makeAnimal("Stay reopened", AnimalListingStatus.PUBLISHED);
-  await prisma.intake.create({
-    data: {
-      animalId,
-      type: IntakeType.STRAY,
-      intakeDate: "2026-08-01",
-      staffMemberId: staffId,
-    },
-  });
   const outcomeId = await recordOutcome(animalId, {
     previousListingStatus: AnimalListingStatus.PUBLISHED,
   });
@@ -1005,6 +1030,7 @@ test("a reversed outcome ends no stay", async () => {
   await reverse(outcomeId);
 
   const reversed = await stays();
+  await assertNoListingMismatch(animalId);
   assert.equal(reversed.isInCare, true);
   assert.equal(reversed.stays.length, 1);
   assert.equal(reversed.stays[0].outcomeDate, null);

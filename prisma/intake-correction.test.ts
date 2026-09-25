@@ -29,6 +29,7 @@ import { IntakeCorrectionFormSchema } from "@/app/lib/zod-schemas/intake.schema"
 import { calendarDay, shiftDayKey, shelterToday } from "@/app/lib/utils/shelter-day";
 import { fallbackShelterSettings } from "@/app/lib/utils/shelter-settings";
 import { NotFoundError } from "@/app/lib/utils/errors";
+import { assertNoListingMismatch } from "./listing-consistency";
 
 const runId = Date.now().toString(36);
 
@@ -411,6 +412,7 @@ test("a date moved past the stay's outcome is refused, and nothing is written", 
   assert.equal(intake.intakeDate, "2026-01-03");
   assert.equal(intake.notes, null);
   assert.equal((await correctionRows(animalId)).length, 0);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a date within the stay is corrected and logged", async () => {
@@ -430,10 +432,13 @@ test("a date within the stay is corrected and logged", async () => {
     (await correctionRows(animalId))[0].changeSummary,
     "Intake was corrected: the date changed from Jan 5, 2026 to Jan 1, 2026.",
   );
+  await assertNoListingMismatch(animalId);
 });
 
 test("a future date is refused on the server", async () => {
-  const { intakeIds } = await makeAnimal("Future", [{ intake: "2026-01-03" }]);
+  const { animalId, intakeIds } = await makeAnimal("Future", [
+    { intake: "2026-01-03" },
+  ]);
   // Two days out, so it is in the future whatever timezone the shelter keeps.
   const future = shiftDayKey(
     shelterToday(fallbackShelterSettings().timezone),
@@ -450,12 +455,13 @@ test("a future date is refused on the server", async () => {
     result.status === "refused" && result.message,
     "The intake date can't be in the future.",
   );
+  await assertNoListingMismatch(animalId);
 });
 
 test("an existing duplicate intake does not block a harmless move", async () => {
   // Adopted, returned, adopted again, returned, and the first adoption then
   // reversed: the animal never left, so the second intake duplicates the first.
-  const { intakeIds } = await makeAnimal("Duplicated", [
+  const { animalId, intakeIds } = await makeAnimal("Duplicated", [
     { intake: "2026-01-01" },
     { outcome: "2026-02-01", reversed: true },
     { intake: "2026-03-01" },
@@ -476,6 +482,7 @@ test("an existing duplicate intake does not block a harmless move", async () => 
     await submission(intakeIds[0], { intakeDate: "2026-02-15" }),
   );
   assert.equal(crossing.status, "corrected");
+  await assertNoListingMismatch(animalId);
 });
 
 test("the gate takes each kind of change", async () => {

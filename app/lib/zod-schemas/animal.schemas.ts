@@ -207,6 +207,7 @@ export const AnimalEditFormSchema = z
   .superRefine(animalColorSuperRefine);
 
 export type CreateAnimalFormInput = z.input<typeof CreateAnimalFormSchema>;
+export type CreateAnimalFormOutput = z.output<typeof CreateAnimalFormSchema>;
 export type AnimalEditFormInput = z.input<typeof AnimalEditFormSchema>;
 
 export const TaskFormSchema = z.object({

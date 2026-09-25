@@ -119,6 +119,77 @@ export function findTimelineBreaks<E extends StayEvent & { ref?: unknown }>(
 }
 
 /**
+ * `listingStatus` disagreeing with the timeline about whether the animal is
+ * here. `lastEvent` is the last event in `orderStayEvents` order, the one that
+ * decides where the timeline says the animal is; it is null only for
+ * `no-intake-on-record`.
+ *
+ * `lastDayEvents` are every event on the last event's day, in that order. When
+ * it holds both an intake and an outcome, the records hold no time of day to
+ * say which came last, so `orderStayEvents` guessed from whether a stay was
+ * open, and the kind of the last event, and so the mismatch, rests on that
+ * guess. A caller that words the mismatch should hedge and name them all. Two
+ * events of one kind on the day leave nothing to guess: the last event's kind
+ * is the same whichever is last.
+ */
+export type ListingMismatch<E extends StayEvent> =
+  | {
+      // The timeline ends on an outcome; the listing says the animal is here.
+      kind: "left-but-listed-here";
+      lastEvent: E;
+      lastDayEvents: E[];
+    }
+  | {
+      // The timeline ends on an intake; the listing says the animal left.
+      kind: "here-but-archived";
+      lastEvent: E;
+      lastDayEvents: E[];
+    }
+  | {
+      // The animal never arrived, but its listing says it is here. An
+      // archived animal with no events is left alone: nothing contradicts it.
+      kind: "no-intake-on-record";
+      lastEvent: null;
+      lastDayEvents: [];
+    };
+
+/**
+ * Whether the animal's listing and its timeline disagree about where it is,
+ * or null when they agree. `archived` is `listingStatus === ARCHIVED`: the
+ * other statuses all mean the animal is here.
+ *
+ * The timeline says the animal is here exactly when its last ordered event is
+ * an intake, which is what `computeStays(...).isInCare` reads too, so this and
+ * the stay figures cannot give different answers. It takes no date because
+ * nothing in the check depends on one. A break in the timeline is not a
+ * mismatch, and is not looked at here (see `findTimelineBreaks`).
+ *
+ * As with `findTimelineBreaks`, an event may carry an opaque `ref`, which is
+ * handed back inside the mismatch.
+ */
+export function findListingMismatch<E extends StayEvent & { ref?: unknown }>(
+  events: readonly E[],
+  archived: boolean,
+): ListingMismatch<E> | null {
+  const ordered = orderStayEvents(events);
+  if (ordered.length === 0) {
+    return archived
+      ? null
+      : { kind: "no-intake-on-record", lastEvent: null, lastDayEvents: [] };
+  }
+
+  const lastEvent = ordered[ordered.length - 1];
+  const here = lastEvent.kind === "intake";
+  if (here !== archived) return null;
+
+  return {
+    kind: here ? "here-but-archived" : "left-but-listed-here",
+    lastEvent,
+    lastDayEvents: ordered.filter((event) => event.date === lastEvent.date),
+  };
+}
+
+/**
  * Pairs one animal's intake/outcome events into discrete stays.
  *
  * Algorithm:

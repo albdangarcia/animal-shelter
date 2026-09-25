@@ -21,6 +21,7 @@ import {
 } from "@/prisma/generated/enums";
 import { recordFosterReturn } from "@/app/lib/services/foster-return";
 import { ConflictError, PreconditionFailedError } from "@/app/lib/utils/errors";
+import { assertNoListingMismatch } from "./listing-consistency";
 
 const runId = Date.now().toString(36);
 
@@ -222,6 +223,7 @@ test("a foster-to-adopt return after an outcome is refused, and nothing is writt
   assert.deepEqual(await readState(animalId, placementId), before);
   assert.equal(before.placement.endDate, null);
   assert.equal(before.currentUnitId, null);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a plain foster return after an outcome is refused too", async () => {
@@ -235,6 +237,7 @@ test("a plain foster return after an outcome is refused too", async () => {
   await assert.rejects(returnFromFoster(placementId), refusedForLeaving);
 
   assert.deepEqual(await readState(animalId, placementId), before);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a foster-to-adopt return for an animal still in care restores its listing", async () => {
@@ -258,6 +261,7 @@ test("a foster-to-adopt return for an animal still in care restores its listing"
     after.activityLogs.map((log) => log.activityType),
     [AnimalActivityType.FOSTER_RETURNED],
   );
+  await assertNoListingMismatch(animalId);
 });
 
 test("a plain foster return for an animal still in care leaves its listing alone", async () => {
@@ -271,10 +275,11 @@ test("a plain foster return for an animal still in care leaves its listing alone
   const after = await readState(animalId, placementId);
   assert.equal(after.listingStatus, AnimalListingStatus.PUBLISHED);
   assert.equal(after.currentUnitId, unitId);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a placement that already ended is refused as such", async () => {
-  const { placementId } = await makeFosteredAnimal("Returned twice", {
+  const { animalId, placementId } = await makeFosteredAnimal("Returned twice", {
     type: FosterPlacementType.GENERAL,
     leftAfterPlacement: false,
   });
@@ -285,4 +290,5 @@ test("a placement that already ended is refused as such", async () => {
     assert.equal(error.message, "This foster placement has already ended.");
     return true;
   });
+  await assertNoListingMismatch(animalId);
 });
