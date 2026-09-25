@@ -129,6 +129,18 @@ const describeNeighbour = (
 };
 
 /**
+ * The refusal for an intake or outcome day after `today`, or null. Every
+ * event is something that already happened, so none may be dated ahead.
+ */
+export function refuseFutureDay(
+  kind: TimelineEvent["kind"],
+  day: CalendarDay,
+  today: CalendarDay,
+): string | null {
+  return day > today ? `The ${kind} date can't be in the future.` : null;
+}
+
+/**
  * Whether `change` may be written. Returns null when it may, or a refusal for
  * staff that names what the day would cross.
  *
@@ -156,8 +168,9 @@ export function evaluateTimelineChange(
   const applied = applyTimelineChange(events, change);
   const noun = applied.subject.kind;
 
-  if (change.day > today) {
-    return `The ${noun} date can't be in the future.`;
+  const future = refuseFutureDay(noun, change.day, today);
+  if (future) {
+    return future;
   }
 
   if (

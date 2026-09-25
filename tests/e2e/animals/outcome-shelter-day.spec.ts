@@ -140,6 +140,34 @@ const processOutcome = async (page: Page, animalId: string, day?: string) => {
   await page.waitForURL("**/dashboard/outcomes", { timeout: 60_000 });
 };
 
+/**
+ * The day the animal's current stay began. An outcome dated before it is
+ * refused, and these animals are seeded in care with a stay of random length,
+ * so each spec's day is moved up to it when it would fall earlier.
+ */
+const latestIntakeDay = async (animalId: string) => {
+  const client = new pg.Client({ connectionString: E2E_DATABASE_URL });
+  await client.connect();
+  try {
+    const { rows } = await client.query<{ day: string }>(
+      `SELECT max("intakeDate") AS day FROM intakes WHERE "animalId" = $1`,
+      [animalId],
+    );
+    return rows[0].day;
+  } finally {
+    await client.end();
+  }
+};
+
+const notBefore = (day: string, earliest: string) =>
+  day < earliest ? earliest : day;
+
+const daysBetween = (from: string, to: string) =>
+  Math.round(
+    (Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) /
+      86_400_000,
+  );
+
 /** The day the column actually holds, read as text so nothing re-reads it. */
 const storedOutcomeDay = async (animalId: string) => {
   const client = new pg.Client({ connectionString: E2E_DATABASE_URL });
@@ -176,7 +204,10 @@ test.describe("a browser far east of the shelter", () => {
   }) => {
     // Nutmeg is a seeded in-care cat that no other spec touches.
     const animalId = await findAnimalId(page, "Nutmeg");
-    const picked = shiftDay(todayIn("Pacific/Auckland"), -5);
+    const picked = notBefore(
+      shiftDay(todayIn("Pacific/Auckland"), -5),
+      await latestIntakeDay(animalId),
+    );
     const dayBefore = shiftDay(picked, -1);
 
     const countedBefore = await outcomesCountedOn(page, picked);
@@ -229,11 +260,13 @@ test.describe("the analytics chart", () => {
     page,
   }) => {
     const shelterToday = todayIn(SHELTER_ZONE);
-    const daysAgo = 10;
-    const day = shiftDay(shelterToday, -daysAgo);
-    const dayAfter = shiftDay(day, 1);
-
     const animalId = await findAnimalId(page, "Marigold");
+    const day = notBefore(
+      shiftDay(shelterToday, -10),
+      await latestIntakeDay(animalId),
+    );
+    const daysAgo = daysBetween(day, shelterToday);
+    const dayAfter = shiftDay(day, 1);
 
     const reportBefore = await outcomesCountedOn(page, day);
     const chartBefore = await chartOutcomesOn(page, day, daysAgo);

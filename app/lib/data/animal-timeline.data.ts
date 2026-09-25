@@ -1,8 +1,9 @@
 import type { TransactionClient } from "@/app/lib/prisma";
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
-import { calendarDay } from "@/app/lib/utils/shelter-day";
+import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import {
   evaluateTimelineChange,
+  refuseFutureDay,
   type TimelineChange,
   type TimelineEvent,
 } from "./animal-timeline";
@@ -53,4 +54,15 @@ export async function checkTimelineChange(
   ];
 
   return evaluateTimelineChange(events, change, await getShelterToday());
+}
+
+/**
+ * The future-day half of `checkTimelineChange`, for the one writer with no
+ * timeline to check against: creating an animal writes its first intake, and
+ * no order can be broken by it. Returns the refusal, or null.
+ */
+export async function checkFirstIntakeDay(
+  day: CalendarDay,
+): Promise<string | null> {
+  return refuseFutureDay("intake", day, await getShelterToday());
 }

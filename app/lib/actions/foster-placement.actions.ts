@@ -1,6 +1,7 @@
 "use server";
 
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
+import { checkTimelineChange } from "@/app/lib/data/animal-timeline.data";
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -32,6 +33,7 @@ import {
   ConflictError,
   NotFoundError,
   PreconditionFailedError,
+  TimelineOrderError,
 } from "../utils/errors";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import {
@@ -397,11 +399,13 @@ const _convertFosterToAdoption = async (
         );
       }
 
-      // Same ordering as outcome.actions.ts's createOutcome: lock the animal
-      // and read the listing status the outcome stores for a reversal to
-      // restore, archive the animal (guarded, mirroring its "already
-      // processed" check), then validate the optional application, then
-      // create the outcome.
+      // Same ordering as `recordOutcome` in outcome-recording: lock the
+      // animal and read the listing status the outcome stores for a reversal
+      // to restore, archive the animal (guarded, mirroring its "already
+      // processed" check), check the day against the animal's timeline, then
+      // validate the optional application, then create the outcome. The
+      // archive comes before the day, as the status check does there, so an
+      // archived animal is refused for that and not for a date.
       await lockAnimal(tx, placement.animalId);
       const animal = await tx.animal.findUnique({
         where: { id: placement.animalId },
@@ -421,6 +425,22 @@ const _convertFosterToAdoption = async (
         throw new ConflictError(
           "This animal has already been processed for an outcome.",
         );
+      }
+
+      // The conversion happens now, so the adoption is dated today on the
+      // shelter's calendar. Nothing in the placement records the day the
+      // foster decided, and inventing one from its dates would be a guess.
+      //
+      // Today can only be refused when the stay's intake is dated in the
+      // future. It is checked anyway, like every other outcome day, so no
+      // writer of one has to be remembered as the exception.
+      const outcomeDate = await getShelterToday();
+      const refusal = await checkTimelineChange(tx, placement.animalId, {
+        kind: "addOutcome",
+        day: outcomeDate,
+      });
+      if (refusal) {
+        throw new TimelineOrderError(refusal, "outcomeDate");
       }
 
       if (adoptionApplicationId) {
@@ -445,7 +465,7 @@ const _convertFosterToAdoption = async (
           );
         }
         await assertNoLiveAdoptionOutcome(tx, application.id);
-        // Effective, not the column, for the same reason as createOutcome:
+        // Effective, not the column, for the same reason as `recordOutcome`:
         // an application an earlier stay's outcome adopted or closed still
         // stores APPROVED.
         if (
@@ -461,10 +481,7 @@ const _convertFosterToAdoption = async (
       const outcome = await tx.outcome.create({
         data: {
           type: OutcomeType.ADOPTION,
-          // The conversion happens now, so the adoption is dated today on the
-          // shelter's calendar. Nothing in the placement records the day the
-          // foster decided, and inventing one from its dates would be a guess.
-          outcomeDate: await getShelterToday(),
+          outcomeDate,
           previousListingStatus: animal.listingStatus,
           animal: { connect: { id: placement.animalId } },
           staffMember: { connect: { id: staffMemberId } },
@@ -517,10 +534,13 @@ const _convertFosterToAdoption = async (
     animalId = result.animalId;
   } catch (error) {
     console.error("Database error converting foster placement:", error);
+    // A refused day has no picker to show under: the conversion form has no
+    // date field, so it is the message alone.
     if (
       error instanceof NotFoundError ||
       error instanceof ConflictError ||
-      error instanceof PreconditionFailedError
+      error instanceof PreconditionFailedError ||
+      error instanceof TimelineOrderError
     ) {
       return { ok: false, message: error.message };
     }

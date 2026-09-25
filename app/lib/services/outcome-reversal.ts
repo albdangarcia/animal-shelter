@@ -143,6 +143,13 @@ export const recordOutcomeReversal = async (
     animal?.listingStatus === AnimalListingStatus.ARCHIVED &&
     latestLive?.id === outcomeId;
 
+  // Unlike every write that records or moves an intake or outcome day, this
+  // is not passed through `checkTimelineChange`, and must not be. Reversing
+  // an outcome that is not the latest leaves two intakes in a row, and that
+  // is the truthful record: the animal never left, so the return duplicates
+  // the arrival. It is not a date mistake to refuse. Removing the duplicate
+  // is a matter of reversing that intake, not of blocking this reversal.
+
   // Guarded as well as checked above, so that nothing reaching this without
   // the lock can overwrite a reversal already recorded.
   const reversed = await tx.outcome.updateMany({

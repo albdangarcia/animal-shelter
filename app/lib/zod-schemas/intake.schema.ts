@@ -108,6 +108,7 @@ export const ReIntakeFormSchema = z
   .superRefine(intakeSuperRefine);
 
 export type ReIntakeFormInput = z.input<typeof ReIntakeFormSchema>;
+export type ReIntakeFormOutput = z.output<typeof ReIntakeFormSchema>;
 
 // Correcting a recorded intake offers exactly the fields recording one does,
 // and no more: a correction form that took more than creation would be a new

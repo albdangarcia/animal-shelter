@@ -37,6 +37,7 @@ import {
   effectiveApplicationStatuses,
   lockAnimal,
 } from "../data/application-status.data";
+import { checkFirstIntakeDay } from "../data/animal-timeline.data";
 
 // Shared by create and update — the "" -> null conversion for every nullable
 // column either action writes. Not every field applies to both actions
@@ -135,6 +136,19 @@ const _createAnimal = async (
   );
 
   try {
+    // The picker disables future days, but only in the browser, and against
+    // the day the page was rendered on. The animal has no other events yet,
+    // so this is the only part of the timeline check that can apply. It reads
+    // the shelter's settings, so it sits inside the try with the writes.
+    const futureDay = await checkFirstIntakeDay(intakeDate);
+    if (futureDay) {
+      return {
+        ok: false,
+        message: futureDay,
+        fieldErrors: { intakeDate: [futureDay] },
+      };
+    }
+
     await prisma.$transaction(async (tx) => {
       const speciesRecord = await tx.species.findUnique({
         where: { id: speciesId },

@@ -11,6 +11,23 @@ export class ConflictError extends Error {
 }
 
 /**
+ * Represents an intake or outcome day refused because it would put the
+ * animal's intakes and outcomes out of order, or because it is in the future.
+ * Thrown from inside the transaction that would have written the day, so the
+ * write rolls back. `field` is the form field the day came from, so the
+ * message can be shown under its date picker.
+ */
+export class TimelineOrderError extends Error {
+  readonly field: "intakeDate" | "outcomeDate";
+
+  constructor(message: string, field: "intakeDate" | "outcomeDate") {
+    super(message);
+    this.name = "TimelineOrderError";
+    this.field = field;
+  }
+}
+
+/**
  * Represents a failure to find a requested resource.
  */
 export class NotFoundError extends Error {
