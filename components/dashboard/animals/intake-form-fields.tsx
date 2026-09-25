@@ -28,6 +28,8 @@ import { PersonPicker } from "@/components/common/person-picker";
 interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
   control: Control<T>;
   partners: PartnerPayload[];
+  /** The surrendering person a stored intake names, shown by name. */
+  initialSurrenderingPerson?: { id: string; name: string };
   suggestedSurrenderingPersonId?: string;
   suggestedSurrenderingPersonLabel?: string;
   canCreatePerson?: boolean;
@@ -38,6 +40,7 @@ interface IntakeFormFieldsProps<T extends FieldValues & IntakeFieldsValues> {
 export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
   control,
   partners,
+  initialSurrenderingPerson,
   suggestedSurrenderingPersonId,
   suggestedSurrenderingPersonLabel,
   canCreatePerson,
@@ -235,6 +238,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                   <PersonPicker
                     value={field.value || null}
                     onChange={(id) => field.onChange(id ?? "")}
+                    initialSelection={initialSurrenderingPerson}
                     suggestedPersonId={suggestedSurrenderingPersonId}
                     suggestedPersonLabel={suggestedSurrenderingPersonLabel}
                     canCreatePerson={canCreatePerson}

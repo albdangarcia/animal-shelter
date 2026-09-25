@@ -58,10 +58,13 @@ const fillStable = async (field: Locator, text: string) => {
 // Clicking submit before hydration makes the browser submit the form itself (a
 // GET that appends the fields to the URL) and nothing reaches the action. React
 // marks each DOM node it has attached to, so wait for that on the form.
-const waitForFormHydration = async (page: Page) => {
+const waitForFormHydration = async (
+  page: Page,
+  submitLabel = "Update Outcome",
+) => {
   const form = page
     .locator("form")
-    .filter({ has: page.getByRole("button", { name: "Update Outcome" }) });
+    .filter({ has: page.getByRole("button", { name: submitLabel }) });
   await expect(form).toBeVisible();
   await expect
     .poll(() =>
@@ -342,4 +345,97 @@ test("a re-picked day is left out of the summary when another field changes", as
   }).toPass({ timeout: 30_000 });
   await expect(detail).toContainText("notes were edited");
   await expect(detail).not.toContainText("the date changed");
+});
+
+const personSearch = (page: Page) =>
+  page.getByRole("combobox").filter({ hasText: "Search for a person..." });
+
+test("the owner picker names the stored owner, and a save sends them back", async ({
+  page,
+}) => {
+  // The recipient column names the owner on a return-to-owner outcome.
+  await page.goto("/dashboard/outcomes?type=RETURN_TO_OWNER");
+  const row = page.locator("tbody tr").first();
+  await expect(row).toBeVisible();
+  const owner = (
+    await row.locator("td").nth(2).locator(".truncate").innerText()
+  ).trim();
+
+  await openFirstOutcomeEdit(page, "RETURN_TO_OWNER");
+
+  // The form holds the owner, so the picker shows them rather than an empty
+  // search box.
+  await expect(page.getByText(owner, { exact: true })).toBeVisible();
+  await expect(personSearch(page)).toHaveCount(0);
+
+  // Nothing was touched, so the owner sent is the one on record.
+  await page.getByRole("button", { name: "Update Outcome" }).click();
+  await expect(page.getByText("No changes to save.")).toBeVisible();
+});
+
+test("a person chosen as the owner survives switching the outcome type away and back", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/animals?listingStatus=PUBLISHED&pageSize=10");
+  const animalLink = page.locator("tbody tr").first().getByRole("link").first();
+  await expect(animalLink).toBeVisible();
+  const animalId = (await animalLink.getAttribute("href"))!.split("/").pop();
+
+  // Nothing is submitted, so any animal on the shelter will do.
+  await page.goto(`/dashboard/outcomes/create?animalId=${animalId}`);
+  await waitForFormHydration(page, "Process Outcome");
+
+  const chooseType = async (label: string) => {
+    await page.getByLabel("Outcome Type").click();
+    await page.getByRole("option", { name: label, exact: true }).click();
+  };
+
+  await chooseType("Return To Owner");
+  // An animal whose intake names a surrendering person starts on them; clear
+  // that so the person below is one the user chose.
+  const clear = page.getByRole("button", { name: "Clear" });
+  await expect(clear.or(personSearch(page))).toBeVisible();
+  if (await clear.isVisible()) {
+    await clear.click();
+  }
+  await personSearch(page).click();
+  await page.getByPlaceholder("Type a name, email, or phone...").fill("e");
+  // Until the debounced search answers, the only option is "Add a new
+  // person"; a person's option carries their name in a paragraph.
+  const option = page
+    .getByRole("option")
+    .filter({ has: page.locator("p") })
+    .first();
+  await expect(option).toBeVisible();
+  const chosen = (await option.locator("p").first().innerText()).trim();
+  await option.click();
+  await expect(page.getByText(chosen, { exact: true })).toBeVisible();
+
+  await chooseType("Deceased");
+  await expect(page.getByText(chosen, { exact: true })).toBeHidden();
+  await chooseType("Return To Owner");
+  await expect(page.getByText(chosen, { exact: true })).toBeVisible();
+  await expect(personSearch(page)).toHaveCount(0);
+});
+
+test("the Processed By column sorts the outcomes list", async ({ page }) => {
+  await page.goto("/dashboard/outcomes?pageSize=50");
+  await expect(page.locator("tbody tr").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Processed By" }).click();
+  await page.getByRole("menuitem", { name: "Asc" }).click();
+  await page.waitForURL(/sort=staffMember\.asc/);
+
+  // The column before the row actions.
+  const staffColumn = (await page.locator("thead th").count()) - 2;
+  await expect(page.locator("tbody tr").first()).toBeVisible();
+  const names = await page
+    .locator("tbody tr")
+    .evaluateAll(
+      (rows, index) =>
+        rows.map((row) => row.querySelectorAll("td")[index].textContent ?? ""),
+      staffColumn,
+    );
+  expect(names.length).toBeGreaterThan(1);
+  expect(names).toEqual([...names].sort((a, b) => a.localeCompare(b)));
 });

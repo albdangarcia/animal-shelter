@@ -27,6 +27,12 @@ export type OutcomePayload = Prisma.OutcomeGetPayload<{
         name: true;
       };
     };
+    owner: {
+      select: {
+        id: true;
+        name: true;
+      };
+    };
     adoptionApplication: {
       select: {
         id: true;

@@ -107,12 +107,10 @@ export function IntakeCorrectionForm({
               control={form.control}
               partners={partners}
               // The person on record, named, so the picker shows who it holds
-              // rather than an empty search box.
-              suggestedSurrenderingPersonId={
-                intake.surrenderingPerson?.id ?? undefined
-              }
-              suggestedSurrenderingPersonLabel={
-                intake.surrenderingPerson?.name ?? undefined
+              // rather than an empty search box. Not a suggestion: this form
+              // has nothing to fill in.
+              initialSurrenderingPerson={
+                intake.surrenderingPerson ?? undefined
               }
               canCreatePerson={canCreatePerson}
               today={today}

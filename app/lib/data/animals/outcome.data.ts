@@ -44,6 +44,12 @@ export const _fetchOutcomeById = async (outcomeId: string) => {
             name: true,
           },
         },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         reversedBy: {
           select: {
             id: true,
