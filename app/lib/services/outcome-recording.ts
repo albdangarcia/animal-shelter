@@ -173,9 +173,12 @@ export const recordOutcome = async (
       ...(destinationPartnerId && {
         destinationPartner: { connect: { id: destinationPartnerId } },
       }),
-      ...(ownerId && {
-        owner: { connect: { id: ownerId } },
-      }),
+      // Only a return to owner has an owner: the form keeps the field's
+      // value while another type is chosen, so it can arrive with any type.
+      ...(ownerId &&
+        outcomeType === OutcomeType.RETURN_TO_OWNER && {
+          owner: { connect: { id: ownerId } },
+        }),
       ...(animal.currentUnitId && {
         previousUnit: { connect: { id: animal.currentUnitId } },
       }),

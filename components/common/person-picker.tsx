@@ -23,6 +23,10 @@ import PersonCreateDialog from "@/components/dashboard/people-directory/person-c
 interface PersonPickerProps {
   value: string | null;
   onChange: (id: string | null) => void;
+  // The person a stored record already names. Shown by name while the field
+  // holds them, and never written to the field: it describes what is there,
+  // where the suggestion below is a default to fill an empty field with.
+  initialSelection?: { id: string; name: string };
   suggestedPersonId?: string;
   suggestedPersonLabel?: string;
   // Shows the "Add a new person" action. Defaults to false: creation
@@ -35,15 +39,25 @@ interface PersonPickerProps {
 export const PersonPicker = ({
   value,
   onChange,
+  initialSelection,
   suggestedPersonId,
   suggestedPersonLabel,
   canCreatePerson = false,
 }: PersonPickerProps) => {
-  // The suggestion is shown by name both when it is about to be applied and
-  // when the field already holds it: a form editing a stored record passes
-  // the person on record as the suggestion, and a field remounted after the
-  // suggestion was applied still holds it.
+  // The person on record is shown by name whenever the field holds them, so
+  // the box never reads empty while a save would send someone. The suggestion
+  // is shown by name both when it is about to be applied and when the field
+  // already holds it: a field remounted after the suggestion was applied
+  // still holds it.
   const [selected, setSelected] = useState<PersonPickerOption | null>(() => {
+    if (initialSelection && value === initialSelection.id) {
+      return {
+        id: initialSelection.id,
+        name: initialSelection.name,
+        email: null,
+        phone: null,
+      };
+    }
     if (
       suggestedPersonId &&
       (value == null || value === suggestedPersonId)

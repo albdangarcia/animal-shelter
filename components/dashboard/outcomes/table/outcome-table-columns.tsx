@@ -181,7 +181,10 @@ export const getColumns = ({
     },
   },
   {
-    accessorKey: "staffMember.name",
+    // An explicit id: a dotted accessorKey would sort as "staffMember_name",
+    // which the server does not know and would answer newest first.
+    accessorFn: (row) => row.staffMember.name,
+    id: "staffMember",
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Processed By" />
     ),

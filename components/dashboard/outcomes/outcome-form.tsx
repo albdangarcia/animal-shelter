@@ -255,7 +255,12 @@ export function OutcomeForm({
               />
             )}
 
-            {outcomeTypeValue === "RETURN_TO_OWNER" && (
+            {/* Hidden rather than unmounted while another type is chosen. The
+                picker knows the chosen person's name only from its own state,
+                so a remount would show an empty search box while the field
+                still holds the person, and a save would send someone nobody
+                can see. */}
+            <div hidden={outcomeTypeValue !== "RETURN_TO_OWNER"}>
               <FormField
                 control={form.control}
                 name="ownerId"
@@ -266,6 +271,7 @@ export function OutcomeForm({
                       <PersonPicker
                         value={field.value || null}
                         onChange={(id) => field.onChange(id ?? "")}
+                        initialSelection={outcome?.owner ?? undefined}
                         suggestedPersonId={suggestedOwnerId}
                         suggestedPersonLabel={suggestedOwnerLabel}
                         canCreatePerson={canCreatePerson}
@@ -275,7 +281,7 @@ export function OutcomeForm({
                   </FormItem>
                 )}
               />
-            )}
+            </div>
 
             <FormField
               control={form.control}
