@@ -33,6 +33,7 @@ import {
 import { shiftDayKey, shelterToday } from "@/app/lib/utils/shelter-day";
 import { fallbackShelterSettings } from "@/app/lib/utils/shelter-settings";
 import { ConflictError, TimelineOrderError } from "@/app/lib/utils/errors";
+import { assertNoListingMismatch } from "./listing-consistency";
 
 const runId = Date.now().toString(36);
 
@@ -190,6 +191,7 @@ test("a re-intake dated before the last outcome is refused, and nothing is writt
   );
 
   assert.deepEqual(await readAnimal(animalId), before);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a re-intake on the last outcome's day is recorded as a same-day return", async () => {
@@ -213,6 +215,7 @@ test("a re-intake on the last outcome's day is recorded as a same-day return", a
       changeSummary: "Animal was re-intaked as seize.",
     },
   ]);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a future day is refused on re-intake", async () => {
@@ -228,6 +231,7 @@ test("a future day is refused on re-intake", async () => {
   );
 
   assert.deepEqual(await readAnimal(animalId), before);
+  await assertNoListingMismatch(animalId);
 });
 
 test("an animal in care is refused for its status, not for the day", async () => {
@@ -245,6 +249,7 @@ test("an animal in care is refused for its status, not for the day", async () =>
   );
 
   assert.deepEqual(await readAnimal(animalId), before);
+  await assertNoListingMismatch(animalId);
 });
 
 test("an animal left with a duplicate intake by a reversal can be re-intaked", async () => {
@@ -277,6 +282,7 @@ test("an animal left with a duplicate intake by a reversal can be re-intaked", a
     animal.intakes.map((intake) => intake.intakeDate),
     ["2026-01-01", "2026-03-01", "2026-05-01"],
   );
+  await assertNoListingMismatch(animalId);
 });
 
 /** The backend a transaction runs on, so a wait can be pinned to it. */
@@ -393,6 +399,7 @@ test("a re-intake waiting on the lock is judged against an outcome day moved fir
     ["2026-01-01"],
   );
   assert.deepEqual(animal.activityLogs, []);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a new animal's first intake may be dated today but not later", async () => {

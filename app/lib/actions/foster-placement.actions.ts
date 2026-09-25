@@ -42,7 +42,7 @@ import {
   lockAnimal,
 } from "../data/application-status.data";
 import { assertNoLiveAdoptionOutcome } from "../services/outcome-reversal";
-import { findLiveUnitForPlacement } from "../services/unit-housing";
+import { recordFosterReturn } from "../services/foster-return";
 
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
 
@@ -243,83 +243,13 @@ const _returnFromFoster = async (
 
   let animalId: string;
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      const placement = await tx.fosterPlacement.findUnique({
-        where: { id: placementId },
-        select: {
-          endDate: true,
-          type: true,
-          previousListingStatus: true,
-          animalId: true,
-          fosterProfile: { select: { person: { select: { name: true } } } },
-        },
-      });
-
-      if (!placement) {
-        throw new NotFoundError("Foster placement not found.");
-      }
-      if (placement.endDate !== null) {
-        throw new ConflictError("This foster placement has already ended.");
-      }
-
-      // Taken before the placement is written, in the order a conversion of
-      // this placement takes them: the conversion holds the animal and then
-      // closes the placement, so closing it here first and then writing the
-      // animal could leave each waiting for the other. A placement's animal
-      // never changes, so the read above needs no lock.
-      await lockAnimal(tx, placement.animalId);
-
-      // Read behind the unit's lock, so a delete of it at the same moment
-      // either sees the animal come back or is seen here.
-      const unit = await findLiveUnitForPlacement(tx, unitId);
-      if (!unit) {
-        throw new PreconditionFailedError(
-          "That unit is no longer available. Please choose a different unit.",
-        );
-      }
-
-      // Guarded update: the compare-and-swap on endDate is what makes this
-      // race-safe against a concurrent return/conversion of the same
-      // placement, without needing Serializable isolation.
-      const updateResult = await tx.fosterPlacement.updateMany({
-        where: { id: placementId, endDate: null },
-        data: {
-          endDate: await getShelterToday(),
-          returnReason,
-          // Nullable column: a cleared textarea submits "" from the client,
-          // which should read back as "no notes" rather than an empty string.
-          returnNotes: returnNotes?.trim() ? returnNotes : null,
-          returnedById: staffMemberId,
-        },
-      });
-      if (updateResult.count === 0) {
-        throw new ConflictError("This foster placement has already ended.");
-      }
-
-      await tx.animal.update({
-        where: { id: placement.animalId },
-        data: {
-          currentUnitId: unitId,
-          ...(placement.type === FosterPlacementType.FOSTER_TO_ADOPT &&
-            placement.previousListingStatus && {
-              listingStatus: placement.previousListingStatus,
-            }),
-        },
-      });
-
-      await tx.animalActivityLog.create({
-        data: {
-          animalId: placement.animalId,
-          activityType: AnimalActivityType.FOSTER_RETURNED,
-          changedById: staffMemberId,
-          changeSummary: `Returned from foster ${placement.fosterProfile.person.name}.${
-            returnNotes ? ` ${returnNotes}` : ""
-          }`,
-        },
-      });
-
-      return { animalId: placement.animalId };
-    });
+    const result = await prisma.$transaction((tx) =>
+      recordFosterReturn(
+        tx,
+        { placementId, returnReason, returnNotes, unitId },
+        staffMemberId,
+      ),
+    );
     animalId = result.animalId;
   } catch (error) {
     console.error("Database error returning animal from foster:", error);

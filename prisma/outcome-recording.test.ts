@@ -30,6 +30,7 @@ import {
 import { shiftDayKey, shelterToday } from "@/app/lib/utils/shelter-day";
 import { fallbackShelterSettings } from "@/app/lib/utils/shelter-settings";
 import { ConflictError, TimelineOrderError } from "@/app/lib/utils/errors";
+import { assertNoListingMismatch } from "./listing-consistency";
 
 const runId = Date.now().toString(36);
 
@@ -183,6 +184,7 @@ test("an outcome dated before the stay's intake is refused, and nothing is writt
   assert.equal(animal.listingStatus, AnimalListingStatus.DRAFT);
   assert.deepEqual(animal.outcomes, []);
   assert.deepEqual(animal.activityLogs, []);
+  await assertNoListingMismatch(animalId);
 });
 
 test("an outcome on the stay's intake day or later is recorded", async () => {
@@ -202,6 +204,7 @@ test("an outcome on the stay's intake day or later is recorded", async () => {
     animal.activityLogs.map((row) => row.activityType),
     [AnimalActivityType.OUTCOME_PROCESSED],
   );
+  await assertNoListingMismatch(animalId);
 });
 
 test("an archived animal is refused for its status, not for the day", async () => {
@@ -220,6 +223,7 @@ test("an archived animal is refused for its status, not for the day", async () =
   );
 
   assert.deepEqual(await readAnimal(animalId), before);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a future day is refused on create", async () => {
@@ -236,6 +240,7 @@ test("a future day is refused on create", async () => {
   assert.equal(animal.listingStatus, AnimalListingStatus.DRAFT);
   assert.deepEqual(animal.outcomes, []);
   assert.deepEqual(animal.activityLogs, []);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a correction moved past a later re-intake is refused, and one within bounds is accepted", async () => {
@@ -272,6 +277,7 @@ test("a correction moved past a later re-intake is refused, and one within bound
         "Outcome was corrected: the date changed from Feb 1, 2026 to Feb 10, 2026.",
     },
   ]);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a correction dated before the stay's intake is refused", async () => {
@@ -289,6 +295,7 @@ test("a correction dated before the stay's intake is refused", async () => {
   );
 
   assert.deepEqual(await readAnimal(animalId), before);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a future day is refused on correction", async () => {
@@ -305,6 +312,7 @@ test("a future day is refused on correction", async () => {
   const animal = await readAnimal(animalId);
   assert.equal(animal.outcomes[0].outcomeDate, "2026-02-01");
   assert.deepEqual(animal.activityLogs, []);
+  await assertNoListingMismatch(animalId);
 });
 
 test("a correction that keeps the day is not checked, even on a future-dated row", async () => {
@@ -324,6 +332,7 @@ test("a correction that keeps the day is not checked, even on a future-dated row
   const animal = await readAnimal(animalId);
   assert.equal(animal.outcomes[0].notes, "Found at the gate.");
   assert.equal(animal.outcomes[0].outcomeDate, day);
+  await assertNoListingMismatch(animalId);
 });
 
 test("an animal left with a duplicate intake by a reversal can have a later outcome recorded", async () => {
@@ -357,6 +366,7 @@ test("an animal left with a duplicate intake by a reversal can have a later outc
     animal.outcomes.map((outcome) => outcome.outcomeDate),
     ["2026-04-01", "2026-06-01"],
   );
+  await assertNoListingMismatch(animalId);
 });
 
 /** The backend a transaction runs on, so a wait can be pinned to it. */
@@ -487,6 +497,7 @@ test("a correction waiting on the lock is refused when the outcome is reversed f
     where: { animalId, activityType: AnimalActivityType.OUTCOME_CORRECTED },
   });
   assert.equal(corrections, 0);
+  await assertNoListingMismatch(animalId);
 });
 
 // The day is judged against the animal's other events, so it must not be

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { calendarDay } from "./shelter-day";
 import {
   computeStays,
+  findListingMismatch,
   findTimelineBreaks,
   orderStayEvents,
   type StayEvent,
@@ -208,4 +209,113 @@ test("an intake moved past its stay's outcome adds a break", () => {
   const moved = findTimelineBreaks([intake(SEP_20), outcome(SEP_15)]);
   assert.equal(moved.length, 1);
   assert.equal(moved[0].kind, "leading-outcome");
+});
+
+const SEP_22 = "2026-09-22";
+
+test("a timeline that ends on an outcome agrees with an archived listing only", () => {
+  const events = [intake(SEP_10), outcome(SEP_15)];
+  assert.equal(findListingMismatch(events, true), null);
+
+  const last = { ...outcome(SEP_15), ref: "o1" };
+  assert.deepEqual(findListingMismatch([intake(SEP_10), last], false), {
+    kind: "left-but-listed-here",
+    lastEvent: last,
+    lastDayEvents: [last],
+  });
+});
+
+test("a timeline that ends on an intake agrees with a listed animal only", () => {
+  const events = [intake(SEP_10), outcome(SEP_15), intake(SEP_20)];
+  assert.equal(findListingMismatch(events, false), null);
+
+  const last = { ...intake(SEP_20), ref: "i2" };
+  assert.deepEqual(
+    findListingMismatch([intake(SEP_10), outcome(SEP_15), last], true),
+    { kind: "here-but-archived", lastEvent: last, lastDayEvents: [last] },
+  );
+});
+
+test("an animal with no events is a mismatch unless it is archived", () => {
+  assert.equal(findListingMismatch([], true), null);
+  assert.deepEqual(findListingMismatch([], false), {
+    kind: "no-intake-on-record",
+    lastEvent: null,
+    lastDayEvents: [],
+  });
+});
+
+test("a same-day return ends on the intake, so it is not a mismatch while listed", () => {
+  // The outcome and the re-intake share a day; the animal was in care, so the
+  // outcome is ordered first and the intake is the last event.
+  const events = [intake(SEP_10), outcome(SEP_15), intake(SEP_15)];
+  assert.equal(findListingMismatch(events, false), null);
+
+  const mismatch = findListingMismatch(events, true);
+  assert.equal(mismatch?.kind, "here-but-archived");
+  assert.equal(mismatch?.lastEvent?.kind, "intake");
+  // Both events of the last day are handed back, in the order they were read.
+  assert.deepEqual(
+    mismatch?.lastDayEvents.map((event) => event.kind),
+    ["outcome", "intake"],
+  );
+});
+
+test("a zero-day stay on the last day ends on the outcome", () => {
+  const events = [intake(SEP_15), outcome(SEP_15)];
+  assert.equal(findListingMismatch(events, true), null);
+  const mismatch = findListingMismatch(events, false);
+  assert.equal(mismatch?.kind, "left-but-listed-here");
+  assert.deepEqual(
+    mismatch?.lastDayEvents.map((event) => event.kind),
+    ["intake", "outcome"],
+  );
+});
+
+test("only the last day's events are listed as ambiguous", () => {
+  const mismatch = findListingMismatch(
+    [intake(SEP_10), outcome(SEP_10), intake(SEP_20)],
+    true,
+  );
+  assert.equal(mismatch?.lastDayEvents.length, 1);
+});
+
+test("a break that is not a mismatch is not reported", () => {
+  // Adopted, returned and adopted again with the first adoption reversed: two
+  // intakes in a row, and the animal has left, as its listing says.
+  const events = [intake(SEP_10), intake(SEP_15), outcome(SEP_20)];
+  assert.equal(findTimelineBreaks(events).length, 1);
+  assert.equal(findListingMismatch(events, true), null);
+});
+
+test("the mismatch check and computeStays agree on whether the animal is here", () => {
+  const timelines: StayEvent[][] = [
+    [],
+    [intake(SEP_10)],
+    [outcome(SEP_10)],
+    [intake(SEP_10), outcome(SEP_15)],
+    [outcome(SEP_10), intake(SEP_10)],
+    [intake(SEP_10), outcome(SEP_15), intake(SEP_15)],
+    [intake(SEP_10), intake(SEP_15)],
+    [intake(SEP_10), intake(SEP_15), outcome(SEP_20)],
+    [intake(SEP_10), outcome(SEP_15), outcome(SEP_20)],
+    [outcome(SEP_10), intake(SEP_15), outcome(SEP_20), intake(SEP_22)],
+    [intake(SEP_10), outcome(SEP_10), intake(SEP_10), outcome(SEP_10)],
+  ];
+  for (const events of timelines) {
+    const inCare = computeStays(events, SEP_18).isInCare;
+    // Listed as here disagrees exactly when the animal is not in care, and
+    // archived disagrees exactly when it is; an animal with no events is the
+    // one case with a third answer, and it is not in care.
+    assert.equal(
+      findListingMismatch(events, false) === null,
+      inCare,
+      JSON.stringify(events),
+    );
+    assert.equal(
+      findListingMismatch(events, true) === null,
+      !inCare || events.length === 0,
+      JSON.stringify(events),
+    );
+  }
 });
