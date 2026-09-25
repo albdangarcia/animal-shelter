@@ -176,9 +176,24 @@ const weightGramsShape = {
 // Spread into a fresh z.object() rather than built via AnimalEditFormSchema
 // .extend(), per the migration's rule against extending an already-refined
 // schema.
+//
+// A new animal is listed as a draft or published, nothing else. The form only
+// offers those two, but the action takes whatever the schema lets through, and
+// an animal created `ARCHIVED` has an intake and no outcome, so its timeline
+// says it is here and its listing says it has left. `PENDING_ADOPTION` needs
+// an application the animal cannot have yet. This is not in `animalFieldsShape`
+// because the edit form resubmits a locked `ARCHIVED` or `PENDING_ADOPTION`.
 export const CreateAnimalFormSchema = z
   .object({
     ...animalFieldsShape,
+    // Refined rather than re-declared as a two-value enum: the form is one
+    // component over both schemas, so the field's type has to stay the same.
+    listingStatus: animalFieldsShape.listingStatus.refine(
+      (status) =>
+        status === AnimalListingStatus.DRAFT ||
+        status === AnimalListingStatus.PUBLISHED,
+      { error: "A new animal can only be a draft or published." },
+    ),
     ...weightGramsShape,
     ...intakeFieldsShape,
   })
