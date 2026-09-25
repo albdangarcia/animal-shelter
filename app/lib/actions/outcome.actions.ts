@@ -31,10 +31,19 @@ import {
   recordOutcome,
   recordOutcomeCorrection,
   type OutcomeCorrection,
+  type RecordedOutcome,
 } from "../services/outcome-recording";
 
 const OUTCOMES_PATH = "/dashboard/outcomes";
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
+
+// The fosters list and the foster's profile both show the placement, which an
+// outcome can end or move the end of.
+const revalidateFosterPages = (fosterPersonId: string | null) => {
+  if (!fosterPersonId) return;
+  revalidatePath("/dashboard/fosters");
+  revalidatePath(`/dashboard/people-directory/${fosterPersonId}/fostering`);
+};
 
 interface CreateOutcomeIds {
   animalId: string;
@@ -73,8 +82,9 @@ const _createOutcome = async (
     };
   }
 
+  let recorded: RecordedOutcome;
   try {
-    await prisma.$transaction((tx) =>
+    recorded = await prisma.$transaction((tx) =>
       recordOutcome(
         tx,
         { animalId, adoptionApplicationId, values: validatedFields.data },
@@ -105,6 +115,7 @@ const _createOutcome = async (
 
   revalidatePath("/dashboard/animals");
   revalidatePath(`/dashboard/animals/${animalId}`);
+  revalidateFosterPages(recorded.fosterPersonId);
 
   if (adoptionApplicationId) {
     revalidatePath(ADOPTION_APPLICATIONS_PATH);
@@ -183,6 +194,7 @@ const _updateOutcome = async (
 
   revalidatePath(OUTCOMES_PATH);
   revalidatePath(`/dashboard/animals/${correction.animalId}`);
+  revalidateFosterPages(correction.fosterPersonId);
 
   return {
     ok: true,

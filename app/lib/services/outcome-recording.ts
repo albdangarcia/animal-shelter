@@ -10,6 +10,8 @@ import {
   AnimalActivityType,
   AnimalListingStatus,
   ApplicationStatus,
+  FosterPlacementType,
+  FosterReturnReason,
   OutcomeType,
 } from "@/prisma/generated/enums";
 import {
@@ -31,6 +33,12 @@ import type { OutcomeFormOutput } from "@/app/lib/zod-schemas/outcome.schema";
  * `checkTimelineChange` behind the animal's lock, and throw a
  * `TimelineOrderError` to roll back a day it refuses.
  *
+ * An animal can leave while it is in foster: it dies there, is transferred out
+ * from the foster home, or is adopted by someone. Recording the outcome ends
+ * the open placement on the outcome's day, and links the placement to the
+ * outcome, so a correction of the day moves the placement's end with it and a
+ * reversal reopens it. The placement's start bounds the day in both.
+ *
  * Like `outcome-reversal`, this module has no `next/*` and no auth imports, so
  * a plain `node:test` can drive it. `recordOutcome` runs inside the caller's
  * `prisma.$transaction`; `recordOutcomeCorrection` reads the outcome first and
@@ -43,15 +51,32 @@ export interface OutcomeToRecord {
   values: OutcomeFormOutput;
 }
 
+export interface RecordedOutcome {
+  /**
+   * The person whose foster placement the outcome ended, or whose placement's
+   * end a correction moved, so the caller can refresh their foster profile.
+   * Null when no placement was touched.
+   */
+  fosterPersonId: string | null;
+}
+
+const describe = (value: string) => value.replace(/_/g, " ").toLowerCase();
+
+// A placement is part of the animal's time in the shelter's care, so the
+// outcome that ends it cannot come before it began. The start day itself is
+// allowed: the animal went out and left the same day.
+const placementStartRefusal = (fosterName: string, startDate: string) =>
+  `The outcome date can't be before the foster placement with ${fosterName} began on ${formatShelterDay(calendarDay(startDate))}.`;
+
 /**
  * Archives the animal and records the outcome that archived it, with its
- * activity row.
+ * activity row. An open foster placement is ended by it, with a row of its own.
  */
 export const recordOutcome = async (
   tx: TransactionClient,
   { animalId, adoptionApplicationId, values }: OutcomeToRecord,
   actorId: string,
-): Promise<void> => {
+): Promise<RecordedOutcome> => {
   const { outcomeDate, outcomeType, destinationPartnerId, ownerId, notes } =
     values;
 
@@ -81,6 +106,31 @@ export const recordOutcome = async (
   });
   if (refusal) {
     throw new TimelineOrderError(refusal, "outcomeDate");
+  }
+
+  // Read behind the lock. Starting a placement writes the animal row, so one
+  // committed before the lock was taken is seen here, and one that has not
+  // yet written it waits for this transaction, then fails its serializable
+  // check against the archive below.
+  const openPlacement = await tx.fosterPlacement.findFirst({
+    where: { animalId, endDate: null },
+    select: {
+      id: true,
+      type: true,
+      startDate: true,
+      fosterProfile: {
+        select: { person: { select: { id: true, name: true } } },
+      },
+    },
+  });
+  const foster = openPlacement?.fosterProfile.person;
+  // Only a backdated outcome can land here, since a placement always starts
+  // on the day it is made.
+  if (openPlacement && foster && outcomeDate < openPlacement.startDate) {
+    throw new TimelineOrderError(
+      placementStartRefusal(foster.name, openPlacement.startDate),
+      "outcomeDate",
+    );
   }
 
   // Guarded as well as checked above, so that nothing reaching this without
@@ -118,6 +168,9 @@ export const recordOutcome = async (
     );
   }
 
+  // An adoption's adopter is always its application's applicant.
+  let adopterId: string | null = null;
+
   // If the outcome is an ADOPTION, ensure it was published
   if (outcomeType === OutcomeType.ADOPTION) {
     if (!adoptionApplicationId) {
@@ -128,7 +181,7 @@ export const recordOutcome = async (
 
     const application = await tx.adoptionApplication.findUnique({
       where: { id: adoptionApplicationId },
-      select: DERIVATION_APPLICATION_SELECT,
+      select: { ...DERIVATION_APPLICATION_SELECT, applicantId: true },
     });
 
     if (application && application.animalId !== animalId) {
@@ -153,10 +206,25 @@ export const recordOutcome = async (
         "Cannot process adoption: The application has not been approved.",
       );
     }
+    adopterId = application.applicantId;
+  }
+
+  // The foster adopting the animal they are fostering. From a foster-to-adopt
+  // placement that is the conversion's job: it links the application to the
+  // placement, which this form does not. Any other placement has no
+  // conversion, so it ends here, as adopted by the foster.
+  const adoptedByFoster = !!foster && adopterId === foster.id;
+  if (
+    adoptedByFoster &&
+    openPlacement?.type === FosterPlacementType.FOSTER_TO_ADOPT
+  ) {
+    throw new PreconditionFailedError(
+      `${foster.name} is adopting this animal from their foster-to-adopt placement. Convert the placement to an adoption from the animal's page instead.`,
+    );
   }
 
   // Create the Outcome record
-  await tx.outcome.create({
+  const outcome = await tx.outcome.create({
     data: {
       outcomeDate,
       type: outcomeType,
@@ -183,6 +251,7 @@ export const recordOutcome = async (
         previousUnit: { connect: { id: animal.currentUnitId } },
       }),
     },
+    select: { id: true },
   });
 
   // Log this closing event in the animal's history, mirroring the
@@ -199,10 +268,48 @@ export const recordOutcome = async (
     },
   });
 
+  if (openPlacement && foster) {
+    // Guarded like a return and a conversion, which take the same lock
+    // before closing a placement, so a lost swap here means something
+    // reached the placement without it.
+    const closed = await tx.fosterPlacement.updateMany({
+      where: { id: openPlacement.id, endDate: null },
+      data: {
+        endDate: outcomeDate,
+        returnReason: adoptedByFoster
+          ? FosterReturnReason.ADOPTED_BY_FOSTER
+          : FosterReturnReason.ENDED_BY_OUTCOME,
+        returnedById: actorId,
+        outcomeId: outcome.id,
+      },
+    });
+    if (closed.count === 0) {
+      throw new ConflictError(
+        "This animal's foster placement changed while the outcome was being recorded. Please try again.",
+      );
+    }
+
+    // The activity type a return writes, as the conversion writes it too:
+    // this is where the animal's time with the foster ends. The summary says
+    // how, since nothing came back to the shelter.
+    await tx.animalActivityLog.create({
+      data: {
+        animalId,
+        activityType: AnimalActivityType.FOSTER_RETURNED,
+        changedById: actorId,
+        changeSummary: `Foster placement with ${foster.name} ended: ${
+          adoptedByFoster ? "adopted by the foster" : describe(outcomeType)
+        }.`,
+      },
+    });
+  }
+
   // Nothing is written onto the applications. The one this outcome links to
   // now reads as adopted, and every other application still open on the
   // animal reads as closed, because both are derived from this outcome
   // (`deriveApplicationStatus`).
+
+  return { fosterPersonId: foster?.id ?? null };
 };
 
 interface OutcomeCorrectionFields {
@@ -217,9 +324,11 @@ interface OutcomeCorrectionFields {
 // nothing differs, so the caller can skip the write and the log row together.
 // Partner and owner ids are resolved to names; the notes themselves are not
 // echoed, since they can be long and the outcome record already holds them.
+// A foster placement the outcome ended moves with the day, in the same row.
 const describeOutcomeCorrection = async (
   before: OutcomeCorrectionFields,
   after: OutcomeCorrectionFields,
+  endedPlacement: boolean,
 ): Promise<string | null> => {
   const changes: string[] = [];
 
@@ -227,6 +336,9 @@ const describeOutcomeCorrection = async (
     changes.push(
       `the date changed from ${formatShelterDay(before.outcomeDate)} to ${formatShelterDay(after.outcomeDate)}`,
     );
+    if (endedPlacement) {
+      changes.push("the foster placement's end moved with it");
+    }
   }
 
   if (before.destinationPartnerId !== after.destinationPartnerId) {
@@ -277,7 +389,7 @@ const describeOutcomeCorrection = async (
 const REVERSED_MESSAGE =
   "This outcome was reversed, so it can no longer be corrected.";
 
-export type OutcomeCorrection = {
+export type OutcomeCorrection = RecordedOutcome & {
   status: "corrected" | "unchanged";
   animalId: string;
 };
@@ -309,6 +421,7 @@ export const recordOutcomeCorrection = async (
       destinationPartnerId: true,
       ownerId: true,
       reversedAt: true,
+      fosterPlacement: { select: { id: true } },
     },
   });
 
@@ -367,14 +480,15 @@ export const recordOutcomeCorrection = async (
       outcomeDate: calendarDay(existingOutcome.outcomeDate),
     },
     nextValues,
+    !!existingOutcome.fosterPlacement,
   );
 
   // A save that changes nothing leaves no trace in the animal's history.
   if (!changeSummary) {
-    return { status: "unchanged", animalId };
+    return { status: "unchanged", animalId, fosterPersonId: null };
   }
 
-  await prisma.$transaction(async (tx) => {
+  const fosterPersonId = await prisma.$transaction(async (tx) => {
     // Taken before the day is checked, so the animal's other intakes and
     // outcomes are still as the check reads them when the correction is
     // written. No person lock is held here, so this keeps the order
@@ -386,18 +500,35 @@ export const recordOutcomeCorrection = async (
     // no longer on the timeline the check reads.
     const stored = await tx.outcome.findUnique({
       where: { id: outcomeId },
-      select: { outcomeDate: true, reversedAt: true },
+      select: {
+        outcomeDate: true,
+        reversedAt: true,
+        // The placement this outcome ended, when it ended one: a conversion,
+        // or an outcome recorded while the animal was in foster. Its end is
+        // the outcome's day, so it moves with the day.
+        fosterPlacement: {
+          select: {
+            id: true,
+            startDate: true,
+            fosterProfile: {
+              select: { person: { select: { id: true, name: true } } },
+            },
+          },
+        },
+      },
     });
     if (!stored || stored.reversedAt) {
       throw new ConflictError(REVERSED_MESSAGE);
     }
+    const placement = stored.fosterPlacement;
 
     // Only a new day is checked: a save that leaves the day alone moves
     // nothing, so a notes fix on an animal whose timeline already has a break
     // is not refused for it. The day is compared with the one stored now,
     // not the one read above, so a correction racing another that moved the
     // day is checked against where the outcome actually sits.
-    if (calendarDay(stored.outcomeDate) !== nextValues.outcomeDate) {
+    const dayMoves = calendarDay(stored.outcomeDate) !== nextValues.outcomeDate;
+    if (dayMoves) {
       const refusal = await checkTimelineChange(tx, animalId, {
         kind: "moveOutcome",
         outcomeId,
@@ -405,6 +536,15 @@ export const recordOutcomeCorrection = async (
       });
       if (refusal) {
         throw new TimelineOrderError(refusal, "outcomeDate");
+      }
+      if (placement && nextValues.outcomeDate < placement.startDate) {
+        throw new TimelineOrderError(
+          placementStartRefusal(
+            placement.fosterProfile.person.name,
+            placement.startDate,
+          ),
+          "outcomeDate",
+        );
       }
     }
 
@@ -418,6 +558,13 @@ export const recordOutcomeCorrection = async (
       throw new ConflictError(REVERSED_MESSAGE);
     }
 
+    if (placement && dayMoves) {
+      await tx.fosterPlacement.update({
+        where: { id: placement.id },
+        data: { endDate: nextValues.outcomeDate },
+      });
+    }
+
     await tx.animalActivityLog.create({
       data: {
         animalId,
@@ -426,7 +573,9 @@ export const recordOutcomeCorrection = async (
         changeSummary,
       },
     });
+
+    return placement && dayMoves ? placement.fosterProfile.person.id : null;
   }, options);
 
-  return { status: "corrected", animalId };
+  return { status: "corrected", animalId, fosterPersonId };
 };

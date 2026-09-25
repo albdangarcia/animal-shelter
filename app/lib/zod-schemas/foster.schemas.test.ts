@@ -1,7 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
-import { createFosterPlacementSchema } from "./foster.schemas";
+import {
+  createFosterPlacementSchema,
+  ReturnFromFosterSchema,
+} from "./foster.schemas";
+import { FosterReturnReason } from "@/prisma/generated/enums";
 import { calendarDay, shiftDayKey } from "@/app/lib/utils/shelter-day";
 
 // A fixed day the schema is built from, so these cases do not depend on when
@@ -91,4 +95,43 @@ test("createFosterPlacementSchema: the boundary moves with the day it is built f
     }).success,
     false,
   );
+});
+
+const returnInput = {
+  placementId: "cmtn2bxpz00gancgsd6hyf79q",
+  unitId: "cmtn2bxpz00gancgsd6hyf79s",
+};
+
+test("ReturnFromFosterSchema: the reasons a return can give are accepted", () => {
+  for (const returnReason of [
+    FosterReturnReason.RETURNED_TO_SHELTER,
+    FosterReturnReason.TRANSFERRED,
+    FosterReturnReason.MEDICAL,
+    FosterReturnReason.OTHER,
+  ]) {
+    const result = ReturnFromFosterSchema.safeParse({
+      ...returnInput,
+      returnReason,
+    });
+    assert.equal(result.success, true, returnReason);
+  }
+});
+
+test("ReturnFromFosterSchema: the reasons only an outcome records are refused", () => {
+  // The form hides them, so this is a direct call: a return with either
+  // would say an outcome ended the placement while putting the animal back
+  // in a unit.
+  for (const returnReason of [
+    FosterReturnReason.ADOPTED_BY_FOSTER,
+    FosterReturnReason.ENDED_BY_OUTCOME,
+  ]) {
+    const result = ReturnFromFosterSchema.safeParse({
+      ...returnInput,
+      returnReason,
+    });
+    assert.equal(result.success, false, returnReason);
+    assert.deepEqual(z.flattenError(result.error!).fieldErrors, {
+      returnReason: ["That reason is recorded by an outcome, not by a return."],
+    });
+  }
 });

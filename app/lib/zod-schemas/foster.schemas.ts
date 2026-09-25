@@ -164,12 +164,26 @@ export type CreateFosterPlacementSchema = ReturnType<
   typeof createFosterPlacementSchema
 >;
 
+// Reasons that record how an outcome ended the placement. Only the outcome
+// that ended it writes one: the conversion, or recording an outcome while the
+// animal is in foster. A return puts the animal back in a unit, which neither
+// of those does, so a return with one of these would be a record of something
+// else.
+const OUTCOME_RETURN_REASONS: readonly FosterReturnReason[] = [
+  FosterReturnReason.ADOPTED_BY_FOSTER,
+  FosterReturnReason.ENDED_BY_OUTCOME,
+];
+
 export const ReturnFromFosterSchema = z.object({
   placementId: cuidSchema,
-  returnReason: z.enum(FosterReturnReason, {
-    error: (issue) =>
-      issue.input === undefined ? "A return reason is required." : undefined,
-  }),
+  returnReason: z
+    .enum(FosterReturnReason, {
+      error: (issue) =>
+        issue.input === undefined ? "A return reason is required." : undefined,
+    })
+    .refine((reason) => !OUTCOME_RETURN_REASONS.includes(reason), {
+      error: "That reason is recorded by an outcome, not by a return.",
+    }),
   returnNotes: z.string().optional(),
   unitId: cuidSchema,
 });
