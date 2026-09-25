@@ -41,6 +41,7 @@ export const OutcomeFormSchema = z
   );
 
 export type OutcomeFormInput = z.input<typeof OutcomeFormSchema>;
+export type OutcomeFormOutput = z.output<typeof OutcomeFormSchema>;
 
 // Exported so the reversal dialog can hold a reason to the same limit before
 // sending it: a paste far over it would otherwise fail on the request's size
