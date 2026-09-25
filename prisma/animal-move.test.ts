@@ -114,8 +114,20 @@ const locationRows = (animalId: string) =>
     select: { changedById: true, changeSummary: true },
   });
 
-const move = (animalId: string, unitId: string | null) =>
-  prisma.$transaction((tx) => moveAnimal(tx, animalId, unitId, staffId));
+const move = (
+  animalId: string,
+  unitId: string | null,
+  options?: { timeout: number },
+) =>
+  prisma.$transaction(
+    (tx) => moveAnimal(tx, animalId, unitId, staffId),
+    options,
+  );
+
+// Longer than the five seconds `waitForSessionBlockedBy` may take, so a slow
+// machine fails on the wait, not on a transaction timeout. Given to every
+// transaction `holdOpen` keeps open and to every transaction a wait depends on.
+const lockWaitTimeout = 20_000;
 
 // Every transaction `holdOpen` has not yet seen end.
 const heldOpen = new Set<{ release: () => void; done: Promise<void> }>();
@@ -130,10 +142,13 @@ const holdOpen = async <T>(work: (tx: TransactionClient) => Promise<T>) => {
   const released = new Promise<void>((resolve) => (release = resolve));
   let held!: (value: T) => void;
   const isHeld = new Promise<T>((resolve) => (held = resolve));
-  const done = prisma.$transaction(async (tx) => {
-    held(await work(tx));
-    await released;
-  });
+  const done = prisma.$transaction(
+    async (tx) => {
+      held(await work(tx));
+      await released;
+    },
+    { timeout: lockWaitTimeout },
+  );
   const entry = { release, done };
   heldOpen.add(entry);
   void done.finally(() => heldOpen.delete(entry)).catch(() => {});
@@ -252,7 +267,7 @@ test("a move waits for an outcome being recorded, then is refused", async () => 
     return backendPid(tx);
   });
 
-  const moving = move(animalId, target.id);
+  const moving = move(animalId, target.id, { timeout: lockWaitTimeout });
   // Observed before the outcome is released, so it cannot be an unhandled
   // rejection while the test waits.
   const refused = assert.rejects(moving, AnimalArchivedError);

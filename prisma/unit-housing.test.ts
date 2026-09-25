@@ -122,7 +122,11 @@ const locationDeletedAt = async (locationId: string) =>
   ).deletedAt;
 
 /** What each placement path does: read the unit behind its lock, then write. */
-const place = (animalId: string, unitId: string) =>
+const place = (
+  animalId: string,
+  unitId: string,
+  options?: { timeout: number },
+) =>
   prisma.$transaction(async (tx) => {
     const unit = await findLiveUnitForPlacement(tx, unitId);
     if (!unit) return false;
@@ -131,7 +135,12 @@ const place = (animalId: string, unitId: string) =>
       data: { currentUnitId: unit.id },
     });
     return true;
-  });
+  }, options);
+
+// Longer than the five seconds `waitForSessionBlockedBy` may take, so a slow
+// machine fails on the wait, not on a transaction timeout. Given to every
+// transaction `holdOpen` keeps open and to every transaction a wait depends on.
+const lockWaitTimeout = 20_000;
 
 // Every transaction `holdOpen` has not yet seen end.
 const heldOpen = new Set<{ release: () => void; done: Promise<void> }>();
@@ -146,10 +155,13 @@ const holdOpen = async <T>(work: (tx: TransactionClient) => Promise<T>) => {
   const released = new Promise<void>((resolve) => (release = resolve));
   let held!: (value: T) => void;
   const isHeld = new Promise<T>((resolve) => (held = resolve));
-  const done = prisma.$transaction(async (tx) => {
-    held(await work(tx));
-    await released;
-  });
+  const done = prisma.$transaction(
+    async (tx) => {
+      held(await work(tx));
+      await released;
+    },
+    { timeout: lockWaitTimeout },
+  );
   const entry = { release, done };
   heldOpen.add(entry);
   void done.finally(() => heldOpen.delete(entry)).catch(() => {});
@@ -235,7 +247,10 @@ test("a unit delete waits for a placement, then sees the animal and refuses", as
     return backendPid(tx);
   });
 
-  const deletion = prisma.$transaction((tx) => deleteUnitIfEmpty(tx, unit.id));
+  const deletion = prisma.$transaction(
+    (tx) => deleteUnitIfEmpty(tx, unit.id),
+    { timeout: lockWaitTimeout },
+  );
   await waitForSessionBlockedBy(placement.result);
   assert.equal(await unitDeletedAt(unit.id), null);
 
@@ -258,7 +273,7 @@ test("a placement waits for a unit delete, then sees the unit deleted", async ()
   }));
   assert.equal(deletion.result.deleted, true);
 
-  const placement = place(animalId, unit.id);
+  const placement = place(animalId, unit.id, { timeout: lockWaitTimeout });
   await waitForSessionBlockedBy(deletion.result.pid);
 
   deletion.release();
@@ -329,7 +344,10 @@ test("a unit delete waits for a reversal putting the animal back, then refuses",
   }));
   assert.equal(reversal.result.reversal.restoredUnitId, unit.id);
 
-  const deletion = prisma.$transaction((tx) => deleteUnitIfEmpty(tx, unit.id));
+  const deletion = prisma.$transaction(
+    (tx) => deleteUnitIfEmpty(tx, unit.id),
+    { timeout: lockWaitTimeout },
+  );
   await waitForSessionBlockedBy(reversal.result.pid);
 
   reversal.release();
@@ -350,8 +368,9 @@ test("a reversal waits for a unit delete, then leaves the animal unhoused", asyn
   }));
   assert.equal(deletion.result.deleted, true);
 
-  const reversal = prisma.$transaction((tx) =>
-    recordOutcomeReversal(tx, outcomeId, "Wrong animal.", staffId),
+  const reversal = prisma.$transaction(
+    (tx) => recordOutcomeReversal(tx, outcomeId, "Wrong animal.", staffId),
+    { timeout: lockWaitTimeout },
   );
   await waitForSessionBlockedBy(deletion.result.pid);
 
@@ -396,8 +415,9 @@ test("a location delete waits for a unit restore, then sees the unit and refuses
   }));
   assert.equal(restore.result.restored, true);
 
-  const deletion = prisma.$transaction((tx) =>
-    deleteLocationIfEmpty(tx, unit.locationId),
+  const deletion = prisma.$transaction(
+    (tx) => deleteLocationIfEmpty(tx, unit.locationId),
+    { timeout: lockWaitTimeout },
   );
   await waitForSessionBlockedBy(restore.result.pid);
 
@@ -418,8 +438,9 @@ test("a unit restore waits for a location delete, then is refused", async () => 
   }));
   assert.equal(deletion.result.deleted, true);
 
-  const restore = prisma.$transaction((tx) =>
-    restoreUnitIfLocationLive(tx, unit.id),
+  const restore = prisma.$transaction(
+    (tx) => restoreUnitIfLocationLive(tx, unit.id),
+    { timeout: lockWaitTimeout },
   );
   await waitForSessionBlockedBy(deletion.result.pid);
 
@@ -451,8 +472,9 @@ test("a location delete waits for a unit being added, then sees it and refuses",
   }));
   assert.equal(creation.result.created, true);
 
-  const deletion = prisma.$transaction((tx) =>
-    deleteLocationIfEmpty(tx, unit.locationId),
+  const deletion = prisma.$transaction(
+    (tx) => deleteLocationIfEmpty(tx, unit.locationId),
+    { timeout: lockWaitTimeout },
   );
   await waitForSessionBlockedBy(creation.result.pid);
 
@@ -472,8 +494,9 @@ test("a unit being added waits for a location delete, then is refused", async ()
   }));
   assert.equal(deletion.result.deleted, true);
 
-  const creation = prisma.$transaction((tx) =>
-    createUnitIn(tx, unit.locationId, "B2"),
+  const creation = prisma.$transaction(
+    (tx) => createUnitIn(tx, unit.locationId, "B2"),
+    { timeout: lockWaitTimeout },
   );
   await waitForSessionBlockedBy(deletion.result.pid);
 

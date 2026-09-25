@@ -125,13 +125,24 @@ const backendPid = async (tx: TransactionClient) =>
   (await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`)[0]
     .pid;
 
+// Longer than the five seconds `waitForSessionBlockedBy` may take, so a slow
+// machine fails on the wait, not on a transaction timeout. Given to both
+// sides of a wait: the outcome held open and the transaction blocked on it.
+const lockWaitTimeout = 20_000;
+
 /**
  * Records an outcome the way both outcome-recording paths do, archiving the
  * animal first, and holds the transaction open between the two writes and
  * again before committing. `ownerId` makes the outcome reference a person, as
  * a return to owner does. `pid` is the backend holding the animal's lock.
+ * `release` opens every gate still shut, so a test that fails part way does
+ * not leave the transaction waiting out its timeout.
  */
-const recordOutcomeInSteps = (animalId: string, ownerId?: string) => {
+const recordOutcomeInSteps = (
+  animalId: string,
+  ownerId?: string,
+  options?: { timeout: number },
+) => {
   const gate = () => {
     let open!: () => void;
     const opened = new Promise<void>((resolve) => (open = resolve));
@@ -143,26 +154,29 @@ const recordOutcomeInSteps = (animalId: string, ownerId?: string) => {
   const insert = gate();
   const recorded = gate();
   const commit = gate();
-  const committed = prisma.$transaction(async (tx) => {
-    started(await backendPid(tx));
-    await tx.animal.updateMany({
-      where: { id: animalId, listingStatus: { not: AnimalListingStatus.ARCHIVED } },
-      data: { listingStatus: AnimalListingStatus.ARCHIVED },
-    });
-    archived.open();
-    await insert.opened;
-    await tx.outcome.create({
-      data: {
-        animalId,
-        type: OutcomeType.TRANSFER_OUT,
-        outcomeDate: "2026-01-01",
-        staffMemberId: staffId,
-        ...(ownerId && { ownerId }),
-      },
-    });
-    recorded.open();
-    await commit.opened;
-  });
+  const committed = prisma.$transaction(
+    async (tx) => {
+      started(await backendPid(tx));
+      await tx.animal.updateMany({
+        where: { id: animalId, listingStatus: { not: AnimalListingStatus.ARCHIVED } },
+        data: { listingStatus: AnimalListingStatus.ARCHIVED },
+      });
+      archived.open();
+      await insert.opened;
+      await tx.outcome.create({
+        data: {
+          animalId,
+          type: OutcomeType.TRANSFER_OUT,
+          outcomeDate: "2026-01-01",
+          staffMemberId: staffId,
+          ...(ownerId && { ownerId }),
+        },
+      });
+      recorded.open();
+      await commit.opened;
+    },
+    options,
+  );
   return {
     pid,
     isArchived: archived.opened,
@@ -170,6 +184,10 @@ const recordOutcomeInSteps = (animalId: string, ownerId?: string) => {
     isRecorded: recorded.opened,
     commit: commit.open,
     committed,
+    release: () => {
+      insert.open();
+      commit.open();
+    },
   };
 };
 
@@ -215,14 +233,23 @@ test("a read that takes no lock misses an outcome still being recorded", async (
 
 test("a read behind the animal lock waits for the outcome and sees it", async () => {
   const application = await makeOpenApplication("Locked");
-  const outcome = recordOutcomeInSteps(application.animalId);
+  const outcome = recordOutcomeInSteps(application.animalId, undefined, {
+    timeout: lockWaitTimeout,
+  });
   outcome.insertOutcome();
   await outcome.isRecorded;
 
-  const read = prisma.$transaction((tx) =>
-    effectiveStatusBehindLock(tx, application),
+  const read = prisma.$transaction(
+    (tx) => effectiveStatusBehindLock(tx, application),
+    { timeout: lockWaitTimeout },
   );
-  await waitForSessionBlockedBy(await outcome.pid);
+  try {
+    await waitForSessionBlockedBy(await outcome.pid);
+  } catch (error) {
+    // Released only on failure: the test opens the gates itself, in order.
+    outcome.release();
+    throw error;
+  }
 
   outcome.commit();
   await outcome.committed;
@@ -235,14 +262,25 @@ test("a read behind the animal lock waits for the outcome and sees it", async ()
 // transaction would wait on the other and Postgres would abort one.
 test("entering an application does not deadlock with an outcome it waits for", async () => {
   const animalId = await makeAnimal("Deadlock");
-  const outcome = recordOutcomeInSteps(animalId, applicantId);
+  const outcome = recordOutcomeInSteps(animalId, applicantId, {
+    timeout: lockWaitTimeout,
+  });
   await outcome.isArchived;
 
-  const entry = prisma.$transaction(async (tx) => {
-    await lockPerson(tx, applicantId);
-    await lockAnimal(tx, animalId);
-  });
-  await waitForSessionBlockedBy(await outcome.pid);
+  const entry = prisma.$transaction(
+    async (tx) => {
+      await lockPerson(tx, applicantId);
+      await lockAnimal(tx, animalId);
+    },
+    { timeout: lockWaitTimeout },
+  );
+  try {
+    await waitForSessionBlockedBy(await outcome.pid);
+  } catch (error) {
+    // Released only on failure: the test opens the gates itself, in order.
+    outcome.release();
+    throw error;
+  }
 
   outcome.insertOutcome();
   await outcome.isRecorded;

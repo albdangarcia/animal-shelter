@@ -228,9 +228,14 @@ const reIntake = (animalId: string) =>
     data: { listingStatus: AnimalListingStatus.DRAFT, archiveReason: null },
   });
 
-const reverse = (outcomeId: string, reason = REASON) =>
-  prisma.$transaction((tx) =>
-    recordOutcomeReversal(tx, outcomeId, reason, adminId),
+const reverse = (
+  outcomeId: string,
+  reason = REASON,
+  options?: { timeout: number },
+) =>
+  prisma.$transaction(
+    (tx) => recordOutcomeReversal(tx, outcomeId, reason, adminId),
+    options,
   );
 
 const readOutcome = (id: string) =>
@@ -392,23 +397,32 @@ test("a reversal waits for the animal lock", async () => {
     previousListingStatus: AnimalListingStatus.PUBLISHED,
   });
 
+  // Both transactions are given longer than the five seconds the wait below
+  // may take, so a slow machine fails on the wait, not on a timeout.
+  const timeout = 20_000;
   let release!: () => void;
   const released = new Promise<void>((resolve) => (release = resolve));
   let locked!: (pid: number) => void;
   const isLocked = new Promise<number>((resolve) => (locked = resolve));
-  const holder = prisma.$transaction(async (tx) => {
-    await lockAnimal(tx, animalId);
-    locked(await backendPid(tx));
-    await released;
-  });
+  const holder = prisma.$transaction(
+    async (tx) => {
+      await lockAnimal(tx, animalId);
+      locked(await backendPid(tx));
+      await released;
+    },
+    { timeout },
+  );
   // `holder` settles first only when it threw before handing back its pid.
   const holderPid = await Promise.race([isLocked, holder as Promise<never>]);
 
-  const reversal = reverse(outcomeId);
-  await waitForSessionBlockedBy(holderPid);
-  assert.equal((await readOutcome(outcomeId)).reversedAt, null);
-
-  release();
+  const reversal = reverse(outcomeId, REASON, { timeout });
+  try {
+    await waitForSessionBlockedBy(holderPid);
+    assert.equal((await readOutcome(outcomeId)).reversedAt, null);
+  } finally {
+    // Released even when the wait fails, so neither transaction is left open.
+    release();
+  }
   await holder;
   await reversal;
   assert.ok((await readOutcome(outcomeId)).reversedAt);
