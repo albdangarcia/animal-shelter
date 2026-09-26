@@ -23,7 +23,24 @@ const AnimalActivityLogSchema = z.object({
   animalId: cuidSchema,
 });
 
-const ACTIVITIES_PER_PAGE = 10;
+export const ACTIVITIES_PER_PAGE = 10;
+
+// The where, order and paging of one feed page, without the auth wrapper, so
+// a test can run the exact query the feed runs.
+export const animalActivityLogPageArgs = (
+  animalId: string,
+  currentPage: number
+) => ({
+  where: { animalId } satisfies Prisma.AnimalActivityLogWhereInput,
+  orderBy: [
+    { changedAt: "desc" },
+    // Only here so rows that share a changedAt land on exactly one page. It
+    // does not order related rows; their writers stamp them apart.
+    { id: "desc" },
+  ] satisfies Prisma.AnimalActivityLogOrderByWithRelationInput[],
+  take: ACTIVITIES_PER_PAGE,
+  skip: (currentPage - 1) * ACTIVITIES_PER_PAGE,
+});
 
 const _fetchAnimalActivityLogs = async (
   currentPageInput: number,
@@ -43,17 +60,13 @@ const _fetchAnimalActivityLogs = async (
 
   const { currentPage, animalId } = validatedArgs.data;
 
-  const whereClause: Prisma.AnimalActivityLogWhereInput = {
-    animalId: animalId,
-  };
+  const pageArgs = animalActivityLogPageArgs(animalId, currentPage);
 
   try {
-    const offset = (currentPage - 1) * ACTIVITIES_PER_PAGE;
-
     const [totalCount, activityLogs] = await Promise.all([
-      prisma.animalActivityLog.count({ where: whereClause }),
+      prisma.animalActivityLog.count({ where: pageArgs.where }),
       prisma.animalActivityLog.findMany({
-        where: whereClause,
+        ...pageArgs,
         include: {
           changedBy: {
             include: {
@@ -61,11 +74,6 @@ const _fetchAnimalActivityLogs = async (
             },
           },
         },
-        orderBy: {
-          changedAt: "desc",
-        },
-        take: ACTIVITIES_PER_PAGE,
-        skip: offset,
       }),
     ]);
 
