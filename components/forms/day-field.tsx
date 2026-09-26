@@ -21,11 +21,21 @@ type DayFieldProps<TValues extends FieldValues> = {
   className?: string;
   /** Classes for the trigger button, forwarded to DateInput. */
   triggerClassName?: string;
+  /**
+   * The form can't do without a date here, so clicking the selected day again
+   * keeps it rather than clearing it. The label is left as written.
+   */
+  required?: boolean;
   /** A line under the picker, above any validation message. */
   description?: ReactNode;
 } & Omit<
   DateInputProps,
-  "value" | "onChange" | "aria-label" | "id" | "className"
+  | "value"
+  | "onChange"
+  | "aria-label"
+  | "id"
+  | "className"
+  | "keepValueOnDeselect"
 >;
 
 /**
@@ -51,6 +61,7 @@ export function DayField<TValues extends FieldValues>({
   label,
   className,
   triggerClassName,
+  required = false,
   description,
   ...inputProps
 }: DayFieldProps<TValues>) {
@@ -73,6 +84,7 @@ export function DayField<TValues extends FieldValues>({
               <DateInput
                 id={name}
                 className={triggerClassName}
+                keepValueOnDeselect={required}
                 value={value}
                 onChange={(date) =>
                   field.onChange(date ? format(date, "yyyy-MM-dd") : undefined)

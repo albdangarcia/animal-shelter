@@ -113,6 +113,20 @@ type Form = {
 
 const forms: Form[] = [
   {
+    // No outcome type is chosen, so a submit only validates.
+    name: "the outcome form's date of outcome",
+    open: async (page) => {
+      const animalId = await firstValue(
+        `SELECT id AS value FROM animals
+         WHERE "listingStatus" <> 'ARCHIVED' ORDER BY id`,
+      );
+      await page.goto(`/dashboard/outcomes/create?animalId=${animalId}`);
+      await waitForFormHydration(page, "Process Outcome");
+    },
+    submit: (page) => page.getByRole("button", { name: "Process Outcome" }),
+    trigger: /^Date of Outcome \*:/,
+  },
+  {
     // No name, type, species... so a submit only validates.
     name: "the create animal form's intake date",
     open: async (page) => {

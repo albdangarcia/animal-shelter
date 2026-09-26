@@ -19,9 +19,19 @@ type DateFieldProps<TValues extends FieldValues> = {
   className?: string;
   /** Classes for the trigger button, forwarded to DateInput. */
   triggerClassName?: string;
+  /**
+   * The form can't do without a date here, so clicking the selected day again
+   * keeps it rather than clearing it. The label is left as written.
+   */
+  required?: boolean;
 } & Omit<
   DateInputProps,
-  "value" | "onChange" | "aria-label" | "id" | "className"
+  | "value"
+  | "onChange"
+  | "aria-label"
+  | "id"
+  | "className"
+  | "keepValueOnDeselect"
 >;
 
 /**
@@ -40,6 +50,7 @@ export function DateField<TValues extends FieldValues>({
   label,
   className,
   triggerClassName,
+  required = false,
   ...inputProps
 }: DateFieldProps<TValues>) {
   const { placeholder = "Pick a date" } = inputProps;
@@ -58,6 +69,7 @@ export function DateField<TValues extends FieldValues>({
               <DateInput
                 id={name}
                 className={triggerClassName}
+                keepValueOnDeselect={required}
                 value={value}
                 onChange={field.onChange}
                 aria-label={`${label}: ${

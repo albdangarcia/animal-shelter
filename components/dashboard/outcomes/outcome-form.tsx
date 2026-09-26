@@ -221,9 +221,7 @@ export function OutcomeForm({
                 label="Date of Outcome *"
                 className="flex flex-col"
                 triggerClassName="pl-3"
-                // Required field: clicking the selected day again must not
-                // clear it.
-                keepValueOnDeselect
+                required
                 // No future days: an outcome is recorded after it happens. The
                 // grid works in local dates, so the shelter's day is read as
                 // one to compare against.
