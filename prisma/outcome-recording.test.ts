@@ -266,7 +266,11 @@ test("a correction moved past a later re-intake is refused, and one within bound
     staffId,
   );
 
-  assert.deepEqual(result, { status: "corrected", animalId });
+  assert.deepEqual(result, {
+    status: "corrected",
+    animalId,
+    fosterPersonId: null,
+  });
   animal = await readAnimal(animalId);
   assert.equal(animal.outcomes[0].outcomeDate, "2026-02-10");
   assert.equal(animal.listingStatus, AnimalListingStatus.DRAFT);

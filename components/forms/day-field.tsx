@@ -1,9 +1,11 @@
 "use client";
 
 import { format, parseISO } from "date-fns";
+import type { ReactNode } from "react";
 import type { Control, FieldValues, Path } from "react-hook-form";
 import {
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -19,6 +21,8 @@ type DayFieldProps<TValues extends FieldValues> = {
   className?: string;
   /** Classes for the trigger button, forwarded to DateInput. */
   triggerClassName?: string;
+  /** A line under the picker, above any validation message. */
+  description?: ReactNode;
 } & Omit<
   DateInputProps,
   "value" | "onChange" | "aria-label" | "id" | "className"
@@ -47,6 +51,7 @@ export function DayField<TValues extends FieldValues>({
   label,
   className,
   triggerClassName,
+  description,
   ...inputProps
 }: DayFieldProps<TValues>) {
   const { placeholder = "Pick a date" } = inputProps;
@@ -78,6 +83,7 @@ export function DayField<TValues extends FieldValues>({
                 {...inputProps}
               />
             </FormControl>
+            {description && <FormDescription>{description}</FormDescription>}
             <FormMessage />
           </FormItem>
         );

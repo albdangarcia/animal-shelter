@@ -125,6 +125,11 @@ const gotoActivity = async (page: Page, animalId: string) => {
 
 test("correcting an outcome logs who changed which fields", async ({ page }) => {
   const { animalId } = await openFirstOutcomeEdit(page, "TRANSFER_OUT");
+  // The seed links only adoption outcomes to foster placements, so this one
+  // ended none, and the date says nothing about a placement's end.
+  await expect(
+    page.getByText("This outcome ended a foster placement.", { exact: false }),
+  ).toHaveCount(0);
 
   const partnerSelect = page.getByLabel(/destination partner/i);
   // The stored partner is what the select opens on; wait for it rather than

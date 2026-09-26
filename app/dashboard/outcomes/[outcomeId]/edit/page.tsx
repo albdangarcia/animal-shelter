@@ -60,6 +60,7 @@ const EditOutcomePage = async ({ params }: Props) => {
       ) : (
         <OutcomeForm
           outcome={outcome}
+          endedFosterPlacement={!!outcome.fosterPlacement}
           animal={{ id: animal.id, name: animal.name }}
           application={application || undefined}
           partners={partners}

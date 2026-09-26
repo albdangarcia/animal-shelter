@@ -35,7 +35,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { returnFromFoster } from "@/app/lib/actions/foster-placement.actions";
-import { ReturnFromFosterSchema } from "@/app/lib/zod-schemas/foster.schemas";
+import {
+  OUTCOME_RETURN_REASONS,
+  ReturnFromFosterSchema,
+} from "@/app/lib/zod-schemas/foster.schemas";
 import { fosterReturnReasonOptions } from "@/app/lib/utils/enum-formatter";
 import { UnitPickerLocation } from "@/app/lib/data/locations/unit-picker.data";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
@@ -129,8 +132,13 @@ export function ReturnFromFosterForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
+                      {/* Only an outcome records these, and the server
+                          refuses them on a return. */}
                       {fosterReturnReasonOptions
-                        .filter((option) => option.value !== "ADOPTED_BY_FOSTER")
+                        .filter(
+                          (option) =>
+                            !OUTCOME_RETURN_REASONS.includes(option.value),
+                        )
                         .map((option) => (
                           <SelectItem key={option.value} value={option.value}>
                             {option.label}

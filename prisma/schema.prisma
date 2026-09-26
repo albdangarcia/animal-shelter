@@ -1314,6 +1314,10 @@ enum FosterReturnReason {
   TRANSFERRED
   MEDICAL
   OTHER
+  // Closed by an outcome recorded while the animal was in foster: it died,
+  // was transferred out, or was adopted by someone other than the foster.
+  // Only recording the outcome sets it; a return never does.
+  ENDED_BY_OUTCOME
 }
 
 /// A dated event: this animal is with this foster for this window. NOT an outcome —

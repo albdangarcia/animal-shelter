@@ -51,6 +51,12 @@ export interface OutcomeReversal {
   restoredListingStatus: AnimalListingStatus | null;
   /** The foster placement put back to open, when the outcome closed one. */
   reopenedPlacementId: string | null;
+  /**
+   * The foster whose placement the outcome ended, reopened or not: their
+   * profile's placement history shows the outcome either way. Null when the
+   * outcome ended no placement.
+   */
+  fosterPersonId: string | null;
   /** The unit the animal was put back in, or null when it was not placed. */
   restoredUnitId: string | null;
   /** What happened to the listing, placement and unit, as sentences for staff. */
@@ -108,7 +114,9 @@ export const recordOutcomeReversal = async (
       fosterPlacement: {
         select: {
           id: true,
-          fosterProfile: { select: { person: { select: { name: true } } } },
+          fosterProfile: {
+            select: { person: { select: { id: true, name: true } } },
+          },
         },
       },
     },
@@ -301,6 +309,7 @@ export const recordOutcomeReversal = async (
     adoptionApplicationId: outcome.adoptionApplicationId,
     restoredListingStatus,
     reopenedPlacementId,
+    fosterPersonId: outcome.fosterPlacement?.fosterProfile.person.id ?? null,
     restoredUnitId: restoredUnit?.id ?? null,
     effects: effectsText,
   };
