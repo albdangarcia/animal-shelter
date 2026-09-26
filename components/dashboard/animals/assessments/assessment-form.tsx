@@ -239,6 +239,9 @@ export function AssessmentForm({
             name="observedAt"
             label="Observed on"
             triggerClassName="w-full pl-3"
+            // Required field: clicking the selected day again must not clear
+            // it.
+            keepValueOnDeselect
             disabledDates={(date) => date > new Date()}
           />
         </div>
