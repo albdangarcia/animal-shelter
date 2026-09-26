@@ -528,6 +528,9 @@ const AnimalForm = ({
                   label="Estimated Birth Date"
                   className="col-span-2"
                   triggerClassName="w-full pl-3"
+                  // Required field: clicking the selected day again must not
+                  // clear it.
+                  keepValueOnDeselect
                   // No future days, and nothing before the epoch the pickers
                   // share. The grid works in local dates, so the shelter's day
                   // is read as one to compare against.

@@ -107,6 +107,8 @@ type Form = {
   submit: (page: Page) => Locator;
   /** The date picker's trigger, by its label, whatever day it names. */
   trigger: RegExp;
+  /** The picker holds no day on opening, so one is picked before the test. */
+  startsEmpty?: boolean;
 };
 
 const forms: Form[] = [
@@ -122,6 +124,21 @@ const forms: Form[] = [
         name: "Create Intake",
       }),
     trigger: /^Intake Date:/,
+  },
+  {
+    // Empty on opening, so a day is picked first. The rest of the form is
+    // empty, so a submit only validates.
+    name: "the create animal form's estimated birth date",
+    open: async (page) => {
+      await page.goto("/dashboard/animals/create");
+      await waitForFormHydration(page, "Create Intake");
+    },
+    submit: (page) =>
+      formWithSubmit(page, "Create Intake").getByRole("button", {
+        name: "Create Intake",
+      }),
+    trigger: /^Estimated Birth Date:/,
+    startsEmpty: true,
   },
   {
     // No intake type is chosen, so a submit only validates.
@@ -200,6 +217,20 @@ for (const form of forms) {
     await form.open(page);
 
     const trigger = page.getByRole("button", { name: form.trigger });
+    if (form.startsEmpty) {
+      const empty = await trigger.getAttribute("aria-label");
+      const first = await openCalendar(page, trigger);
+      // A day in the middle of last month: always allowed, unlike today, which
+      // the picker can refuse if midnight passes between the page's render
+      // and this click. The middle of the grid is never an outside day.
+      await first
+        .getByRole("button", { name: "Go to the Previous Month" })
+        .click();
+      await first.locator("button[data-day]").nth(15).click();
+      await page.keyboard.press("Escape");
+      await expect(first).toBeHidden();
+      await expect(trigger).not.toHaveAttribute("aria-label", empty!);
+    }
     const before = await trigger.getAttribute("aria-label");
     expect(before).not.toBeNull();
 
