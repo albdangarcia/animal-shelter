@@ -168,13 +168,14 @@ export const recordAnimalCreation = async (
     ? `${intakeSummaryBase}; placed in ${resolvedUnitLabel.location.name} · ${resolvedUnitLabel.name}.`
     : `${intakeSummaryBase}.`;
 
-  await tx.animalActivityLog.create({
+  const intakeRow = await tx.animalActivityLog.create({
     data: {
       animalId: newAnimal.id,
       activityType: AnimalActivityType.INTAKE_PROCESSED,
       changedById: staffMemberId,
       changeSummary: intakeSummary,
     },
+    select: { changedAt: true },
   });
 
   // Log status change if published
@@ -185,6 +186,13 @@ export const recordAnimalCreation = async (
         activityType: AnimalActivityType.STATUS_CHANGE,
         changedById: staffMemberId,
         changeSummary: `Listing status changed to PUBLISHED.`,
+        // The feed orders by time alone, newest first, and shows the animal
+        // as admitted before it was published only if this row is later. Two
+        // rows written back to back can share a millisecond, so this one is
+        // stamped at least a millisecond after the intake's.
+        changedAt: new Date(
+          Math.max(Date.now(), intakeRow.changedAt.getTime() + 1),
+        ),
       },
     });
   }
