@@ -332,6 +332,7 @@ test("a reversal voids the outcome, restores the listing and records why", async
   assert.equal(result.adoptionApplicationId, applicationId);
   assert.equal(result.restoredListingStatus, AnimalListingStatus.PENDING_ADOPTION);
   assert.equal(result.reopenedPlacementId, null);
+  assert.equal(result.fosterPersonId, null);
 
   // Voided, not deleted, and the link to the application is kept.
   const outcome = await readOutcome(outcomeId);
@@ -789,6 +790,7 @@ test("reversing a conversion reopens the placement it closed", async () => {
   const result = await reverse(outcomeId);
 
   assert.equal(result.reopenedPlacementId, placementId);
+  assert.equal(result.fosterPersonId, fosterPersonId);
   assert.deepEqual(await readPlacement(placementId), {
     endDate: null,
     returnReason: null,
@@ -822,6 +824,8 @@ test("a conversion's placement stays closed when the listing is left alone", asy
   const result = await reverse(outcomeId);
 
   assert.equal(result.reopenedPlacementId, null);
+  // Named all the same: the foster's history now shows the outcome reversed.
+  assert.equal(result.fosterPersonId, fosterPersonId);
   assert.deepEqual(await readPlacement(placementId), before);
   await assertNoListingMismatch(animalId);
 });

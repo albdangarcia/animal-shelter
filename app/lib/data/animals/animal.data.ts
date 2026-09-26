@@ -445,6 +445,20 @@ const _fetchAnimalForOutcomeForm = async (id: string) => {
             },
           },
         },
+        // Recording an outcome ends an open placement, so the form says so
+        // before it is submitted. At most one is open per animal.
+        fosterPlacements: {
+          where: { endDate: null },
+          take: 1,
+          select: {
+            id: true,
+            type: true,
+            startDate: true,
+            fosterProfile: {
+              select: { person: { select: { id: true, name: true } } },
+            },
+          },
+        },
       },
     });
     return animal;

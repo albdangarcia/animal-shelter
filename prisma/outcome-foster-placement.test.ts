@@ -317,6 +317,7 @@ test("reversing that outcome reopens the placement and puts the animal in no uni
   );
 
   assert.equal(reversal.reopenedPlacementId, placementId);
+  assert.equal(reversal.fosterPersonId, fosterPersonId);
   assert.equal(reversal.restoredUnitId, null);
   assert.deepEqual(await readPlacement(placementId!), {
     endDate: null,

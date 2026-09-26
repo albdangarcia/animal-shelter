@@ -56,6 +56,9 @@ export const _fetchOutcomeById = async (outcomeId: string) => {
             name: true,
           },
         },
+        // The placement this outcome ended, if it ended one. Its end is the
+        // outcome's day, so the edit form says a new day moves it too.
+        fosterPlacement: { select: { id: true } },
         adoptionApplication: {
           include: {
             animal: {

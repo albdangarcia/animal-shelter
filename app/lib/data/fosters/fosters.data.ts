@@ -480,7 +480,12 @@ const fosterProfileForTabInclude = {
   speciesCapabilities: { select: { id: true, name: true } },
   placements: {
     orderBy: [{ startDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-    include: { animal: { select: { id: true, name: true } } },
+    include: {
+      animal: { select: { id: true, name: true } },
+      // A placement an outcome ended is shown as that outcome's type, and
+      // marked when that outcome was later reversed.
+      outcome: { select: { type: true, reversedAt: true } },
+    },
   },
 } satisfies Prisma.FosterProfileInclude;
 

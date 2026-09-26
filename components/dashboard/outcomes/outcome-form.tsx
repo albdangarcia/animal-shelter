@@ -64,6 +64,11 @@ interface OutcomeFormProps {
   animal: AnimalForOutcome;
   application?: AdoptionApplicationPayload; // Optional, for internal adoptions
   outcome?: OutcomePayload; // For edit mode
+  /**
+   * Edit mode: this outcome ended a foster placement, whose end day is the
+   * outcome's and moves with it.
+   */
+  endedFosterPlacement?: boolean;
   partners: PartnerPayload[]; // For the 'Transfer' option
   suggestedOwnerId?: string; // For the 'Return to Owner' option
   suggestedOwnerLabel?: string;
@@ -98,6 +103,7 @@ export function OutcomeForm({
   animal,
   application,
   outcome,
+  endedFosterPlacement,
   partners,
   suggestedOwnerId,
   suggestedOwnerLabel,
@@ -222,6 +228,11 @@ export function OutcomeForm({
                 // grid works in local dates, so the shelter's day is read as
                 // one to compare against.
                 disabledDates={(date) => date > parseISO(today)}
+                description={
+                  isEditMode && endedFosterPlacement
+                    ? "This outcome ended a foster placement. Changing the date moves the placement's end day with it."
+                    : undefined
+                }
               />
             </div>
 

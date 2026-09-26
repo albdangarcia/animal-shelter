@@ -169,7 +169,7 @@ export type CreateFosterPlacementSchema = ReturnType<
 // animal is in foster. A return puts the animal back in a unit, which neither
 // of those does, so a return with one of these would be a record of something
 // else.
-const OUTCOME_RETURN_REASONS: readonly FosterReturnReason[] = [
+export const OUTCOME_RETURN_REASONS: readonly FosterReturnReason[] = [
   FosterReturnReason.ADOPTED_BY_FOSTER,
   FosterReturnReason.ENDED_BY_OUTCOME,
 ];

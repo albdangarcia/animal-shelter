@@ -38,7 +38,7 @@ const OUTCOMES_PATH = "/dashboard/outcomes";
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
 
 // The fosters list and the foster's profile both show the placement, which an
-// outcome can end or move the end of.
+// outcome can end or move the end of, and a reversal can reopen or mark.
 const revalidateFosterPages = (fosterPersonId: string | null) => {
   if (!fosterPersonId) return;
   revalidatePath("/dashboard/fosters");
@@ -264,9 +264,7 @@ const _reverseOutcome = async (
       `${ADOPTION_APPLICATIONS_PATH}/${reversal.adoptionApplicationId}/edit`,
     );
   }
-  if (reversal.reopenedPlacementId) {
-    revalidatePath("/dashboard/fosters");
-  }
+  revalidateFosterPages(reversal.fosterPersonId);
   if (reversal.restoredUnitId) {
     revalidatePath("/dashboard/locations");
   }
