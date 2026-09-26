@@ -117,7 +117,12 @@ const correctionRows = (page: Page) =>
   page.locator("li").filter({ hasText: "corrected an outcome" });
 
 const gotoActivity = async (page: Page, animalId: string) => {
-  await page.goto(`/dashboard/animals/${animalId}`);
+  // The text check below is the real readiness signal; waiting for the
+  // window `load` event as well only adds a way for a stalled subresource to
+  // time the test out after the server has already answered.
+  await page.goto(`/dashboard/animals/${animalId}`, {
+    waitUntil: "domcontentloaded",
+  });
   await expect(
     page.getByText("most recent activity logs for this animal").first(),
   ).toBeVisible();
@@ -169,7 +174,9 @@ test("correcting an outcome logs who changed which fields", async ({ page }) => 
   await expect(detail).toContainText(
     `the destination partner changed from ${previousPartner} to ${nextPartner}`,
   );
-  await expect(detail).toContainText("notes were added");
+  // "added" on a first run, "edited" when a retry finds the notes the first
+  // attempt left behind — the database is not reset between retries.
+  await expect(detail).toContainText(/notes were (added|edited)/);
   // Only the fields that moved are named.
   await expect(detail).not.toContainText("the date changed");
   await expect(detail).not.toContainText("the owner changed");
