@@ -234,19 +234,45 @@ const readAnimal = async (animalId: string) => {
           adoptionApplicationId: true,
         },
       },
-      activityLog: { select: { activityType: true, changeSummary: true } },
+      // By time alone, as the feed orders them. No tie-break on id: it
+      // would hide two rows that share a timestamp.
+      activityLog: {
+        select: { activityType: true, changeSummary: true },
+        orderBy: { changedAt: "asc" },
+      },
     },
   });
   return {
     listingStatus: animal.listingStatus,
     currentUnitId: animal.currentUnitId,
     outcomes: animal.Outcome,
-    // Sorted by type, not by time: rows written in one transaction can share
-    // a timestamp, so their order by time is not fixed.
-    activityLogs: animal.activityLog.toSorted((a, b) =>
-      a.activityType.localeCompare(b.activityType),
-    ),
+    activityLogs: animal.activityLog,
   };
+};
+
+/**
+ * The outcome's row and the placement's end, in the order they were written,
+ * the end strictly later. The feed shows the end above the outcome only then.
+ */
+const assertEndFollowsOutcome = async (animalId: string) => {
+  const rows = await prisma.animalActivityLog.findMany({
+    where: {
+      animalId,
+      activityType: {
+        in: [
+          AnimalActivityType.OUTCOME_PROCESSED,
+          AnimalActivityType.FOSTER_RETURNED,
+        ],
+      },
+    },
+    select: { activityType: true, changedAt: true },
+    orderBy: { changedAt: "asc" },
+  });
+  assert.deepEqual(
+    rows.map((row) => row.activityType),
+    [AnimalActivityType.OUTCOME_PROCESSED, AnimalActivityType.FOSTER_RETURNED],
+  );
+  assert.ok(rows[1].changedAt > rows[0].changedAt);
 };
 
 const onlyOutcome = async (animalId: string) => {
@@ -293,15 +319,35 @@ test("an outcome while in foster ends the placement on its day, linked to it", a
   assert.equal(animal.currentUnitId, null);
   assert.deepEqual(animal.activityLogs, [
     {
-      activityType: AnimalActivityType.FOSTER_RETURNED,
-      changeSummary: `Foster placement with ${fosterName} ended: deceased.`,
-    },
-    {
       activityType: AnimalActivityType.OUTCOME_PROCESSED,
       changeSummary: "Animal was processed for outcome: deceased.",
     },
+    {
+      activityType: AnimalActivityType.FOSTER_RETURNED,
+      changeSummary: `Foster placement with ${fosterName} ended: deceased.`,
+    },
   ]);
+  await assertEndFollowsOutcome(animalId);
   await assertNoListingMismatch(animalId);
+});
+
+// Rows written back to back share a millisecond only sometimes. Under a
+// frozen clock they always do, so this fails every time the placement's end
+// is not stamped after the outcome.
+test("the placement's end follows the outcome even when both are written in the same millisecond", async (t) => {
+  const { animalId } = await makeAnimal(
+    "Died in foster, same millisecond",
+    FosterPlacementType.GENERAL,
+  );
+
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  try {
+    await record(animalId, "2026-01-10");
+  } finally {
+    t.mock.timers.reset();
+  }
+
+  await assertEndFollowsOutcome(animalId);
 });
 
 test("reversing that outcome reopens the placement and puts the animal in no unit", async () => {
@@ -315,6 +361,8 @@ test("reversing that outcome reopens the placement and puts the animal in no uni
   const reversal = await prisma.$transaction((tx) =>
     recordOutcomeReversal(tx, outcomeId, "Entered by mistake.", staffId),
   );
+  // The reversal leaves both rows as they were written.
+  await assertEndFollowsOutcome(animalId);
 
   assert.equal(reversal.reopenedPlacementId, placementId);
   assert.equal(reversal.fosterPersonId, fosterPersonId);
@@ -383,6 +431,7 @@ test("an outcome dated before the placement began is refused, and nothing is wri
   // The placement's own first day is allowed.
   await record(animalId, PLACEMENT_START);
   assert.equal((await readPlacement(placementId!)).endDate, PLACEMENT_START);
+  await assertEndFollowsOutcome(animalId);
   await assertNoListingMismatch(animalId);
 });
 
@@ -442,6 +491,7 @@ test("the foster adopting from a general placement ends it as adopted by the fos
     (await fosterRows(animalId)).map((log) => log.changeSummary),
     [`Foster placement with ${fosterName} ended: adopted by the foster.`],
   );
+  await assertEndFollowsOutcome(animalId);
   await assertNoListingMismatch(animalId);
 });
 
@@ -469,6 +519,7 @@ test("someone else adopting from a foster-to-adopt placement ends it as an ordin
     (await fosterRows(animalId)).map((log) => log.changeSummary),
     [`Foster placement with ${fosterName} ended: adoption.`],
   );
+  await assertEndFollowsOutcome(animalId);
   await assertNoListingMismatch(animalId);
 });
 
@@ -492,6 +543,10 @@ test("correcting the outcome's day moves the placement's end with it, in the sam
   // One row for the correction, and none for the placement's move.
   assert.deepEqual((await readAnimal(animalId)).activityLogs, [
     {
+      activityType: AnimalActivityType.OUTCOME_PROCESSED,
+      changeSummary: "Animal was processed for outcome: deceased.",
+    },
+    {
       activityType: AnimalActivityType.FOSTER_RETURNED,
       changeSummary: `Foster placement with ${fosterName} ended: deceased.`,
     },
@@ -500,11 +555,8 @@ test("correcting the outcome's day moves the placement's end with it, in the sam
       changeSummary:
         "Outcome was corrected: the date changed from Jan 10, 2026 to Jan 8, 2026; the foster placement's end moved with it.",
     },
-    {
-      activityType: AnimalActivityType.OUTCOME_PROCESSED,
-      changeSummary: "Animal was processed for outcome: deceased.",
-    },
   ]);
+  await assertEndFollowsOutcome(animalId);
   await assertNoListingMismatch(animalId);
 
   // A correction that keeps the day does not write the placement at all, not
@@ -721,5 +773,6 @@ test("an outcome waiting on a placement being made closes it once it commits", a
     outcomeId,
     adoptionApplicationId: null,
   });
+  await assertEndFollowsOutcome(animalId);
   await assertNoListingMismatch(animalId);
 });

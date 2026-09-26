@@ -257,7 +257,7 @@ export const recordOutcome = async (
   // Log this closing event in the animal's history, mirroring the
   // INTAKE_PROCESSED log written on every intake — without this, the
   // activity feed shows consecutive intakes with no outcome between them.
-  await tx.animalActivityLog.create({
+  const outcomeRow = await tx.animalActivityLog.create({
     data: {
       animalId,
       activityType: AnimalActivityType.OUTCOME_PROCESSED,
@@ -266,6 +266,7 @@ export const recordOutcome = async (
         .replace(/_/g, " ")
         .toLowerCase()}.`,
     },
+    select: { changedAt: true },
   });
 
   if (openPlacement && foster) {
@@ -292,6 +293,11 @@ export const recordOutcome = async (
     // The activity type a return writes, as the conversion writes it too:
     // this is where the animal's time with the foster ends. The summary says
     // how, since nothing came back to the shelter.
+    //
+    // The feed orders by time alone, newest first, and shows the placement's
+    // end above the outcome that ended it only if the end is later. Two rows
+    // written back to back can share a millisecond, so this one is stamped at
+    // least a millisecond after the outcome's.
     await tx.animalActivityLog.create({
       data: {
         animalId,
@@ -300,6 +306,9 @@ export const recordOutcome = async (
         changeSummary: `Foster placement with ${foster.name} ended: ${
           adoptedByFoster ? "adopted by the foster" : describe(outcomeType)
         }.`,
+        changedAt: new Date(
+          Math.max(Date.now(), outcomeRow.changedAt.getTime() + 1),
+        ),
       },
     });
   }

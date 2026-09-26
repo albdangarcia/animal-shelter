@@ -421,13 +421,14 @@ const _convertFosterToAdoption = async (
         },
       });
 
-      await tx.animalActivityLog.create({
+      const outcomeRow = await tx.animalActivityLog.create({
         data: {
           animalId: placement.animalId,
           activityType: AnimalActivityType.OUTCOME_PROCESSED,
           changedById: staffMemberId,
           changeSummary: "Animal was processed for outcome: adoption.",
         },
+        select: { changedAt: true },
       });
 
       // Nothing is written onto the applications, the same as any other
@@ -450,12 +451,18 @@ const _convertFosterToAdoption = async (
         throw new ConflictError("This foster placement has already ended.");
       }
 
+      // Stamped at least a millisecond after the outcome's row, as
+      // `recordOutcome` stamps its own, so the feed, which orders by time
+      // alone, always shows the conversion above the adoption it recorded.
       await tx.animalActivityLog.create({
         data: {
           animalId: placement.animalId,
           activityType: AnimalActivityType.FOSTER_RETURNED,
           changedById: staffMemberId,
           changeSummary: `Foster-to-adopt placement with ${placement.fosterProfile.person.name} converted to an adoption.`,
+          changedAt: new Date(
+            Math.max(Date.now(), outcomeRow.changedAt.getTime() + 1),
+          ),
         },
       });
 
