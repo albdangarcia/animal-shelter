@@ -293,6 +293,26 @@ const outcomeApplicationId = (outcomeId: string) =>
     return row?.applicationId ?? null;
   });
 
+// The animal's latest two outcome and placement-end rows, oldest first, by
+// time alone as the activity feed orders them, and whether the second is
+// strictly later than the first.
+const latestOutcomeAndEndRows = (animalId: string) =>
+  withDb(async (client) => {
+    const { rows } = await client.query<{ activityType: string; at: Date }>(
+      `SELECT "activityType", "changedAt" AS at FROM animal_activity_logs
+       WHERE "animalId" = $1
+         AND "activityType" IN ('OUTCOME_PROCESSED', 'FOSTER_RETURNED')
+       ORDER BY "changedAt" DESC
+       LIMIT 2`,
+      [animalId],
+    );
+    const [second, first] = rows;
+    return {
+      order: [first?.activityType, second?.activityType],
+      later: !!first && !!second && second.at > first.at,
+    };
+  });
+
 // Clicking submit before hydration makes the browser submit the form itself,
 // and nothing reaches the action. React marks each DOM node it has attached
 // to, so wait for that on the form.
@@ -621,6 +641,12 @@ test("a foster adopting from their foster-to-adopt placement is sent to the conv
     outcomeId,
   });
   expect(await outcomeApplicationId(outcomeId!)).toBe(applicationId);
+  // The placement's end is written after the adoption, and stamped later, so
+  // the feed always lists the two in the same order.
+  expect(await latestOutcomeAndEndRows(convertible.id)).toEqual({
+    order: ["OUTCOME_PROCESSED", "FOSTER_RETURNED"],
+    later: true,
+  });
 });
 
 test("a general placement adopted by its own foster ends as adopted by the foster", async ({
