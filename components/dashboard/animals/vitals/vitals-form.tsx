@@ -152,6 +152,9 @@ export function VitalsForm({
             label="Date Recorded"
             className="md:col-span-3"
             triggerClassName="w-full pl-3"
+            // Required field: clicking the selected day again must not clear
+            // it.
+            keepValueOnDeselect
             disabledDates={(date) => date > new Date()}
           />
 
