@@ -21,11 +21,21 @@ type DayFieldProps<TValues extends FieldValues> = {
   className?: string;
   /** Classes for the trigger button, forwarded to DateInput. */
   triggerClassName?: string;
+  /**
+   * The form can't do without a date here, so clicking the selected day again
+   * keeps it rather than clearing it. The label is left as written.
+   */
+  required?: boolean;
   /** A line under the picker, above any validation message. */
   description?: ReactNode;
 } & Omit<
   DateInputProps,
-  "value" | "onChange" | "aria-label" | "id" | "className"
+  | "value"
+  | "onChange"
+  | "aria-label"
+  | "id"
+  | "className"
+  | "keepValueOnDeselect"
 >;
 
 /**
@@ -51,6 +61,7 @@ export function DayField<TValues extends FieldValues>({
   label,
   className,
   triggerClassName,
+  required = false,
   description,
   ...inputProps
 }: DayFieldProps<TValues>) {
@@ -61,7 +72,7 @@ export function DayField<TValues extends FieldValues>({
       control={control}
       name={name}
       render={({ field }) => {
-        const day = field.value as string | undefined;
+        const day = field.value as string | null | undefined;
         const picked = day ? parseISO(day) : undefined;
         const value =
           picked && !Number.isNaN(picked.getTime()) ? picked : undefined;
@@ -73,9 +84,14 @@ export function DayField<TValues extends FieldValues>({
               <DateInput
                 id={name}
                 className={triggerClassName}
+                keepValueOnDeselect={required}
                 value={value}
+                // Cleared is null, not undefined: react-hook-form shows a
+                // field's default in place of undefined, so an emptied date
+                // would keep naming the day it started with. An optional day's
+                // schema has to accept null.
                 onChange={(date) =>
-                  field.onChange(date ? format(date, "yyyy-MM-dd") : undefined)
+                  field.onChange(date ? format(date, "yyyy-MM-dd") : null)
                 }
                 aria-label={`${label}: ${
                   value ? format(value, "PPP") : placeholder

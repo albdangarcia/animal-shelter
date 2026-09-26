@@ -223,8 +223,9 @@ export const TaskFormSchema = z.object({
   priority: z.enum(TaskPriority).optional(),
 
   // A deadline is a calendar day, so the picker submits `yyyy-MM-dd` and the
-  // field travels as that string. See docs/calendar-days.md.
-  dueDate: calendarDaySchema("A due date").optional(),
+  // field travels as that string. See docs/calendar-days.md. A cleared picker
+  // sends null.
+  dueDate: calendarDaySchema("A due date").nullish(),
 
   assigneeId: z
     .cuid2({

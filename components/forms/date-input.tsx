@@ -26,7 +26,8 @@ export interface DateInputProps {
   /**
    * react-day-picker's single mode reports `undefined` when the already-
    * selected day is clicked again. Set this on a required field to ignore
-   * that and keep the current value.
+   * that and keep the current value; DayField and DateField set it from their
+   * `required` prop.
    */
   keepValueOnDeselect?: boolean;
   iconPosition?: "leading" | "trailing";

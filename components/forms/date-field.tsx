@@ -19,9 +19,19 @@ type DateFieldProps<TValues extends FieldValues> = {
   className?: string;
   /** Classes for the trigger button, forwarded to DateInput. */
   triggerClassName?: string;
+  /**
+   * The form can't do without a date here, so clicking the selected day again
+   * keeps it rather than clearing it. The label is left as written.
+   */
+  required?: boolean;
 } & Omit<
   DateInputProps,
-  "value" | "onChange" | "aria-label" | "id" | "className"
+  | "value"
+  | "onChange"
+  | "aria-label"
+  | "id"
+  | "className"
+  | "keepValueOnDeselect"
 >;
 
 /**
@@ -40,6 +50,7 @@ export function DateField<TValues extends FieldValues>({
   label,
   className,
   triggerClassName,
+  required = false,
   ...inputProps
 }: DateFieldProps<TValues>) {
   const { placeholder = "Pick a date" } = inputProps;
@@ -49,7 +60,7 @@ export function DateField<TValues extends FieldValues>({
       control={control}
       name={name}
       render={({ field }) => {
-        const value = field.value as Date | undefined;
+        const value = (field.value ?? undefined) as Date | undefined;
 
         return (
           <FormItem className={className}>
@@ -58,8 +69,13 @@ export function DateField<TValues extends FieldValues>({
               <DateInput
                 id={name}
                 className={triggerClassName}
+                keepValueOnDeselect={required}
                 value={value}
-                onChange={field.onChange}
+                // Cleared is null, not undefined: react-hook-form shows a
+                // field's default in place of undefined, so an emptied date
+                // would keep naming the day it started with. An optional
+                // date's schema has to accept null.
+                onChange={(date) => field.onChange(date ?? null)}
                 aria-label={`${label}: ${
                   value ? format(value, "PPP") : placeholder
                 }`}
