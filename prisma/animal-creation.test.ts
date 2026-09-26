@@ -106,6 +106,21 @@ const readAnimal = (animalId: string) =>
     },
   });
 
+// Ordered by time alone, as the feed orders them, so a shared timestamp is not
+// hidden behind an id tie-break.
+const assertPublishFollowsIntake = async (animalId: string) => {
+  const rows = await prisma.animalActivityLog.findMany({
+    where: { animalId },
+    select: { activityType: true, changedAt: true },
+    orderBy: { changedAt: "asc" },
+  });
+  assert.deepEqual(
+    rows.map((row) => row.activityType),
+    [AnimalActivityType.INTAKE_PROCESSED, AnimalActivityType.STATUS_CHANGE],
+  );
+  assert.ok(rows[1].changedAt > rows[0].changedAt);
+};
+
 test("a draft animal starts with one intake and agrees with its timeline", async () => {
   const { animalId } = await create("Draft");
 
@@ -131,12 +146,22 @@ test("a published animal is stamped and logged, and agrees with its timeline", a
   const animal = await readAnimal(animalId);
   assert.equal(animal.listingStatus, AnimalListingStatus.PUBLISHED);
   assert.notEqual(animal.publishedAt, null);
-  // Both rows are written in one transaction, so there is no order to read.
-  assert.deepEqual(
-    animal.activityLog.map((row) => row.activityType).sort(),
-    [AnimalActivityType.INTAKE_PROCESSED, AnimalActivityType.STATUS_CHANGE].sort(),
-  );
+  await assertPublishFollowsIntake(animalId);
   await assertNoListingMismatch(animalId);
+});
+
+test("a published animal created within one millisecond is still logged as admitted, then published", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  let animalId: string;
+  try {
+    ({ animalId } = await create("Published, same millisecond", {
+      listingStatus: AnimalListingStatus.PUBLISHED,
+    }));
+  } finally {
+    t.mock.timers.reset();
+  }
+
+  await assertPublishFollowsIntake(animalId);
 });
 
 test("an intake weight is written as a dated vitals entry", async () => {
