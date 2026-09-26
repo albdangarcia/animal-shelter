@@ -27,6 +27,13 @@ test("createFosterPlacementSchema: omitting the expected return date is valid", 
   assert.equal(result.success, true);
 });
 
+test("createFosterPlacementSchema: a cleared expected return date is valid", () => {
+  // The picker writes null when its day is cleared.
+  const result = schema.safeParse({ ...baseInput, expectedEndDate: null });
+  assert.equal(result.success, true);
+  assert.equal(result.data?.expectedEndDate, null);
+});
+
 test("createFosterPlacementSchema: a future expected return day is valid", () => {
   const result = schema.safeParse({
     ...baseInput,

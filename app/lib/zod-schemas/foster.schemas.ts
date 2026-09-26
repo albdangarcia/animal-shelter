@@ -146,12 +146,12 @@ export const createFosterPlacementSchema = (today: CalendarDay) =>
     // LONG_TERM / FOSTER_TO_ADOPT placements are open-ended. When a day *is*
     // set it feeds attention-queue Signal 3, so reject a past day here — the
     // calendar only greys out past days client-side, and a placement created
-    // already overdue is never intentional.
+    // already overdue is never intentional. A cleared picker sends null.
     expectedEndDate: calendarDaySchema("An expected return date")
       .refine((day) => !isFosterPlacementOverdue(day, today), {
         error: "An expected return date cannot be in the past.",
       })
-      .optional(),
+      .nullish(),
     notes: z.string().optional(),
   });
 

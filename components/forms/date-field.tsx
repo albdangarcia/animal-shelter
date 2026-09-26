@@ -60,7 +60,7 @@ export function DateField<TValues extends FieldValues>({
       control={control}
       name={name}
       render={({ field }) => {
-        const value = field.value as Date | undefined;
+        const value = (field.value ?? undefined) as Date | undefined;
 
         return (
           <FormItem className={className}>
@@ -71,7 +71,11 @@ export function DateField<TValues extends FieldValues>({
                 className={triggerClassName}
                 keepValueOnDeselect={required}
                 value={value}
-                onChange={field.onChange}
+                // Cleared is null, not undefined: react-hook-form shows a
+                // field's default in place of undefined, so an emptied date
+                // would keep naming the day it started with. An optional
+                // date's schema has to accept null.
+                onChange={(date) => field.onChange(date ?? null)}
                 aria-label={`${label}: ${
                   value ? format(value, "PPP") : placeholder
                 }`}

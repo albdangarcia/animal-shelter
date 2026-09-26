@@ -93,7 +93,7 @@ export const TaskForm = ({
           category: task.category,
           status: task.status,
           priority: task.priority,
-          dueDate: task.dueDate ?? undefined,
+          dueDate: task.dueDate,
           assigneeId: task.assignee?.id || undefined,
         }
       : {
@@ -102,7 +102,9 @@ export const TaskForm = ({
           category: undefined,
           status: TaskStatus.TODO,
           priority: TaskPriority.MEDIUM,
-          dueDate: undefined,
+          // Null, as a cleared picker writes, so clearing a picked date
+          // leaves nothing to discard.
+          dueDate: null,
           assigneeId: undefined,
         },
   });
@@ -265,6 +267,7 @@ export const TaskForm = ({
             label="Due Date"
             className="md:col-span-2 md:col-start-4"
             triggerClassName="w-full pl-3"
+            clearable
             // An existing task keeps whatever due date it already has; a new
             // one can't be created already overdue. The grid works in local
             // dates, so the shelter's day is read as one to compare against.

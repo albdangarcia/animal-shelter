@@ -4,13 +4,17 @@ import { z } from "zod";
 import {
   AnimalEditFormSchema,
   CreateAnimalFormSchema,
+  createTaskFormSchema,
+  TaskFormSchema,
 } from "./animal.schemas";
 import {
   AnimalHealthStatus,
   AnimalListingStatus,
   IntakeType,
   Sex,
+  TaskCategory,
 } from "@/prisma/generated/enums";
+import { calendarDay } from "@/app/lib/utils/shelter-day";
 
 const baseInput = {
   animalName: "Biscuit",
@@ -75,8 +79,12 @@ test("CreateAnimalFormSchema: a missing listing status still asks for one", () =
 test("AnimalEditFormSchema: the edit form still resubmits a locked listing", () => {
   // Only creation is restricted. An archived or pending animal's edit form
   // sends its listing back unchanged, and that has to keep parsing.
-  const { intakeType: _t, intakeDate: _d, weightGrams: _w, ...editInput } =
-    baseInput;
+  const {
+    intakeType: _t,
+    intakeDate: _d,
+    weightGrams: _w,
+    ...editInput
+  } = baseInput;
   for (const listingStatus of [
     AnimalListingStatus.ARCHIVED,
     AnimalListingStatus.PENDING_ADOPTION,
@@ -86,5 +94,22 @@ test("AnimalEditFormSchema: the edit form still resubmits a locked listing", () 
       listingStatus,
     });
     assert.equal(result.success, true, listingStatus);
+  }
+});
+
+test("TaskFormSchema: a cleared due date parses as no due date", () => {
+  // The picker writes null when its day is cleared, on create and on edit.
+  const input = {
+    title: "Walk",
+    category: TaskCategory.FEEDING,
+    dueDate: null,
+  };
+  for (const schema of [
+    TaskFormSchema,
+    createTaskFormSchema(calendarDay("2026-09-21")),
+  ]) {
+    const result = schema.safeParse(input);
+    assert.equal(result.success, true);
+    assert.equal(result.data?.dueDate, null);
   }
 });
