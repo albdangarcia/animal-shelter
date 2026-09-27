@@ -251,6 +251,9 @@ test("a unit delete waits for a placement, then sees the animal and refuses", as
     (tx) => deleteUnitIfEmpty(tx, unit.id),
     { timeout: lockWaitTimeout },
   );
+  // Observed as soon as it starts, so a failed wait is not followed by an
+  // unhandled rejection. Awaiting it below still sees any rejection.
+  void deletion.catch(() => {});
   await waitForSessionBlockedBy(placement.result);
   assert.equal(await unitDeletedAt(unit.id), null);
 
@@ -274,6 +277,7 @@ test("a placement waits for a unit delete, then sees the unit deleted", async ()
   assert.equal(deletion.result.deleted, true);
 
   const placement = place(animalId, unit.id, { timeout: lockWaitTimeout });
+  void placement.catch(() => {});
   await waitForSessionBlockedBy(deletion.result.pid);
 
   deletion.release();
@@ -348,6 +352,7 @@ test("a unit delete waits for a reversal putting the animal back, then refuses",
     (tx) => deleteUnitIfEmpty(tx, unit.id),
     { timeout: lockWaitTimeout },
   );
+  void deletion.catch(() => {});
   await waitForSessionBlockedBy(reversal.result.pid);
 
   reversal.release();
@@ -372,6 +377,7 @@ test("a reversal waits for a unit delete, then leaves the animal unhoused", asyn
     (tx) => recordOutcomeReversal(tx, outcomeId, "Wrong animal.", staffId),
     { timeout: lockWaitTimeout },
   );
+  void reversal.catch(() => {});
   await waitForSessionBlockedBy(deletion.result.pid);
 
   deletion.release();
@@ -419,6 +425,7 @@ test("a location delete waits for a unit restore, then sees the unit and refuses
     (tx) => deleteLocationIfEmpty(tx, unit.locationId),
     { timeout: lockWaitTimeout },
   );
+  void deletion.catch(() => {});
   await waitForSessionBlockedBy(restore.result.pid);
 
   restore.release();
@@ -442,6 +449,7 @@ test("a unit restore waits for a location delete, then is refused", async () => 
     (tx) => restoreUnitIfLocationLive(tx, unit.id),
     { timeout: lockWaitTimeout },
   );
+  void restore.catch(() => {});
   await waitForSessionBlockedBy(deletion.result.pid);
 
   deletion.release();
@@ -476,6 +484,7 @@ test("a location delete waits for a unit being added, then sees it and refuses",
     (tx) => deleteLocationIfEmpty(tx, unit.locationId),
     { timeout: lockWaitTimeout },
   );
+  void deletion.catch(() => {});
   await waitForSessionBlockedBy(creation.result.pid);
 
   creation.release();
@@ -498,6 +507,7 @@ test("a unit being added waits for a location delete, then is refused", async ()
     (tx) => createUnitIn(tx, unit.locationId, "B2"),
     { timeout: lockWaitTimeout },
   );
+  void creation.catch(() => {});
   await waitForSessionBlockedBy(deletion.result.pid);
 
   deletion.release();

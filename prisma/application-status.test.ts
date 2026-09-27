@@ -243,11 +243,16 @@ test("a read behind the animal lock waits for the outcome and sees it", async ()
     (tx) => effectiveStatusBehindLock(tx, application),
     { timeout: lockWaitTimeout },
   );
+  // Observed as soon as it starts, so a failed wait is not followed by an
+  // unhandled rejection. Awaiting it below still sees any rejection.
+  void read.catch(() => {});
   try {
     await waitForSessionBlockedBy(await outcome.pid);
   } catch (error) {
     // Released only on failure: the test opens the gates itself, in order.
+    // Both are then seen to their end, so neither outlives the test.
     outcome.release();
+    await Promise.allSettled([outcome.committed, read]);
     throw error;
   }
 
@@ -274,11 +279,14 @@ test("entering an application does not deadlock with an outcome it waits for", a
     },
     { timeout: lockWaitTimeout },
   );
+  void entry.catch(() => {});
   try {
     await waitForSessionBlockedBy(await outcome.pid);
   } catch (error) {
     // Released only on failure: the test opens the gates itself, in order.
+    // Both are then seen to their end, whether they commit or deadlock.
     outcome.release();
+    await Promise.allSettled([outcome.committed, entry]);
     throw error;
   }
 

@@ -441,12 +441,17 @@ test("a reversal waits for the animal lock", async () => {
   const holderPid = await Promise.race([isLocked, holder as Promise<never>]);
 
   const reversal = reverse(outcomeId, REASON, { timeout });
+  // Observed as soon as it starts, so a failed wait is not followed by an
+  // unhandled rejection. Awaiting it below still sees any rejection.
+  void reversal.catch(() => {});
   try {
     await waitForSessionBlockedBy(holderPid);
     assert.equal((await readOutcome(outcomeId)).reversedAt, null);
   } finally {
-    // Released even when the wait fails, so neither transaction is left open.
+    // Released even when the wait fails, and both seen to their end, so
+    // neither transaction outlives the test.
     release();
+    await Promise.allSettled([holder, reversal]);
   }
   await holder;
   await reversal;
