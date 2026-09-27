@@ -177,11 +177,20 @@ const recordOutcomeInSteps = (
     },
     options,
   );
+  // `committed` settles first only when it threw before opening the gate, so
+  // a test waiting on the gate fails with that error instead of stalling. A
+  // gate the test never awaits is observed here, so its rejection is not
+  // reported as unhandled; awaiting it still sees the rejection.
+  const orFailure = <T>(opened: Promise<T>) => {
+    const settled = Promise.race([opened, committed as Promise<never>]);
+    void settled.catch(() => {});
+    return settled;
+  };
   return {
-    pid,
-    isArchived: archived.opened,
+    pid: orFailure(pid),
+    isArchived: orFailure(archived.opened),
     insertOutcome: insert.open,
-    isRecorded: recorded.opened,
+    isRecorded: orFailure(recorded.opened),
     commit: commit.open,
     committed,
     release: () => {
@@ -282,6 +291,8 @@ test("entering an application does not deadlock with an outcome it waits for", a
   void entry.catch(() => {});
   try {
     await waitForSessionBlockedBy(await outcome.pid);
+    outcome.insertOutcome();
+    await outcome.isRecorded;
   } catch (error) {
     // Released only on failure: the test opens the gates itself, in order.
     // Both are then seen to their end, whether they commit or deadlock.
@@ -290,8 +301,6 @@ test("entering an application does not deadlock with an outcome it waits for", a
     throw error;
   }
 
-  outcome.insertOutcome();
-  await outcome.isRecorded;
   outcome.commit();
 
   const [outcomeResult, entryResult] = await Promise.allSettled([
