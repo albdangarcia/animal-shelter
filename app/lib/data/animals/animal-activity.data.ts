@@ -7,6 +7,10 @@ import {
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import z from "zod";
+import {
+  ACTIVITIES_PER_PAGE,
+  animalActivityLogPageArgs,
+} from "./animal-activity-page";
 
 export type AnimalActivityLogPayload = Prisma.AnimalActivityLogGetPayload<{
   include: {
@@ -22,8 +26,6 @@ const AnimalActivityLogSchema = z.object({
   currentPage: currentPageSchema,
   animalId: cuidSchema,
 });
-
-const ACTIVITIES_PER_PAGE = 10;
 
 const _fetchAnimalActivityLogs = async (
   currentPageInput: number,
@@ -43,17 +45,13 @@ const _fetchAnimalActivityLogs = async (
 
   const { currentPage, animalId } = validatedArgs.data;
 
-  const whereClause: Prisma.AnimalActivityLogWhereInput = {
-    animalId: animalId,
-  };
+  const pageArgs = animalActivityLogPageArgs(animalId, currentPage);
 
   try {
-    const offset = (currentPage - 1) * ACTIVITIES_PER_PAGE;
-
     const [totalCount, activityLogs] = await Promise.all([
-      prisma.animalActivityLog.count({ where: whereClause }),
+      prisma.animalActivityLog.count({ where: pageArgs.where }),
       prisma.animalActivityLog.findMany({
-        where: whereClause,
+        ...pageArgs,
         include: {
           changedBy: {
             include: {
@@ -61,11 +59,6 @@ const _fetchAnimalActivityLogs = async (
             },
           },
         },
-        orderBy: {
-          changedAt: "desc",
-        },
-        take: ACTIVITIES_PER_PAGE,
-        skip: offset,
       }),
     ]);
 
