@@ -238,11 +238,13 @@ export const recordOutcome = async (
       ...(adoptionApplicationId && {
         adoptionApplication: { connect: { id: adoptionApplicationId } },
       }),
-      ...(destinationPartnerId && {
-        destinationPartner: { connect: { id: destinationPartnerId } },
-      }),
-      // Only a return to owner has an owner: the form keeps the field's
-      // value while another type is chosen, so it can arrive with any type.
+      // Only a transfer out has a destination partner, and only a return to
+      // owner has an owner: the form keeps each field's value while another
+      // type is chosen, so either can arrive with any type.
+      ...(destinationPartnerId &&
+        outcomeType === OutcomeType.TRANSFER_OUT && {
+          destinationPartner: { connect: { id: destinationPartnerId } },
+        }),
       ...(ownerId &&
         outcomeType === OutcomeType.RETURN_TO_OWNER && {
           owner: { connect: { id: ownerId } },
