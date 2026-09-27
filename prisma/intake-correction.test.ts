@@ -586,11 +586,16 @@ test("a date correction waits for the animal lock, and judges what it finds", as
   const holderPid = await Promise.race([isLocked, holder as Promise<never>]);
 
   const correction = correct(intakeIds[0], next, { timeout });
+  // Observed as soon as it starts, so a failed wait is not followed by an
+  // unhandled rejection. Awaiting it below still sees any rejection.
+  void correction.catch(() => {});
   try {
     await waitForSessionBlockedBy(holderPid);
   } finally {
-    // Released even when the wait fails, so neither transaction is left open.
+    // Released even when the wait fails, and both seen to their end, so
+    // neither transaction outlives the test.
     release();
+    await Promise.allSettled([holder, correction]);
   }
   await holder;
   const result = await correction;
