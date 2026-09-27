@@ -2,10 +2,10 @@
 // docker-compose Postgres on 55432 (see scripts/test-db.ts), never the dev DB.
 //
 // The feed itself is wrapped in RequirePermission, which needs a Next request
-// to read the session, so this runs the feed's own page arguments against a
-// real table instead. Only paging is asserted here: rows whose order means
-// something are stamped apart by their writers, and the tests for those read
-// by changedAt alone.
+// to read the session and builds the auth instance on import, so this runs the
+// feed's own page arguments against a real table instead. Only paging is
+// asserted here: rows whose order means something are stamped apart by their
+// writers, and the tests for those read by changedAt alone.
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -13,7 +13,7 @@ import prisma from "@/app/lib/prisma";
 import {
   ACTIVITIES_PER_PAGE,
   animalActivityLogPageArgs,
-} from "@/app/lib/data/animals/animal-activity.data";
+} from "@/app/lib/data/animals/animal-activity-page";
 import { AnimalActivityType, Sex } from "@/prisma/generated/enums";
 
 after(() => prisma.$disconnect());
