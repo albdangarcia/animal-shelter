@@ -15,6 +15,7 @@ import {
   AnimalListingStatus,
   IntakeType,
   OutcomeType,
+  PartnerType,
   Sex,
 } from "@/prisma/generated/enums";
 import {
@@ -41,6 +42,8 @@ const future = () =>
 let speciesId: string;
 let colorId: string;
 let staffId: string;
+let partnerId: string;
+let ownerId: string;
 
 before(async () => {
   speciesId = (
@@ -61,6 +64,21 @@ before(async () => {
       select: { id: true },
     })
   ).id;
+  partnerId = (
+    await prisma.partner.create({
+      data: {
+        name: `Outcome day partner ${runId}`,
+        type: PartnerType.RESCUE_GROUP,
+      },
+      select: { id: true },
+    })
+  ).id;
+  ownerId = (
+    await prisma.person.create({
+      data: { name: `Outcome day owner ${runId}` },
+      select: { id: true },
+    })
+  ).id;
 });
 
 after(async () => {
@@ -68,7 +86,8 @@ after(async () => {
   await prisma.intake.deleteMany({ where: { staffMemberId: staffId } });
   // Takes the activity rows with it.
   await prisma.animal.deleteMany({ where: { speciesId } });
-  await prisma.person.deleteMany({ where: { id: staffId } });
+  await prisma.partner.deleteMany({ where: { id: partnerId } });
+  await prisma.person.deleteMany({ where: { id: { in: [staffId, ownerId] } } });
   await prisma.color.deleteMany({ where: { id: colorId } });
   await prisma.species.deleteMany({ where: { id: speciesId } });
   await prisma.$disconnect();
@@ -370,6 +389,117 @@ test("an animal left with a duplicate intake by a reversal can have a later outc
     animal.outcomes.map((outcome) => outcome.outcomeDate),
     ["2026-04-01", "2026-06-01"],
   );
+  await assertNoListingMismatch(animalId);
+});
+
+// The outcome form keeps a field's value while its block is unmounted, so a
+// partner or owner picked under one type is still sent after the type is
+// changed. Only the type each belongs to may store it.
+const recordWithLinks = (
+  animalId: string,
+  outcomeType: OutcomeType,
+  links: { destinationPartnerId?: string; ownerId?: string },
+) =>
+  prisma.$transaction((tx) =>
+    recordOutcome(
+      tx,
+      {
+        animalId,
+        values: OutcomeFormSchema.parse({
+          outcomeType,
+          outcomeDate: "2026-02-01",
+          ...links,
+        }),
+      },
+      staffId,
+    ),
+  );
+
+const storedLinks = (animalId: string) =>
+  prisma.outcome.findFirstOrThrow({
+    where: { animalId },
+    select: { type: true, destinationPartnerId: true, ownerId: true },
+  });
+
+test("a non-transfer outcome recorded with a destination partner stores no partner", async () => {
+  const { animalId } = await makeAnimal("Partner left behind", [
+    { intake: "2026-01-03" },
+  ]);
+
+  await recordWithLinks(animalId, OutcomeType.DECEASED, {
+    destinationPartnerId: partnerId,
+  });
+
+  assert.deepEqual(await storedLinks(animalId), {
+    type: OutcomeType.DECEASED,
+    destinationPartnerId: null,
+    ownerId: null,
+  });
+  await assertNoListingMismatch(animalId);
+});
+
+test("a transfer out stores its destination partner", async () => {
+  const { animalId } = await makeAnimal("Transferred", [
+    { intake: "2026-01-03" },
+  ]);
+
+  await recordWithLinks(animalId, OutcomeType.TRANSFER_OUT, {
+    destinationPartnerId: partnerId,
+  });
+
+  assert.deepEqual(await storedLinks(animalId), {
+    type: OutcomeType.TRANSFER_OUT,
+    destinationPartnerId: partnerId,
+    ownerId: null,
+  });
+  await assertNoListingMismatch(animalId);
+});
+
+test("a non-return outcome recorded with an owner stores no owner", async () => {
+  const { animalId } = await makeAnimal("Owner left behind", [
+    { intake: "2026-01-03" },
+  ]);
+
+  await recordWithLinks(animalId, OutcomeType.DECEASED, { ownerId });
+
+  assert.deepEqual(await storedLinks(animalId), {
+    type: OutcomeType.DECEASED,
+    destinationPartnerId: null,
+    ownerId: null,
+  });
+  await assertNoListingMismatch(animalId);
+});
+
+test("a return to owner stores its owner", async () => {
+  const { animalId } = await makeAnimal("Reclaimed", [
+    { intake: "2026-01-03" },
+  ]);
+
+  await recordWithLinks(animalId, OutcomeType.RETURN_TO_OWNER, { ownerId });
+
+  assert.deepEqual(await storedLinks(animalId), {
+    type: OutcomeType.RETURN_TO_OWNER,
+    destinationPartnerId: null,
+    ownerId,
+  });
+  await assertNoListingMismatch(animalId);
+});
+
+test("an outcome that is neither a transfer nor a return stores neither a partner nor an owner", async () => {
+  const { animalId } = await makeAnimal("Both left behind", [
+    { intake: "2026-01-03" },
+  ]);
+
+  await recordWithLinks(animalId, OutcomeType.DECEASED, {
+    destinationPartnerId: partnerId,
+    ownerId,
+  });
+
+  assert.deepEqual(await storedLinks(animalId), {
+    type: OutcomeType.DECEASED,
+    destinationPartnerId: null,
+    ownerId: null,
+  });
   await assertNoListingMismatch(animalId);
 });
 
