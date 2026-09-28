@@ -1,6 +1,9 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import pg from "pg";
+import { E2E_DATABASE_URL } from "../../../playwright/env";
 import {
   bootstrapStorageState,
   fillStable,
@@ -92,6 +95,22 @@ const printedDay = (day: DayKey) =>
 
 const dayKeyOf = (printed: string): DayKey =>
   new Date(`${printed} UTC`).toISOString().slice(0, 10);
+
+const withDb = async <T>(run: (client: pg.Client) => Promise<T>) => {
+  const client = new pg.Client({ connectionString: E2E_DATABASE_URL });
+  await client.connect();
+  try {
+    return await run(client);
+  } finally {
+    await client.end();
+  }
+};
+
+// The app's ids are validated as CUIDs: lowercase letters and digits.
+const newId = () =>
+  `c${Array.from(crypto.randomBytes(24), (byte) =>
+    "abcdefghijklmnopqrstuvwxyz0123456789".charAt(byte % 36),
+  ).join("")}`;
 
 // The route's loading skeleton is a table too, so wait for the real footer
 // before reading rows.
@@ -494,6 +513,138 @@ test("a date moved past the stay's outcome is refused, naming the outcome", asyn
   expect((await latestIntakeOf(page, animalId, animalName)).day).toBe(
     intake.day,
   );
+});
+
+test("a date moved past a foster placement's start is refused, naming the placement", async ({
+  page,
+}) => {
+  // An animal on its first stay, taken in at least two days ago, with
+  // nothing else in its history. It is given a placement that began the day
+  // after its intake and was returned the day after that, written directly
+  // since the app only places an animal from today. Each activity row is
+  // stamped at noon of its day, or now if that is still ahead, so a return
+  // dated today is never stamped in the future.
+  const fixture = await withDb(async (client) => {
+    const { rows } = await client.query<{
+      animalId: string;
+      animalName: string;
+      intakeId: string;
+      intakeDay: DayKey;
+    }>(
+      `SELECT a.id AS "animalId", a.name AS "animalName",
+              i.id AS "intakeId", i."intakeDate" AS "intakeDay"
+       FROM animals a JOIN intakes i ON i."animalId" = a.id
+       WHERE a."listingStatus" = 'PUBLISHED'
+         AND i."intakeDate" <= $1
+         AND (SELECT count(*) FROM intakes x WHERE x."animalId" = a.id) = 1
+         AND NOT EXISTS (SELECT 1 FROM outcomes o WHERE o."animalId" = a.id)
+         AND NOT EXISTS (
+           SELECT 1 FROM adoption_applications p WHERE p.animal_id = a.id)
+         AND NOT EXISTS (
+           SELECT 1 FROM foster_placements f WHERE f.animal_id = a.id)
+       ORDER BY a.name, a.id`,
+      [shiftDay(shelterToday(), -2)],
+    );
+    const animal = rows.find((row) => !isNamedElsewhere(row.animalName));
+    if (!animal) {
+      throw new Error("No first-stay animal is free of other specs.");
+    }
+    const {
+      rows: [foster],
+    } = await client.query<{ profileId: string; name: string }>(
+      `SELECT fp.id AS "profileId", p.name
+       FROM foster_profiles fp JOIN persons p ON p.id = fp.person_id
+       WHERE fp.status = 'ACTIVE'
+       ORDER BY fp.id LIMIT 1`,
+    );
+    if (!foster) {
+      throw new Error("No active foster to have fostered the animal.");
+    }
+    const {
+      rows: [admin],
+    } = await client.query<{ id: string }>(
+      `SELECT id FROM persons WHERE email = 'admin@example.com'`,
+    );
+    const startDay = shiftDay(animal.intakeDay, 1);
+    const endDay = shiftDay(animal.intakeDay, 2);
+    await client.query(
+      `INSERT INTO foster_placements
+         (id, type, start_date, end_date, return_reason, animal_id,
+          foster_profile_id, previous_unit_id, placed_by_id, returned_by_id,
+          "updatedAt")
+       SELECT $1, 'GENERAL', $2, $3, 'RETURNED_TO_SHELTER', a.id, $5,
+              a.current_unit_id, $6, $6, now()
+       FROM animals a WHERE a.id = $4`,
+      [newId(), startDay, endDay, animal.animalId, foster.profileId, admin.id],
+    );
+    await client.query(
+      `INSERT INTO animal_activity_logs
+         (id, "activityType", "animalId", "changedById", "changeSummary",
+          "changedAt")
+       VALUES ($1, 'FOSTER_PLACED', $3, $4, $5,
+               LEAST($6::date + time '12:00', now() AT TIME ZONE 'UTC')),
+              ($2, 'FOSTER_RETURNED', $3, $4, $7,
+               LEAST($8::date + time '12:00', now() AT TIME ZONE 'UTC'))`,
+      [
+        newId(),
+        newId(),
+        animal.animalId,
+        admin.id,
+        `Placed with foster ${foster.name}.`,
+        startDay,
+        `Returned from foster ${foster.name}.`,
+        endDay,
+      ],
+    );
+    return { ...animal, fosterName: foster.name, startDay, endDay };
+  });
+
+  // A refused correction is returned, not thrown, so its transaction
+  // commits: anything written before the refusal would stay. Compare every
+  // row of the animal's that a correction could touch.
+  const animalRows = () =>
+    withDb(async (client) => {
+      const read = async (sql: string) =>
+        (await client.query(sql, [fixture.animalId])).rows;
+      return {
+        animal: await read(`SELECT * FROM animals WHERE id = $1`),
+        intakes: await read(
+          `SELECT * FROM intakes WHERE "animalId" = $1 ORDER BY id`,
+        ),
+        outcomes: await read(
+          `SELECT * FROM outcomes WHERE "animalId" = $1 ORDER BY id`,
+        ),
+        placements: await read(
+          `SELECT * FROM foster_placements WHERE animal_id = $1 ORDER BY id`,
+        ),
+        activity: await read(
+          `SELECT * FROM animal_activity_logs WHERE "animalId" = $1
+           ORDER BY id`,
+        ),
+      };
+    });
+  const before = await animalRows();
+  expect(before.intakes).toMatchObject([{ intakeDate: fixture.intakeDay }]);
+
+  await gotoIntakeEdit(page, `${INTAKES_PATH}/${fixture.intakeId}/edit`);
+  // After the placement began, and still inside the stay.
+  await pickIntakeDay(page, fixture.endDay);
+  await page.getByRole("button", { name: "Update Intake" }).click();
+
+  const refusal = `The intake date can't be after the foster placement with ${fixture.fosterName} began on ${printedDay(fixture.startDay)}.`;
+  await expect(
+    page
+      .locator('[data-slot="form-item"]')
+      .filter({ has: intakeDateTrigger(page) })
+      .locator('[data-slot="form-message"]'),
+  ).toHaveText(refusal);
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: refusal }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/dashboard\/intakes\/[^/]+\/edit$/);
+
+  // Nothing written: no row of the animal's changed, or was added.
+  expect(await animalRows()).toEqual(before);
 });
 
 test("a date moved within its stay changes the animal's days in care", async ({

@@ -1,6 +1,9 @@
 import type { TransactionClient } from "@/app/lib/prisma";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
-import { checkTimelineChange } from "@/app/lib/data/animal-timeline.data";
+import {
+  checkPlacementsInsideStay,
+  checkTimelineChange,
+} from "@/app/lib/data/animal-timeline.data";
 import { AnimalActivityType, IntakeType } from "@/prisma/generated/enums";
 import { NotFoundError } from "@/app/lib/utils/errors";
 import {
@@ -55,7 +58,10 @@ export interface IntakeCorrectionValues {
 export type IntakeCorrection =
   | { status: "corrected"; animalId: string; changeSummary: string }
   | { status: "unchanged"; animalId: string }
-  /** The new day would break the animal's timeline, or is in the future. */
+  /**
+   * The new day would break the animal's timeline, is in the future, or
+   * would leave a foster placement starting before the animal arrived.
+   */
   | { status: "refused"; animalId: string; message: string };
 
 /**
@@ -251,7 +257,9 @@ const blankToNull = (value: string | null) => value || null;
  *
  * A save that changes nothing writes neither. A new day is checked against the
  * animal's other intakes and outcomes (`checkTimelineChange`) and refused when
- * it would put them out of order; a correction that leaves the day alone never
+ * it would put them out of order, or when it would leave one of its foster
+ * placements starting before the stay it belongs to
+ * (`checkPlacementsInsideStay`). A correction that leaves the day alone never
  * moves an event, so it is not checked. Because an accepted day keeps the
  * timeline as well formed as it was, whether the animal is in care does not
  * change, and neither does its listing status.
@@ -326,11 +334,16 @@ export async function recordIntakeCorrection(
   }
 
   if (before.intakeDate !== after.intakeDate) {
-    const refusal = await checkTimelineChange(tx, animalId, {
+    const change = {
       kind: "moveIntake",
       intakeId,
       day: after.intakeDate,
-    });
+    } as const;
+    // An intake moved later can also leave a foster placement starting
+    // before the animal arrived, which the timeline alone does not show.
+    const refusal =
+      (await checkTimelineChange(tx, animalId, change)) ??
+      (await checkPlacementsInsideStay(tx, animalId, change));
     if (refusal) {
       return { status: "refused", animalId, message: refusal };
     }

@@ -3,8 +3,10 @@
 // under the animal's lock and hands them here.
 
 import {
+  computeStays,
   findTimelineBreaks,
   orderStayEvents,
+  type Stay,
   type StayEvent,
 } from "@/app/lib/utils/stay-utils";
 import {
@@ -212,4 +214,107 @@ export function evaluateTimelineChange(
   }
 
   return `The ${noun} date would put this animal's intakes and outcomes out of order.`;
+}
+
+/**
+ * One of the animal's foster placements, as the bounds check reads it. The
+ * foster's name is only for the refusal.
+ */
+export type PlacementSpan = {
+  ref: string;
+  startDate: CalendarDay;
+  endDate: CalendarDay | null;
+  /** The outcome that ended the placement, when one did. */
+  outcomeId: string | null;
+  fosterName: string;
+};
+
+// Whether the placement lies inside one of `stays`, edges included: it may
+// start on the intake's day and end on the outcome's. A placement still open
+// needs a stay still open.
+const liesInsideAStay = (
+  placement: Pick<PlacementSpan, "startDate" | "endDate">,
+  stays: readonly Stay[],
+): boolean =>
+  stays.some((stay) => {
+    if (stay.intakeDate > placement.startDate) return false;
+    if (stay.outcomeDate === null) return true;
+    return (
+      placement.endDate !== null &&
+      placement.startDate <= stay.outcomeDate &&
+      placement.endDate <= stay.outcomeDate
+    );
+  });
+
+// Whether writing `change` also ends the placement on the change's day.
+// Recording an outcome ends the open placement (the create refuses a second,
+// so there is at most one), and correcting an outcome's day moves the end of
+// the placement it ended.
+const movesWithChange = (
+  placement: PlacementSpan,
+  change: TimelineChange,
+): boolean =>
+  (change.kind === "addOutcome" && placement.endDate === null) ||
+  (change.kind === "moveOutcome" && placement.outcomeId === change.outcomeId);
+
+/**
+ * Whether `change` keeps every foster placement inside a stay. Returns null
+ * when it does, or a refusal for staff that names the placement it would
+ * leave outside.
+ *
+ * A placement is time in the shelter's care spent at a foster's home, so it
+ * lies inside one stay: it starts on or after that stay's intake day, and
+ * ends, if it has, on or before its outcome day. Both timelines are read with
+ * `computeStays`, so stays mean here what they mean everywhere else, merged
+ * stays and same-day returns included. The change's own effect on placements
+ * is applied first: a recorded outcome ends the open placement on its day,
+ * and a corrected outcome moves the end of the placement it ended.
+ *
+ * Only a placement that lay inside a stay before the change is judged, the
+ * way `evaluateTimelineChange` counts breaks rather than demanding none. A
+ * placement already outside every stay is not something this change did, and
+ * must not block an unrelated fix.
+ *
+ * Call it once `evaluateTimelineChange` has accepted the change. It does not
+ * check the day against today or the other events itself.
+ */
+export function evaluatePlacementBounds(
+  events: readonly TimelineEvent[],
+  placements: readonly PlacementSpan[],
+  change: TimelineChange,
+): string | null {
+  const { before, after, subject } = applyTimelineChange(events, change);
+  // Only the stays' dates are read, never their length, so any day will do.
+  const staysBefore = computeStays(before, change.day).stays;
+  const staysAfter = computeStays(after, change.day).stays;
+
+  const crossed = placements.flatMap((placement) => {
+    if (!liesInsideAStay(placement, staysBefore)) return [];
+    const moves = movesWithChange(placement, change);
+    const endDate = moves ? change.day : placement.endDate;
+    if (liesInsideAStay({ ...placement, endDate }, staysAfter)) return [];
+    // The bound the day stepped past: the placement's last day. A placement
+    // whose end moves with the outcome can only be left outside by its
+    // start, and so can one whose stored end is before its start.
+    return moves || endDate === null || endDate < placement.startDate
+      ? [{ placement, bound: placement.startDate, verb: "began" }]
+      : [{ placement, bound: endDate, verb: "ended" }];
+  });
+  if (crossed.length === 0) return null;
+
+  // The one named is the bound nearest where the moved day started: an
+  // intake moving later meets the earliest start first, and an outcome
+  // moving earlier the latest bound.
+  if (subject.kind === "intake") {
+    const first = crossed.reduce((a, b) =>
+      b.placement.startDate < a.placement.startDate ? b : a,
+    );
+    return `The intake date can't be after the foster placement with ${
+      first.placement.fosterName
+    } began on ${formatShelterDay(first.placement.startDate)}.`;
+  }
+  const last = crossed.reduce((a, b) => (b.bound > a.bound ? b : a));
+  return `The outcome date can't be before the foster placement with ${
+    last.placement.fosterName
+  } ${last.verb} on ${formatShelterDay(last.bound)}.`;
 }

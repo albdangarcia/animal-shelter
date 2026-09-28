@@ -14,7 +14,9 @@ import {
 // out, or is adopted. Recording that outcome ends the placement, the outcome
 // form says so before it is submitted, and the foster's placement history
 // says how the placement ended. A foster adopting from their own
-// foster-to-adopt placement is sent to the conversion instead.
+// foster-to-adopt placement is sent to the conversion instead. An outcome
+// dated before an earlier placement's return is refused, on create and on
+// correction.
 
 const adminPassword = process.env.ADMIN_PASSWORD;
 
@@ -206,6 +208,64 @@ const placeInFoster = async (
   });
 
 /**
+ * A placement of `animal` that ran from `startDay` to `endDay` and was
+ * returned to the shelter, with the writes a placement and its return make,
+ * each activity row stamped on its own day. Nothing about the animal
+ * changes: it is back where it was.
+ */
+const returnedPlacement = async (
+  animal: Animal,
+  startDay: DayKey,
+  endDay: DayKey,
+) =>
+  withDb(async (client) => {
+    const { rows: fosters } = await client.query<Foster>(
+      `SELECT fp.id AS "profileId", p.id AS "personId", p.name
+       FROM foster_profiles fp JOIN persons p ON p.id = fp.person_id
+       WHERE fp.status = 'ACTIVE'
+       ORDER BY fp.id LIMIT 1`,
+    );
+    if (fosters.length === 0) {
+      throw new Error("No active foster to have fostered the animal.");
+    }
+    const [foster] = fosters;
+    const {
+      rows: [admin],
+    } = await client.query<{ id: string }>(
+      `SELECT id FROM persons WHERE email = 'admin@example.com'`,
+    );
+    const placementId = newId();
+    await client.query(
+      `INSERT INTO foster_placements
+         (id, type, start_date, end_date, return_reason, animal_id,
+          foster_profile_id, previous_unit_id, placed_by_id, returned_by_id,
+          "updatedAt")
+       SELECT $1, 'GENERAL', $2, $3, 'RETURNED_TO_SHELTER', a.id, $5,
+              a.current_unit_id, $6, $6, now()
+       FROM animals a WHERE a.id = $4`,
+      [placementId, startDay, endDay, animal.id, foster.profileId, admin.id],
+    );
+    await client.query(
+      `INSERT INTO animal_activity_logs
+         (id, "activityType", "animalId", "changedById", "changeSummary",
+          "changedAt")
+       VALUES ($1, 'FOSTER_PLACED', $3, $4, $5, $6::date + time '12:00'),
+              ($2, 'FOSTER_RETURNED', $3, $4, $7, $8::date + time '12:00')`,
+      [
+        newId(),
+        newId(),
+        animal.id,
+        admin.id,
+        `Placed with foster ${foster.name}.`,
+        startDay,
+        `Returned from foster ${foster.name}.`,
+        endDay,
+      ],
+    );
+    return { placementId, foster };
+  });
+
+/**
  * An approved adoption application from `foster` for `animal`, which moves
  * a published listing to Pending Adoption as approving one does.
  */
@@ -278,6 +338,29 @@ const liveOutcomeId = (animalId: string) =>
     );
     expect(rows.length).toBeLessThanOrEqual(1);
     return rows[0]?.id ?? null;
+  });
+
+const outcomeDay = (outcomeId: string) =>
+  withDb(async (client) => {
+    const {
+      rows: [row],
+    } = await client.query<{ day: string }>(
+      `SELECT "outcomeDate" AS day FROM outcomes WHERE id = $1`,
+      [outcomeId],
+    );
+    return row?.day ?? null;
+  });
+
+const correctionRowCount = (animalId: string) =>
+  withDb(async (client) => {
+    const {
+      rows: [row],
+    } = await client.query<{ count: number }>(
+      `SELECT count(*)::int AS count FROM animal_activity_logs
+       WHERE "animalId" = $1 AND "activityType" = 'OUTCOME_CORRECTED'`,
+      [animalId],
+    );
+    return row.count;
   });
 
 // An outcome's linked application, to check a conversion linked it.
@@ -356,6 +439,13 @@ const INTAKE_DATE = /^Intake Date:/;
 const dateTrigger = (page: Page, label: RegExp = OUTCOME_DATE) =>
   page.getByRole("button", { name: label });
 
+// The message shown under the date picker.
+const dateMessage = (page: Page) =>
+  page
+    .locator('[data-slot="form-item"]')
+    .filter({ has: dateTrigger(page) })
+    .locator('[data-slot="form-message"]');
+
 // data-day is the browser's en-US short date: M/D/YYYY, no padding.
 const dataDayOf = (day: DayKey) => {
   const [year, month, date] = day.split("-").map(Number);
@@ -429,18 +519,19 @@ const placementStart = shiftDay(today, -10);
 
 // Placed in `beforeAll`: `deceased` for the first three cases in turn,
 // `convertible` for the foster-to-adopt case, `adoptedByFoster` for the
-// general adoption, `reIntaken` for the reversal after a re-intake.
+// general adoption, `reIntaken` for the reversal after a re-intake,
+// `fosteredEarlier` for the last two cases in turn.
 let deceased: Animal;
 let convertible: Animal;
 let adoptedByFoster: Animal;
 let reIntaken: Animal;
+let fosteredEarlier: Animal;
 let deceasedPlacement: { placementId: string; foster: Foster };
+let earlierPlacement: { placementId: string; foster: Foster };
 
 test.beforeAll(async () => {
-  [deceased, convertible, adoptedByFoster, reIntaken] = await takeAnimals(
-    4,
-    intakeDay,
-  );
+  [deceased, convertible, adoptedByFoster, reIntaken, fosteredEarlier] =
+    await takeAnimals(5, intakeDay);
 });
 
 test("an outcome recorded while the animal is in foster says so, and ends the placement", async ({
@@ -464,12 +555,7 @@ test("an outcome recorded while the animal is in foster says so, and ends the pl
   await pickDay(page, beforeStart);
   await page.getByRole("button", { name: "Process Outcome" }).click();
   const refusal = `The outcome date can't be before the foster placement with ${foster.name} began on ${printedDay(placementStart)}.`;
-  await expect(
-    page
-      .locator('[data-slot="form-item"]')
-      .filter({ has: dateTrigger(page) })
-      .locator('[data-slot="form-message"]'),
-  ).toHaveText(refusal);
+  await expect(dateMessage(page)).toHaveText(refusal);
   await expect(toast(page, refusal)).toBeVisible();
   expect(await liveOutcomeId(deceased.id)).toBeNull();
 
@@ -740,4 +826,74 @@ test("an outcome reversed after a re-intake leaves the placement ended, marked r
   const row = await historyRow(page, foster, reIntaken);
   await expect(row).toContainText(printedDay(outcomeDay));
   await expect(row).toContainText("Ended: other (reversed)");
+});
+
+// The placement `fosteredEarlier` came back from: it ends five days ago, so
+// an outcome can be dated just before its end.
+const earlierStart = shiftDay(today, -10);
+const earlierEnd = shiftDay(today, -5);
+const earlierReturned = {
+  endDate: earlierEnd,
+  returnReason: "RETURNED_TO_SHELTER",
+  outcomeId: null,
+};
+
+test("an outcome dated before an earlier placement's return is refused under the picker, with nothing written", async ({
+  page,
+}) => {
+  earlierPlacement = await returnedPlacement(
+    fosteredEarlier,
+    earlierStart,
+    earlierEnd,
+  );
+  const { placementId, foster } = earlierPlacement;
+
+  await page.goto(`${OUTCOMES_PATH}/create?animalId=${fosteredEarlier.id}`);
+  await waitForFormHydration(page, "Process Outcome");
+  // Not in foster now, so the form has nothing to say about one.
+  await expect(page.getByText(/is in foster with/)).toHaveCount(0);
+  await chooseFromSelect(page, "Outcome Type *", "Other");
+
+  await pickDay(page, shiftDay(earlierEnd, -1));
+  await page.getByRole("button", { name: "Process Outcome" }).click();
+  const refusal = `The outcome date can't be before the foster placement with ${foster.name} ended on ${printedDay(earlierEnd)}.`;
+  await expect(dateMessage(page)).toHaveText(refusal);
+  await expect(toast(page, refusal)).toBeVisible();
+  expect(await liveOutcomeId(fosteredEarlier.id)).toBeNull();
+  expect(await readPlacement(placementId)).toEqual(earlierReturned);
+
+  // The return day itself is allowed, and leaves the placement as it was
+  // returned.
+  await pickDay(page, earlierEnd);
+  await page.getByRole("button", { name: "Process Outcome" }).click();
+  await expect(toast(page, "Outcome processed successfully.")).toBeVisible();
+  await waitForPathname(page, OUTCOMES_PATH);
+  expect(await liveOutcomeId(fosteredEarlier.id)).not.toBeNull();
+  expect(await readPlacement(placementId)).toEqual(earlierReturned);
+});
+
+test("correcting that outcome to before the placement's return is refused under the picker, with nothing written", async ({
+  page,
+}) => {
+  const { placementId, foster } = earlierPlacement;
+  const outcomeId = await liveOutcomeId(fosteredEarlier.id);
+  expect(outcomeId).not.toBeNull();
+  const correctionsBefore = await correctionRowCount(fosteredEarlier.id);
+
+  await page.goto(`${OUTCOMES_PATH}/${outcomeId}/edit`);
+  await waitForFormHydration(page, "Update Outcome");
+  // The outcome did not end the placement, so it does not move with it.
+  await expect(
+    page.getByText(/This outcome ended a foster placement/),
+  ).toHaveCount(0);
+
+  await pickDay(page, shiftDay(earlierEnd, -1));
+  await page.getByRole("button", { name: "Update Outcome" }).click();
+  const refusal = `The outcome date can't be before the foster placement with ${foster.name} ended on ${printedDay(earlierEnd)}.`;
+  await expect(dateMessage(page)).toHaveText(refusal);
+  await expect(toast(page, refusal)).toBeVisible();
+
+  expect(await outcomeDay(outcomeId!)).toBe(earlierEnd);
+  expect(await correctionRowCount(fosteredEarlier.id)).toBe(correctionsBefore);
+  expect(await readPlacement(placementId)).toEqual(earlierReturned);
 });
