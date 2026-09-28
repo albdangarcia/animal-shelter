@@ -4,7 +4,11 @@ import {
   effectiveApplicationStatus,
   lockAnimal,
 } from "@/app/lib/data/application-status.data";
-import { checkTimelineChange } from "@/app/lib/data/animal-timeline.data";
+import {
+  checkPlacementsInsideStay,
+  checkTimelineChange,
+  type TimelineChange,
+} from "@/app/lib/data/animal-timeline.data";
 import { assertNoLiveAdoptionOutcome } from "@/app/lib/services/outcome-reversal";
 import {
   AnimalActivityType,
@@ -37,7 +41,9 @@ import type { OutcomeFormOutput } from "@/app/lib/zod-schemas/outcome.schema";
  * from the foster home, or is adopted by someone. Recording the outcome ends
  * the open placement on the outcome's day, and links the placement to the
  * outcome, so a correction of the day moves the placement's end with it and a
- * reversal reopens it. The placement's start bounds the day in both.
+ * reversal reopens it. Every placement must stay inside the stay it belongs
+ * to, so in both the day can't come before that placement's start, or before
+ * the end of an earlier placement in the same stay.
  *
  * Like `outcome-reversal`, this module has no `next/*` and no auth imports, so
  * a plain `node:test` can drive it. `recordOutcome` runs inside the caller's
@@ -62,11 +68,20 @@ export interface RecordedOutcome {
 
 const describe = (value: string) => value.replace(/_/g, " ").toLowerCase();
 
-// A placement is part of the animal's time in the shelter's care, so the
-// outcome that ends it cannot come before it began. The start day itself is
-// allowed: the animal went out and left the same day.
-const placementStartRefusal = (fosterName: string, startDate: string) =>
-  `The outcome date can't be before the foster placement with ${fosterName} began on ${formatShelterDay(calendarDay(startDate))}.`;
+// Both gates a new outcome day passes, in order, behind the animal's lock.
+// Throws the first refusal, shown under the date picker.
+const assertOutcomeDayFits = async (
+  tx: TransactionClient,
+  animalId: string,
+  change: TimelineChange,
+) => {
+  const refusal =
+    (await checkTimelineChange(tx, animalId, change)) ??
+    (await checkPlacementsInsideStay(tx, animalId, change));
+  if (refusal) {
+    throw new TimelineOrderError(refusal, "outcomeDate");
+  }
+};
 
 /**
  * Archives the animal and records the outcome that archived it, with its
@@ -100,38 +115,39 @@ export const recordOutcome = async (
     );
   }
 
-  const refusal = await checkTimelineChange(tx, animalId, {
-    kind: "addOutcome",
-    day: outcomeDate,
-  });
-  if (refusal) {
-    throw new TimelineOrderError(refusal, "outcomeDate");
-  }
-
   // Read behind the lock. Starting a placement writes the animal row, so one
   // committed before the lock was taken is seen here, and one that has not
   // yet written it waits for this transaction, then fails its serializable
   // check against the archive below.
-  const openPlacement = await tx.fosterPlacement.findFirst({
+  const openPlacements = await tx.fosterPlacement.findMany({
     where: { animalId, endDate: null },
     select: {
       id: true,
       type: true,
-      startDate: true,
       fosterProfile: {
         select: { person: { select: { id: true, name: true } } },
       },
     },
+    take: 2,
   });
-  const foster = openPlacement?.fosterProfile.person;
-  // Only a backdated outcome can land here, since a placement always starts
-  // on the day it is made.
-  if (openPlacement && foster && outcomeDate < openPlacement.startDate) {
-    throw new TimelineOrderError(
-      placementStartRefusal(foster.name, openPlacement.startDate),
-      "outcomeDate",
+  // The outcome ends one placement, and the day check below counts on it
+  // ending every open one. Making a placement refuses a second, but nothing
+  // in the database does, so two are refused here rather than one being
+  // left open on an animal that has left.
+  if (openPlacements.length > 1) {
+    throw new ConflictError(
+      "This animal has more than one open foster placement. Return all but one before recording an outcome.",
     );
   }
+  const [openPlacement] = openPlacements;
+  const foster = openPlacement?.fosterProfile.person;
+
+  // The day can't come before the open placement's start, since the outcome
+  // ends it, nor before a placement in this stay was returned.
+  await assertOutcomeDayFits(tx, animalId, {
+    kind: "addOutcome",
+    day: outcomeDate,
+  });
 
   // Guarded as well as checked above, so that nothing reaching this without
   // the lock can archive the animal twice.
@@ -520,10 +536,7 @@ export const recordOutcomeCorrection = async (
         fosterPlacement: {
           select: {
             id: true,
-            startDate: true,
-            fosterProfile: {
-              select: { person: { select: { id: true, name: true } } },
-            },
+            fosterProfile: { select: { person: { select: { id: true } } } },
           },
         },
       },
@@ -540,23 +553,13 @@ export const recordOutcomeCorrection = async (
     // day is checked against where the outcome actually sits.
     const dayMoves = calendarDay(stored.outcomeDate) !== nextValues.outcomeDate;
     if (dayMoves) {
-      const refusal = await checkTimelineChange(tx, animalId, {
+      // The placement this outcome ended moves with it, so its start bounds
+      // the day, and so does the end of any other placement in the stay.
+      await assertOutcomeDayFits(tx, animalId, {
         kind: "moveOutcome",
         outcomeId,
         day: nextValues.outcomeDate,
       });
-      if (refusal) {
-        throw new TimelineOrderError(refusal, "outcomeDate");
-      }
-      if (placement && nextValues.outcomeDate < placement.startDate) {
-        throw new TimelineOrderError(
-          placementStartRefusal(
-            placement.fosterProfile.person.name,
-            placement.startDate,
-          ),
-          "outcomeDate",
-        );
-      }
     }
 
     // Guarded as well as checked above, so that nothing reaching this without

@@ -2,6 +2,7 @@ import type { TransactionClient } from "@/app/lib/prisma";
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import {
+  evaluatePlacementBounds,
   evaluateTimelineChange,
   refuseFutureDay,
   type TimelineChange,
@@ -29,6 +30,61 @@ export async function checkTimelineChange(
   animalId: string,
   change: TimelineChange,
 ): Promise<string | null> {
+  return evaluateTimelineChange(
+    await readTimelineEvents(tx, animalId),
+    change,
+    await getShelterToday(),
+  );
+}
+
+/**
+ * The second gate for a change to an intake or outcome day: whether it keeps
+ * every foster placement of the animal inside a stay. Returns null when it
+ * does, or the refusal to show staff, naming the placement
+ * (`evaluatePlacementBounds` has the rule).
+ *
+ * Called after `checkTimelineChange` has accepted the same change, behind the
+ * same `lockAnimal`, in the transaction that then writes it. Returning or
+ * converting a placement takes that lock, and making one writes the locked
+ * row, so the placements read here are still the animal's when the change is
+ * written.
+ */
+export async function checkPlacementsInsideStay(
+  tx: TransactionClient,
+  animalId: string,
+  change: TimelineChange,
+): Promise<string | null> {
+  const placements = await tx.fosterPlacement.findMany({
+    where: { animalId },
+    select: {
+      id: true,
+      startDate: true,
+      endDate: true,
+      outcomeId: true,
+      fosterProfile: { select: { person: { select: { name: true } } } },
+    },
+  });
+  if (placements.length === 0) return null;
+
+  return evaluatePlacementBounds(
+    await readTimelineEvents(tx, animalId),
+    placements.map((placement) => ({
+      ref: placement.id,
+      startDate: calendarDay(placement.startDate),
+      endDate:
+        placement.endDate === null ? null : calendarDay(placement.endDate),
+      outcomeId: placement.outcomeId,
+      fosterName: placement.fosterProfile.person.name,
+    })),
+    change,
+  );
+}
+
+// The animal's intakes and live outcomes, as both gates read them.
+const readTimelineEvents = async (
+  tx: TransactionClient,
+  animalId: string,
+): Promise<TimelineEvent[]> => {
   const intakes = await tx.intake.findMany({
     where: { animalId },
     select: { id: true, intakeDate: true },
@@ -40,7 +96,7 @@ export async function checkTimelineChange(
     select: { id: true, outcomeDate: true },
   });
 
-  const events: TimelineEvent[] = [
+  return [
     ...intakes.map((intake) => ({
       kind: "intake" as const,
       date: calendarDay(intake.intakeDate),
@@ -52,9 +108,7 @@ export async function checkTimelineChange(
       ref: outcome.id,
     })),
   ];
-
-  return evaluateTimelineChange(events, change, await getShelterToday());
-}
+};
 
 /**
  * The future-day half of `checkTimelineChange`, for the one writer with no

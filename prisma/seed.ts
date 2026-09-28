@@ -42,6 +42,7 @@ import { computeStays, findTimelineBreaks } from "@/app/lib/utils/stay-utils";
 import {
   calendarDay,
   shelterDayKey,
+  shelterDaysBetweenKeys,
   shelterToday,
   shiftDayKey,
   startOfShelterDay,
@@ -3150,6 +3151,31 @@ async function seedFostering() {
 
   // --- Placements: one open, two closed with varied return reasons ---
 
+  // A placement is time inside the animal's current stay, so every one below
+  // is dated from its latest intake day: it starts on or after that day and
+  // ends, if it has, by today. It starts the day after when that is before
+  // today, which keeps the FOSTER_PLACED row after the INTAKE_PROCESSED one
+  // in the feed.
+  const today = shelterToday(seedTimezone);
+  const firstFosterDay = (intakeDay: CalendarDay, daysBack: number) => {
+    const target = shiftDayKey(today, -daysBack);
+    const dayAfterIntake = shiftDayKey(intakeDay, 1);
+    const earliest = dayAfterIntake < today ? dayAfterIntake : intakeDay;
+    return target > earliest ? target : earliest;
+  };
+  // The activity row for something that happened on `day`: midday, or, if
+  // that is still ahead today, a minute ago, but never before the day began.
+  const momentOn = (day: CalendarDay) => {
+    const now = Date.now();
+    const dayStart = startOfShelterDay(day, seedTimezone).getTime();
+    const midday = dayStart + 12 * 60 * 60 * 1000;
+    return new Date(
+      midday < now ? midday : Math.max(dayStart, now - 60 * 1000),
+    );
+  };
+  const latestIntakeDay = (intakes: { intakeDate: string }[]) =>
+    calendarDay(intakes[0].intakeDate);
+
   // Pull real in-care, currently-housed animals so the open placement
   // faithfully seeds "currentUnitId nulled, previousUnitId set". The
   // attention-queue scenario animals are excluded — their foster state is
@@ -3170,16 +3196,31 @@ async function seedFostering() {
         ],
       },
     },
-    select: { id: true, currentUnitId: true },
+    select: {
+      id: true,
+      currentUnitId: true,
+      intake: {
+        select: { intakeDate: true },
+        orderBy: { intakeDate: "desc" },
+        take: 1,
+      },
+    },
   });
+  // Room for a start after the intake day and a return after that, by today.
+  const fosterableAnimals = housedInCareAnimals.filter(
+    (animal) =>
+      animal.intake.length > 0 &&
+      latestIntakeDay(animal.intake) <= shiftDayKey(today, -2),
+  );
 
-  if (housedInCareAnimals.length >= 3) {
+  if (fosterableAnimals.length >= 3) {
     const [openAnimal, closedAnimal1, closedAnimal2] = pickDistinct(
-      housedInCareAnimals,
+      fosterableAnimals,
       3,
     );
 
-    const openStart = daysAgo(6);
+    // Six days ago, or later if the animal arrived since.
+    const openStart = firstFosterDay(latestIntakeDay(openAnimal.intake), 6);
     await prisma.fosterPlacement.create({
       data: {
         animalId: openAnimal.id,
@@ -3187,7 +3228,7 @@ async function seedFostering() {
         // needs a seeded USER account with a real open placement to view.
         fosterProfileId: activeMedical.id,
         type: FosterPlacementType.GENERAL,
-        startDate: shelterDayKey(openStart, seedTimezone),
+        startDate: openStart,
         // Still within its expected window — attention-queue signal 3 must
         // NOT flag this one. Juniper's scripted placement below is the overdue
         // case.
@@ -3205,7 +3246,7 @@ async function seedFostering() {
         animalId: openAnimal.id,
         activityType: "FOSTER_PLACED",
         changedById: approver.id,
-        changedAt: openStart,
+        changedAt: momentOn(openStart),
         changeSummary: "Animal was placed with a foster.",
       },
     });
@@ -3227,8 +3268,13 @@ async function seedFostering() {
     ];
 
     for (const plan of closedPlans) {
-      const start = daysAgo(randomInt(90, 150));
-      const end = addDaysClamped(start, randomInt(20, 45), new Date());
+      const intakeDay = latestIntakeDay(plan.animal.intake);
+      const stayDays = shelterDaysBetweenKeys(intakeDay, today);
+      const start = shiftDayKey(intakeDay, randomInt(1, stayDays - 1));
+      const end = shiftDayKey(
+        start,
+        randomInt(1, Math.min(45, shelterDaysBetweenKeys(start, today))),
+      );
       const returnStaff = getRandomItem(staffMembers);
 
       await prisma.fosterPlacement.create({
@@ -3236,8 +3282,8 @@ async function seedFostering() {
           animalId: plan.animal.id,
           fosterProfileId: plan.profile.id,
           type: FosterPlacementType.GENERAL,
-          startDate: shelterDayKey(start, seedTimezone),
-          endDate: shelterDayKey(end, seedTimezone),
+          startDate: start,
+          endDate: end,
           previousUnitId: plan.animal.currentUnitId,
           placedById: approver.id,
           returnedById: returnStaff.id,
@@ -3250,7 +3296,7 @@ async function seedFostering() {
           animalId: plan.animal.id,
           activityType: "FOSTER_PLACED",
           changedById: approver.id,
-          changedAt: start,
+          changedAt: momentOn(start),
           changeSummary: "Animal was placed with a foster.",
         },
       });
@@ -3259,7 +3305,7 @@ async function seedFostering() {
           animalId: plan.animal.id,
           activityType: "FOSTER_RETURNED",
           changedById: returnStaff.id,
-          changedAt: end,
+          changedAt: momentOn(end),
           changeSummary: `Animal was returned from foster: ${plan.reason
             .replace(/_/g, " ")
             .toLowerCase()}.`,
@@ -3278,18 +3324,37 @@ async function seedFostering() {
   // the queue's two-reason dedupe case.
   const juniper = await prisma.animal.findFirst({
     where: { name: "Juniper" },
-    select: { id: true, currentUnitId: true },
+    select: {
+      id: true,
+      currentUnitId: true,
+      intake: {
+        select: { intakeDate: true },
+        orderBy: { intakeDate: "desc" },
+        take: 1,
+      },
+    },
   });
-  if (juniper) {
-    const juniperPlacementStart = daysAgo(21);
+  if (juniper && juniper.intake.length > 0) {
+    // Three weeks ago, or later if she arrived since. Her in-care stay began
+    // before today, so this is yesterday at the latest, and so is the
+    // expected end below.
+    const juniperPlacementStart = firstFosterDay(
+      latestIntakeDay(juniper.intake),
+      21,
+    );
+    const fourDaysAgo = shiftDayKey(today, -4);
     await prisma.fosterPlacement.create({
       data: {
         animalId: juniper.id,
         fosterProfileId: activeGeneralist.id,
         type: FosterPlacementType.GENERAL,
-        startDate: shelterDayKey(juniperPlacementStart, seedTimezone),
+        startDate: juniperPlacementStart,
         // Overdue: strictly before today, which is what signal 3 looks for.
-        expectedEndDate: shiftDayKey(shelterToday(seedTimezone), -4),
+        // Four days ago, or her start day if that is later.
+        expectedEndDate:
+          juniperPlacementStart > fourDaysAgo
+            ? juniperPlacementStart
+            : fourDaysAgo,
         previousUnitId: juniper.currentUnitId,
         placedById: approver.id,
       },
@@ -3303,7 +3368,7 @@ async function seedFostering() {
         animalId: juniper.id,
         activityType: "FOSTER_PLACED",
         changedById: approver.id,
-        changedAt: juniperPlacementStart,
+        changedAt: momentOn(juniperPlacementStart),
         changeSummary: "Animal was placed with a foster.",
       },
     });
