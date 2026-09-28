@@ -379,11 +379,8 @@ function AnswerField({ field, control }: AnswerFieldProps) {
 
         return (
           <FormItem>
-            <FormLabel htmlFor={name}>
+            <FormLabel htmlFor={name} required={field.isRequired}>
               {field.label}
-              {field.isRequired ? (
-                <span className="text-destructive"> *</span>
-              ) : null}
             </FormLabel>
             <FormControl>
               <AnswerInput field={field} name={name} rhf={rhf} />

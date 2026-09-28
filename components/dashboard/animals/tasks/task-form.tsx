@@ -155,7 +155,7 @@ export const TaskForm = ({
             name="title"
             render={({ field }) => (
               <FormItem className="col-span-full">
-                <FormLabel>Title *</FormLabel>
+                <FormLabel required>Title</FormLabel>
                 <FormControl>
                   <Input placeholder="e.g., Administer medication" {...field} />
                 </FormControl>
@@ -188,7 +188,7 @@ export const TaskForm = ({
             name="category"
             render={({ field }) => (
               <FormItem className="md:col-span-3">
-                <FormLabel>Category *</FormLabel>
+                <FormLabel required>Category</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value ?? ""}>
                   <FormControl>
                     <SelectTrigger className="w-full">

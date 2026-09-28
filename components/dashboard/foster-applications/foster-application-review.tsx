@@ -157,7 +157,7 @@ export function FosterApplicationReview({
                   name="status"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Application Status *</FormLabel>
+                      <FormLabel required>Application Status</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value ?? ""}
@@ -196,7 +196,7 @@ export function FosterApplicationReview({
                     name="statusChangeReason"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Reason for Status Change *</FormLabel>
+                        <FormLabel required>Reason for Status Change</FormLabel>
                         <FormControl>
                           <Textarea
                             placeholder="Provide a reason for changing the status..."

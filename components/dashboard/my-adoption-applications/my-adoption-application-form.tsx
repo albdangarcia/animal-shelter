@@ -304,7 +304,7 @@ export function MyApplicationForm({
                   name="applicantName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Full Name *</FormLabel>
+                      <FormLabel required>Full Name</FormLabel>
                       <FormControl>
                         <Input placeholder="John Doe" {...field} />
                       </FormControl>
@@ -317,7 +317,7 @@ export function MyApplicationForm({
                   name="applicantEmail"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Email *</FormLabel>
+                      <FormLabel required>Email</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="you@example.com"
@@ -334,7 +334,7 @@ export function MyApplicationForm({
                   name="applicantPhone"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Phone *</FormLabel>
+                      <FormLabel required>Phone</FormLabel>
                       <FormControl>
                         <Input placeholder="(123) 456-7890" {...field} />
                       </FormControl>
@@ -350,7 +350,7 @@ export function MyApplicationForm({
                   name="applicantAddressLine1"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Address Line 1 *</FormLabel>
+                      <FormLabel required>Address Line 1</FormLabel>
                       <FormControl>
                         <Input placeholder="123 Main St" {...field} />
                       </FormControl>
@@ -380,7 +380,7 @@ export function MyApplicationForm({
                     name="applicantCity"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>City *</FormLabel>
+                        <FormLabel required>City</FormLabel>
                         <FormControl>
                           <Input {...field} />
                         </FormControl>
@@ -393,7 +393,7 @@ export function MyApplicationForm({
                     name="applicantState"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>State *</FormLabel>
+                        <FormLabel required>State</FormLabel>
                         <Select
                           onValueChange={field.onChange}
                           value={field.value ?? ""}
@@ -420,7 +420,7 @@ export function MyApplicationForm({
                     name="applicantZipCode"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>ZIP Code *</FormLabel>
+                        <FormLabel required>ZIP Code</FormLabel>
                         <FormControl>
                           <Input placeholder="12345" {...field} />
                         </FormControl>
@@ -445,7 +445,7 @@ export function MyApplicationForm({
                   name="livingSituation"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Living Situation *</FormLabel>
+                      <FormLabel required>Living Situation</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value ?? ""}
@@ -474,7 +474,7 @@ export function MyApplicationForm({
                   name="householdSize"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Household Size *</FormLabel>
+                      <FormLabel required>Household Size</FormLabel>
                       <FormControl>
                         <NumberInput min={1} max={50} {...field} />
                       </FormControl>
@@ -490,11 +490,15 @@ export function MyApplicationForm({
                   name="hasYard"
                   render={({ field }) => (
                     <FormItem className="space-y-3">
-                      <div className="text-sm font-medium">
-                        Do you have a yard? *
+                      {/* A <label for> can't name the radiogroup div, so the heading
+                          names it by id instead. */}
+                      <div id="hasYard-heading" className="text-sm font-medium">
+                        Do you have a yard?
+                        <span className="text-destructive"> *</span>
                       </div>
                       <FormControl>
                         <RadioGroup
+                          aria-labelledby="hasYard-heading"
                           onValueChange={field.onChange}
                           value={field.value ?? ""}
                           className="flex items-center space-x-4"
@@ -523,11 +527,13 @@ export function MyApplicationForm({
                     name="landlordPermission"
                     render={({ field }) => (
                       <FormItem className="space-y-3">
-                        <div className="text-sm font-medium">
-                          Do you have landlord permission? *
+                        <div id="landlordPermission-heading" className="text-sm font-medium">
+                          Do you have landlord permission?
+                          <span className="text-destructive"> *</span>
                         </div>
                         <FormControl>
                           <RadioGroup
+                            aria-labelledby="landlordPermission-heading"
                             onValueChange={field.onChange}
                             value={field.value ?? ""}
                             className="flex items-center space-x-4"
@@ -558,11 +564,13 @@ export function MyApplicationForm({
                   name="hasChildren"
                   render={({ field }) => (
                     <FormItem className="space-y-3">
-                      <div className="text-sm font-medium">
-                        Are there children in the home? *
+                      <div id="hasChildren-heading" className="text-sm font-medium">
+                        Are there children in the home?
+                        <span className="text-destructive"> *</span>
                       </div>
                       <FormControl>
                         <RadioGroup
+                          aria-labelledby="hasChildren-heading"
                           onValueChange={field.onChange}
                           value={field.value ?? ""}
                           className="flex items-center space-x-4"
@@ -593,7 +601,7 @@ export function MyApplicationForm({
                     name="childrenAges"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Children&apos;s Ages *</FormLabel>
+                        <FormLabel required>Children&apos;s Ages</FormLabel>
                         <FormControl>
                           <Input placeholder="e.g., 5, 12, 15" {...field} />
                         </FormControl>
@@ -638,7 +646,7 @@ export function MyApplicationForm({
                 name="animalExperience"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Animal Experience *</FormLabel>
+                    <FormLabel required>Animal Experience</FormLabel>
                     <FormControl>
                       <Textarea
                         placeholder="Please describe your experience with animals, including past ownership."
@@ -655,7 +663,7 @@ export function MyApplicationForm({
                 name="reasonForAdoption"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Reason for Adoption *</FormLabel>
+                    <FormLabel required>Reason for Adoption</FormLabel>
                     <FormControl>
                       <Textarea
                         placeholder="Why do you want to adopt at this time? What are you looking for in a companion?"

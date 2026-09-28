@@ -141,7 +141,7 @@ export function PlacementCreateForm({
                 name="animalId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Animal *</FormLabel>
+                    <FormLabel required>Animal</FormLabel>
                     <FormControl>
                       <AnimalCombobox
                         options={animalOptions}
@@ -173,7 +173,7 @@ export function PlacementCreateForm({
                 name="fosterProfileId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Foster *</FormLabel>
+                    <FormLabel required>Foster</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="w-full">
@@ -205,7 +205,7 @@ export function PlacementCreateForm({
               name="type"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Placement Type *</FormLabel>
+                  <FormLabel required>Placement Type</FormLabel>
                   <Select
                     onValueChange={field.onChange}
                     value={field.value ?? ""}

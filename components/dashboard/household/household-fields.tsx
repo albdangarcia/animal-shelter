@@ -67,7 +67,7 @@ export const HouseholdFormFields = ({
         name="livingSituation"
         render={({ field }) => (
           <FormItem className="col-span-3">
-            <FormLabel>Living Situation *</FormLabel>
+            <FormLabel required>Living Situation</FormLabel>
             {/* value coerced to "" so Select stays controlled from the first
                 render — undefined->defined later trips React's
                 "uncontrolled to controlled" warning. */}
@@ -93,8 +93,9 @@ export const HouseholdFormFields = ({
       <NumberField
         control={form.control}
         name="householdSize"
-        label="Household Size *"
+        label="Household Size"
         className="col-span-3"
+        required
         min={1}
         max={50}
       />
@@ -104,7 +105,7 @@ export const HouseholdFormFields = ({
         name="hasYard"
         render={({ field }) => (
           <FormItem className="col-span-2">
-            <FormLabel>Do you have a yard? *</FormLabel>
+            <FormLabel required>Do you have a yard?</FormLabel>
             {/* value coerced to "" so Select stays controlled from the first
                 render — undefined->defined later trips React's
                 "uncontrolled to controlled" warning. */}
@@ -134,7 +135,7 @@ export const HouseholdFormFields = ({
           name="landlordPermission"
           render={({ field }) => (
             <FormItem className="col-span-2">
-              <FormLabel>Do you have landlord permission? *</FormLabel>
+              <FormLabel required>Do you have landlord permission?</FormLabel>
               <Select onValueChange={field.onChange} value={field.value ?? ""}>
                 <FormControl>
                   <SelectTrigger className="w-full">
@@ -157,7 +158,7 @@ export const HouseholdFormFields = ({
         name="hasChildren"
         render={({ field }) => (
           <FormItem className="col-span-2">
-            <FormLabel>Do you have children at home? *</FormLabel>
+            <FormLabel required>Do you have children at home?</FormLabel>
             <Select onValueChange={field.onChange} value={field.value ?? ""}>
               <FormControl>
                 <SelectTrigger className="w-full">
@@ -213,7 +214,7 @@ export const HouseholdFormFields = ({
         name="animalExperience"
         render={({ field }) => (
           <FormItem className="col-span-full">
-            <FormLabel>Experience with Animals *</FormLabel>
+            <FormLabel required>Experience with Animals</FormLabel>
             <FormControl>
               <Textarea
                 placeholder="Tell us about your experience caring for pets."

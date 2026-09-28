@@ -16,6 +16,8 @@ type NumberFieldProps<TValues extends FieldValues> = {
   name: Path<TValues>;
   label: string;
   className?: string;
+  /** Marks the label with the required asterisk. Not passed to the input. */
+  required?: boolean;
 } & Omit<ComponentProps<typeof NumberInput>, "value" | "onChange">;
 
 export function NumberField<TValues extends FieldValues>({
@@ -23,6 +25,7 @@ export function NumberField<TValues extends FieldValues>({
   name,
   label,
   className,
+  required = false,
   ...inputProps
 }: NumberFieldProps<TValues>) {
   return (
@@ -31,7 +34,9 @@ export function NumberField<TValues extends FieldValues>({
       name={name}
       render={({ field }) => (
         <FormItem className={className}>
-          <FormLabel htmlFor={name}>{label}</FormLabel>
+          <FormLabel htmlFor={name} required={required}>
+            {label}
+          </FormLabel>
           <FormControl>
             <NumberInput id={name} {...inputProps} {...field} />
           </FormControl>

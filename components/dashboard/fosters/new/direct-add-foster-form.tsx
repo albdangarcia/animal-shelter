@@ -115,7 +115,7 @@ export function DirectAddFosterForm({
               name="personId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Person *</FormLabel>
+                  <FormLabel required>Person</FormLabel>
                   <FormControl>
                     <PersonPicker
                       value={field.value || null}

@@ -20,6 +20,22 @@ const eslintConfig = defineConfig([
         "varsIgnorePattern": "^_",
       }],
       "react-hooks/incompatible-library": "warn",
+      // Required fields get their asterisk from FormLabel, so every form
+      // marks them the same way.
+      "no-restricted-syntax": ["error",
+        {
+          "selector": "JSXElement[openingElement.name.name='FormLabel'] > JSXText[value=/[*]\\s*$/]",
+          "message": "Don't type the asterisk. Use <FormLabel required> instead.",
+        },
+        {
+          "selector": "JSXElement[openingElement.name.name='FormLabel'] > JSXExpressionContainer > Literal[value=/[*]\\s*$/]",
+          "message": "Don't type the asterisk. Use <FormLabel required> instead.",
+        },
+        {
+          "selector": "JSXAttribute[name.name='label'] > Literal[value=/ [*]\\s*$/]",
+          "message": "Don't type the asterisk. Pass `required` to the field instead.",
+        },
+      ],
     },
   },
 ]);
