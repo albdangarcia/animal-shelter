@@ -253,7 +253,7 @@ const latestCorrectionDetail = async (page: Page, animalId: string) => {
 };
 
 const intakeDateTrigger = (page: Page) =>
-  page.getByRole("button", { name: /^Intake Date:/ });
+  page.getByRole("button", { name: /^Intake Date \*:/ });
 
 // The popover does not close on select, so it may already be open; clicking
 // the trigger then would shut it.

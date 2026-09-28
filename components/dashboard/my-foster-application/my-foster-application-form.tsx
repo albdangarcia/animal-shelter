@@ -128,7 +128,7 @@ export function MyFosterApplicationForm({
                 name="applicantName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Full Name *</FormLabel>
+                    <FormLabel required>Full Name</FormLabel>
                     <FormControl>
                       <Input placeholder="John Doe" {...field} />
                     </FormControl>
@@ -141,7 +141,7 @@ export function MyFosterApplicationForm({
                 name="applicantEmail"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Email *</FormLabel>
+                    <FormLabel required>Email</FormLabel>
                     <FormControl>
                       <Input
                         placeholder="you@example.com"
@@ -158,7 +158,7 @@ export function MyFosterApplicationForm({
                 name="applicantPhone"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Phone *</FormLabel>
+                    <FormLabel required>Phone</FormLabel>
                     <FormControl>
                       <Input placeholder="(123) 456-7890" {...field} />
                     </FormControl>
@@ -174,7 +174,7 @@ export function MyFosterApplicationForm({
                 name="applicantAddressLine1"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Address Line 1 *</FormLabel>
+                    <FormLabel required>Address Line 1</FormLabel>
                     <FormControl>
                       <Input placeholder="123 Main St" {...field} />
                     </FormControl>
@@ -204,7 +204,7 @@ export function MyFosterApplicationForm({
                   name="applicantCity"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>City *</FormLabel>
+                      <FormLabel required>City</FormLabel>
                       <FormControl>
                         <Input {...field} />
                       </FormControl>
@@ -217,7 +217,7 @@ export function MyFosterApplicationForm({
                   name="applicantState"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>State *</FormLabel>
+                      <FormLabel required>State</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value ?? ""}
@@ -244,7 +244,7 @@ export function MyFosterApplicationForm({
                   name="applicantZipCode"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>ZIP Code *</FormLabel>
+                      <FormLabel required>ZIP Code</FormLabel>
                       <FormControl>
                         <Input placeholder="12345" {...field} />
                       </FormControl>

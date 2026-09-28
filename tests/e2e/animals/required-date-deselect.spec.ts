@@ -137,7 +137,7 @@ const forms: Form[] = [
       formWithSubmit(page, "Create Intake").getByRole("button", {
         name: "Create Intake",
       }),
-    trigger: /^Intake Date:/,
+    trigger: /^Intake Date \*:/,
   },
   {
     // Empty on opening, so a day is picked first. The rest of the form is
@@ -151,7 +151,7 @@ const forms: Form[] = [
       formWithSubmit(page, "Create Intake").getByRole("button", {
         name: "Create Intake",
       }),
-    trigger: /^Estimated Birth Date:/,
+    trigger: /^Estimated Birth Date \*:/,
     startsEmpty: true,
   },
   {
@@ -166,7 +166,7 @@ const forms: Form[] = [
       await waitForFormHydration(page, "Process Re-Intake");
     },
     submit: (page) => page.getByRole("button", { name: "Process Re-Intake" }),
-    trigger: /^Intake Date:/,
+    trigger: /^Intake Date \*:/,
   },
   {
     // An owner surrender needs a person, so a submit only validates.
@@ -180,7 +180,7 @@ const forms: Form[] = [
       await chooseFromSelect(page, "Intake Type", "Owner Surrender");
     },
     submit: (page) => page.getByRole("button", { name: "Update Intake" }),
-    trigger: /^Intake Date:/,
+    trigger: /^Intake Date \*:/,
   },
   {
     // With no measurement entered, the form refuses to send.
@@ -207,7 +207,7 @@ const forms: Form[] = [
         .getByRole("dialog", { name: "Record Vitals" })
         .locator("form")
         .getByRole("button", { name: "Record Vitals" }),
-    trigger: /^Date Recorded:/,
+    trigger: /^Date Recorded \*:/,
   },
   {
     // The summary and answers are empty, so a submit only validates.
@@ -220,7 +220,7 @@ const forms: Form[] = [
       await waitForFormHydration(page, "Record assessment");
     },
     submit: (page) => page.getByRole("button", { name: "Record assessment" }),
-    trigger: /^Observed on:/,
+    trigger: /^Observed on \*:/,
   },
 ];
 

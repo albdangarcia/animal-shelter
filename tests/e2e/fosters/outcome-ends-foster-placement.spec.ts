@@ -434,7 +434,7 @@ const chooseFromSelect = async (page: Page, label: string, option: string) => {
 };
 
 const OUTCOME_DATE = /^Date of Outcome \*:/;
-const INTAKE_DATE = /^Intake Date:/;
+const INTAKE_DATE = /^Intake Date \*:/;
 
 const dateTrigger = (page: Page, label: RegExp = OUTCOME_DATE) =>
   page.getByRole("button", { name: label });

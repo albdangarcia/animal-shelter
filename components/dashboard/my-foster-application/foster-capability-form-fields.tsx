@@ -92,7 +92,7 @@ export const FosterCapabilityFormFields = ({
           };
           return (
             <FormItem className="col-span-full flex flex-col">
-              <FormLabel>Species you can foster *</FormLabel>
+              <FormLabel required>Species you can foster</FormLabel>
               <Popover>
                 <PopoverTrigger asChild>
                   <FormControl>

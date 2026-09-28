@@ -23,7 +23,8 @@ type DayFieldProps<TValues extends FieldValues> = {
   triggerClassName?: string;
   /**
    * The form can't do without a date here, so clicking the selected day again
-   * keeps it rather than clearing it. The label is left as written.
+   * keeps it rather than clearing it. The label and the trigger's name both
+   * gain the required asterisk.
    */
   required?: boolean;
   /** A line under the picker, above any validation message. */
@@ -79,7 +80,9 @@ export function DayField<TValues extends FieldValues>({
 
         return (
           <FormItem className={className}>
-            <FormLabel htmlFor={name}>{label}</FormLabel>
+            <FormLabel htmlFor={name} required={required}>
+              {label}
+            </FormLabel>
             <FormControl>
               <DateInput
                 id={name}
@@ -93,7 +96,7 @@ export function DayField<TValues extends FieldValues>({
                 onChange={(date) =>
                   field.onChange(date ? format(date, "yyyy-MM-dd") : null)
                 }
-                aria-label={`${label}: ${
+                aria-label={`${label}${required ? " *" : ""}: ${
                   value ? format(value, "PPP") : placeholder
                 }`}
                 {...inputProps}

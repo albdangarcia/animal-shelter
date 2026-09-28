@@ -198,7 +198,7 @@ const chooseFromSelect = async (
 };
 
 const OUTCOME_DATE = /^Date of Outcome \*:/;
-const INTAKE_DATE = /^Intake Date:/;
+const INTAKE_DATE = /^Intake Date \*:/;
 
 const dateTrigger = (page: Page, label: RegExp) =>
   page.getByRole("button", { name: label });
@@ -444,7 +444,7 @@ test("creating an animal with a future intake day is refused under the picker", 
     await chooseFromSelect(page, "Primary Color", null);
     await chooseFromSelect(page, "Intake Type", "Seize");
     // Any day on the grid the page opens on is not in its future.
-    const birthCalendar = await openCalendar(page, /^Estimated Birth Date:/);
+    const birthCalendar = await openCalendar(page, /^Estimated Birth Date \*:/);
     await birthCalendar
       .locator("button[data-day]:not([disabled])")
       .nth(0)

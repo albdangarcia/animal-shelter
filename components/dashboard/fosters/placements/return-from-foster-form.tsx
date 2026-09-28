@@ -124,7 +124,7 @@ export function ReturnFromFosterForm({
               name="returnReason"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Return Reason *</FormLabel>
+                  <FormLabel required>Return Reason</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value ?? ""}>
                     <FormControl>
                       <SelectTrigger className="w-full">
@@ -178,7 +178,7 @@ export function ReturnFromFosterForm({
                 name="unitId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Unit *</FormLabel>
+                    <FormLabel required>Unit</FormLabel>
                     <Select
                       onValueChange={field.onChange}
                       value={field.value}

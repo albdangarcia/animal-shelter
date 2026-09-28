@@ -184,7 +184,7 @@ export function OutcomeForm({
                 name="outcomeType"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Outcome Type *</FormLabel>
+                    <FormLabel required>Outcome Type</FormLabel>
                     {/* Was both defaultValue and value, which makes the Select
                         uncontrolled on first render and ignores form.reset(). */}
                     <Select
@@ -218,7 +218,7 @@ export function OutcomeForm({
               <DayField
                 control={form.control}
                 name="outcomeDate"
-                label="Date of Outcome *"
+                label="Date of Outcome"
                 className="flex flex-col"
                 triggerClassName="pl-3"
                 required
@@ -240,7 +240,7 @@ export function OutcomeForm({
                 name="destinationPartnerId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Destination Partner *</FormLabel>
+                    <FormLabel required>Destination Partner</FormLabel>
                     <Select
                       onValueChange={field.onChange}
                       value={field.value ?? ""}
@@ -275,7 +275,7 @@ export function OutcomeForm({
                 name="ownerId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Owner *</FormLabel>
+                    <FormLabel required>Owner</FormLabel>
                     <FormControl>
                       <PersonPicker
                         value={field.value || null}

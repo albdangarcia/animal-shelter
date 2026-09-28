@@ -170,7 +170,7 @@ const StaffAdoptionApplicationForm = ({
                 name="animalId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Animal to Adopt *</FormLabel>
+                    <FormLabel required>Animal to Adopt</FormLabel>
                     {selectedAnimal ? (
                       <div className="flex items-center gap-2">
                         <Badge
