@@ -71,8 +71,8 @@ test("admin can create a location", async ({ page }) => {
   await page.goto(locationsPath);
   await page.getByRole("button", { name: "Add Location" }).click();
 
-  await fillStable(page.getByLabel("Name", { exact: true }), locationName);
-  await page.getByLabel("Type", { exact: true }).click();
+  await fillStable(page.getByLabel("Name *", { exact: true }), locationName);
+  await page.getByLabel("Type *", { exact: true }).click();
   await page.getByRole("option", { name: "Isolation", exact: true }).click();
   await page
     .getByRole("button", { name: "Create Location", exact: true })
@@ -93,8 +93,8 @@ test("admin can add a unit to the new location", async ({ page }) => {
   // An empty location renders two "Add Unit" triggers (header + empty-state
   // link) — either opens the same dialog, so .first() is enough.
   await card.getByRole("button", { name: "Add Unit" }).first().click();
-  await fillStable(page.getByLabel("Name", { exact: true }), unitName);
-  await fillStable(page.getByLabel("Capacity", { exact: true }), "2");
+  await fillStable(page.getByLabel("Name *", { exact: true }), unitName);
+  await fillStable(page.getByLabel("Capacity *", { exact: true }), "2");
   await page
     .getByRole("button", { name: "Create Unit", exact: true })
     .click();

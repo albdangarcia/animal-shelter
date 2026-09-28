@@ -181,7 +181,7 @@ export const HouseholdFormFields = ({
           name="childrenAges"
           render={({ field }) => (
             <FormItem className="col-span-full">
-              <FormLabel>Ages of children</FormLabel>
+              <FormLabel required>Ages of children</FormLabel>
               <FormControl>
                 <Input placeholder="e.g., 5, 8, 12" {...field} />
               </FormControl>

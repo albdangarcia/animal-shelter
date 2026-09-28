@@ -12,6 +12,7 @@ import {
   allowedNextStatuses,
   formatStatusList,
   isAllowedTransition,
+  statusChangeNeedsReason,
 } from "./application-status";
 import {
   EffectiveApplicationStatus,
@@ -136,4 +137,13 @@ test("a withdrawn application never blocks reviving another one", () => {
     !REACTIVATION_BLOCKING_STATUSES.includes(ApplicationStatus.WITHDRAWN),
   );
   assert.ok(!REACTIVATION_BLOCKING_STATUSES.includes(EffectiveApplicationStatus.CLOSED));
+});
+
+test("a status change needs a reason unless nothing changes or review starts", () => {
+  const { PENDING, REVIEWING, REJECTED, APPROVED } = ApplicationStatus;
+  assert.equal(statusChangeNeedsReason(PENDING, undefined), false);
+  assert.equal(statusChangeNeedsReason(PENDING, PENDING), false);
+  assert.equal(statusChangeNeedsReason(PENDING, REVIEWING), false);
+  assert.equal(statusChangeNeedsReason(PENDING, REJECTED), true);
+  assert.equal(statusChangeNeedsReason(REVIEWING, APPROVED), true);
 });

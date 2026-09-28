@@ -228,6 +228,19 @@ export const isAllowedTransition = (
   to: ApplicationStatus,
 ): boolean => allowedNextStatuses(from).includes(to);
 
+// Whether staff must give a reason for moving an application from `from` to
+// `to`. Any real change needs one, except picking a new application up for
+// review: PENDING to REVIEWING says nothing the applicant needs explaining.
+// The update action enforces this and the review form marks the reason field
+// with it, so the two cannot disagree.
+export const statusChangeNeedsReason = (
+  from: EffectiveApplicationStatus,
+  to: ApplicationStatus | undefined,
+): boolean =>
+  to !== undefined &&
+  to !== from &&
+  !(from === ApplicationStatus.PENDING && to === ApplicationStatus.REVIEWING);
+
 export const illegalTransitionMessage = (
   from: EffectiveApplicationStatus,
   to: ApplicationStatus,

@@ -65,7 +65,7 @@ export const ColorForm = ({ onFormSubmit, color }: Props) => {
           name="name"
           render={({ field }) => (
             <FormItem>
-              <FormLabel htmlFor="name">Name</FormLabel>
+              <FormLabel htmlFor="name" required>Name</FormLabel>
               <FormControl>
                 <Input id="name" placeholder="e.g. Brindle" {...field} />
               </FormControl>

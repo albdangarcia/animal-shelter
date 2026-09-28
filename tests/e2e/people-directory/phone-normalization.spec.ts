@@ -77,7 +77,7 @@ const fillStable = async (field: Locator, text: string) => {
   }).toPass({ timeout: 15_000 });
 };
 
-const nameField = (page: Page) => page.getByLabel("Name", { exact: true });
+const nameField = (page: Page) => page.getByLabel("Name *", { exact: true });
 // The staff form's label renders as "Phone (or email)".
 const phoneField = (page: Page) => page.getByLabel(/^Phone/);
 

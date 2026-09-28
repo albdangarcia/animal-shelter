@@ -70,7 +70,7 @@ export const UnitForm = ({ onFormSubmit, locationId, unit }: Props) => {
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel htmlFor="name">Name</FormLabel>
+                <FormLabel htmlFor="name" required>Name</FormLabel>
                 <FormControl>
                   <Input id="name" placeholder="e.g. A-1" {...field} />
                 </FormControl>
@@ -85,7 +85,7 @@ export const UnitForm = ({ onFormSubmit, locationId, unit }: Props) => {
             name="capacity"
             render={({ field }) => (
               <FormItem>
-                <FormLabel htmlFor="capacity">Capacity</FormLabel>
+                <FormLabel htmlFor="capacity" required>Capacity</FormLabel>
                 <FormControl>
                   <NumberInput id="capacity" min={1} {...field} />
                 </FormControl>

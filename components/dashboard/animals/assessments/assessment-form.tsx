@@ -194,7 +194,7 @@ export function AssessmentForm({
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <FormItem>
             <div className="flex items-center gap-1.5">
-              <FormLabel htmlFor="template-picker">Template</FormLabel>
+              <FormLabel htmlFor="template-picker" required>Template</FormLabel>
               <FieldInfo label="About this template">
                 {template.description}
               </FieldInfo>
@@ -259,8 +259,7 @@ export function AssessmentForm({
                 render={({ field: noteField }) => (
                   <FormItem>
                     <FormLabel htmlFor={`fields.${field.key}.note`}>
-                      Note{" "}
-                      <span className="text-muted-foreground">(optional)</span>
+                      Note
                     </FormLabel>
                     <FormControl>
                       <Input
@@ -301,7 +300,7 @@ export function AssessmentForm({
             name="signal"
             render={({ field }) => (
               <FormItem>
-                <FormLabel htmlFor="signal">Signal</FormLabel>
+                <FormLabel htmlFor="signal" required>Signal</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value ?? ""}

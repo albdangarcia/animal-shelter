@@ -146,7 +146,7 @@ export const PartnerContactForm = ({
           name="personId"
           render={() => (
             <FormItem>
-              <FormLabel>Person</FormLabel>
+              <FormLabel required>Person</FormLabel>
               <PartnerContactPicker
                 people={people}
                 value={selectedPerson}

@@ -103,6 +103,11 @@ export function VitalsForm({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <p className="col-span-full text-sm text-muted-foreground">
+            Record at least one measurement: weight, temperature or body
+            condition score.
+          </p>
+
           {/* Weight */}
           <FormField
             control={form.control}

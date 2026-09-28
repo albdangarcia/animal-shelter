@@ -42,7 +42,7 @@ test("editing a person note stamps 'edited by Admin User' on the Notes tab", asy
 
   await openNoteEditDialog(page, card);
   const revised = `Return-to-owner paperwork completed and filed. E2E ${Date.now()}`;
-  await fillStable(page.getByLabel("Content", { exact: true }), revised);
+  await fillStable(page.getByLabel("Content *", { exact: true }), revised);
   await page.getByRole("button", { name: "Update Note" }).click();
   await expect(page.getByText("Note updated successfully.")).toBeVisible();
 

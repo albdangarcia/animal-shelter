@@ -125,7 +125,7 @@ const ReIntakeForm = ({
                   name="healthStatus"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Health Status</FormLabel>
+                      <FormLabel required>Health Status</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value}

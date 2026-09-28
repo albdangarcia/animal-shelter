@@ -78,7 +78,7 @@ export const LocationForm = ({ onFormSubmit, location }: Props) => {
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel htmlFor="name">Name</FormLabel>
+                <FormLabel htmlFor="name" required>Name</FormLabel>
                 <FormControl>
                   <Input id="name" placeholder="e.g. Main Kennel" {...field} />
                 </FormControl>
@@ -93,7 +93,7 @@ export const LocationForm = ({ onFormSubmit, location }: Props) => {
             name="type"
             render={({ field }) => (
               <FormItem>
-                <FormLabel htmlFor="type">Type</FormLabel>
+                <FormLabel htmlFor="type" required>Type</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value ?? ""}

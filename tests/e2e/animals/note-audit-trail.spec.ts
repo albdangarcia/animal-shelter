@@ -88,7 +88,7 @@ test("editing an animal note stamps 'edited by Admin User' and feeds the activit
   await openNoteEditDialog(page, card);
 
   const revised = `Kennel cough resolved on recheck — cleared for adoption. E2E ${Date.now()}`;
-  await fillStable(page.getByLabel("Content", { exact: true }), revised);
+  await fillStable(page.getByLabel("Content *", { exact: true }), revised);
   // Leave the category as MEDICAL; changeSummary is the category label.
   await page.getByRole("button", { name: "Update Note" }).click();
   await expect(page.getByText("Note updated successfully.")).toBeVisible();

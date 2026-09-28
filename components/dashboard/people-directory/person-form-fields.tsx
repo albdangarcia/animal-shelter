@@ -42,7 +42,7 @@ export const PersonFormFields = ({
         name="name"
         render={({ field }) => (
           <FormItem className="col-span-4">
-            <FormLabel>Name</FormLabel>
+            <FormLabel required>Name</FormLabel>
             <FormControl>
               <Input
                 placeholder="e.g., Jane Doe"

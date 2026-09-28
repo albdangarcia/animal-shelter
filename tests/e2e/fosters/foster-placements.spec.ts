@@ -483,7 +483,7 @@ test("converting with the foster's approved application linked makes it read Ado
   await openRowMenuItem(applicationRow, "Review");
   await waitForPathname(page, REVIEW_PATH);
 
-  await chooseFromSelect(page, "Application Status *", "Approved");
+  await chooseFromSelect(page, "Application Status", "Approved");
   await fillStable(
     page.getByLabel("Reason for Status Change *", { exact: true }),
     "Approved ahead of a foster-to-adopt conversion.",

@@ -83,7 +83,7 @@ test("the review form says which of its two note fields the applicant sees", asy
   // The reason field only renders once a different status is picked. Nothing
   // is submitted here — this is about what the form promises before staff
   // commit to anything.
-  await page.getByLabel("Application Status *", { exact: true }).click();
+  await page.getByLabel("Application Status", { exact: true }).click();
   await page.getByRole("option", { name: "Waitlisted" }).click();
 
   await expect(
@@ -91,4 +91,45 @@ test("the review form says which of its two note fields the applicant sees", asy
       "Shared with the applicant — shown on their application page and recorded in the status history below.",
     ),
   ).toBeVisible();
+});
+
+test("the reason field is marked required only when the change needs a reason", async ({
+  page,
+}) => {
+  // One of Jane Doe's PENDING fixtures. There can be more than one (a withdrawn
+  // application's replacement is PENDING too), and any of them will do:
+  // nothing is submitted.
+  await page.goto(
+    `/dashboard/adoption-applications?query=${encodeURIComponent(
+      APPLICANT_NAME,
+    )}&status=PENDING`,
+  );
+  await expect(page.locator("tbody tr").first()).toBeVisible();
+  await page.goto(await rowMenuItemHref(page, 0, "Review"));
+  await waitForPathname(page, REVIEW_PATH);
+
+  const status = page.getByLabel("Application Status", { exact: true });
+  const optionalReason = page.getByLabel("Reason for Status Change", {
+    exact: true,
+  });
+  const requiredReason = page.getByLabel("Reason for Status Change *", {
+    exact: true,
+  });
+
+  // Unchanged: no reason is asked for, so the field does not render at all.
+  await expect(status).toHaveText("Pending");
+  await expect(optionalReason).toHaveCount(0);
+  await expect(requiredReason).toHaveCount(0);
+
+  await status.click();
+  await page.getByRole("option", { name: "Rejected", exact: true }).click();
+  await expect(requiredReason).toBeVisible();
+  await expect(optionalReason).toHaveCount(0);
+
+  // Picking a new application up for review is the one change the server lets
+  // through without a reason.
+  await status.click();
+  await page.getByRole("option", { name: "Reviewing", exact: true }).click();
+  await expect(optionalReason).toBeVisible();
+  await expect(requiredReason).toHaveCount(0);
 });

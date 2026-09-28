@@ -297,7 +297,7 @@ const gotoReIntakeForm = async (page: Page, animalId: string) => {
   await page.goto(`/dashboard/animals/${animalId}/intake/create`);
   await waitForFormHydration(page, "Process Re-Intake");
   // "Seize" needs no partner, person or address.
-  await chooseFromSelect(page, "Intake Type", "Seize");
+  await chooseFromSelect(page, "Intake Type *", "Seize");
 };
 
 const reIntake = async (page: Page, animalId: string, day: DayKey) => {
@@ -438,11 +438,11 @@ test("creating an animal with a future intake day is refused under the picker", 
     await page.goto("/dashboard/animals/create");
     await waitForFormHydration(page, "Create Intake");
 
-    await fillStable(page.getByLabel("Animal Name", { exact: true }), name);
-    await chooseFromSelect(page, "Species", null);
-    await chooseFromSelect(page, "Breed", null);
-    await chooseFromSelect(page, "Primary Color", null);
-    await chooseFromSelect(page, "Intake Type", "Seize");
+    await fillStable(page.getByLabel("Animal Name *", { exact: true }), name);
+    await chooseFromSelect(page, "Species *", null);
+    await chooseFromSelect(page, "Breed *", null);
+    await chooseFromSelect(page, "Primary Color *", null);
+    await chooseFromSelect(page, "Intake Type *", "Seize");
     // Any day on the grid the page opens on is not in its future.
     const birthCalendar = await openCalendar(page, /^Estimated Birth Date \*:/);
     await birthCalendar

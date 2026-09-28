@@ -65,7 +65,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
           name={"intakeType" as Path<T>}
           render={({ field }) => (
             <FormItem className="col-span-3">
-              <FormLabel>Intake Type</FormLabel>
+              <FormLabel required>Intake Type</FormLabel>
               <Select onValueChange={field.onChange} value={field.value ?? ""}>
                 <FormControl>
                   <SelectTrigger className="w-full">
@@ -134,7 +134,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
               name={"sourcePartnerId" as Path<T>}
               render={({ field }) => (
                 <FormItem className="col-span-full">
-                  <FormLabel>Source Partner</FormLabel>
+                  <FormLabel required>Source Partner</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger className="w-full">
@@ -164,7 +164,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
               name={"foundCity" as Path<T>}
               render={({ field }) => (
                 <FormItem className="col-span-3">
-                  <FormLabel>City</FormLabel>
+                  <FormLabel required>City</FormLabel>
                   <FormControl>
                     <Input placeholder="Anytown" {...field} />
                   </FormControl>
@@ -177,7 +177,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
               name={"foundState" as Path<T>}
               render={({ field }) => (
                 <FormItem className="col-span-3">
-                  <FormLabel>State</FormLabel>
+                  <FormLabel required>State</FormLabel>
                   <Select
                     onValueChange={field.onChange}
                     value={field.value ?? ""}
@@ -204,7 +204,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
               name={"foundAddress" as Path<T>}
               render={({ field }) => (
                 <FormItem className="col-span-full">
-                  <FormLabel>Address / Cross Streets</FormLabel>
+                  <FormLabel required>Address / Cross Streets</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="e.g., Corner of Main St & Park Ave"
@@ -234,7 +234,7 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
             name={"surrenderingPersonId" as Path<T>}
             render={({ field }) => (
               <FormItem className="col-span-full">
-                <FormLabel>Surrendering Person</FormLabel>
+                <FormLabel required>Surrendering Person</FormLabel>
                 <FormControl>
                   <PersonPicker
                     value={field.value || null}

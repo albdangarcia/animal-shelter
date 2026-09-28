@@ -28,6 +28,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { RequiredFieldsLegend } from "@/components/forms/required-fields-legend";
 import {
   Form,
   FormControl,
@@ -273,15 +274,19 @@ export function MyApplicationForm({
         // Dropped into the same two-column grid the sections use, so it lands
         // in the field column rather than floating alone above the rail.
         <div className="mb-10 grid gap-7 sm:mb-14 lg:grid-cols-[0.8fr_minmax(0,1fr)] lg:gap-16">
-          <p className="max-w-[52ch] text-[16px] leading-[1.65] text-pretty text-organic-neutral-800 lg:col-start-2">
-            {intro}
-          </p>
+          <div className="space-y-3 lg:col-start-2">
+            <p className="max-w-[52ch] text-[16px] leading-[1.65] text-pretty text-organic-neutral-800">
+              {intro}
+            </p>
+            <RequiredFieldsLegend />
+          </div>
         </div>
       ) : (
         <Card>
           <CardHeader>
             <CardTitle>Adoption Application</CardTitle>
             <CardDescription>{intro}</CardDescription>
+            <RequiredFieldsLegend />
           </CardHeader>
         </Card>
       )}

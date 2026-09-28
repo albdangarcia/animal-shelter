@@ -141,7 +141,7 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
                   name="name"
                   render={({ field }) => (
                     <FormItem className="col-span-4">
-                      <FormLabel>Name</FormLabel>
+                      <FormLabel required>Name</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="e.g., Westchester Humane Society"
@@ -158,7 +158,7 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
                   name="type"
                   render={({ field }) => (
                     <FormItem className="col-span-2">
-                      <FormLabel>Type</FormLabel>
+                      <FormLabel required>Type</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value ?? ""}
