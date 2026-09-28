@@ -794,7 +794,7 @@ test("an outcome reversed after a re-intake leaves the placement ended, marked r
   // and its reversal has nothing to reopen.
   await page.goto(`/dashboard/animals/${reIntaken.id}/intake/create`);
   await waitForFormHydration(page, "Process Re-Intake");
-  await chooseFromSelect(page, "Intake Type", "Seize");
+  await chooseFromSelect(page, "Intake Type *", "Seize");
   // Not today: the picker opens on today already selected, and clicking a
   // selected day clears it.
   await pickDay(page, shiftDay(today, -1), INTAKE_DATE);

@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { RequiredFieldsLegend } from "@/components/forms/required-fields-legend";
 import { toast } from "sonner";
 import { Form } from "@/components/ui/form";
 import { HouseholdFieldsSchema } from "@/app/lib/zod-schemas/household-profile.schemas";
@@ -68,6 +69,7 @@ export const SelfHouseholdForm = ({
               This information helps us match you with the right animal and
               speeds up future adoption applications.
             </CardDescription>
+            <RequiredFieldsLegend />
           </CardHeader>
           <CardContent className="space-y-10">
             <HouseholdFormFields form={form} />

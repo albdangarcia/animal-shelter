@@ -22,6 +22,7 @@ import { AnimalForAdoptionApplicationPayload } from "@/app/lib/types";
 import {
   allowedNextStatuses,
   STAFF_EDITABLE_STATUSES,
+  statusChangeNeedsReason,
 } from "@/app/lib/utils/application-status";
 import { isReviewStatus } from "@/app/lib/utils/derive-application-status";
 import { FormattedDate } from "@/components/common/formatted-date";
@@ -116,6 +117,7 @@ export function StaffApplicationUpdateForm({
 
   const newStatus = useWatch({ control: form.control, name: "status" });
   const isStatusChanging = newStatus && newStatus !== currentStatus;
+  const reasonRequired = statusChangeNeedsReason(currentStatus, newStatus);
 
   // Every message the action returns used to be toasted as an error, because
   // the effect draining action state had no way to tell success from failure.
@@ -223,7 +225,7 @@ export function StaffApplicationUpdateForm({
                   name="status"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel required>Application Status</FormLabel>
+                      <FormLabel>Application Status</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         // Shows the current status when the form holds none,
@@ -259,7 +261,9 @@ export function StaffApplicationUpdateForm({
                     name="statusChangeReason"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel required>Reason for Status Change</FormLabel>
+                        <FormLabel required={reasonRequired}>
+                          Reason for Status Change
+                        </FormLabel>
                         <FormControl>
                           <Textarea
                             placeholder="Provide a reason for changing the status..."

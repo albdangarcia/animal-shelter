@@ -169,6 +169,7 @@ export const FosterCapabilityFormFields = ({
         label="Max animals at once"
         className="col-span-3"
         min={1}
+        required
       />
 
       <FormField

@@ -84,7 +84,7 @@ export const CharacteristicForm = ({ onFormSubmit, characteristic }: Props) => {
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel htmlFor="name">Name</FormLabel>
+                <FormLabel htmlFor="name" required>Name</FormLabel>
                 <FormControl>
                   <Input
                     id="name"
@@ -103,7 +103,7 @@ export const CharacteristicForm = ({ onFormSubmit, characteristic }: Props) => {
             name="category"
             render={({ field }) => (
               <FormItem>
-                <FormLabel htmlFor="category">Category</FormLabel>
+                <FormLabel htmlFor="category" required>Category</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value ?? ""}

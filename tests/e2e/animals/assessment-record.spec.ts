@@ -57,7 +57,7 @@ test("record an assessment, then edit it without losing answers", async ({
   const summary = `E2E handling assessment ${Date.now()}`;
 
   await page.goto(`/dashboard/animals/${id}/assessments/create`);
-  await pickOption(page, "Template", "Handling Sensitivity");
+  await pickOption(page, "Template *", "Handling Sensitivity");
 
   await pickOption(page, "Collar and leash application *", "Accepts readily");
   await pickOption(page, "Gentle restraint for exam", "Tolerates");
@@ -65,7 +65,7 @@ test("record an assessment, then edit it without losing answers", async ({
 
   // A per-answer note that the later edit must not drop.
   await fillStable(
-    page.getByLabel("Note (optional)").first(),
+    page.getByLabel("Note", { exact: true }).first(),
     "Calm for the collar",
   );
   await fillStable(page.getByLabel("Summary"), summary);
@@ -115,7 +115,7 @@ test("record an assessment, then edit it without losing answers", async ({
 test("a blank assessment cannot be submitted", async ({ page }) => {
   const id = await friscoId(page);
   await page.goto(`/dashboard/animals/${id}/assessments/create`);
-  await pickOption(page, "Template", "Intake Medical");
+  await pickOption(page, "Template *", "Intake Medical");
 
   await page.getByRole("button", { name: "Record assessment" }).click();
 

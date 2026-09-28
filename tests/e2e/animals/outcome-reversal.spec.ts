@@ -287,7 +287,7 @@ const prepareCandidate = async (page: Page): Promise<Candidate> => {
   if (!winner) throw new Error("The new application is not on the list.");
 
   await page.goto(winner.reviewHref);
-  await chooseFromSelect(page, "Application Status *", "Approved");
+  await chooseFromSelect(page, "Application Status", "Approved");
   await fillStable(
     page.getByLabel("Reason for Status Change *", { exact: true }),
     "Approved ahead of recording the adoption.",

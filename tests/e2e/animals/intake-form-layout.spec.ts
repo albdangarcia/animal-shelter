@@ -77,14 +77,14 @@ const setFormWidth = async (page: Page, width: number) => {
 };
 
 const namedSelects = (page: Page): Locator[] =>
-  ["Species", "Breed", "Primary Color", "Sex"].map((label) =>
+  ["Species *", "Breed *", "Primary Color *", "Sex *"].map((label) =>
     page.getByLabel(label, { exact: true }),
   );
 
 test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/dashboard/animals/create");
-  await expect(page.getByLabel("Species", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Species *", { exact: true })).toBeVisible();
 });
 
 test("below the container breakpoint the fields stack and no two selects overlap", async ({

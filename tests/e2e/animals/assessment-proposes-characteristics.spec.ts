@@ -87,7 +87,7 @@ const sourceLink = (page: Page, templateName: string) =>
 
 const recordCatSafeTest = async (page: Page, id: string) => {
   await page.goto(`/dashboard/animals/${id}/assessments/create`);
-  await pickOption(page, "Template", "Cat Test");
+  await pickOption(page, "Template *", "Cat Test");
   await pickOption(page, "Response on first seeing the cat *", "Curious and calm");
   await pickOption(page, "Response at close proximity *", "Calm");
   await pickOption(page, "Recommendation *", "Cat-safe");
@@ -330,7 +330,7 @@ test("renaming a trait in Settings keeps its citation and supersession linked", 
     await openCatalogMenu(from);
     await page.getByRole("menuitem", { name: "Edit" }).click();
     const dialog = page.getByRole("dialog");
-    await fillStable(dialog.getByLabel("Name", { exact: true }), to);
+    await fillStable(dialog.getByLabel("Name *", { exact: true }), to);
     await dialog.getByRole("button", { name: "Update Characteristic" }).click();
     await expect(page.getByText("Characteristic updated successfully.")).toBeVisible();
   };

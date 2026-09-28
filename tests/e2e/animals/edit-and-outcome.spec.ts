@@ -111,7 +111,7 @@ test("the listing status select is disabled and pinned to the current value for 
   ] as const) {
     const animalId = await firstAnimalIdByStatus(page, status);
     await page.goto(`/dashboard/animals/${animalId}/edit`);
-    const statusSelect = page.getByLabel("Listing Status", { exact: true });
+    const statusSelect = page.getByLabel("Listing Status *", { exact: true });
     await expect(statusSelect).toBeVisible();
     await expect(statusSelect).toBeDisabled();
     // A disabled select showing only this label offers no other value.
@@ -145,7 +145,7 @@ test("saving an archived animal's edit form leaves its listing status archived",
   const stillArchived = await firstAnimalIdByStatus(page, "ARCHIVED");
   expect(stillArchived).toBe(animalId);
   await page.goto(`/dashboard/animals/${animalId}/edit`);
-  await expect(page.getByLabel("Listing Status", { exact: true })).toContainText("Archived");
+  await expect(page.getByLabel("Listing Status *", { exact: true })).toContainText("Archived");
 });
 
 test("an archived animal's edit form disables the location and unit cascade", async ({

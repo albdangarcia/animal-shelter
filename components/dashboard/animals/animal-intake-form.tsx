@@ -303,7 +303,7 @@ const AnimalForm = ({
                   name="animalName"
                   render={({ field }) => (
                     <FormItem className="col-span-2">
-                      <FormLabel>Animal Name</FormLabel>
+                      <FormLabel required>Animal Name</FormLabel>
                       <FormControl>
                         <Input
                           placeholder="e.g., Buddy"
@@ -320,7 +320,7 @@ const AnimalForm = ({
                   name="species"
                   render={({ field }) => (
                     <FormItem className="col-span-2">
-                      <FormLabel>Species</FormLabel>
+                      <FormLabel required>Species</FormLabel>
                       <Select
                         onValueChange={(value) => {
                           field.onChange(value);
@@ -351,7 +351,7 @@ const AnimalForm = ({
                   name="breed"
                   render={({ field }) => (
                     <FormItem className="col-span-2">
-                      <FormLabel>Breed</FormLabel>
+                      <FormLabel required>Breed</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value}
@@ -379,7 +379,7 @@ const AnimalForm = ({
                   name="primaryColor"
                   render={({ field }) => (
                     <FormItem className="col-span-2">
-                      <FormLabel>Primary Color</FormLabel>
+                      <FormLabel required>Primary Color</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value}
@@ -500,7 +500,7 @@ const AnimalForm = ({
                   name="sex"
                   render={({ field }) => (
                     <FormItem className="col-span-2">
-                      <FormLabel>Sex</FormLabel>
+                      <FormLabel required>Sex</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value}
@@ -590,7 +590,7 @@ const AnimalForm = ({
                   name="healthStatus"
                   render={({ field }) => (
                     <FormItem className="col-span-2">
-                      <FormLabel>Health Status</FormLabel>
+                      <FormLabel required>Health Status</FormLabel>
                       <Select
                         onValueChange={field.onChange}
                         value={field.value}
@@ -704,7 +704,7 @@ const AnimalForm = ({
                   render={({ field }) => (
                     <FormItem className="col-span-2">
                       <div className="flex items-center gap-1.5">
-                        <FormLabel>Listing Status</FormLabel>
+                        <FormLabel required>Listing Status</FormLabel>
                         {isStatusLocked && (
                           <FieldInfo
                             label="Why the listing status is locked"

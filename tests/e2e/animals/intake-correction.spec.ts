@@ -318,7 +318,7 @@ const choosePerson = async (page: Page, except?: string) => {
 };
 
 const chooseIntakeType = async (page: Page, label: string) => {
-  await page.getByLabel("Intake Type", { exact: true }).click();
+  await page.getByLabel("Intake Type *", { exact: true }).click();
   await page.getByRole("option", { name: label, exact: true }).click();
 };
 
@@ -381,7 +381,7 @@ test("correcting a stray to an owner surrender needs a person and clears where i
   const editUrl = await openIntakeEdit(page, intake.row);
 
   const address = (
-    await page.getByLabel("Address / Cross Streets", { exact: true }).inputValue()
+    await page.getByLabel("Address / Cross Streets *", { exact: true }).inputValue()
   ).trim();
   expect(address).not.toBe("");
 
@@ -412,9 +412,9 @@ test("correcting a stray to an owner surrender needs a person and clears where i
   await expect(page.getByText(personName, { exact: true }).first()).toBeVisible();
   await chooseIntakeType(page, "Stray");
   await expect(
-    page.getByLabel("Address / Cross Streets", { exact: true }),
+    page.getByLabel("Address / Cross Streets *", { exact: true }),
   ).toHaveValue("");
-  await expect(page.getByLabel("City", { exact: true })).toHaveValue("");
+  await expect(page.getByLabel("City *", { exact: true })).toHaveValue("");
 });
 
 test("the person picker shows exactly the person a save will send", async ({

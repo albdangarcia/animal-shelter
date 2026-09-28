@@ -177,7 +177,7 @@ const forms: Form[] = [
       );
       await page.goto(`/dashboard/intakes/${intakeId}/edit`);
       await waitForFormHydration(page, "Update Intake");
-      await chooseFromSelect(page, "Intake Type", "Owner Surrender");
+      await chooseFromSelect(page, "Intake Type *", "Owner Surrender");
     },
     submit: (page) => page.getByRole("button", { name: "Update Intake" }),
     trigger: /^Intake Date \*:/,

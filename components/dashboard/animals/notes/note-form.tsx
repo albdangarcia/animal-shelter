@@ -101,7 +101,7 @@ export const NoteForm = ({ animalId, onFormSubmit, ref, note }: Props) => {
             name="category"
             render={({ field }) => (
               <FormItem className="md:col-span-3">
-                <FormLabel htmlFor="category">Category</FormLabel>
+                <FormLabel htmlFor="category" required>Category</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value ?? ""}
@@ -131,7 +131,7 @@ export const NoteForm = ({ animalId, onFormSubmit, ref, note }: Props) => {
             name="content"
             render={({ field }) => (
               <FormItem className="col-span-full">
-                <FormLabel>Content</FormLabel>
+                <FormLabel required>Content</FormLabel>
                 <FormControl>
                   <Textarea
                     placeholder="Provide a detailed description of the note..."

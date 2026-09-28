@@ -325,7 +325,7 @@ test("the application can be reviewed and its status advanced", async ({
   ).toBeDisabled();
 
   // PENDING -> REVIEWING is exempt from the status-change-reason requirement.
-  await page.getByLabel("Application Status *", { exact: true }).click();
+  await page.getByLabel("Application Status", { exact: true }).click();
   await page.getByRole("option", { name: "Reviewing" }).click();
   await page.getByRole("button", { name: "Update Application" }).click();
 
@@ -389,7 +389,7 @@ test("a withdrawn application can no longer be edited by staff", async ({
   const appId = new URL(page.url()).pathname.split("/")[3];
 
   // REVIEWING -> WITHDRAWN needs a reason.
-  await page.getByLabel("Application Status *", { exact: true }).click();
+  await page.getByLabel("Application Status", { exact: true }).click();
   await page.getByRole("option", { name: "Withdrawn" }).click();
   await fillStable(
     page.getByPlaceholder("Provide a reason for changing the status..."),

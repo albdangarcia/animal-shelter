@@ -34,6 +34,7 @@ import {
   isAllowedTransition,
   illegalTransitionMessage,
   STAFF_EDITABLE_STATUSES,
+  statusChangeNeedsReason,
 } from "../utils/application-status";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
 import type { EffectiveApplicationStatus } from "../utils/derive-application-status";
@@ -154,23 +155,18 @@ const _staffUpdateAdoptionApp = async (
     };
   }
 
-  if (isStatusActuallyChanging) {
-    const isExemptedChange =
-      currentStatus === ApplicationStatus.PENDING &&
-      newStatus === ApplicationStatus.REVIEWING;
-    if (
-      !isExemptedChange &&
-      (!statusChangeReason || statusChangeReason.trim() === "")
-    ) {
-      return {
-        ok: false,
-        message:
-          "Validation Error: A reason for the status change is required.",
-        fieldErrors: {
-          statusChangeReason: ["A reason for the status change is required."],
-        },
-      };
-    }
+  if (
+    statusChangeNeedsReason(currentStatus, newStatus) &&
+    (!statusChangeReason || statusChangeReason.trim() === "")
+  ) {
+    return {
+      ok: false,
+      message:
+        "Validation Error: A reason for the status change is required.",
+      fieldErrors: {
+        statusChangeReason: ["A reason for the status change is required."],
+      },
+    };
   }
 
   const applicationUpdateData: Prisma.AdoptionApplicationUpdateInput = {};

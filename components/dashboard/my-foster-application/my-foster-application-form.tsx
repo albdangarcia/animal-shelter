@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { RequiredFieldsLegend } from "@/components/forms/required-fields-legend";
 import {
   Form,
   FormControl,
@@ -117,6 +118,7 @@ export function MyFosterApplicationForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <RequiredFieldsLegend />
         <Card>
           <CardHeader>
             <CardTitle>Applicant Information</CardTitle>

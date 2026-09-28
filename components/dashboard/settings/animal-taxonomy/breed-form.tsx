@@ -84,7 +84,7 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
             name="speciesId"
             render={({ field }) => (
               <FormItem>
-                <FormLabel htmlFor="speciesId">Species</FormLabel>
+                <FormLabel htmlFor="speciesId" required>Species</FormLabel>
                 <Select
                   onValueChange={field.onChange}
                   value={field.value ?? ""}
@@ -114,7 +114,7 @@ export const BreedForm = ({ onFormSubmit, species, breed }: Props) => {
             name="name"
             render={({ field }) => (
               <FormItem>
-                <FormLabel htmlFor="name">Name</FormLabel>
+                <FormLabel htmlFor="name" required>Name</FormLabel>
                 <FormControl>
                   <Input id="name" placeholder="e.g. Labrador" {...field} />
                 </FormControl>

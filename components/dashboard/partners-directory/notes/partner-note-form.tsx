@@ -66,7 +66,7 @@ export const PartnerNoteForm = ({ partnerId, onFormSubmit, note }: Props) => {
           name="content"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Content</FormLabel>
+              <FormLabel required>Content</FormLabel>
               <FormControl>
                 <Textarea
                   placeholder="Provide a detailed description of the note..."
