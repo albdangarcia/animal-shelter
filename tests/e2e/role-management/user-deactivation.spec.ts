@@ -118,6 +118,11 @@ test("a deactivated account cannot sign in, and is told why", async ({
 test("staff can edit the email of a deactivated account, but not of an active one", async ({
   page,
 }) => {
+  // This can be the first test in the run to open a person's profile and edit
+  // form, and on a cold `next dev` it then pays for compiling both: over a
+  // minute on a slow runner, while the saves themselves take milliseconds.
+  test.setTimeout(180_000);
+
   accountPersonId = await firstRowIdByQuery(
     page,
     "/dashboard/people-directory",
