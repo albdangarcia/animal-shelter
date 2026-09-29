@@ -34,6 +34,10 @@ interface PersonPickerProps {
   // must opt in explicitly. Fails closed — a host that omits it hides a button
   // rather than offering one that errors on submit.
   canCreatePerson?: boolean;
+  // Wiring from FormControl, so the field's label names the trigger.
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
 }
 
 export const PersonPicker = ({
@@ -43,6 +47,9 @@ export const PersonPicker = ({
   suggestedPersonId,
   suggestedPersonLabel,
   canCreatePerson = false,
+  id,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
 }: PersonPickerProps) => {
   // The person on record is shown by name whenever the field holds them, so
   // the box never reads empty while a save would send someone. The suggestion
@@ -184,6 +191,9 @@ export const PersonPicker = ({
       >
         <PopoverTrigger asChild>
           <Button
+            id={id}
+            aria-describedby={ariaDescribedBy}
+            aria-invalid={ariaInvalid}
             type="button"
             variant="outline"
             role="combobox"

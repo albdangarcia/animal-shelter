@@ -211,6 +211,7 @@ export function AssessmentForm({
               </p>
             ) : (
               <Select
+                name="templateKey"
                 value={templateKey}
                 onValueChange={setTemplateKey}
               >

@@ -188,6 +188,7 @@ export function OutcomeForm({
                     {/* Was both defaultValue and value, which makes the Select
                         uncontrolled on first render and ignores form.reset(). */}
                     <Select
+                      name={field.name}
                       onValueChange={field.onChange}
                       value={field.value ?? ""}
                       disabled={isAdoptionOutcome || isEditMode}
@@ -242,6 +243,7 @@ export function OutcomeForm({
                   <FormItem>
                     <FormLabel required>Destination Partner</FormLabel>
                     <Select
+                      name={field.name}
                       onValueChange={field.onChange}
                       value={field.value ?? ""}
                     >

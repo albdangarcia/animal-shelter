@@ -71,7 +71,11 @@ export const HouseholdFormFields = ({
             {/* value coerced to "" so Select stays controlled from the first
                 render — undefined->defined later trips React's
                 "uncontrolled to controlled" warning. */}
-            <Select onValueChange={field.onChange} value={field.value ?? ""}>
+            <Select
+              name={field.name}
+              onValueChange={field.onChange}
+              value={field.value ?? ""}
+            >
               <FormControl>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select living situation" />
@@ -109,7 +113,11 @@ export const HouseholdFormFields = ({
             {/* value coerced to "" so Select stays controlled from the first
                 render — undefined->defined later trips React's
                 "uncontrolled to controlled" warning. */}
-            <Select onValueChange={field.onChange} value={field.value ?? ""}>
+            <Select
+              name={field.name}
+              onValueChange={field.onChange}
+              value={field.value ?? ""}
+            >
               <FormControl>
                 <SelectTrigger className="w-full">
                   {/* Was "Not specified", which implied a resting state the
@@ -136,7 +144,11 @@ export const HouseholdFormFields = ({
           render={({ field }) => (
             <FormItem className="col-span-2">
               <FormLabel required>Do you have landlord permission?</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value ?? ""}>
+              <Select
+                name={field.name}
+                onValueChange={field.onChange}
+                value={field.value ?? ""}
+              >
                 <FormControl>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select Yes or No" />
@@ -159,7 +171,11 @@ export const HouseholdFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-2">
             <FormLabel required>Do you have children at home?</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value ?? ""}>
+            <Select
+              name={field.name}
+              onValueChange={field.onChange}
+              value={field.value ?? ""}
+            >
               <FormControl>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select Yes or No" />

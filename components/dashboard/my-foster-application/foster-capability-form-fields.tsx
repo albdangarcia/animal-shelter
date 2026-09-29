@@ -47,16 +47,18 @@ interface SpeciesOption {
 // Yes/No/Unspecified select, matching the household form's boolToSelectValue
 // conventions (undefined = not specified).
 const YesNoSelect = ({
+  name,
   value,
   onChange,
 }: {
+  name: string;
   value: "true" | "false" | undefined;
   onChange: (value: "true" | "false") => void;
 }) => (
   // value is coerced to "" rather than left undefined so Select is controlled
   // from the first render — an undefined->defined switch later trips React's
   // "uncontrolled to controlled" warning.
-  <Select onValueChange={onChange} value={value ?? ""}>
+  <Select name={name} onValueChange={onChange} value={value ?? ""}>
     <FormControl>
       <SelectTrigger className="w-full">
         <SelectValue placeholder="Not specified" />
@@ -178,7 +180,11 @@ export const FosterCapabilityFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-2">
             <FormLabel>Quarantine space available?</FormLabel>
-            <YesNoSelect value={field.value} onChange={field.onChange} />
+            <YesNoSelect
+              name={field.name}
+              value={field.value}
+              onChange={field.onChange}
+            />
             <FormMessage />
           </FormItem>
         )}
@@ -189,7 +195,11 @@ export const FosterCapabilityFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-2">
             <FormLabel>Can give oral medications?</FormLabel>
-            <YesNoSelect value={field.value} onChange={field.onChange} />
+            <YesNoSelect
+              name={field.name}
+              value={field.value}
+              onChange={field.onChange}
+            />
             <FormMessage />
           </FormItem>
         )}
@@ -200,7 +210,11 @@ export const FosterCapabilityFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-2">
             <FormLabel>Can bottle-feed?</FormLabel>
-            <YesNoSelect value={field.value} onChange={field.onChange} />
+            <YesNoSelect
+              name={field.name}
+              value={field.value}
+              onChange={field.onChange}
+            />
             <FormMessage />
           </FormItem>
         )}
@@ -211,7 +225,11 @@ export const FosterCapabilityFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-2">
             <FormLabel>Can transport animals?</FormLabel>
-            <YesNoSelect value={field.value} onChange={field.onChange} />
+            <YesNoSelect
+              name={field.name}
+              value={field.value}
+              onChange={field.onChange}
+            />
             <FormMessage />
           </FormItem>
         )}
@@ -222,7 +240,11 @@ export const FosterCapabilityFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-2">
             <FormLabel>Willing to foster medical cases?</FormLabel>
-            <YesNoSelect value={field.value} onChange={field.onChange} />
+            <YesNoSelect
+              name={field.name}
+              value={field.value}
+              onChange={field.onChange}
+            />
             <FormMessage />
           </FormItem>
         )}
@@ -233,7 +255,11 @@ export const FosterCapabilityFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-2">
             <FormLabel>Willing to foster hospice cases?</FormLabel>
-            <YesNoSelect value={field.value} onChange={field.onChange} />
+            <YesNoSelect
+              name={field.name}
+              value={field.value}
+              onChange={field.onChange}
+            />
             <FormMessage />
           </FormItem>
         )}

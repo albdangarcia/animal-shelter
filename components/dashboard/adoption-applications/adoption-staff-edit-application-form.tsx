@@ -227,6 +227,7 @@ export function StaffApplicationUpdateForm({
                     <FormItem>
                       <FormLabel>Application Status</FormLabel>
                       <Select
+                        name={field.name}
                         onValueChange={field.onChange}
                         // Shows the current status when the form holds none,
                         // which is when it is adopted or closed.
@@ -403,7 +404,11 @@ export function StaffApplicationUpdateForm({
                   </FormItem>
                   <FormItem>
                     <FormLabel>State</FormLabel>
-                    <Select value={application.applicantState} disabled>
+                    <Select
+                    name="applicantState"
+                    value={application.applicantState}
+                    disabled
+                  >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -439,7 +444,11 @@ export function StaffApplicationUpdateForm({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <FormItem>
                   <FormLabel>Living Situation</FormLabel>
-                  <Select value={application.livingSituation} disabled>
+                  <Select
+                    name="livingSituation"
+                    value={application.livingSituation}
+                    disabled
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>

@@ -66,7 +66,11 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
           render={({ field }) => (
             <FormItem className="col-span-3">
               <FormLabel required>Intake Type</FormLabel>
-              <Select onValueChange={field.onChange} value={field.value ?? ""}>
+              <Select
+                name={field.name}
+                onValueChange={field.onChange}
+                value={field.value ?? ""}
+              >
                 <FormControl>
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Select a type" />
@@ -135,7 +139,11 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
               render={({ field }) => (
                 <FormItem className="col-span-full">
                   <FormLabel required>Source Partner</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
+                  <Select
+                    name={field.name}
+                    onValueChange={field.onChange}
+                    value={field.value}
+                  >
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select a partner shelter/rescue" />
@@ -179,6 +187,8 @@ export const IntakeFormFields = <T extends FieldValues & IntakeFieldsValues>({
                 <FormItem className="col-span-3">
                   <FormLabel required>State</FormLabel>
                   <Select
+                    name={field.name}
+                    autoComplete="address-level1"
                     onValueChange={field.onChange}
                     value={field.value ?? ""}
                   >

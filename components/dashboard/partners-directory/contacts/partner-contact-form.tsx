@@ -147,12 +147,14 @@ export const PartnerContactForm = ({
           render={() => (
             <FormItem>
               <FormLabel required>Person</FormLabel>
-              <PartnerContactPicker
-                people={people}
-                value={selectedPerson}
-                onChange={handlePersonChange}
-                disabled={isEditMode}
-              />
+              <FormControl>
+                <PartnerContactPicker
+                  people={people}
+                  value={selectedPerson}
+                  onChange={handlePersonChange}
+                  disabled={isEditMode}
+                />
+              </FormControl>
               {isEditMode ? (
                 <FormDescription>
                   The linked person can&apos;t be changed. Remove this contact

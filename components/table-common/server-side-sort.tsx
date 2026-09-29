@@ -64,7 +64,11 @@ export function ServerSideSort({
       <Label htmlFor="sort-order" className="sr-only text-sm font-medium">
         Sort by:
       </Label>
-      <Select onValueChange={handleValueChange} value={currentValue}>
+      <Select
+        name="sort-order"
+        onValueChange={handleValueChange}
+        value={currentValue}
+      >
         <SelectTrigger
           id="sort-order"
           className={cn("w-40 font-medium", triggerClassName)}

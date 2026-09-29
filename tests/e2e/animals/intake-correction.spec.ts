@@ -293,8 +293,8 @@ const pickIntakeDay = async (page: Page, day: DayKey) => {
 };
 
 
-// The picker's trigger is a combobox with no accessible name, so it is found
-// by the prompt it shows.
+// The picker's trigger is a combobox named by its field label, which differs
+// by form, so it is found by the prompt it shows.
 const personSearch = (page: Page) =>
   page.getByRole("combobox").filter({ hasText: "Search for a person..." });
 

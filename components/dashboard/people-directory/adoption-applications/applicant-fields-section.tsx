@@ -185,6 +185,8 @@ export const ApplicantFieldsSection = ({
                 <FormItem>
                   <FormLabel required>State</FormLabel>
                   <Select
+                    name={field.name}
+                    autoComplete="address-level1"
                     onValueChange={field.onChange}
                     value={field.value ?? ""}
                   >
@@ -233,6 +235,7 @@ export const ApplicantFieldsSection = ({
               <FormItem>
                 <FormLabel required>Living Situation</FormLabel>
                 <Select
+                  name={field.name}
                   onValueChange={field.onChange}
                   value={field.value ?? ""}
                 >

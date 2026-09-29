@@ -69,6 +69,7 @@ export function DataTablePagination<TData extends RowData>({
         <div className="flex items-center space-x-2">
           <p className="text-sm font-medium">Rows per page</p>
           <Select
+            name="page-size"
             value={`${pageSize}`}
             onValueChange={(value) => handleNavigation(1, Number(value))}
             disabled={displaySizeOptions.length <= 1}

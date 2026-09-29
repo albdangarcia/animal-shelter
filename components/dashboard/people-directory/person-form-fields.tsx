@@ -132,7 +132,12 @@ export const PersonFormFields = ({
         render={({ field }) => (
           <FormItem className="col-span-2">
             <FormLabel>State</FormLabel>
-            <Select onValueChange={field.onChange} value={field.value ?? ""}>
+            <Select
+              name={field.name}
+              autoComplete="address-level1"
+              onValueChange={field.onChange}
+              value={field.value ?? ""}
+            >
               <FormControl>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select a state" />

@@ -189,7 +189,11 @@ export const TaskForm = ({
             render={({ field }) => (
               <FormItem className="md:col-span-3">
                 <FormLabel required>Category</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                <Select
+                  name={field.name}
+                  onValueChange={field.onChange}
+                  value={field.value ?? ""}
+                >
                   <FormControl>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select a category" />
@@ -215,7 +219,11 @@ export const TaskForm = ({
             render={({ field }) => (
               <FormItem className="md:col-span-3 md:col-start-4 self-start">
                 <FormLabel>Status</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select
+                  name={field.name}
+                  onValueChange={field.onChange}
+                  value={field.value}
+                >
                   <FormControl>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select a status" />
@@ -241,7 +249,11 @@ export const TaskForm = ({
             render={({ field }) => (
               <FormItem className="md:col-span-2">
                 <FormLabel>Priority</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <Select
+                  name={field.name}
+                  onValueChange={field.onChange}
+                  value={field.value}
+                >
                   <FormControl>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select priority" />
@@ -282,7 +294,11 @@ export const TaskForm = ({
             render={({ field }) => (
               <FormItem className="md:col-span-3">
                 <FormLabel>Assign to</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                <Select
+                  name={field.name}
+                  onValueChange={field.onChange}
+                  value={field.value ?? ""}
+                >
                   <FormControl>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select a staff member or volunteer" />

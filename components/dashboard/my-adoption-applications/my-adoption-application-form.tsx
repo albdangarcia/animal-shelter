@@ -400,6 +400,8 @@ export function MyApplicationForm({
                       <FormItem>
                         <FormLabel required>State</FormLabel>
                         <Select
+                          name={field.name}
+                          autoComplete="address-level1"
                           onValueChange={field.onChange}
                           value={field.value ?? ""}
                         >
@@ -452,6 +454,7 @@ export function MyApplicationForm({
                     <FormItem>
                       <FormLabel required>Living Situation</FormLabel>
                       <Select
+                        name={field.name}
                         onValueChange={field.onChange}
                         value={field.value ?? ""}
                       >
