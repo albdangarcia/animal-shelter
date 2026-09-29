@@ -160,6 +160,7 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
                     <FormItem className="col-span-2">
                       <FormLabel required>Type</FormLabel>
                       <Select
+                        name={field.name}
                         onValueChange={field.onChange}
                         value={field.value ?? ""}
                       >
@@ -259,6 +260,8 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
                     <FormItem className="col-span-2">
                       <FormLabel>State</FormLabel>
                       <Select
+                        name={field.name}
+                        autoComplete="address-level1"
                         onValueChange={field.onChange}
                         value={field.value ?? ""}
                       >

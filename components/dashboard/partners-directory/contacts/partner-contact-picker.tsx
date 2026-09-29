@@ -31,9 +31,21 @@ interface Props {
   value: SelectedPerson | null;
   onChange: (person: SelectedPerson | null) => void;
   disabled?: boolean;
+  // Wiring from FormControl, so the field's label names the trigger.
+  id?: string;
+  "aria-describedby"?: string;
+  "aria-invalid"?: boolean;
 }
 
-export const PartnerContactPicker = ({ people, value, onChange, disabled }: Props) => {
+export const PartnerContactPicker = ({
+  people,
+  value,
+  onChange,
+  disabled,
+  id,
+  "aria-describedby": ariaDescribedBy,
+  "aria-invalid": ariaInvalid,
+}: Props) => {
   const [open, setOpen] = useState(false);
 
   const handleSelect = (person: LinkablePersonPayload) => {
@@ -49,6 +61,9 @@ export const PartnerContactPicker = ({ people, value, onChange, disabled }: Prop
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
           type="button"
           variant="outline"
           role="combobox"

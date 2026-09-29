@@ -322,6 +322,7 @@ const AnimalForm = ({
                     <FormItem className="col-span-2">
                       <FormLabel required>Species</FormLabel>
                       <Select
+                        name={field.name}
                         onValueChange={(value) => {
                           field.onChange(value);
                           setCurrentSpeciesId(value);
@@ -353,6 +354,7 @@ const AnimalForm = ({
                     <FormItem className="col-span-2">
                       <FormLabel required>Breed</FormLabel>
                       <Select
+                        name={field.name}
                         onValueChange={field.onChange}
                         value={field.value}
                         disabled={!currentSpeciesId}
@@ -381,6 +383,7 @@ const AnimalForm = ({
                     <FormItem className="col-span-2">
                       <FormLabel required>Primary Color</FormLabel>
                       <Select
+                        name={field.name}
                         onValueChange={field.onChange}
                         value={field.value}
                       >
@@ -502,6 +505,7 @@ const AnimalForm = ({
                     <FormItem className="col-span-2">
                       <FormLabel required>Sex</FormLabel>
                       <Select
+                        name={field.name}
                         onValueChange={field.onChange}
                         value={field.value}
                       >
@@ -549,6 +553,7 @@ const AnimalForm = ({
                         </FieldInfo>
                       </div>
                       <Select
+                        name={field.name}
                         onValueChange={(value) => {
                           setIsSizeTouched(true);
                           field.onChange(
@@ -592,6 +597,7 @@ const AnimalForm = ({
                     <FormItem className="col-span-2">
                       <FormLabel required>Health Status</FormLabel>
                       <Select
+                        name={field.name}
                         onValueChange={field.onChange}
                         value={field.value}
                       >
@@ -717,6 +723,7 @@ const AnimalForm = ({
                         )}
                       </div>
                       <Select
+                        name={field.name}
                         onValueChange={field.onChange}
                         value={field.value}
                         disabled={isStatusLocked}
@@ -760,6 +767,7 @@ const AnimalForm = ({
                     </FieldInfo>
                   </div>
                   <Select
+                    name="locationId"
                     value={currentLocationId || UNPLACED_VALUE}
                     disabled={isUnitLocked}
                     onValueChange={(value) => {
@@ -802,6 +810,7 @@ const AnimalForm = ({
                     <FormItem className="col-span-3">
                       <FormLabel>Unit</FormLabel>
                       <Select
+                        name={field.name}
                         onValueChange={field.onChange}
                         value={field.value || ""}
                         disabled={!currentLocationId || isUnitLocked}

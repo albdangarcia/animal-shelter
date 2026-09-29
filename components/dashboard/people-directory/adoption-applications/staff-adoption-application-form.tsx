@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/card";
 import {
   Form,
+  FormControl,
   FormField,
   FormItem,
   FormLabel,
@@ -201,16 +202,18 @@ const StaffAdoptionApplicationForm = ({
                         onOpenChange={setIsAnimalSearchOpen}
                       >
                         <PopoverTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={isAnimalSearchOpen}
-                            className="w-full justify-between font-normal text-muted-foreground"
-                          >
-                            Search for an animal...
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
+                          <FormControl>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={isAnimalSearchOpen}
+                              className="w-full justify-between font-normal text-muted-foreground"
+                            >
+                              Search for an animal...
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
                         </PopoverTrigger>
                         <PopoverContent
                           className="w-[--radix-popover-trigger-width] p-0"

@@ -125,7 +125,11 @@ export function ReturnFromFosterForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel required>Return Reason</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value ?? ""}>
+                  <Select
+                    name={field.name}
+                    onValueChange={field.onChange}
+                    value={field.value ?? ""}
+                  >
                     <FormControl>
                       <SelectTrigger className="w-full">
                         <SelectValue placeholder="Select a reason" />
@@ -153,15 +157,16 @@ export function ReturnFromFosterForm({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="grid gap-2">
-                <Label>Location</Label>
+                <Label htmlFor="return-location">Location</Label>
                 <Select
+                  name="locationId"
                   value={currentLocationId}
                   onValueChange={(value) => {
                     setCurrentLocationId(value);
                     form.setValue("unitId", "");
                   }}
                 >
-                  <SelectTrigger className="w-full">
+                  <SelectTrigger id="return-location" className="w-full">
                     <SelectValue placeholder="Select a location" />
                   </SelectTrigger>
                   <SelectContent>
@@ -180,6 +185,7 @@ export function ReturnFromFosterForm({
                   <FormItem>
                     <FormLabel required>Unit</FormLabel>
                     <Select
+                      name={field.name}
                       onValueChange={field.onChange}
                       value={field.value}
                       disabled={!currentLocationId}

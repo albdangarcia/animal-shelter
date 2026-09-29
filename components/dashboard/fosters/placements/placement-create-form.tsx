@@ -174,7 +174,11 @@ export function PlacementCreateForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel required>Foster</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      name={field.name}
+                      onValueChange={field.onChange}
+                      value={field.value}
+                    >
                       <FormControl>
                         <SelectTrigger className="w-full">
                           <SelectValue placeholder="Select an active foster with capacity" />
@@ -207,6 +211,7 @@ export function PlacementCreateForm({
                 <FormItem>
                   <FormLabel required>Placement Type</FormLabel>
                   <Select
+                    name={field.name}
                     onValueChange={field.onChange}
                     value={field.value ?? ""}
                   >

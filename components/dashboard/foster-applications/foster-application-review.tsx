@@ -159,6 +159,7 @@ export function FosterApplicationReview({
                     <FormItem>
                       <FormLabel required>Application Status</FormLabel>
                       <Select
+                        name={field.name}
                         onValueChange={field.onChange}
                         value={field.value ?? ""}
                         disabled={isPending || nextStatuses.length === 0}

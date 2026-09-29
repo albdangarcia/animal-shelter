@@ -105,8 +105,8 @@ const firstPublishedAnimal = async (page: Page) => {
 // server-side (>=2 chars, 300ms debounce + round-trip) — always wait for the
 // option before clicking, it is never instant.
 const pickAnimal = async (page: Page, animalName: string) => {
-  // The trigger has no accessible name (its text is the combobox value, not a
-  // label), so disambiguate from the State / Living Situation selects by text.
+  // Disambiguate the trigger from the State / Living Situation selects by the
+  // prompt it shows.
   await page
     .getByRole("combobox")
     .filter({ hasText: "Search for an animal" })
