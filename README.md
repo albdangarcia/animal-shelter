@@ -257,6 +257,8 @@ docker compose up -d
 
 `-v` drops the named Postgres volume, so the next `up` starts from an empty database and seeds it from scratch.
 
+**Two worktrees that change the schema:** dev servers in separate git worktrees can run at once (the second `npm run dev` moves to the next free port), but they share the dev database. That's fine until a worktree changes `schema.prisma`, because pushing that schema changes the database under the other one too. Give that worktree its own database in the same Postgres: in its `.env`, change the database name at the end of both `DATABASE_URL` and `DATABASE_URL_UNPOOLED` (e.g. `/postgres` → `/shelter_b`), then run `npm run db` there. `prisma db push` creates the database if it doesn't exist, and the seed fills it. A worktree has no `.env` or `node_modules` of its own, so copy the main checkout's `.env` and run `npm ci` first, using the Node version in `.nvmrc`.
+
 > #### ⚠️ **A Note on Local Image Seeding**
 >
 > The database seeding script (`npx prisma db seed`) will populate the database with sample animals whose images are served from the local `/public` folder. This is done to provide a quick visual setup without requiring you to upload dozens of images manually.
@@ -283,12 +285,15 @@ This method mirrors the live production environment. It's ideal for testing the 
 | Command | What it runs | Database |
 |---|---|---|
 | `npm test` | Unit tests (`app/**/*.test.ts`) via `node:test` | None |
-| `npm run test:db` | Prisma query-extension tests (`prisma/**/*.test.ts`) via `node:test` | Throwaway `docker-compose.playwright.yml` container on port 55432 — **never** the dev database |
+| `npm run test:db` | Prisma query-extension tests (`prisma/**/*.test.ts`) via `node:test` | Its own throwaway `docker-compose.playwright.yml` container, on port 55600 in the main checkout — **never** the dev database |
 | `npm run test:all` | `npm test` then `npm run test:db` | As above |
-| `npm run e2e` | Playwright suite (see [End-to-End Tests](#end-to-end-tests)) | Same throwaway container, reset and seeded |
+| `npm run e2e` | Playwright suite (see [End-to-End Tests](#end-to-end-tests)) | Another throwaway container from the same file, on port 55432 in the main checkout, reset and seeded |
 
-`npm run test:db` (`scripts/test-db.ts`) needs Docker with `docker compose` — the same requirement as `npm run e2e`. It brings the container up (idempotent), runs `prisma db push`, then the tests, and leaves the container running;
-`npm run e2e`'s teardown removes it. Set `PLAYWRIGHT_DATABASE_URL` to point the tests somewhere else. CI runs the equivalent steps directly in the `db-tests` job.
+`npm run test:db` (`scripts/test-db.ts`) needs Docker with `docker compose` — the same requirement as `npm run e2e`. It brings its container up (idempotent), runs `prisma db push`, then the tests, and leaves the container running, so the next run starts faster. Set `PLAYWRIGHT_DATABASE_URL` to point the tests somewhere else. CI runs the equivalent steps directly in the `db-tests` job.
+
+**Several checkouts at once.** Each checkout (the main one and every git worktree) gets its own e2e and `test:db` containers and ports, so the two commands can run at the same time, in one checkout or in several. The main checkout is slot 0: e2e Postgres on 55432 with compose project `animal-shelter-playwright`, e2e app on 3100, and `test:db` Postgres on 55600 with project `animal-shelter-db-tests`. A worktree gets a slot from 1 to 99 from a hash of its path, which moves the ports to 55500 + slot, 3100 + slot and 55600 + slot, and its project names end in that hash. Each run logs the slot, project and ports in an `E2E harness:` or `test:db harness:` line. If a run fails on a busy port, another worktree has the same slot: set `E2E_SLOT=<n>` (1 to 99) and run again. `E2E_SLOT=0` gives a worktree the main checkout's ports; its project names keep the hash, so it fails on a busy port rather than sharing the main checkout's database. `PLAYWRIGHT_POSTGRES_PORT`, `PLAYWRIGHT_APP_PORT` and `PLAYWRIGHT_DATABASE_URL` still override the e2e values.
+
+**Leftover containers:** `test:db`'s container stays up, so deleting a worktree leaves its containers behind. `docker compose ls` lists them (the `animal-shelter-playwright-*` and `animal-shelter-db-tests-*` projects); remove one with `docker compose -p <name> down -v`.
 
 ## End-to-End Tests
 
@@ -299,13 +304,13 @@ Playwright is configured for a Chromium-only E2E workflow that mirrors the local
 - Starts an isolated PostgreSQL container from `docker-compose.playwright.yml`
 - Overrides only auth/database-related environment variables for the E2E process
 - Resets the database schema, runs `prisma db push`, and seeds data with `prisma/seed.ts`
-- Starts the Next.js app on `http://127.0.0.1:3001`
+- Starts the Next.js app on `http://127.0.0.1:3100` (3100 + slot in a git worktree), building into `.next-e2e` so it can run beside `npm run dev` in the same checkout
 - Runs a login smoke test using the seeded admin account (`admin@example.com`)
 
 ### Requirements
 
 - Docker with `docker compose`
-- A populated `.env` file with at least `BETTER_AUTH_SECRET` and `ADMIN_PASSWORD` (these are the only vars `playwright/env.ts` throws on; it pins everything else it needs — `BETTER_AUTH_URL`, `BETTER_AUTH_ALLOWED_HOSTS`, the database URLs, and the OAuth vars — so don't re-add them here)
+- No `.env` is needed. `playwright/env.ts` pins what it needs — `BETTER_AUTH_URL`, `BETTER_AUTH_ALLOWED_HOSTS`, the database URLs, and the OAuth vars — and falls back to test-only values for `BETTER_AUTH_SECRET` and `ADMIN_PASSWORD` when `.env` does not set them. If `.env` sets `ADMIN_PASSWORD`, the seeded admin uses it.
 
 ### Install the browser once
 

@@ -24,10 +24,12 @@ description: How to boot this app locally and drive it end-to-end for verificati
 
 ## E2E database isolation (do not break this)
 
-`npm run e2e` must use the docker-compose container on port 55432, never the dev
-database. Verify from the setup log:
+`npm run e2e` must use its docker-compose container (port 55432 at slot 0, which is
+the main checkout or `E2E_SLOT=0`; 55500 + slot otherwise), never the dev database.
+Verify from the setup log. Its `E2E harness: slot ..., compose project ..., Postgres ...`
+line, printed after the web server's first lines, names the port to expect:
 
-- **Correct:** `Datasource "db": ... at "127.0.0.1:55432"` followed by
+- **Correct:** `Datasource "db": ... at "127.0.0.1:55432"` (in the main checkout) followed by
   `🚀 Your database is now in sync with your Prisma schema`.
 - **Wrong:** `The database is already in sync with the Prisma schema` immediately after
   `DROP SCHEMA / CREATE SCHEMA`. That is impossible for a freshly-wiped database and
@@ -80,7 +82,8 @@ not as a form bug — it puts the password in the URL, the server log, and brows
 history in plaintext.
 
 The Playwright harness is exempt: `playwright.config.ts` starts the dev server with
-`--hostname 127.0.0.1` and sets `baseURL` to `http://127.0.0.1:3001`, so both sides
+`--hostname 127.0.0.1` and sets `baseURL` to `http://127.0.0.1:3100` (3100 + slot in a
+worktree), so both sides
 agree on the origin and nothing is blocked. This only bites manual dev runs.
 
 ## Logging in as a test user without fighting the UI

@@ -11,36 +11,59 @@
  * Person/User contact sync holds, where the rows end up when an account is
  * moved off the record it was wrongly linked to, and whether deactivating one
  * really sets the column, revokes the sessions and refuses the next sign-in.
- * This script points them at the throwaway docker-compose container on port
- * 55432 — the same database `npm run e2e` provisions — and NEVER the dev
- * database. The previous script had a `dotenv -e .env.local -e .env.development
- * -e .env` prefix, so it resolved to whatever `.env*` held (i.e. dev) and wrote
- * to / deleted from it.
+ * This script points them at a throwaway docker-compose container of their
+ * own, and NEVER the dev database. It is not the container `npm run e2e`
+ * provisions: each checkout has one of each, on its own ports (see
+ * `app/lib/test-harness-coordinates.ts`), so test:db can run while e2e does,
+ * in one worktree or in several. The previous script had a `dotenv -e
+ * .env.local -e .env.development -e .env` prefix, so it resolved to whatever
+ * `.env*` held (i.e. dev) and wrote to / deleted from it.
  *
  * Requires Docker with `docker compose` — already a requirement for
  * `npm run e2e`. `docker compose ... up -d --wait` is idempotent, so this is a
  * no-op when the container is already running. The container is left up
- * afterwards, the same way CI's `db-tests` job leaves it; `npm run e2e`'s
- * global-teardown is what tears it down (`docker compose down -v`).
+ * afterwards, the same way CI's `db-tests` job leaves it, so the next run
+ * skips the start-up; `docker compose -p <project> down -v` removes it (the
+ * project name is in the first line this script logs).
  *
  * Mirrors the steps of CI's `db-tests` job (`.github/workflows/ci.yml`):
- * compose up --wait → `prisma db push` → `tsx --test`. The connection string
- * and compose coordinates are imported from `playwright/env.ts` so there is one
- * source of truth; setting `PLAYWRIGHT_DATABASE_URL` in the environment
- * overrides the default there and here alike.
+ * compose up --wait → `prisma db push` → `tsx --test`. CI's job uses the e2e
+ * project and port directly; that is safe there because each job has its own
+ * VM. The connection string and compose coordinates are imported from
+ * `playwright/env.ts` so there is one source of truth; setting
+ * `PLAYWRIGHT_DATABASE_URL` in the environment points the tests elsewhere.
  */
 import { spawn } from "node:child_process";
 import {
-  E2E_DATABASE_URL,
+  describeHarness,
   E2E_DOCKER_COMPOSE_FILE,
-  E2E_DOCKER_PROJECT_NAME,
+  E2E_POSTGRES_DB,
+  E2E_POSTGRES_PASSWORD,
+  E2E_POSTGRES_USER,
+  TEST_DB_DATABASE_URL,
+  TEST_DB_DOCKER_PROJECT_NAME,
+  TEST_DB_POSTGRES_PORT,
 } from "@/playwright/env";
+
+const env: NodeJS.ProcessEnv = {
+  ...process.env,
+  PLAYWRIGHT_DATABASE_URL: TEST_DB_DATABASE_URL,
+  // Pinned too, as getPlaywrightEnv() does for e2e, so nothing that bypasses
+  // the override can fall back to .env's dev database.
+  DATABASE_URL: TEST_DB_DATABASE_URL,
+  DATABASE_URL_UNPOOLED: TEST_DB_DATABASE_URL,
+  // Read by docker-compose.playwright.yml.
+  PLAYWRIGHT_POSTGRES_PORT: TEST_DB_POSTGRES_PORT,
+  PLAYWRIGHT_POSTGRES_USER: E2E_POSTGRES_USER,
+  PLAYWRIGHT_POSTGRES_PASSWORD: E2E_POSTGRES_PASSWORD,
+  PLAYWRIGHT_POSTGRES_DB: E2E_POSTGRES_DB,
+};
 
 const run = (command: string, args: string[]): Promise<void> =>
   new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       stdio: "inherit",
-      env: { ...process.env, PLAYWRIGHT_DATABASE_URL: E2E_DATABASE_URL },
+      env,
     });
     child.on("error", reject);
     child.on("exit", (code, signal) => {
@@ -57,10 +80,13 @@ const run = (command: string, args: string[]): Promise<void> =>
   });
 
 async function main() {
+  console.log(
+    `test:db harness: ${describeHarness(TEST_DB_DOCKER_PROJECT_NAME, TEST_DB_DATABASE_URL)}`,
+  );
   await run("docker", [
     "compose",
     "-p",
-    E2E_DOCKER_PROJECT_NAME,
+    TEST_DB_DOCKER_PROJECT_NAME,
     "-f",
     E2E_DOCKER_COMPOSE_FILE,
     "up",

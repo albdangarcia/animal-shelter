@@ -1,5 +1,5 @@
-// Lives under prisma/ so `npm run test:db` runs it against the throwaway
-// docker-compose Postgres on 55432 (see scripts/test-db.ts), never the dev DB.
+// Lives under prisma/ so `npm run test:db` runs it against its throwaway
+// docker-compose Postgres (see scripts/test-db.ts), never the dev DB.
 //
 // Drives the real `setTaskStatusTool.execute` — permission check, the
 // approval-id guard, the write transaction, and the P2002-to-ConflictError

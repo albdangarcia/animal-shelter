@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
+import { resolveHarnessCoordinates } from "../app/lib/test-harness-coordinates";
 
 const envFiles = [
   ".env",
@@ -17,33 +18,72 @@ for (const envFile of envFiles) {
   }
 }
 
-export const E2E_APP_PORT = process.env.PLAYWRIGHT_APP_PORT ?? "3001";
+// Test-only fallbacks, so a checkout without .env (a fresh git worktree) can
+// run the suite. A real .env still wins. Written into process.env
+// itself, not only into getPlaywrightEnv(): the seed and several specs read
+// process.env.ADMIN_PASSWORD at module load, inside the worker.
+process.env.BETTER_AUTH_SECRET ||=
+  "e2e-test-only-secret-never-used-outside-tests";
+process.env.ADMIN_PASSWORD ||= "e2e-admin-password";
+
+// Per-checkout containers and ports: see app/lib/test-harness-coordinates.ts.
+const coordinates = resolveHarnessCoordinates({
+  root: process.cwd(),
+  isLinkedWorktree:
+    fs.statSync(path.join(process.cwd(), ".git"), { throwIfNoEntry: false })
+      ?.isFile() ?? false,
+  env: process.env,
+});
+
+export const HARNESS_SLOT = coordinates.slot;
+export const HARNESS_SLOT_SOURCE = coordinates.slotSource;
+
+export const E2E_APP_PORT = coordinates.e2e.appPort;
 export const E2E_BASE_URL =
-  process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${E2E_APP_PORT}`;
+  process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${E2E_APP_PORT}`;
 export const E2E_POSTGRES_SERVICE_NAME = "postgres-e2e";
-export const E2E_DOCKER_PROJECT_NAME = "animal-shelter-playwright";
+export const E2E_DOCKER_PROJECT_NAME = coordinates.e2e.projectName;
 export const E2E_DOCKER_COMPOSE_FILE = path.join(
   process.cwd(),
   "docker-compose.playwright.yml",
 );
-console.log("E2E_DOCKER_COMPOSE_FILE:", E2E_DOCKER_COMPOSE_FILE);
-export const E2E_POSTGRES_PORT =
-  process.env.PLAYWRIGHT_POSTGRES_PORT ?? "55432";
-export const E2E_POSTGRES_USER = process.env.POSTGRES_USER ?? "postgres";
-export const E2E_POSTGRES_PASSWORD =
-  process.env.POSTGRES_PASSWORD ?? "mysecretpassword";
-export const E2E_POSTGRES_DB = process.env.POSTGRES_DB ?? "postgres";
+export const E2E_POSTGRES_PORT = coordinates.e2e.postgresPort;
+export const E2E_POSTGRES_USER = coordinates.postgres.user;
+export const E2E_POSTGRES_PASSWORD = coordinates.postgres.password;
+export const E2E_POSTGRES_DB = coordinates.postgres.database;
 
-const buildDatabaseUrl = () => {
-  const username = encodeURIComponent(E2E_POSTGRES_USER);
-  const password = encodeURIComponent(E2E_POSTGRES_PASSWORD);
-  const database = encodeURIComponent(E2E_POSTGRES_DB);
+// The e2e dev server builds here instead of .next, so it can run beside
+// `npm run dev` in the same checkout (Next allows one dev server per distDir).
+// Not inside .next: `next build` empties that folder. next.config.ts reads it.
+export const E2E_NEXT_DIST_DIR = ".next-e2e";
 
-  return `postgresql://${username}:${password}@127.0.0.1:${E2E_POSTGRES_PORT}/${database}`;
+export const E2E_DATABASE_URL = coordinates.e2e.databaseUrl;
+
+// `npm run test:db` has its own container, so it can run while e2e does and
+// e2e's teardown (`down -v`) never removes its database. Same compose file.
+export const TEST_DB_DOCKER_PROJECT_NAME = coordinates.testDb.projectName;
+export const TEST_DB_POSTGRES_PORT = coordinates.testDb.postgresPort;
+export const TEST_DB_DATABASE_URL = coordinates.testDb.databaseUrl;
+
+/** One log line naming the container a run uses, for global setup and test:db. */
+export const describeHarness = (
+  projectName: string,
+  databaseUrl: string,
+  appUrl?: string,
+) => {
+  let database = databaseUrl;
+  try {
+    database = new URL(databaseUrl).host;
+  } catch {
+    // Keep the raw value when it is not a URL.
+  }
+  return [
+    `slot ${HARNESS_SLOT} (${HARNESS_SLOT_SOURCE})`,
+    `compose project ${projectName}`,
+    `Postgres ${database}`,
+    ...(appUrl ? [`app ${appUrl}`] : []),
+  ].join(", ");
 };
-
-export const E2E_DATABASE_URL =
-  process.env.PLAYWRIGHT_DATABASE_URL ?? buildDatabaseUrl();
 
 // better-auth validates `baseURL.allowedHosts` when the instance is built, and
 // prisma/seed.ts builds one at module load — so an empty list is a hard crash
@@ -61,25 +101,8 @@ export const E2E_ALLOWED_HOSTS = (() => {
 })();
 
 export const getPlaywrightEnv = (): NodeJS.ProcessEnv => {
-  const authSecret = process.env.BETTER_AUTH_SECRET;
-  const adminPassword = process.env.ADMIN_PASSWORD;
-
-  if (!authSecret) {
-    throw new Error(
-      "BETTER_AUTH_SECRET must be set before running Playwright E2E tests.",
-    );
-  }
-
-  if (!adminPassword) {
-    throw new Error(
-      "ADMIN_PASSWORD must be set before running Playwright E2E tests.",
-    );
-  }
-
   return {
     ...process.env,
-    BETTER_AUTH_SECRET: authSecret,
-    ADMIN_PASSWORD: adminPassword,
     DATABASE_URL: E2E_DATABASE_URL,
     DATABASE_URL_UNPOOLED: E2E_DATABASE_URL,
     PLAYWRIGHT_DATABASE_URL: E2E_DATABASE_URL,
@@ -105,6 +128,7 @@ export const getPlaywrightEnv = (): NodeJS.ProcessEnv => {
     PLAYWRIGHT_POSTGRES_DB: E2E_POSTGRES_DB,
     PLAYWRIGHT_POSTGRES_PORT: E2E_POSTGRES_PORT,
     COMPOSE_PROJECT_NAME: E2E_DOCKER_PROJECT_NAME,
+    PLAYWRIGHT_NEXT_DIST_DIR: E2E_NEXT_DIST_DIR,
     BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN ?? "",
     NEXT_TELEMETRY_DISABLED: "1",
   };
