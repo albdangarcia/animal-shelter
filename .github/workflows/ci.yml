@@ -115,12 +115,21 @@ jobs:
       - name: Prisma DB tests
         run: npx tsx --test "prisma/**/*.test.ts"
 
-  e2e:
-    # This name is the required-status-check key in the `main` ruleset.
-    # Renaming it silently stops the check reporting and blocks every PR.
-    name: e2e
+  # The browser suite, split into four shards that each run on their own VM, so
+  # global-setup's fixed container name, port and compose project never
+  # collide. Playwright hands out whole files in path order, balanced by test
+  # count. Not a required check itself: the `e2e` job below reports for all
+  # four, so the shard count can change without touching the ruleset.
+  e2e-shard:
+    name: e2e-shard (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    strategy:
+      # Let every shard finish, so one run shows every failing spec.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
     # Public repo: secrets are withheld from fork PRs, so skip rather than fail.
+    # Keep this identical to the `e2e` job's condition below.
     if: github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
     env:
@@ -156,14 +165,36 @@ jobs:
       # global-setup brings up the throwaway Postgres itself, drops its schema,
       # pushes and seeds, so no database step is needed before this one.
       - name: Playwright e2e
-        run: npm run e2e
+        run: npm run e2e -- --shard=${{ matrix.shard }}/4
 
+      # One artifact per shard: upload-artifact@v4 refuses a second upload
+      # under a name already used in the run.
       - name: Upload Playwright report
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-report-${{ matrix.shard }}
           path: |
             playwright-report/
             test-results/
           retention-days: 7
+
+  e2e:
+    # This name is the required-status-check key in the `main` ruleset.
+    # Renaming it silently stops the check reporting and blocks every PR.
+    # It reports the shards' combined result under the name the ruleset knows.
+    name: e2e
+    needs: [e2e-shard]
+    runs-on: ubuntu-latest
+    # `always()` because a skipped required check counts as passing: without it
+    # a failed or cancelled shard would skip this job and let a red run merge.
+    # Not `!cancelled()` either, which skips this job when the run is cancelled.
+    # The fork condition is the shards' own, so on fork PRs this job is skipped
+    # exactly as the shards are; if the two drift apart, fork PRs are either
+    # blocked forever or merged without running the suite.
+    if: always() && (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    steps:
+      # One result for the whole matrix: `success` only if every shard passed.
+      # `failure`, `cancelled` and `skipped` all fail this step.
+      - run: test "${{ needs.e2e-shard.result }}" = "success"
