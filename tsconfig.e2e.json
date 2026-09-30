@@ -1,0 +1,6 @@
+{
+  // Used only by the Playwright web server (see next.config.ts). Next rewrites
+  // a tsconfig that does not extend another, adding its distDir's types to
+  // `include`; this one only extends tsconfig.json, so nothing is rewritten.
+  "extends": "./tsconfig.json"
+}

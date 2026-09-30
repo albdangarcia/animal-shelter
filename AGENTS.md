@@ -31,6 +31,11 @@ These rules are for new tests. Do not delete or move existing browser tests as a
 - Run the unit and database tests freely.
 - For the browser, run only the specs you touched **plus the specs that cover the pages, components and server actions you changed**, with `npx playwright test <paths>`. Find them by grepping `tests/e2e` for the route, component or action name; a change to a shared component such as a picker can break specs you never opened.
 - Run the whole browser suite locally only when the change touches something every spec depends on: the seed, `playwright/global-setup.ts`, auth, or the shared helpers in `tests/e2e/support`. Otherwise leave it to CI, where the full suite runs as a required check.
-- The local e2e run and `npm run test:db` share one Docker container and fixed ports, so do not start either while another worktree is running one.
 
 Setup and commands: the README's "Tests" and "End-to-End Tests" sections.
+
+# Working in a git worktree
+
+- A new worktree has no `.env` and no `node_modules` (both are gitignored). Run `npm ci` with the Node version in `.nvmrc`; without `.env`, its `prisma generate` needs a placeholder URL, as in CI: `DATABASE_URL_UNPOOLED=postgresql://placeholder@127.0.0.1/placeholder npm ci`. `npm run test:db` and `npm run e2e` then work without `.env`; `npm run dev` needs a copy of the main checkout's.
+- Each checkout gets its own e2e and `test:db` containers and ports, so e2e and `test:db` can run at once, in one worktree or in several. If a run fails on a busy port, another worktree has the same slot: set `E2E_SLOT=<n>` (1 to 99) and run again.
+- Dev servers in different worktrees share the dev database. If your change touches `prisma/schema.prisma`, give the worktree its own database before you push the schema: see the README, "Two worktrees that change the schema".

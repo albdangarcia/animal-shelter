@@ -1,5 +1,5 @@
-// Lives under prisma/ so `npm run test:db` runs it against the throwaway
-// docker-compose Postgres on 55432 (see scripts/test-db.ts), never the dev DB.
+// Lives under prisma/ so `npm run test:db` runs it against its throwaway
+// docker-compose Postgres (see scripts/test-db.ts), never the dev DB.
 //
 // The feed itself is wrapped in RequirePermission, which needs a Next request
 // to read the session and builds the auth instance on import, so this runs the

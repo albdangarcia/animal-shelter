@@ -94,7 +94,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # resolveDatabaseUrl() gives this priority in both pooled and direct
-      # modes, and it matches what playwright/env.ts computes on its own.
+      # modes. It is the e2e container's URL, not test:db's (55600 locally):
+      # this job has its own VM, so the two cannot collide here.
       PLAYWRIGHT_DATABASE_URL: postgresql://postgres:mysecretpassword@127.0.0.1:55432/postgres
     steps:
       - uses: actions/checkout@v4
@@ -104,8 +105,8 @@ jobs:
           cache: npm
       - run: npm ci
 
-      # `npm run test:db` (scripts/test-db.ts) does exactly these three steps
-      # against the same throwaway container; CI keeps them as explicit steps so
+      # `npm run test:db` (scripts/test-db.ts) does these three steps against
+      # its own compose project and port; CI keeps them as explicit steps so
       # a failure points at the stage that broke and the container is managed
       # as its own step.
       - name: Start throwaway Postgres

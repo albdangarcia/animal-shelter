@@ -1,5 +1,8 @@
 import type { FullConfig } from "@playwright/test";
 import {
+  describeHarness,
+  E2E_BASE_URL,
+  E2E_DATABASE_URL,
   E2E_DOCKER_COMPOSE_FILE,
   E2E_DOCKER_PROJECT_NAME,
   E2E_POSTGRES_DB,
@@ -8,12 +11,6 @@ import {
   getPlaywrightEnv,
 } from "./env";
 import { runCommand } from "./process";
-
-console.log("global-setup.ts, E2E_DOCKER_COMPOSE_FILE:", E2E_DOCKER_COMPOSE_FILE);
-console.log("global-setup.ts, E2E_DOCKER_PROJECT_NAME:", E2E_DOCKER_PROJECT_NAME);
-console.log("global-setup.ts, E2E_POSTGRES_DB:", E2E_POSTGRES_DB);
-console.log("global-setup.ts, E2E_POSTGRES_SERVICE_NAME:", E2E_POSTGRES_SERVICE_NAME);
-console.log("global-setup.ts, E2E_POSTGRES_USER:", E2E_POSTGRES_USER);
 
 const resetDatabase = async (env: NodeJS.ProcessEnv) => {
   await runCommand(
@@ -44,6 +41,9 @@ const resetDatabase = async (env: NodeJS.ProcessEnv) => {
 export default async function globalSetup(_config: FullConfig) {
   const env = getPlaywrightEnv();
 
+  console.log(
+    `E2E harness: ${describeHarness(E2E_DOCKER_PROJECT_NAME, E2E_DATABASE_URL, E2E_BASE_URL)}`,
+  );
   console.log("Starting Playwright PostgreSQL container...");
   await runCommand(
     "docker",
