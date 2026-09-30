@@ -20,10 +20,10 @@
  * Requires Docker with `docker compose` — already a requirement for
  * `npm run e2e`. `docker compose ... up -d --wait` is idempotent, so this is a
  * no-op when the container is already running. The container is left up
- * afterwards, the same way CI's `e2e` job leaves it; `npm run e2e`'s
+ * afterwards, the same way CI's `db-tests` job leaves it; `npm run e2e`'s
  * global-teardown is what tears it down (`docker compose down -v`).
  *
- * Mirrors the Prisma-test steps of CI's `e2e` job (`.github/workflows/ci.yml`):
+ * Mirrors the steps of CI's `db-tests` job (`.github/workflows/ci.yml`):
  * compose up --wait → `prisma db push` → `tsx --test`. The connection string
  * and compose coordinates are imported from `playwright/env.ts` so there is one
  * source of truth; setting `PLAYWRIGHT_DATABASE_URL` in the environment

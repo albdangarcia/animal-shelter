@@ -84,6 +84,37 @@ jobs:
             --to-schema=./prisma/schema.prisma \
             --exit-code
 
+  # The prisma/**/*.test.ts tests need a real Postgres but no browser, seed or
+  # app server, so they run here in parallel with e2e instead of ahead of it.
+  # They read no secrets, so unlike e2e this job also runs on fork PRs.
+  db-tests:
+    # This name is the required-status-check key in the `main` ruleset.
+    # Renaming it silently stops the check reporting and blocks every PR.
+    name: db-tests
+    runs-on: ubuntu-latest
+    env:
+      # resolveDatabaseUrl() gives this priority in both pooled and direct
+      # modes, and it matches what playwright/env.ts computes on its own.
+      PLAYWRIGHT_DATABASE_URL: postgresql://postgres:mysecretpassword@127.0.0.1:55432/postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+
+      # `npm run test:db` (scripts/test-db.ts) does exactly these three steps
+      # against the same throwaway container; CI keeps them as explicit steps so
+      # a failure points at the stage that broke and the container is managed
+      # as its own step.
+      - name: Start throwaway Postgres
+        run: docker compose -p animal-shelter-playwright -f docker-compose.playwright.yml up -d --wait
+      - name: Push schema
+        run: npx prisma db push
+      - name: Prisma DB tests
+        run: npx tsx --test "prisma/**/*.test.ts"
+
   e2e:
     # This name is the required-status-check key in the `main` ruleset.
     # Renaming it silently stops the check reporting and blocks every PR.
@@ -122,19 +153,8 @@ jobs:
         if: steps.pw-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
-      # The Prisma query-extension test needs a real Postgres. `npm run test:db`
-      # (scripts/test-db.ts) does exactly these three steps against this same
-      # throwaway container; CI keeps them as explicit steps so a failure points
-      # at the stage that broke and the container is managed as its own step.
-      # global-setup re-ups this same compose project (idempotent) and drops the
-      # schema, so these rows cannot reach the seed.
-      - name: Start throwaway Postgres
-        run: docker compose -p animal-shelter-playwright -f docker-compose.playwright.yml up -d --wait
-      - name: Push schema
-        run: npx prisma db push
-      - name: Prisma extension tests
-        run: npx tsx --test "prisma/**/*.test.ts"
-
+      # global-setup brings up the throwaway Postgres itself, drops its schema,
+      # pushes and seeds, so no database step is needed before this one.
       - name: Playwright e2e
         run: npm run e2e
 

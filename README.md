@@ -288,7 +288,7 @@ This method mirrors the live production environment. It's ideal for testing the 
 | `npm run e2e` | Playwright suite (see [End-to-End Tests](#end-to-end-tests)) | Same throwaway container, reset and seeded |
 
 `npm run test:db` (`scripts/test-db.ts`) needs Docker with `docker compose` — the same requirement as `npm run e2e`. It brings the container up (idempotent), runs `prisma db push`, then the tests, and leaves the container running;
-`npm run e2e`'s teardown removes it. Set `PLAYWRIGHT_DATABASE_URL` to point the tests somewhere else. CI runs the equivalent steps directly in the `e2e` job.
+`npm run e2e`'s teardown removes it. Set `PLAYWRIGHT_DATABASE_URL` to point the tests somewhere else. CI runs the equivalent steps directly in the `db-tests` job.
 
 ## End-to-End Tests
 
