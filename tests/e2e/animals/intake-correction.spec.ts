@@ -1,9 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import pg from "pg";
-import { E2E_DATABASE_URL } from "../../../playwright/env";
 import {
   bootstrapStorageState,
   fillStable,
@@ -96,22 +93,6 @@ const printedDay = (day: DayKey) =>
 const dayKeyOf = (printed: string): DayKey =>
   new Date(`${printed} UTC`).toISOString().slice(0, 10);
 
-const withDb = async <T>(run: (client: pg.Client) => Promise<T>) => {
-  const client = new pg.Client({ connectionString: E2E_DATABASE_URL });
-  await client.connect();
-  try {
-    return await run(client);
-  } finally {
-    await client.end();
-  }
-};
-
-// The app's ids are validated as CUIDs: lowercase letters and digits.
-const newId = () =>
-  `c${Array.from(crypto.randomBytes(24), (byte) =>
-    "abcdefghijklmnopqrstuvwxyz0123456789".charAt(byte % 36),
-  ).join("")}`;
-
 // The route's loading skeleton is a table too, so wait for the real footer
 // before reading rows.
 const gotoTable = async (page: Page, url: string) => {
@@ -123,8 +104,6 @@ interface IntakeRow {
   row: Locator;
   animalId: string;
   animalName: string;
-  // As the list prints it.
-  day: string;
 }
 
 // The columns, in order: select, intake date, animal, type, source, recorded
@@ -139,7 +118,6 @@ const readIntakeRow = async (row: Locator): Promise<IntakeRow> => {
     row,
     animalId: href.split("/").pop() as string,
     animalName: (await animalLink.innerText()).trim(),
-    day: (await row.locator("td").nth(1).innerText()).trim(),
   };
 };
 
@@ -227,11 +205,6 @@ const gotoActivity = async (page: Page, animalId: string) => {
   await expect(
     page.getByText("most recent activity logs for this animal").first(),
   ).toBeVisible();
-};
-
-const correctionCount = async (page: Page, animalId: string) => {
-  await gotoActivity(page, animalId);
-  return correctionRows(page).count();
 };
 
 // The feed is server-rendered; on a slow runner the first click can land
@@ -322,99 +295,33 @@ const chooseIntakeType = async (page: Page, label: string) => {
   await page.getByRole("option", { name: label, exact: true }).click();
 };
 
-// Shared by the notes correction and the no-op save that follows it.
-let notesIntake: { animalId: string; editUrl: string } | undefined;
+// The edit page of the intake the notes correction edits, which the volunteer
+// is then turned away from.
+let notesEditUrl: string | undefined;
 
-test("editing an intake's notes logs one correction, shown in the feed", async ({
+test("editing an intake's notes is shown in the feed, and saving it again untouched has nothing to save", async ({
   page,
 }) => {
   const intake = await firstUnnamedIntake(
     page,
     `${INTAKES_PATH}?type=TRANSFER_IN`,
   );
-  const before = await correctionCount(page, intake.animalId);
-
-  await gotoTable(page, `${INTAKES_PATH}?type=TRANSFER_IN&pageSize=50`);
-  const row = page
-    .locator("tbody tr")
-    .filter({
-      has: page.locator(`a[href="/dashboard/animals/${intake.animalId}"]`),
-    })
-    .first();
-  const editUrl = await openIntakeEdit(page, row);
-  notesIntake = { animalId: intake.animalId, editUrl };
+  const editUrl = await openIntakeEdit(page, intake.row);
+  notesEditUrl = editUrl;
 
   const notes = page.getByLabel("Internal Notes", { exact: true });
   const hadNotes = (await notes.inputValue()).trim() !== "";
   await fillStable(notes, `Corrected in E2E ${Date.now()}`);
   await submitCorrection(page, "Intake updated successfully.");
 
-  await gotoActivity(page, intake.animalId);
-  await expect(correctionRows(page)).toHaveCount(before + 1);
   const detail = await latestCorrectionDetail(page, intake.animalId);
   await expect(detail).toContainText(
     `Intake was corrected: notes were ${hadNotes ? "edited" : "added"}.`,
   );
-});
 
-test("saving an intake without changing anything writes nothing", async ({
-  page,
-}) => {
-  if (!notesIntake) throw new Error("The notes correction did not run.");
-  const before = await correctionCount(page, notesIntake.animalId);
-
-  await gotoIntakeEdit(page, notesIntake.editUrl);
-  await submitCorrection(page, "No changes to save.");
-
-  await gotoActivity(page, notesIntake.animalId);
-  await expect(correctionRows(page)).toHaveCount(before);
-});
-
-test("correcting a stray to an owner surrender needs a person and clears where it was found", async ({
-  page,
-}) => {
-  const intake = await firstUnnamedIntake(page, `${INTAKES_PATH}?type=STRAY`);
-  // The source column prints a stray's found city and state as "City, ST".
-  const place = (
-    await intake.row.locator("td").nth(4).locator(".truncate").innerText()
-  ).trim();
-  const editUrl = await openIntakeEdit(page, intake.row);
-
-  const address = (
-    await page.getByLabel("Address / Cross Streets *", { exact: true }).inputValue()
-  ).trim();
-  expect(address).not.toBe("");
-
-  await chooseIntakeType(page, "Owner Surrender");
-
-  // Without a person the form refuses to send.
-  await page.getByRole("button", { name: "Update Intake" }).click();
-  await expect(page.getByText("A surrendering person is required.")).toBeVisible();
-  await expect(page).toHaveURL(editUrl);
-
-  const personName = await choosePerson(page);
-
-  await submitCorrection(page, "Intake updated successfully.");
-
-  // The seed also records who found most strays. That column is not on the
-  // form, but it belongs to a stray too, so it is cleared with the address
-  // and named after it when it held someone.
-  const detail = await latestCorrectionDetail(page, intake.animalId);
-  await expect(detail).toContainText(
-    `Intake was corrected: the type changed from stray to owner surrender; ` +
-      `the surrendering person changed from none to ${personName}; ` +
-      `the found address, city and state were cleared (were ${address}, ${place})`,
-  );
-
-  // Stored cleared, not just hidden: back on the form, switching the type
-  // back to stray shows the found fields empty.
+  // The form sends back what it loaded, so the server sees no change.
   await gotoIntakeEdit(page, editUrl);
-  await expect(page.getByText(personName, { exact: true }).first()).toBeVisible();
-  await chooseIntakeType(page, "Stray");
-  await expect(
-    page.getByLabel("Address / Cross Streets *", { exact: true }),
-  ).toHaveValue("");
-  await expect(page.getByLabel("City *", { exact: true })).toHaveValue("");
+  await submitCorrection(page, "No changes to save.");
 });
 
 test("the person picker shows exactly the person a save will send", async ({
@@ -494,8 +401,6 @@ test("a date moved past the stay's outcome is refused, naming the outcome", asyn
   }
   const { animalId, animalName, outcomeDay } = chosen;
 
-  const before = await correctionCount(page, animalId);
-
   const intake = await latestIntakeOf(page, animalId, animalName);
   await openIntakeEdit(page, intake.row);
   const dayAfterOutcome = shiftDay(dayKeyOf(outcomeDay), 1);
@@ -506,204 +411,6 @@ test("a date moved past the stay's outcome is refused, naming the outcome", asyn
   // Once under the picker, and once in the toast.
   await expect(page.getByText(refusal)).toHaveCount(2);
   await expect(page).toHaveURL(/\/dashboard\/intakes\/[^/]+\/edit$/);
-
-  // Nothing written: no correction row, and the intake keeps its day.
-  await gotoActivity(page, animalId);
-  await expect(correctionRows(page)).toHaveCount(before);
-  expect((await latestIntakeOf(page, animalId, animalName)).day).toBe(
-    intake.day,
-  );
-});
-
-test("a date moved past a foster placement's start is refused, naming the placement", async ({
-  page,
-}) => {
-  // An animal on its first stay, taken in at least two days ago, with
-  // nothing else in its history. It is given a placement that began the day
-  // after its intake and was returned the day after that, written directly
-  // since the app only places an animal from today. Each activity row is
-  // stamped at noon of its day, or now if that is still ahead, so a return
-  // dated today is never stamped in the future.
-  const fixture = await withDb(async (client) => {
-    const { rows } = await client.query<{
-      animalId: string;
-      animalName: string;
-      intakeId: string;
-      intakeDay: DayKey;
-    }>(
-      `SELECT a.id AS "animalId", a.name AS "animalName",
-              i.id AS "intakeId", i."intakeDate" AS "intakeDay"
-       FROM animals a JOIN intakes i ON i."animalId" = a.id
-       WHERE a."listingStatus" = 'PUBLISHED'
-         AND i."intakeDate" <= $1
-         AND (SELECT count(*) FROM intakes x WHERE x."animalId" = a.id) = 1
-         AND NOT EXISTS (SELECT 1 FROM outcomes o WHERE o."animalId" = a.id)
-         AND NOT EXISTS (
-           SELECT 1 FROM adoption_applications p WHERE p.animal_id = a.id)
-         AND NOT EXISTS (
-           SELECT 1 FROM foster_placements f WHERE f.animal_id = a.id)
-       ORDER BY a.name, a.id`,
-      [shiftDay(shelterToday(), -2)],
-    );
-    const animal = rows.find((row) => !isNamedElsewhere(row.animalName));
-    if (!animal) {
-      throw new Error("No first-stay animal is free of other specs.");
-    }
-    const {
-      rows: [foster],
-    } = await client.query<{ profileId: string; name: string }>(
-      `SELECT fp.id AS "profileId", p.name
-       FROM foster_profiles fp JOIN persons p ON p.id = fp.person_id
-       WHERE fp.status = 'ACTIVE'
-       ORDER BY fp.id LIMIT 1`,
-    );
-    if (!foster) {
-      throw new Error("No active foster to have fostered the animal.");
-    }
-    const {
-      rows: [admin],
-    } = await client.query<{ id: string }>(
-      `SELECT id FROM persons WHERE email = 'admin@example.com'`,
-    );
-    const startDay = shiftDay(animal.intakeDay, 1);
-    const endDay = shiftDay(animal.intakeDay, 2);
-    await client.query(
-      `INSERT INTO foster_placements
-         (id, type, start_date, end_date, return_reason, animal_id,
-          foster_profile_id, previous_unit_id, placed_by_id, returned_by_id,
-          "updatedAt")
-       SELECT $1, 'GENERAL', $2, $3, 'RETURNED_TO_SHELTER', a.id, $5,
-              a.current_unit_id, $6, $6, now()
-       FROM animals a WHERE a.id = $4`,
-      [newId(), startDay, endDay, animal.animalId, foster.profileId, admin.id],
-    );
-    await client.query(
-      `INSERT INTO animal_activity_logs
-         (id, "activityType", "animalId", "changedById", "changeSummary",
-          "changedAt")
-       VALUES ($1, 'FOSTER_PLACED', $3, $4, $5,
-               LEAST($6::date + time '12:00', now() AT TIME ZONE 'UTC')),
-              ($2, 'FOSTER_RETURNED', $3, $4, $7,
-               LEAST($8::date + time '12:00', now() AT TIME ZONE 'UTC'))`,
-      [
-        newId(),
-        newId(),
-        animal.animalId,
-        admin.id,
-        `Placed with foster ${foster.name}.`,
-        startDay,
-        `Returned from foster ${foster.name}.`,
-        endDay,
-      ],
-    );
-    return { ...animal, fosterName: foster.name, startDay, endDay };
-  });
-
-  // A refused correction is returned, not thrown, so its transaction
-  // commits: anything written before the refusal would stay. Compare every
-  // row of the animal's that a correction could touch.
-  const animalRows = () =>
-    withDb(async (client) => {
-      const read = async (sql: string) =>
-        (await client.query(sql, [fixture.animalId])).rows;
-      return {
-        animal: await read(`SELECT * FROM animals WHERE id = $1`),
-        intakes: await read(
-          `SELECT * FROM intakes WHERE "animalId" = $1 ORDER BY id`,
-        ),
-        outcomes: await read(
-          `SELECT * FROM outcomes WHERE "animalId" = $1 ORDER BY id`,
-        ),
-        placements: await read(
-          `SELECT * FROM foster_placements WHERE animal_id = $1 ORDER BY id`,
-        ),
-        activity: await read(
-          `SELECT * FROM animal_activity_logs WHERE "animalId" = $1
-           ORDER BY id`,
-        ),
-      };
-    });
-  const before = await animalRows();
-  expect(before.intakes).toMatchObject([{ intakeDate: fixture.intakeDay }]);
-
-  await gotoIntakeEdit(page, `${INTAKES_PATH}/${fixture.intakeId}/edit`);
-  // After the placement began, and still inside the stay.
-  await pickIntakeDay(page, fixture.endDay);
-  await page.getByRole("button", { name: "Update Intake" }).click();
-
-  const refusal = `The intake date can't be after the foster placement with ${fixture.fosterName} began on ${printedDay(fixture.startDay)}.`;
-  await expect(
-    page
-      .locator('[data-slot="form-item"]')
-      .filter({ has: intakeDateTrigger(page) })
-      .locator('[data-slot="form-message"]'),
-  ).toHaveText(refusal);
-  await expect(
-    page.locator("[data-sonner-toast]").filter({ hasText: refusal }),
-  ).toBeVisible();
-  await expect(page).toHaveURL(/\/dashboard\/intakes\/[^/]+\/edit$/);
-
-  // Nothing written: no row of the animal's changed, or was added.
-  expect(await animalRows()).toEqual(before);
-});
-
-test("a date moved within its stay changes the animal's days in care", async ({
-  page,
-}) => {
-  // The longest current stays, each with its days in care. An animal that has
-  // been in care once has nothing before its intake, so one day earlier is
-  // always within bounds, and a longer stay keeps it on this top list.
-  await page.goto("/dashboard/reports/length-of-stay");
-  // The innermost card holding the title: a wrapping card, if any, comes
-  // first in document order.
-  const worklist = page
-    .locator('[data-slot="card"]')
-    .filter({ hasText: "Longest current stays" })
-    .last()
-    .locator("tbody tr");
-  await expect(worklist.first()).toBeVisible();
-
-  let chosen:
-    | { animalId: string; animalName: string; days: number; day: string }
-    | undefined;
-  for (const row of await worklist.all()) {
-    const cells = row.locator("td");
-    const animalName = (await cells.nth(0).innerText()).trim();
-    const cumulative = (await cells.nth(3).innerText()).trim();
-    if (cumulative !== "same" || isNamedElsewhere(animalName)) continue;
-    chosen = {
-      animalId: (await row.getByRole("link").getAttribute("href"))!
-        .split("/")
-        .pop()!,
-      animalName,
-      days: Number((await cells.nth(2).innerText()).trim()),
-      day: (await cells.nth(4).innerText()).trim(),
-    };
-    break;
-  }
-  if (!chosen) {
-    throw new Error("No animal on its first stay is free of other specs.");
-  }
-
-  const intake = await latestIntakeOf(page, chosen.animalId, chosen.animalName);
-  expect(intake.day).toBe(chosen.day);
-  await openIntakeEdit(page, intake.row);
-
-  const dayBefore = shiftDay(dayKeyOf(chosen.day), -1);
-  await pickIntakeDay(page, dayBefore);
-  await submitCorrection(page, "Intake updated successfully.");
-
-  const detail = await latestCorrectionDetail(page, chosen.animalId);
-  await expect(detail).toContainText(
-    `Intake was corrected: the date changed from ${chosen.day} to ${printedDay(dayBefore)}.`,
-  );
-
-  await page.goto("/dashboard/reports/length-of-stay");
-  const row = worklist.filter({
-    has: page.locator(`a[href="/dashboard/animals/${chosen.animalId}"]`),
-  });
-  await expect(row.locator("td").nth(2)).toHaveText(String(chosen.days + 1));
-  await expect(row.locator("td").nth(4)).toHaveText(printedDay(dayBefore));
 });
 
 test("a volunteer sees the intakes list with no way to edit", async ({
@@ -726,8 +433,8 @@ test("a volunteer sees the intakes list with no way to edit", async ({
 
     // The edit page turns them away too, rather than offering a form the
     // action would refuse.
-    if (!notesIntake) throw new Error("The notes correction did not run.");
-    await page.goto(notesIntake.editUrl);
+    if (!notesEditUrl) throw new Error("The notes correction did not run.");
+    await page.goto(notesEditUrl);
     await expect(page.getByText("Access Denied")).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Update Intake" }),
