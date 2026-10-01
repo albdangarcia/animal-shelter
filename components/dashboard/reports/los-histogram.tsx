@@ -8,7 +8,7 @@ import {
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import type { LosHistogramBucket } from "@/app/lib/data/reports/length-of-stay-report.data";
+import type { LosHistogramBucket } from "@/app/lib/utils/length-of-stay";
 
 const chartConfig = {
   count: {
