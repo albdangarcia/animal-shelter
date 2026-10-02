@@ -40,7 +40,26 @@ test.beforeAll(async ({ browser }) => {
   await context.close();
 });
 
-test.use({ storageState: storageStatePath });
+// The shelter's zone: the app's own fallback when its settings name none. The
+// picker refuses days before the shelter's today, so the browser runs in that
+// zone too: the calendar then opens on the shelter's month, and the dates
+// below are the shelter's, not the runner's (UTC in CI, a day ahead of the
+// shelter for its first hours).
+const SHELTER_ZONE = process.env.SHELTER_TIMEZONE || "America/New_York";
+
+test.use({ storageState: storageStatePath, timezoneId: SHELTER_ZONE });
+
+/** Today on the shelter's calendar, as a local date (midnight, no zone). */
+const shelterToday = () => {
+  // "en-CA" formats a date as yyyy-MM-dd.
+  const [year, month, day] = new Intl.DateTimeFormat("en-CA", {
+    timeZone: SHELTER_ZONE,
+  })
+    .format(new Date())
+    .split("-")
+    .map(Number);
+  return new Date(year, month - 1, day);
+};
 
 // Which foster and which animal the seed makes available is not deterministic
 // — seedFostering picks its placements from a shuffled lottery, and the four
@@ -171,7 +190,7 @@ test("a general placement cannot be converted to an adoption", async ({
 });
 
 test("the calendar refuses a past expected return date", async ({ page }) => {
-  const today = new Date();
+  const today = shelterToday();
   // On the 1st there is no past day rendered in the current month, so the
   // guard is vacuously satisfied and there is nothing to assert.
   test.skip(today.getDate() === 1, "No past day is in view on the 1st.");
@@ -211,7 +230,7 @@ test("a placement can record an expected return date", async ({ page }) => {
   const calendar = page.getByRole("dialog");
   // Next month's 15th is always in the future, whatever today is.
   await calendar.getByRole("button", { name: /Go to the Next Month/i }).click();
-  const now = new Date();
+  const now = shelterToday();
   await dayCell(
     calendar,
     new Date(now.getFullYear(), now.getMonth() + 1, 15),

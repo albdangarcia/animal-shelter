@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import type { LongestStayRow } from "@/app/lib/data/reports/length-of-stay-report.data";
+import type { LongestStayRow } from "@/app/lib/utils/length-of-stay";
 import { formatShelterDay } from "@/app/lib/utils/shelter-day";
 import {
   Table,
