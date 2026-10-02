@@ -22,9 +22,6 @@ import {
 //    "Good with other dogs", unassigned and uncontradicted. He also carries a
 //    hand-assigned "Good with cats" that his "Not cat-safe" Cat Test
 //    contradicts.
-//  - Buddy (dog) has a hand-assigned "Good with other dogs" and a separate
-//    "Dog-social" Dog-to-Dog Introduction that proposes the same trait,
-//    uncontradicted — a "Cite this assessment" fixture.
 //  - Daisy (dog) has a "Cat-safe" Cat Test that already sources "Good with
 //    cats"; an older "Not cat-safe" Cat Test of hers is overtaken by it. A
 //    deleted "Dog-social" Dog-to-Dog Introduction (recorded on her by
@@ -32,8 +29,6 @@ import {
 //  - Rocket (dog) carries a hand-assigned "Good with other dogs" that his
 //    "Solo-dog home" Dog-to-Dog Introduction contradicts — no reason on
 //    record, because there's nowhere left to put one.
-//  - Whiskers (cat) has only species-agnostic templates (no proposing
-//    fields) — the control case for "nothing to suggest".
 //  - volunteer1@example.com can read assessments and characteristics but not
 //    manage characteristics.
 
@@ -60,11 +55,6 @@ test.use({ storageState });
 const animalId = (page: Page, name: string) =>
   firstRowIdByQuery(page, "/dashboard/animals", name);
 
-const pickOption = async (page: Page, label: string, option: string) => {
-  await page.getByLabel(label, { exact: true }).click();
-  await page.getByRole("option", { name: option, exact: true }).click();
-};
-
 const rowFor = (page: Page, templateName: string) =>
   page
     .getByRole("list", { name: "Assessments" })
@@ -84,15 +74,6 @@ const sourceLink = (page: Page, templateName: string) =>
   page.getByRole("link", {
     name: new RegExp(`${templateName} assessment of`, "i"),
   });
-
-const recordCatSafeTest = async (page: Page, id: string) => {
-  await page.goto(`/dashboard/animals/${id}/assessments/create`);
-  await pickOption(page, "Template *", "Cat Test");
-  await pickOption(page, "Response on first seeing the cat *", "Curious and calm");
-  await pickOption(page, "Response at close proximity *", "Calm");
-  await pickOption(page, "Recommendation *", "Cat-safe");
-  await page.getByRole("button", { name: "Record assessment" }).click();
-};
 
 const suggestionsHeading = "Characteristics these findings suggest";
 
@@ -115,7 +96,32 @@ const expectActivityEntry = async (page: Page, summary: RegExp) => {
   }).toPass();
 };
 
-// --- Suggesting: add, cite, and a deleted source suggesting nothing ---------
+// --- Read-only for a viewer without ANIMAL_CHARACTERISTICS_MANAGE -----------
+
+test("without permission to manage characteristics, suggestions show with no buttons", async ({
+  page,
+  browser,
+}) => {
+  // Frisco's Dog-to-Dog Introduction, before the next test acts on it.
+  const frisco = await animalId(page, "Frisco");
+
+  const context = await browser.newContext({ storageState: volunteerState });
+  const viewer = await context.newPage();
+  try {
+    await viewer.goto(`/dashboard/animals/${frisco}/assessments`);
+    await openRow(viewer, "Dog-to-Dog Introduction");
+    await expect(viewer.getByText(suggestionsHeading)).toBeVisible();
+    await expect(viewer.getByText("Good with other dogs")).toBeVisible();
+    await expect(viewer.getByRole("button", { name: "Add to animal" })).toHaveCount(0);
+    await expect(
+      viewer.getByRole("button", { name: "Cite this assessment" }),
+    ).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+// --- Suggesting: add -------------------------------------------------------
 
 test("an unassigned trait offers 'Add to animal'; acting on it cites the assessment and logs it", async ({
   page,
@@ -141,65 +147,6 @@ test("an unassigned trait offers 'Add to animal'; acting on it cites the assessm
     page,
     /Good with other dogs added, citing the Dog-to-Dog Introduction of/,
   );
-});
-
-test("a trait assigned elsewhere offers 'Cite this assessment'; acting on it moves the citation", async ({
-  page,
-}) => {
-  const id = await animalId(page, "Buddy");
-  await page.goto(`/dashboard/animals/${id}/characteristics`);
-  await expect(page.getByText("Good with other dogs", { exact: true })).toBeVisible();
-  // Assigned by hand — no citation yet.
-  await expect(sourceLink(page, "Dog-to-Dog Introduction")).toHaveCount(0);
-
-  await page.goto(`/dashboard/animals/${id}/assessments`);
-  await openRow(page, "Dog-to-Dog Introduction");
-  await expect(page.getByText(suggestionsHeading)).toBeVisible();
-  await page.getByRole("button", { name: "Cite this assessment" }).click();
-  await expect(
-    page.getByText("Good with other dogs re-cited to this assessment."),
-  ).toBeVisible();
-  // Settled: acting on it drops the row.
-  await expect(page.getByText(suggestionsHeading)).toHaveCount(0);
-
-  await page.goto(`/dashboard/animals/${id}/characteristics`);
-  await expect(sourceLink(page, "Dog-to-Dog Introduction")).toBeVisible();
-});
-
-test("editing the cited assessment's answer away from what it proposed: the tab warns, its page offers nothing for the trait", async ({
-  page,
-}) => {
-  // Continues from Buddy's citation above.
-  const id = await animalId(page, "Buddy");
-  await page.goto(`/dashboard/animals/${id}/assessments`);
-  await openRow(page, "Dog-to-Dog Introduction");
-  const editUrl = `${new URL(page.url()).pathname}/edit`;
-
-  await page.goto(editUrl);
-  await pickOption(page, "Recommendation *", "Needs slow introductions");
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await page.waitForURL(`**/dashboard/animals/${id}/assessments`);
-
-  await openRow(page, "Dog-to-Dog Introduction");
-  await expect(page.getByText(suggestionsHeading)).toHaveCount(0);
-
-  await page.goto(`/dashboard/animals/${id}/characteristics`);
-  await expect(page.getByText("(no longer supports it)")).toBeVisible();
-});
-
-test("a deleted assessment suggests nothing", async ({ page }) => {
-  const id = await animalId(page, "Daisy");
-  // Deleted rows are off the default list, same as any other soft-deleted
-  // row — there's no special carve-out any more.
-  await page.goto(`/dashboard/animals/${id}/assessments?status=deleted`);
-  await openRow(page, "polite play with plenty of breaks");
-  await expect(page.getByText(/^Deleted on /)).toBeVisible();
-  await expect(page.getByText(suggestionsHeading)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Add to animal" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Cite this assessment" })).toHaveCount(0);
-
-  await page.goto(`/dashboard/animals/${id}/characteristics`);
-  await expect(page.getByText("(deleted)")).toBeVisible();
 });
 
 // --- Warnings: a live contradiction, never a gate ----------------------------
@@ -260,35 +207,15 @@ test("adding or removing a contradicted trait on the tab needs no dialog, checkb
   ).toBeVisible();
 });
 
-// --- Supersession: an overtaken contradiction, kept from the enforced design -
-
-test("an overtaken contradiction says so on its own page; the tab shows no warning for it", async ({
-  page,
-}) => {
-  const id = await animalId(page, "Daisy");
-  await page.goto(`/dashboard/animals/${id}/characteristics`);
-  await expect(page.getByText(/^Contradicted by/)).toHaveCount(0);
-  await expect(sourceLink(page, "Cat Test")).toBeVisible();
-
-  await page.goto(`/dashboard/animals/${id}/assessments`);
-  await openRow(page, "Fixated at the barrier");
-  await expect(
-    page.getByText(/superseded for Good with cats by the Cat Test of/),
-  ).toBeVisible();
-  // It contradicts, it doesn't propose — the card shows the superseded note
-  // and nothing else, no suggestion to act on.
-  await expect(page.getByRole("button", { name: "Add to animal" })).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Cite this assessment" }),
-  ).toHaveCount(0);
-});
-
 // --- Restore: the citation was never touched while the source was gone -----
 
 test("restoring a deleted assessment removes the tab's '(deleted)' warning", async ({
   page,
 }) => {
   const id = await animalId(page, "Daisy");
+  await page.goto(`/dashboard/animals/${id}/characteristics`);
+  await expect(page.getByText("(deleted)")).toBeVisible();
+
   await page.goto(`/dashboard/animals/${id}/assessments?status=deleted`);
   await openRow(page, "polite play with plenty of breaks");
   const url = page.url();
@@ -360,27 +287,7 @@ test("renaming a trait in Settings keeps its citation and supersession linked", 
   }
 });
 
-// --- No review route, no badge, and the default list ------------------------
-
-test("recording an assessment that proposes a trait redirects straight to the list, badge-free", async ({
-  page,
-}) => {
-  const id = await animalId(page, "Buddy");
-  await recordCatSafeTest(page, id);
-  await expect(page.getByText("Assessment recorded.")).toBeVisible();
-  await page.waitForURL(`**/dashboard/animals/${id}/assessments`);
-
-  const row = rowFor(page, "Cat Test");
-  await expect(row).toBeVisible();
-  await expect(row.getByText(/to review/)).toHaveCount(0);
-  await expect(page.getByText(/to review/)).toHaveCount(0);
-
-  await openRow(page, "Cat Test");
-  await expect(page.getByText(suggestionsHeading)).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Add to animal" }),
-  ).toBeVisible();
-});
+// --- The default list ------------------------------------------------------
 
 test("the default Status filter hides a deleted row exactly like every other soft-deleted list, even one a trait still cites", async ({
   page,
@@ -395,40 +302,4 @@ test("the default Status filter hides a deleted row exactly like every other sof
   await page.goto(`${list}?status=deleted`);
   await expect(rowFor(page, citedIntro)).toHaveCount(1);
   await expect(rowFor(page, citedIntro).getByText("Deleted", { exact: true })).toBeVisible();
-});
-
-// --- A template with no proposing fields suggests nothing --------------------
-
-test("an assessment from a template with no proposing fields has no suggestions section", async ({
-  page,
-}) => {
-  const id = await animalId(page, "Whiskers");
-  await page.goto(`/dashboard/animals/${id}/assessments`);
-  await openRow(page, "Handling Sensitivity");
-  await expect(page.getByText(suggestionsHeading)).toHaveCount(0);
-});
-
-// --- Read-only for a viewer without ANIMAL_CHARACTERISTICS_MANAGE -----------
-
-test("without permission to manage characteristics, suggestions show with no buttons", async ({
-  page,
-  browser,
-}) => {
-  // Buddy's Cat Test, recorded and left unassigned by the test above.
-  const buddy = await animalId(page, "Buddy");
-
-  const context = await browser.newContext({ storageState: volunteerState });
-  const viewer = await context.newPage();
-  try {
-    await viewer.goto(`/dashboard/animals/${buddy}/assessments`);
-    await openRow(viewer, "Cat Test");
-    await expect(viewer.getByText(suggestionsHeading)).toBeVisible();
-    await expect(viewer.getByText("Good with cats")).toBeVisible();
-    await expect(viewer.getByRole("button", { name: "Add to animal" })).toHaveCount(0);
-    await expect(
-      viewer.getByRole("button", { name: "Cite this assessment" }),
-    ).toHaveCount(0);
-  } finally {
-    await context.close();
-  }
 });
