@@ -263,7 +263,20 @@ test("an animal can be returned from foster", async ({ page }) => {
   await banner(page).getByRole("link", { name: "Return from Foster" }).click();
   await page.waitForURL("**/return");
 
-  await chooseFromSelect(page, "Return Reason *", "Returned To Shelter");
+  // Only an outcome records these two, so the form does not offer them.
+  await page.getByLabel("Return Reason *", { exact: true }).click();
+  const returnedToShelter = page.getByRole("option", {
+    name: "Returned To Shelter",
+    exact: true,
+  });
+  await expect(returnedToShelter).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: "Ended By Outcome" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("option", { name: "Adopted By Foster" }),
+  ).toHaveCount(0);
+  await returnedToShelter.click();
 
   // The form pre-selects the unit the animal occupied before it was fostered.
   // If that unit is gone, pick the first location and unit on offer instead.
@@ -280,6 +293,17 @@ test("an animal can be returned from foster", async ({ page }) => {
   await expect(page.getByText("Animal returned from foster.")).toBeVisible();
   await page.waitForURL("**/dashboard/animals/**");
   await expect(page.getByText("In foster with")).toBeHidden();
+
+  // The placement has ended, so recording an outcome would end nothing, and
+  // the outcome form says nothing about a foster. The notice is rendered with
+  // the form, so it is absent once the form is there.
+  await page.goto(
+    `/dashboard/outcomes/create?animalId=${placedAnimalUrl.split("/").pop()}`,
+  );
+  await expect(
+    page.getByRole("button", { name: "Process Outcome" }),
+  ).toBeVisible();
+  await expect(page.getByText(/is in foster with/)).toHaveCount(0);
 });
 
 test("a foster-to-adopt placement moves the listing to Pending Adoption and converts to an adoption", async ({

@@ -18,34 +18,13 @@ import {
 } from "@/components/ui/table";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { FosterProfileForTab } from "@/app/lib/data/fosters/fosters.data";
-import { FosterReturnReason } from "@/prisma/generated/enums";
+import { describePlacementEnd } from "@/app/lib/utils/foster-placement-end-label";
 
 type Placement = FosterProfileForTab["placements"][number];
 
 interface FosterPlacementHistoryCardProps {
   placements: Placement[];
 }
-
-// A placement ended by an outcome recorded while the animal was in foster
-// says what the outcome was ("Ended: deceased"), which the reason alone does
-// not. It falls back to the reason if the outcome is gone.
-//
-// Reversing the outcome reopens the placement only when that outcome is what
-// archived the animal. One reversed after a later re-intake leaves the
-// placement ended and linked to it, so the row says the outcome was reversed
-// rather than reading as if it stood.
-const describeEnd = (placement: Placement) => {
-  if (
-    placement.returnReason !== FosterReturnReason.ENDED_BY_OUTCOME ||
-    !placement.outcome
-  ) {
-    return formatSingleEnumOption(placement.returnReason);
-  }
-  const type = formatSingleEnumOption(placement.outcome.type).toLowerCase();
-  return placement.outcome.reversedAt
-    ? `Ended: ${type} (reversed)`
-    : `Ended: ${type}`;
-};
 
 export function FosterPlacementHistoryCard({
   placements,
@@ -106,7 +85,7 @@ export function FosterPlacementHistoryCard({
                   </TableCell>
                   <TableCell>
                     {placement.returnReason ? (
-                      describeEnd(placement)
+                      describePlacementEnd(placement)
                     ) : (
                       <span className="text-muted-foreground italic">—</span>
                     )}
