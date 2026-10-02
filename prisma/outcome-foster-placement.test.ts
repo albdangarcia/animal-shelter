@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import {
   AnimalActivityType,
+  AnimalHealthStatus,
   AnimalListingStatus,
   ApplicationSource,
   ApplicationStatus,
@@ -28,10 +29,12 @@ import {
   recordOutcomeCorrection,
 } from "@/app/lib/services/outcome-recording";
 import { recordOutcomeReversal } from "@/app/lib/services/outcome-reversal";
+import { recordReIntake } from "@/app/lib/services/intake-recording";
 import {
   OutcomeFormSchema,
   type OutcomeFormOutput,
 } from "@/app/lib/zod-schemas/outcome.schema";
+import { ReIntakeFormSchema } from "@/app/lib/zod-schemas/intake.schema";
 import {
   PreconditionFailedError,
   TimelineOrderError,
@@ -377,6 +380,55 @@ test("reversing that outcome reopens the placement and puts the animal in no uni
   });
   const animal = await readAnimal(animalId);
   assert.equal(animal.listingStatus, AnimalListingStatus.PUBLISHED);
+  assert.equal(animal.currentUnitId, null);
+  await assertNoListingMismatch(animalId);
+});
+
+// Once the animal is back in the shelter's care, the outcome is no longer what
+// archived it, so reversing it leaves the animal where the re-intake put it,
+// and the placement as the outcome ended it. The foster's history still shows
+// that placement, now with its outcome marked reversed.
+test("an outcome reversed after a re-intake leaves its placement ended and linked", async () => {
+  const { animalId, placementId } = await makeAnimal(
+    "Left from foster, back since",
+    FosterPlacementType.GENERAL,
+  );
+  await record(animalId, "2026-01-10", { type: OutcomeType.OTHER });
+  const { id: outcomeId } = await onlyOutcome(animalId);
+  await prisma.$transaction((tx) =>
+    recordReIntake(
+      tx,
+      {
+        animalId,
+        values: ReIntakeFormSchema.parse({
+          intakeType: IntakeType.SEIZE,
+          intakeDate: "2026-01-20",
+          notes: "",
+          healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
+          isSpayedNeutered: false,
+        }),
+      },
+      staffId,
+    ),
+  );
+
+  const reversal = await prisma.$transaction((tx) =>
+    recordOutcomeReversal(tx, outcomeId, "Entered on the wrong stay.", staffId),
+  );
+
+  assert.equal(reversal.reopenedPlacementId, null);
+  // Named all the same, so the foster's history is shown afresh.
+  assert.equal(reversal.fosterPersonId, fosterPersonId);
+  assert.notEqual((await onlyOutcome(animalId)).reversedAt, null);
+  assert.deepEqual(await readPlacement(placementId!), {
+    endDate: "2026-01-10",
+    returnReason: FosterReturnReason.ENDED_BY_OUTCOME,
+    returnedById: staffId,
+    outcomeId,
+    adoptionApplicationId: null,
+  });
+  const animal = await readAnimal(animalId);
+  assert.equal(animal.listingStatus, AnimalListingStatus.DRAFT);
   assert.equal(animal.currentUnitId, null);
   await assertNoListingMismatch(animalId);
 });
