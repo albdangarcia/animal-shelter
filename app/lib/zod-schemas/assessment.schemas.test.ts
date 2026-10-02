@@ -95,11 +95,18 @@ test("a fully blank INTAKE_MEDICAL is rejected", () => {
     },
   });
   assert.equal(result.success, false);
-  assert.ok(
+  // Both required core-exam questions are flagged, each under its own field,
+  // with the message the form shows there.
+  assert.deepEqual(
     !result.success &&
-      result.error.issues.some(
-        (i) => i.path.join(".") === "fields.dental.value",
-      ),
+      result.error.issues.map((i) => [i.path.join("."), i.message]),
+    [
+      ["fields.dental.value", "Dental is required."],
+      [
+        "fields.heart_lungs.value",
+        "Heart & lungs on auscultation is required.",
+      ],
+    ],
   );
 });
 
