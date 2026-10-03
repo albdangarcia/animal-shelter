@@ -606,7 +606,9 @@ test("withdrawing an approved application releases the animal", async ({
 
   // Approval holds the animal at PENDING_ADOPTION.
   await page.goto(animal);
-  await expect(page.getByText("Pending Adoption")).toBeVisible();
+  await expect(
+    page.getByText("Pending Adoption", { exact: true }),
+  ).toBeVisible();
 
   await openApplication(page, href);
   await page.getByRole("button", { name: "Withdraw application" }).click();
@@ -624,7 +626,9 @@ test("withdrawing an approved application releases the animal", async ({
 
   // And the animal really is back on the adoptable listings.
   await page.goto(animal);
-  await expect(page.getByText("Pending Adoption")).toHaveCount(0);
+  await expect(page.getByText("Pending Adoption", { exact: true })).toHaveCount(
+    0,
+  );
   await expect(
     page.getByRole("link", { name: "View Your Application" }),
   ).toBeVisible();
