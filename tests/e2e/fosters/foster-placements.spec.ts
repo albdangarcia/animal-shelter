@@ -326,7 +326,9 @@ test("a foster-to-adopt placement moves the listing to Pending Adoption and conv
   await page.waitForURL("**/dashboard/animals/**");
 
   await expect(banner(page)).toContainText("Foster To Adopt");
-  await expect(page.getByText("Pending Adoption").first()).toBeVisible();
+  await expect(
+    page.getByText("Pending Adoption", { exact: true }).first(),
+  ).toBeVisible();
 
   await banner(page).getByRole("link", { name: "Convert to Adoption" }).click();
   await page.waitForURL("**/convert");

@@ -398,7 +398,9 @@ test("an outcome recorded while the animal is in foster says so, and ends the pl
   await waitForPathname(page, OUTCOMES_PATH);
 
   await page.goto(`/dashboard/animals/${deceased.id}`);
-  await expect(page.getByText("Archived").first()).toBeVisible();
+  await expect(
+    page.getByText("Archived", { exact: true }).first(),
+  ).toBeVisible();
   await expect(banner(page)).toBeHidden();
 
   // The history says how the placement ended, not just that an outcome did.
