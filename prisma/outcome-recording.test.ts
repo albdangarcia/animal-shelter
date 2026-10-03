@@ -13,7 +13,11 @@ import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import {
   AnimalActivityType,
   AnimalListingStatus,
+  ApplicationSource,
+  ApplicationStatus,
   IntakeType,
+  LivingSituation,
+  LocationType,
   OutcomeType,
   PartnerType,
   Sex,
@@ -30,7 +34,11 @@ import {
 } from "@/app/lib/zod-schemas/outcome.schema";
 import { shiftDayKey, shelterToday } from "@/app/lib/utils/shelter-day";
 import { fallbackShelterSettings } from "@/app/lib/utils/shelter-settings";
-import { ConflictError, TimelineOrderError } from "@/app/lib/utils/errors";
+import {
+  ConflictError,
+  PreconditionFailedError,
+  TimelineOrderError,
+} from "@/app/lib/utils/errors";
 import { assertNoListingMismatch } from "./listing-consistency";
 
 const runId = Date.now().toString(36);
@@ -44,6 +52,8 @@ let colorId: string;
 let staffId: string;
 let partnerId: string;
 let ownerId: string;
+let applicantId: string;
+const locationIds: string[] = [];
 
 before(async () => {
   speciesId = (
@@ -79,15 +89,26 @@ before(async () => {
       select: { id: true },
     })
   ).id;
+  applicantId = (
+    await prisma.person.create({
+      data: { name: `Outcome day applicant ${runId}` },
+      select: { id: true },
+    })
+  ).id;
 });
 
 after(async () => {
   await prisma.outcome.deleteMany({ where: { staffMemberId: staffId } });
   await prisma.intake.deleteMany({ where: { staffMemberId: staffId } });
+  await prisma.adoptionApplication.deleteMany({ where: { applicantId } });
   // Takes the activity rows with it.
   await prisma.animal.deleteMany({ where: { speciesId } });
+  await prisma.unit.deleteMany({ where: { locationId: { in: locationIds } } });
+  await prisma.location.deleteMany({ where: { id: { in: locationIds } } });
   await prisma.partner.deleteMany({ where: { id: partnerId } });
-  await prisma.person.deleteMany({ where: { id: { in: [staffId, ownerId] } } });
+  await prisma.person.deleteMany({
+    where: { id: { in: [staffId, ownerId, applicantId] } },
+  });
   await prisma.color.deleteMany({ where: { id: colorId } });
   await prisma.species.deleteMany({ where: { id: speciesId } });
   await prisma.$disconnect();
@@ -226,6 +247,56 @@ test("an outcome on the stay's intake day or later is recorded", async () => {
   await assertNoListingMismatch(animalId);
 });
 
+/** A unit in a location of its own. */
+const makeUnit = async () => {
+  const location = await prisma.location.create({
+    data: {
+      name: `Outcome day kennels ${runId} ${locationIds.length + 1}`,
+      type: LocationType.KENNEL,
+    },
+    select: { id: true },
+  });
+  locationIds.push(location.id);
+  const unit = await prisma.unit.create({
+    data: { name: "A1", capacity: 2, locationId: location.id },
+    select: { id: true },
+  });
+  return unit.id;
+};
+
+// An animal that has left is in no kennel, so its unit is free for the next.
+// The unit it left is kept on the outcome, which is where a reversal puts it
+// back.
+test("an outcome takes the animal out of its unit and keeps the unit it left", async () => {
+  const unitId = await makeUnit();
+  const { animalId } = await makeAnimal("Kennelled", [
+    { intake: "2026-01-03" },
+  ]);
+  await prisma.animal.update({
+    where: { id: animalId },
+    data: { currentUnitId: unitId },
+  });
+
+  await record(animalId, "2026-02-01");
+
+  const animal = await prisma.animal.findUniqueOrThrow({
+    where: { id: animalId },
+    select: { currentUnitId: true },
+  });
+  assert.equal(animal.currentUnitId, null);
+  const outcome = await prisma.outcome.findFirstOrThrow({
+    where: { animalId },
+    select: { previousUnitId: true },
+  });
+  assert.equal(outcome.previousUnitId, unitId);
+  // The outcome's own row stands for the move; no location change is logged.
+  assert.deepEqual(
+    (await readAnimal(animalId)).activityLogs.map((row) => row.activityType),
+    [AnimalActivityType.OUTCOME_PROCESSED],
+  );
+  await assertNoListingMismatch(animalId);
+});
+
 test("an archived animal is refused for its status, not for the day", async () => {
   const { animalId } = await makeAnimal("Already gone", [
     { intake: "2026-01-03" },
@@ -355,6 +426,208 @@ test("a correction that keeps the day is not checked, even on a future-dated row
   const animal = await readAnimal(animalId);
   assert.equal(animal.outcomes[0].notes, "Found at the gate.");
   assert.equal(animal.outcomes[0].outcomeDate, day);
+  await assertNoListingMismatch(animalId);
+});
+
+// What the edit form sends for a field it found empty, or that the outcome's
+// type has no use for.
+const EMPTY_FORM = { destinationPartnerId: "", ownerId: "", notes: "" };
+
+// Stamped on every outcome a correction test starts from, so any write to the
+// row, even one of the values it already holds, moves its `updatedAt`.
+const LONG_AGO = new Date("2026-02-01T12:00:00Z");
+
+/**
+ * An animal that came in on Jan 3 and left on Feb 1 with the given outcome,
+ * recorded through the create form's path. Returns the outcome's id.
+ */
+const recordedOutcome = async (label: string, values: OutcomeFormOutput) => {
+  const { animalId } = await makeAnimal(label, [{ intake: "2026-01-03" }]);
+  await prisma.$transaction((tx) =>
+    recordOutcome(tx, { animalId, values }, staffId),
+  );
+  const { id } = await prisma.outcome.findFirstOrThrow({
+    where: { animalId },
+    select: { id: true },
+  });
+  await prisma.outcome.update({
+    where: { id },
+    data: { updatedAt: LONG_AGO },
+  });
+  return { animalId, outcomeId: id };
+};
+
+const STORED_OUTCOME_SELECT = {
+  type: true,
+  outcomeDate: true,
+  notes: true,
+  destinationPartnerId: true,
+  ownerId: true,
+  adoptionApplicationId: true,
+  updatedAt: true,
+} as const;
+
+const storedOutcome = (outcomeId: string) =>
+  prisma.outcome.findUniqueOrThrow({
+    where: { id: outcomeId },
+    select: STORED_OUTCOME_SELECT,
+  });
+
+const correctionCount = (animalId: string) =>
+  prisma.animalActivityLog.count({
+    where: { animalId, activityType: AnimalActivityType.OUTCOME_CORRECTED },
+  });
+
+// The edit form sends back what it loaded: the stored day, the stored partner
+// or owner, and empty strings for whatever the outcome does not hold. Saving
+// it untouched is not a correction, whichever fields the type carries.
+test("a correction that changes nothing, the same day included, is unchanged and writes nothing", async () => {
+  const forms = [
+    { outcomeType: OutcomeType.DECEASED },
+    {
+      outcomeType: OutcomeType.TRANSFER_OUT,
+      destinationPartnerId: partnerId,
+      notes: "Left with the rescue.",
+    },
+    { outcomeType: OutcomeType.RETURN_TO_OWNER, ownerId },
+  ];
+
+  for (const form of forms) {
+    const values = OutcomeFormSchema.parse({
+      ...EMPTY_FORM,
+      outcomeDate: "2026-02-01",
+      ...form,
+    });
+    const { animalId, outcomeId } = await recordedOutcome(
+      `Unchanged ${form.outcomeType}`,
+      values,
+    );
+    const before = await storedOutcome(outcomeId);
+
+    const result = await recordOutcomeCorrection(outcomeId, values, staffId);
+
+    assert.deepEqual(
+      result,
+      { status: "unchanged", animalId, fosterPersonId: null },
+      form.outcomeType,
+    );
+    assert.deepEqual(await storedOutcome(outcomeId), before, form.outcomeType);
+    assert.equal(await correctionCount(animalId), 0, form.outcomeType);
+  }
+});
+
+// The type is the one thing the edit form never lets change, so a different
+// one means a caller other than the form. An adoption's type is what links it
+// to the application it adopted under, so neither may move, and nothing sent
+// with it is written either.
+test("a type change is refused, and nothing is written", async () => {
+  const { animalId } = await makeAnimal("Retyped", [{ intake: "2026-01-03" }]);
+  const applicationId = (
+    await prisma.adoptionApplication.create({
+      data: {
+        applicantName: `Outcome day applicant ${runId}`,
+        applicantEmail: `outcome.day.${runId}@example.com`,
+        applicantPhone: "2125550100",
+        applicantAddressLine1: "1 Main St",
+        applicantCity: "New York",
+        applicantState: "NY",
+        applicantZipCode: "10001",
+        livingSituation: LivingSituation.OWN_HOME,
+        householdSize: 1,
+        reasonForAdoption: "Test",
+        status: ApplicationStatus.APPROVED,
+        source: ApplicationSource.STAFF,
+        applicantId,
+        animalId,
+      },
+      select: { id: true },
+    })
+  ).id;
+  await prisma.$transaction((tx) =>
+    recordOutcome(
+      tx,
+      {
+        animalId,
+        adoptionApplicationId: applicationId,
+        values: OutcomeFormSchema.parse({
+          ...EMPTY_FORM,
+          outcomeType: OutcomeType.ADOPTION,
+          outcomeDate: "2026-02-01",
+        }),
+      },
+      staffId,
+    ),
+  );
+  const { id: outcomeId } = await prisma.outcome.findFirstOrThrow({
+    where: { animalId },
+    select: { id: true },
+  });
+  await prisma.outcome.update({
+    where: { id: outcomeId },
+    data: { updatedAt: LONG_AGO },
+  });
+  const outcomeBefore = await storedOutcome(outcomeId);
+  assert.equal(outcomeBefore.adoptionApplicationId, applicationId);
+  const animalBefore = await readAnimal(animalId);
+
+  await assert.rejects(
+    recordOutcomeCorrection(
+      outcomeId,
+      OutcomeFormSchema.parse({
+        ...EMPTY_FORM,
+        outcomeType: OutcomeType.DECEASED,
+        outcomeDate: "2026-02-01",
+        notes: "Retype attempt.",
+      }),
+      staffId,
+    ),
+    (error: unknown) =>
+      error instanceof PreconditionFailedError &&
+      error.message ===
+        "The outcome type can't be changed once an outcome is recorded. To fix a wrong type, reverse this outcome and record the right one.",
+  );
+
+  assert.deepEqual(await storedOutcome(outcomeId), outcomeBefore);
+  assert.deepEqual(await readAnimal(animalId), animalBefore);
+  await assertNoListingMismatch(animalId);
+});
+
+// A day sent back unchanged beside a real change is not part of it: the
+// summary names what moved and nothing else.
+test("the same day with a notes change names only the notes", async () => {
+  const stored = {
+    ...EMPTY_FORM,
+    outcomeType: OutcomeType.TRANSFER_OUT,
+    outcomeDate: "2026-02-01",
+    destinationPartnerId: partnerId,
+    notes: "Left with the rescue.",
+  };
+  const { animalId, outcomeId } = await recordedOutcome(
+    "Notes only",
+    OutcomeFormSchema.parse(stored),
+  );
+
+  const result = await recordOutcomeCorrection(
+    outcomeId,
+    OutcomeFormSchema.parse({
+      ...stored,
+      notes: "Left with the rescue, and her bed.",
+    }),
+    staffId,
+  );
+
+  assert.equal(result.status, "corrected");
+  const outcome = await storedOutcome(outcomeId);
+  assert.equal(outcome.outcomeDate, "2026-02-01");
+  assert.equal(outcome.destinationPartnerId, partnerId);
+  assert.equal(outcome.notes, "Left with the rescue, and her bed.");
+  const corrections = (await readAnimal(animalId)).activityLogs.filter(
+    (row) => row.activityType === AnimalActivityType.OUTCOME_CORRECTED,
+  );
+  assert.deepEqual(
+    corrections.map((row) => row.changeSummary),
+    ["Outcome was corrected: notes were edited."],
+  );
   await assertNoListingMismatch(animalId);
 });
 

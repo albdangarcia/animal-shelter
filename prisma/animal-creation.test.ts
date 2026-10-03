@@ -3,9 +3,10 @@
 // say: the animal, its one intake and the activity rows, and after a refusal,
 // that no animal was left behind.
 //
-// `recordAnimalCreation` is the whole of the create action bar the session
-// check, the form validation, the first-day check, the transaction and the
-// cache invalidation, so driving it is driving the action.
+// `createAnimalFromForm` is the whole of the create action bar the session
+// check, the form validation and the cache invalidation, so driving it is
+// driving the action. Most cases drive `recordAnimalCreation`, the write it
+// makes once the first intake's day is accepted.
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import prisma from "@/app/lib/prisma";
@@ -16,7 +17,12 @@ import {
   IntakeType,
   Sex,
 } from "@/prisma/generated/enums";
-import { recordAnimalCreation } from "@/app/lib/services/animal-creation";
+import {
+  createAnimalFromForm,
+  recordAnimalCreation,
+} from "@/app/lib/services/animal-creation";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
+import { shiftDayKey } from "@/app/lib/utils/shelter-day";
 import { CreateAnimalFormSchema } from "@/app/lib/zod-schemas/animal.schemas";
 import { assertNoListingMismatch } from "./listing-consistency";
 
@@ -205,4 +211,36 @@ test("an unknown species or color is refused, and no animal is left behind", asy
   } finally {
     await prisma.color.deleteMany({ where: { id: otherColor.id } });
   }
+});
+
+// The picker stops a future day only against the day the page was rendered
+// on, so the server checks the day again, against the shelter's today, before
+// anything is written.
+test("a first intake dated after today is refused with nothing written, and one dated today is created", async () => {
+  const today = await getShelterToday();
+
+  const refused = await createAnimalFromForm(
+    submission("Tomorrow", { intakeDate: shiftDayKey(today, 1) }),
+    staffId,
+  );
+
+  assert.deepEqual(refused, {
+    refusal: "The intake date can't be in the future.",
+  });
+  assert.equal(
+    await prisma.animal.count({ where: { name: `Tomorrow ${runId}` } }),
+    0,
+  );
+
+  const created = await createAnimalFromForm(
+    submission("Today", { intakeDate: today }),
+    staffId,
+  );
+
+  assert.ok("animalId" in created);
+  const animal = await readAnimal(created.animalId);
+  assert.deepEqual(animal.intake, [
+    { intakeDate: today, type: IntakeType.SEIZE },
+  ]);
+  await assertNoListingMismatch(created.animalId);
 });

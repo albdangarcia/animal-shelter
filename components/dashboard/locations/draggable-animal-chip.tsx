@@ -2,7 +2,7 @@
 
 import { calendarDay } from "@/app/lib/utils/shelter-day";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Link from "next/link";
 import { useDraggable } from "@dnd-kit/core";
 import { IconMapPin, IconExternalLink } from "@tabler/icons-react";
@@ -107,6 +107,7 @@ export const DraggableAnimalChip = ({ animal, fromUnitId, locationLabel }: Props
   // the moving chip; Radix's own onOpenChange (pointer leave / blur) resets the
   // state, so it doesn't spring back open after a drop.
   const [open, setOpen] = useState(false);
+  const speciesId = useId();
 
   return (
     <HoverCard
@@ -120,12 +121,18 @@ export const DraggableAnimalChip = ({ animal, fromUnitId, locationLabel }: Props
           ref={setNodeRef}
           {...listeners}
           {...attributes}
+          // The chip's text runs the name into the species line (and, with
+          // no photo, the initials into the name), so it is named for the
+          // animal and described by its species, after the drag instructions
+          // dnd-kit points to.
+          aria-label={animal.name}
+          aria-describedby={`${attributes["aria-describedby"]} ${speciesId}`}
           className={cn(
             "cursor-grab touch-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring",
             isDragging && "opacity-40",
           )}
         >
-          <AnimalChip animal={animal} />
+          <AnimalChip animal={animal} speciesId={speciesId} />
         </div>
       </HoverCardTrigger>
       <HoverCardContent align="start" className="w-64">

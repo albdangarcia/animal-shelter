@@ -25,7 +25,7 @@ import {
 import { buildLocationChangeSummary } from "../utils/location-activity";
 import { ConflictError, NotFoundError } from "../utils/errors";
 import { findLiveUnitForPlacement } from "../services/unit-housing";
-import { recordAnimalCreation } from "../services/animal-creation";
+import { createAnimalFromForm } from "../services/animal-creation";
 import { toAnimalData } from "../utils/animal-data";
 import { del } from "@vercel/blob";
 import { isDemo } from "@/lib/flags";
@@ -35,7 +35,6 @@ import {
   effectiveApplicationStatuses,
   lockAnimal,
 } from "../data/application-status.data";
-import { checkFirstIntakeDay } from "../data/animal-timeline.data";
 
 const _createAnimal = async (
   user: SessionUser,
@@ -62,8 +61,7 @@ const _createAnimal = async (
     };
   }
 
-  const { intakeType, intakeDate, surrenderingPersonId } =
-    validatedFields.data;
+  const { intakeType, surrenderingPersonId } = validatedFields.data;
 
   if (intakeType === IntakeType.OWNER_SURRENDER) {
     const parsedPersonId = cuidSchema.safeParse(surrenderingPersonId);
@@ -79,22 +77,19 @@ const _createAnimal = async (
   }
 
   try {
-    // The picker disables future days, but only in the browser, and against
-    // the day the page was rendered on. The animal has no other events yet,
-    // so this is the only part of the timeline check that can apply. It reads
-    // the shelter's settings, so it sits inside the try with the writes.
-    const futureDay = await checkFirstIntakeDay(intakeDate);
-    if (futureDay) {
+    // The day check reads the shelter's settings, so it sits inside the try
+    // with the writes.
+    const created = await createAnimalFromForm(
+      validatedFields.data,
+      staffMemberId,
+    );
+    if ("refusal" in created) {
       return {
         ok: false,
-        message: futureDay,
-        fieldErrors: { intakeDate: [futureDay] },
+        message: created.refusal,
+        fieldErrors: { intakeDate: [created.refusal] },
       };
     }
-
-    await prisma.$transaction((tx) =>
-      recordAnimalCreation(tx, validatedFields.data, staffMemberId),
-    );
   } catch (error) {
     console.error("Database Error creating intake record:", error);
     return {
