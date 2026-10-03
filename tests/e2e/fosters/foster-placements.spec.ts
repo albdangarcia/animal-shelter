@@ -1,7 +1,9 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
-import os from "node:os";
-import path from "node:path";
-import { fillStable, waitForPathname } from "../support/applications";
+import {
+  fillStable,
+  waitForPathname,
+  storageStatePathFor,
+} from "../support/applications";
 
 const adminPassword = process.env.ADMIN_PASSWORD;
 const fostersPath = "/dashboard/fosters";
@@ -10,7 +12,7 @@ const newPlacementPath = "/dashboard/fosters/placements/new";
 // One sign-in for the whole file, reused as storage state — the better-auth
 // sign-in endpoint rate-limits after a few hits inside a minute and this spec
 // has far more cases than that budget. Mirrors locations.spec.ts.
-const storageStatePath = path.join(os.tmpdir(), "fosters-admin.state.json");
+const storageStatePath = storageStatePathFor("fosters-admin.state.json");
 
 test.describe.configure({ mode: "serial" });
 

@@ -4,8 +4,7 @@
 // tests/e2e/people-directory/staff-walk-in-adoption-application.spec.ts — this
 // module only removes the copy-paste.
 import { expect, type Browser, type Locator, type Page } from "@playwright/test";
-import os from "node:os";
-import path from "node:path";
+import { storageStatePathFor } from "./applications";
 
 const adminPassword = process.env.ADMIN_PASSWORD;
 
@@ -15,7 +14,7 @@ const adminPassword = process.env.ADMIN_PASSWORD;
 // spec picks its own path so a single-file run never loads another file's
 // (possibly stale) state.
 export const adminStatePath = (name: string) =>
-  path.join(os.tmpdir(), `note-audit-${name}-admin.state.json`);
+  storageStatePathFor(`note-audit-${name}-admin.state.json`);
 
 const signIn = async (page: Page) => {
   await page.goto(`/sign-in?callbackUrl=${encodeURIComponent("/dashboard")}`);

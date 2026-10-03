@@ -1,6 +1,4 @@
 import { test, expect, type Page } from "@playwright/test";
-import os from "node:os";
-import path from "node:path";
 import { bootstrapAdminAuth, firstRowIdByQuery } from "../support/note-audit";
 import {
   APPLICANT_NAME,
@@ -8,6 +6,7 @@ import {
   SEEDED_USER_PASSWORD,
   fillStable,
   signIn,
+  storageStatePathFor,
 } from "../support/applications";
 
 // Barring an account, and lifting the bar.
@@ -24,7 +23,7 @@ import {
 // whatever state the failed attempt left, and reports that instead of the
 // failure.
 
-const storageState = path.join(os.tmpdir(), "user-deactivation-admin.state.json");
+const storageState = storageStatePathFor("user-deactivation-admin.state.json");
 const roleManagementPath = "/dashboard/settings/role-management";
 
 const ACCOUNT_EMAIL = "casey.deactivated@example.com";
