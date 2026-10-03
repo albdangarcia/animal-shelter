@@ -1,6 +1,6 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
+import { useId, useOptimistic, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   DndContext,
@@ -245,6 +245,10 @@ function UnitTile({
   return (
     <div
       ref={setNodeRef}
+      // Named as the drop announcements name it, so assistive tech (and a
+      // test) can tell one unit's tile from the next.
+      role="group"
+      aria-label={`${unit.name} in ${locationName}`}
       className={cn(
         "flex flex-col gap-2 rounded-lg border p-3",
         capacityTileClass[state],
@@ -276,10 +280,18 @@ function UnitTile({
 
 // Location group
 function LocationGroup({ location }: { location: BoardLocation }) {
+  const headingId = useId();
   return (
-    <div className="flex flex-col gap-3">
+    // Its unit tiles are groups too, so each sits inside its location's.
+    <div
+      role="group"
+      aria-labelledby={headingId}
+      className="flex flex-col gap-3"
+    >
       <div className="flex items-center gap-2">
-        <h3 className="text-base font-semibold">{location.name}</h3>
+        <h3 id={headingId} className="text-base font-semibold">
+          {location.name}
+        </h3>
         <Badge variant="secondary">
           {formatSingleEnumOption(location.type)}
         </Badge>

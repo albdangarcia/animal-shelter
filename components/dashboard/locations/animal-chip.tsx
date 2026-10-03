@@ -14,9 +14,12 @@ export const getInitials = (name: string) => {
 interface Props {
   animal: BoardAnimal;
   className?: string;
+  // Set on the species line, so a chip named for the animal alone can point
+  // to it as its description.
+  speciesId?: string;
 }
 
-export const AnimalChip = ({ animal, className }: Props) => {
+export const AnimalChip = ({ animal, className, speciesId }: Props) => {
   return (
     <div
       className={cn(
@@ -40,7 +43,10 @@ export const AnimalChip = ({ animal, className }: Props) => {
         <p className="truncate text-xs font-medium leading-tight">
           {animal.name}
         </p>
-        <p className="truncate text-[10px] leading-tight text-muted-foreground">
+        <p
+          id={speciesId}
+          className="truncate text-[10px] leading-tight text-muted-foreground"
+        >
           {animal.species}
         </p>
       </div>

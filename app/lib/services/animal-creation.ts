@@ -1,4 +1,5 @@
-import type { TransactionClient } from "@/app/lib/prisma";
+import prisma, { type TransactionClient } from "@/app/lib/prisma";
+import { checkFirstIntakeDay } from "@/app/lib/data/animal-timeline.data";
 import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import { findLiveUnitForPlacement } from "@/app/lib/services/unit-housing";
 import { toAnimalData } from "@/app/lib/utils/animal-data";
@@ -15,8 +16,9 @@ import {
  * records them.
  *
  * Like `outcome-recording`, this module has no `next/*` and no auth imports,
- * so a plain `node:test` can drive it. It runs inside the caller's
- * `prisma.$transaction`. The intake is written in the same transaction as
+ * so a plain `node:test` can drive it. `recordAnimalCreation` runs inside the
+ * caller's `prisma.$transaction`; `createAnimalFromForm` checks the first
+ * intake's day and opens its own. The intake is written in the same transaction as
  * the animal, so the timeline a new animal starts with is always one intake and
  * no outcome. That is what makes the listing safe to choose here: a draft or
  * published animal is here, and the schema refuses every other status.
@@ -198,4 +200,26 @@ export const recordAnimalCreation = async (
   }
 
   return { animalId: newAnimal.id };
+};
+
+/**
+ * The create form's write: the first intake's day is checked, then the animal
+ * is created in a transaction of its own. A refused day writes nothing and is
+ * returned, to be shown under the intake date picker.
+ */
+export const createAnimalFromForm = async (
+  values: CreateAnimalFormOutput,
+  staffMemberId: string,
+): Promise<{ refusal: string } | { animalId: string }> => {
+  // The picker disables future days, but only in the browser, and against
+  // the day the page was rendered on. The animal has no other events yet,
+  // so this is the only part of the timeline check that can apply.
+  const refusal = await checkFirstIntakeDay(values.intakeDate);
+  if (refusal) {
+    return { refusal };
+  }
+
+  return prisma.$transaction((tx) =>
+    recordAnimalCreation(tx, values, staffMemberId),
+  );
 };
