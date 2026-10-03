@@ -92,6 +92,8 @@ jobs:
     # Renaming it silently stops the check reporting and blocks every PR.
     name: db-tests
     runs-on: ubuntu-latest
+    # Takes 2-3 minutes; a hung test or container shouldn't hold the run for 6 hours.
+    timeout-minutes: 10
     env:
       # resolveDatabaseUrl() gives this priority in both pooled and direct
       # modes. It is the e2e container's URL, not test:db's (25600 locally):
@@ -124,6 +126,10 @@ jobs:
   e2e-shard:
     name: e2e-shard (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
+    # A healthy shard takes 3-7 minutes (the slowest seen is 9.5). Without a
+    # limit, a dev server that is up but failing every page leaves each test to
+    # time out and retry, and the shard runs on toward GitHub's 6-hour default.
+    timeout-minutes: 20
     strategy:
       # Let every shard finish, so one run shows every failing spec.
       fail-fast: false

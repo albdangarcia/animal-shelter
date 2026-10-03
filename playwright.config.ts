@@ -28,7 +28,13 @@ export default defineConfig({
   globalTeardown: "./playwright/global-teardown.ts",
   webServer: {
     command: `npm run dev -- --hostname 127.0.0.1 --port ${E2E_APP_PORT}`,
-    url: `${E2E_BASE_URL}/favicon.ico`,
+    // A real page, not a static file such as /favicon.ico: only a page compiles
+    // app/layout.tsx, so a layout that fails to build (a Google font that
+    // cannot be fetched, say) answers 500 here and startup fails within
+    // `timeout` instead of every test timing out. Signed out, /sign-in renders
+    // without touching the database, which matters because the webServer
+    // starts before globalSetup brings the database up.
+    url: `${E2E_BASE_URL}/sign-in`,
     timeout: 180_000,
     reuseExistingServer: false,
     stdout: "pipe",
