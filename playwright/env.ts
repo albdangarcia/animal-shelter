@@ -1,7 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import dotenv from "dotenv";
-import { resolveHarnessCoordinates } from "../app/lib/test-harness-coordinates";
+import {
+  checkoutId,
+  resolveHarnessCoordinates,
+} from "../app/lib/test-harness-coordinates";
 
 const envFiles = [
   ".env",
@@ -37,6 +40,9 @@ const coordinates = resolveHarnessCoordinates({
 
 export const HARNESS_SLOT = coordinates.slot;
 export const HARNESS_SLOT_SOURCE = coordinates.slotSource;
+// Unique to this checkout's path, unlike the slot (E2E_SLOT can repeat one)
+// and the compose project name (bare for every main checkout).
+export const HARNESS_CHECKOUT_ID = checkoutId(process.cwd());
 
 export const E2E_APP_PORT = coordinates.e2e.appPort;
 export const E2E_BASE_URL =

@@ -1,6 +1,8 @@
 import { expect, type Browser, type Locator, type Page } from "@playwright/test";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { HARNESS_CHECKOUT_ID } from "../../../playwright/env";
 
 // Every seeded account except admin@example.com shares this password
 // (prisma/seed.ts, `seedPersonsAndUsers`).
@@ -32,8 +34,19 @@ export const signIn = async (page: Page, email: string, password: string) => {
   await page.waitForURL("**/dashboard", { timeout: 60_000 });
 };
 
-export const storageStatePathFor = (fileName: string) =>
-  path.join(os.tmpdir(), fileName);
+// One folder per checkout, because checkouts can run the suite at once, each
+// against its own database. A shared file would let one checkout's
+// `beforeAll` overwrite another's session before its tests load it, and the
+// test would carry a session its database never issued.
+const storageStateDir = path.join(
+  os.tmpdir(),
+  `animal-shelter-e2e-${HARNESS_CHECKOUT_ID}-storage-state`,
+);
+
+export const storageStatePathFor = (fileName: string) => {
+  fs.mkdirSync(storageStateDir, { recursive: true });
+  return path.join(storageStateDir, fileName);
+};
 
 /**
  * One sign-in per spec file, reused as storage state.

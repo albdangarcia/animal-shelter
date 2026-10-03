@@ -1,11 +1,10 @@
 import { test, expect } from "@playwright/test";
-import os from "node:os";
-import path from "node:path";
 import { bootstrapAdminAuth, firstRowIdByQuery } from "../support/note-audit";
 import {
   MY_APPLICATIONS_PATH,
   SEEDED_USER_PASSWORD,
   signIn,
+  storageStatePathFor,
 } from "../support/applications";
 
 // The repair for an account linked to the wrong person's record.
@@ -19,7 +18,7 @@ import {
 // Admin-only on purpose: PERSONS_MANAGE covers keeping the record, not
 // deciding whose account it is, and nothing in the app puts the link back.
 
-const storageState = path.join(os.tmpdir(), "account-unlink-admin.state.json");
+const storageState = storageStatePathFor("account-unlink-admin.state.json");
 
 // No retries, unlike the CI default. The unlink is irreversible and the seed is
 // applied once per run (playwright/global-setup.ts), so a retry starts against a

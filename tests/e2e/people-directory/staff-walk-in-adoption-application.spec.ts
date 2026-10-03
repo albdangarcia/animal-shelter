@@ -1,14 +1,12 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
-import os from "node:os";
-import path from "node:path";
+import { storageStatePathFor } from "../support/applications";
 
 const adminPassword = process.env.ADMIN_PASSWORD;
 
 // One sign-in for the whole file, reused as storage state. The better-auth
 // sign-in endpoint rate-limits after a few hits inside a minute, and this spec
 // has more cases than that budget — logging in per test would flake.
-const storageStatePath = path.join(
-  os.tmpdir(),
+const storageStatePath = storageStatePathFor(
   "walk-in-adoption-admin.state.json",
 );
 
