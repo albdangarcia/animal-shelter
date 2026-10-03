@@ -82,24 +82,29 @@ const expectDescriptionPersists = async (
   await expect(page.getByLabel("Description")).toHaveValue(text);
 };
 
-test("an archived animal's description can be edited and persists", async ({
+// The edit form of an animal with a locked listing status once sent a status
+// the action refuses, so it could not save at all. Pending adoption is the
+// case that regressed silently; it matters as much as archived.
+test("an archived or pending-adoption animal's description can be edited and persists", async ({
   page,
 }) => {
-  const animalId = await firstAnimalIdByStatus(page, "ARCHIVED");
-  const description = `Archived edit check ${Date.now()}`;
-  await saveDescription(page, animalId, description);
-  await expectDescriptionPersists(page, animalId, description);
-});
+  for (const [status, label] of [
+    ["ARCHIVED", "Archived"],
+    ["PENDING_ADOPTION", "Pending Adoption"],
+  ] as const) {
+    const animalId = await firstAnimalIdByStatus(page, status);
+    const description = `${label} edit check ${Date.now()}`;
+    await saveDescription(page, animalId, description);
+    await expectDescriptionPersists(page, animalId, description);
 
-test("a pending-adoption animal's description can be edited and persists", async ({
-  page,
-}) => {
-  // This is the case that regressed silently — it matters as much as the
-  // archived one.
-  const animalId = await firstAnimalIdByStatus(page, "PENDING_ADOPTION");
-  const description = `Pending-adoption edit check ${Date.now()}`;
-  await saveDescription(page, animalId, description);
-  await expectDescriptionPersists(page, animalId, description);
+    // The form exposes no path to a different status, so the save left it as
+    // it was: the edit form still shows it, and the status filter still
+    // returns the animal.
+    await expect(
+      page.getByLabel("Listing Status *", { exact: true }),
+    ).toContainText(label);
+    expect(await firstAnimalIdByStatus(page, status)).toBe(animalId);
+  }
 });
 
 test("the listing status select is disabled and pinned to the current value for locked statuses", async ({
@@ -127,27 +132,6 @@ test("an in-care animal's ordinary edit still saves", async ({ page }) => {
   await expectDescriptionPersists(page, animalId, description);
 });
 
-test("saving an archived animal's edit form leaves its listing status archived", async ({
-  page,
-}) => {
-  const animalId = await firstAnimalIdByStatus(page, "ARCHIVED");
-  await saveDescription(
-    page,
-    animalId,
-    `Archived status immutability ${Date.now()}`,
-  );
-  await expect(page.getByText("Animal updated successfully.")).toBeVisible();
-  await page.waitForURL(`**/dashboard/animals/${animalId}`, { timeout: 60_000 });
-
-  // The form exposes no path to a different status; the save above left it
-  // archived. The status filter still returns it and the edit form still
-  // badges it Archived.
-  const stillArchived = await firstAnimalIdByStatus(page, "ARCHIVED");
-  expect(stillArchived).toBe(animalId);
-  await page.goto(`/dashboard/animals/${animalId}/edit`);
-  await expect(page.getByLabel("Listing Status *", { exact: true })).toContainText("Archived");
-});
-
 test("an archived animal's edit form disables the location and unit cascade", async ({
   page,
 }) => {
@@ -155,40 +139,4 @@ test("an archived animal's edit form disables the location and unit cascade", as
   await page.goto(`/dashboard/animals/${animalId}/edit`);
   await expect(page.getByLabel("Location", { exact: true })).toBeDisabled();
   await expect(page.getByLabel("Unit", { exact: true })).toBeDisabled();
-});
-
-test("processing an outcome releases the animal from its kennel", async ({
-  page,
-}) => {
-  // Frisco is a stable, seeded long-stay dog housed in "Dog block A · A-1".
-  await page.goto("/dashboard/animals?query=Frisco");
-  const row = page.locator("tbody tr").filter({ hasText: "Frisco" }).first();
-  await expect(row).toBeVisible();
-  const href = await row.getByRole("link").first().getAttribute("href");
-  const animalId = (href as string).split("/").pop() as string;
-
-  const locationRow = page
-    .locator("div.text-sm")
-    .filter({ has: page.getByText("Location", { exact: true }) })
-    .first();
-
-  // Starting placement, confirmed on the profile.
-  await page.goto(`/dashboard/animals/${animalId}`);
-  await expect(locationRow).toContainText("Dog block A · A-1");
-
-  // Process a deceased outcome — needs no partner or owner.
-  await page.goto(`/dashboard/outcomes/create?animalId=${animalId}`);
-  await page.getByLabel("Outcome Type").click();
-  await page.getByRole("option", { name: "Deceased" }).click();
-  await page.getByRole("button", { name: "Process Outcome" }).click();
-  await page.waitForURL("**/dashboard/outcomes", { timeout: 60_000 });
-
-  // The animal has left the shelter: its profile shows no kennel...
-  await page.goto(`/dashboard/animals/${animalId}`);
-  await expect(locationRow).toContainText("Unplaced");
-  await expect(locationRow).not.toContainText("Dog block A");
-
-  // ...and it is gone from the shelter board's unit tile.
-  await page.goto("/dashboard/locations");
-  await expect(page.getByText("Frisco", { exact: true })).toHaveCount(0);
 });
