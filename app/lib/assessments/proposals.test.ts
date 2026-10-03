@@ -267,6 +267,27 @@ test("state table: deleted source — nothing to suggest, nothing superseded", (
   const summary = summarize(here, [assigned(CATS, "here")], [], true);
   assert.deepEqual(summary.suggestions, []);
   assert.deepEqual(summary.superseded, []);
+
+  // Unassigned, or cited elsewhere: live, it would suggest adding or citing.
+  for (const assignments of [[], [assigned(CATS, "elsewhere")]]) {
+    assert.deepEqual(summarize(here, assignments, [], true).suggestions, []);
+  }
+
+  // A deleted page's own overtaken finding isn't shown either. Passing it
+  // among the live assessments makes the deleted flag the only thing that
+  // hides it.
+  const overtaken = catTest("overtaken", "Not cat-safe", 2);
+  const newer = catTest("newer", "Cat-safe", 10);
+  assert.deepEqual(
+    summarizeAssessmentCharacteristics({
+      assessment: overtaken,
+      deleted: true,
+      assignments: [],
+      liveAssessments: [overtaken, newer],
+      timezone: SHELTER_TIMEZONE,
+    }).superseded,
+    [],
+  );
 });
 
 test("state table: restored — resumes reading as its citation now stands", () => {
@@ -329,4 +350,45 @@ test("state table: catalog rename — matched by id; only the shown name changes
   // Cited elsewhere: the suggestion carries the catalog's current name.
   const [s] = summarize(here, [assigned(CATS, "elsewhere")]).suggestions;
   assert.equal(s.characteristicName, "Cat-friendly");
+});
+
+test("a template with no proposing fields has no suggestions and nothing superseded", () => {
+  // Like Handling Sensitivity: a select with a concerning answer, and a
+  // free-text note, neither pointing at a trait.
+  const handling: RecordedAssessment = {
+    id: "handling",
+    templateName: "Handling Sensitivity",
+    observedAt: day(5),
+    fields: [
+      {
+        key: "overall",
+        label: "Overall handling sensitivity",
+        concerningValues: ["High"],
+        proposesOnValues: [],
+        proposes: null,
+      },
+      {
+        key: "notes",
+        label: "Notes",
+        concerningValues: [],
+        proposesOnValues: [],
+        proposes: null,
+      },
+    ],
+    answers: [
+      { fieldKey: "overall", value: "High" },
+      { fieldKey: "notes", value: "Good with cats" },
+    ],
+  };
+  // The animal's other assessments do propose, contradict and supersede.
+  const overtaken = catTest("overtaken", "Not cat-safe", 2);
+  const affirming = catTest("affirming", "Cat-safe", 9);
+
+  const summary = summarize(
+    handling,
+    [assigned(CATS, "affirming")],
+    [overtaken, affirming],
+  );
+  assert.deepEqual(summary.suggestions, []);
+  assert.deepEqual(summary.superseded, []);
 });

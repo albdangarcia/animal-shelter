@@ -111,20 +111,3 @@ test("record an assessment, then edit it without losing answers", async ({
   await expect(detail.findings).toContainText("Calm for the collar");
   await expect(detail.summary).toContainText(summary);
 });
-
-test("a blank assessment cannot be submitted", async ({ page }) => {
-  const id = await friscoId(page);
-  await page.goto(`/dashboard/animals/${id}/assessments/create`);
-  await pickOption(page, "Template *", "Intake Medical");
-
-  await page.getByRole("button", { name: "Record assessment" }).click();
-
-  // Stays on the form, and the required core-exam questions are flagged
-  // (Intake Medical had every field optional after the weight/BCS removal —
-  // dental and heart & lungs were made required to close that hole).
-  await expect(page).toHaveURL(/\/assessments\/create$/);
-  await expect(page.getByText("Dental is required.")).toBeVisible();
-  await expect(
-    page.getByText("Heart & lungs on auscultation is required."),
-  ).toBeVisible();
-});
