@@ -94,9 +94,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # resolveDatabaseUrl() gives this priority in both pooled and direct
-      # modes. It is the e2e container's URL, not test:db's (55600 locally):
+      # modes. It is the e2e container's URL, not test:db's (25600 locally):
       # this job has its own VM, so the two cannot collide here.
-      PLAYWRIGHT_DATABASE_URL: postgresql://postgres:mysecretpassword@127.0.0.1:55432/postgres
+      PLAYWRIGHT_DATABASE_URL: postgresql://postgres:mysecretpassword@127.0.0.1:25400/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -138,7 +138,7 @@ jobs:
       ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
       # resolveDatabaseUrl() gives this priority in both pooled and direct
       # modes, and it matches what playwright/env.ts computes on its own.
-      PLAYWRIGHT_DATABASE_URL: postgresql://postgres:mysecretpassword@127.0.0.1:55432/postgres
+      PLAYWRIGHT_DATABASE_URL: postgresql://postgres:mysecretpassword@127.0.0.1:25400/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
