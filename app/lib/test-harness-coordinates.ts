@@ -100,10 +100,14 @@ export function resolveHarnessCoordinates(
     );
   };
 
-  // 55432 stays for slot 0: CI's jobs hard-code it.
+  // Below 32768, where Linux's ephemeral range starts (macOS's starts at
+  // 49152): an outgoing connection can be handed any port in that range, and
+  // a bind to that port then fails with "address already in use". test:db
+  // starts at 25600, not 25500, to stay off 25565, a common server default.
+  // CI's jobs hard-code the slot-0 e2e port.
   const e2ePostgresPort =
-    env.PLAYWRIGHT_POSTGRES_PORT || String(slot === 0 ? 55432 : 55500 + slot);
-  const testDbPostgresPort = String(55600 + slot);
+    env.PLAYWRIGHT_POSTGRES_PORT || String(25400 + slot);
+  const testDbPostgresPort = String(25600 + slot);
 
   return {
     slot,

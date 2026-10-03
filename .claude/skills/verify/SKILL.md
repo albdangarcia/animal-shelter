@@ -24,12 +24,12 @@ description: How to boot this app locally and drive it end-to-end for verificati
 
 ## E2E database isolation (do not break this)
 
-`npm run e2e` must use its docker-compose container (port 55432 at slot 0, which is
-the main checkout or `E2E_SLOT=0`; 55500 + slot otherwise), never the dev database.
+`npm run e2e` must use its docker-compose container (port 25400 + slot: 25400 in
+the main checkout or with `E2E_SLOT=0`), never the dev database.
 Verify from the setup log. Its `E2E harness: slot ..., compose project ..., Postgres ...`
 line, printed after the web server's first lines, names the port to expect:
 
-- **Correct:** `Datasource "db": ... at "127.0.0.1:55432"` (in the main checkout) followed by
+- **Correct:** `Datasource "db": ... at "127.0.0.1:25400"` (in the main checkout) followed by
   `🚀 Your database is now in sync with your Prisma schema`.
 - **Wrong:** `The database is already in sync with the Prisma schema` immediately after
   `DROP SCHEMA / CREATE SCHEMA`. That is impossible for a freshly-wiped database and

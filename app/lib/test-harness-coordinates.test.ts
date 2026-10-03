@@ -26,21 +26,21 @@ const worktree = {
   env: {},
 };
 
-test("the main checkout keeps the original e2e project and Postgres port", () => {
+test("the main checkout keeps the bare project names and the base ports", () => {
   assert.deepEqual(resolveHarnessCoordinates(mainCheckout), {
     slot: 0,
     slotSource: "main checkout",
     postgres: defaultPostgres,
     e2e: {
       projectName: "animal-shelter-playwright",
-      postgresPort: "55432",
+      postgresPort: "25400",
       appPort: "3100",
-      databaseUrl: url("55432"),
+      databaseUrl: url("25400"),
     },
     testDb: {
       projectName: "animal-shelter-db-tests",
-      postgresPort: "55600",
-      databaseUrl: url("55600"),
+      postgresPort: "25600",
+      databaseUrl: url("25600"),
     },
   });
 });
@@ -53,14 +53,14 @@ test("a worktree's slot and project names come from the hash of its path", () =>
     postgres: defaultPostgres,
     e2e: {
       projectName: "animal-shelter-playwright-b42edc82",
-      postgresPort: "55537",
+      postgresPort: "25437",
       appPort: "3137",
-      databaseUrl: url("55537"),
+      databaseUrl: url("25437"),
     },
     testDb: {
       projectName: "animal-shelter-db-tests-b42edc82",
-      postgresPort: "55637",
-      databaseUrl: url("55637"),
+      postgresPort: "25637",
+      databaseUrl: url("25637"),
     },
   });
 });
@@ -108,14 +108,14 @@ test("E2E_SLOT=0 gives a worktree the main checkout's ports but its own project 
       postgres: defaultPostgres,
       e2e: {
         projectName: "animal-shelter-playwright-b42edc82",
-        postgresPort: "55432",
+        postgresPort: "25400",
         appPort: "3100",
-        databaseUrl: url("55432"),
+        databaseUrl: url("25400"),
       },
       testDb: {
         projectName: "animal-shelter-db-tests-b42edc82",
-        postgresPort: "55600",
-        databaseUrl: url("55600"),
+        postgresPort: "25600",
+        databaseUrl: url("25600"),
       },
     },
   );
@@ -142,10 +142,28 @@ test("E2E_SLOT picks the ports and keeps the path hash in the project names", ()
 
   assert.equal(coordinates.slot, 7);
   assert.equal(coordinates.e2e.projectName, `animal-shelter-playwright-${id}`);
-  assert.equal(coordinates.e2e.postgresPort, "55507");
+  assert.equal(coordinates.e2e.postgresPort, "25407");
   assert.equal(coordinates.e2e.appPort, "3107");
   assert.equal(coordinates.testDb.projectName, `animal-shelter-db-tests-${id}`);
-  assert.equal(coordinates.testDb.postgresPort, "55607");
+  assert.equal(coordinates.testDb.postgresPort, "25607");
+});
+
+test("every slot's ports sit below the ephemeral range and never overlap", () => {
+  // An outgoing connection can take any port from 32768 up on Linux (49152 on
+  // macOS), and a later bind to it fails, which is how CI's e2e job once lost
+  // 55432 to one.
+  const ports = new Set<string>();
+  for (let slot = 0; slot <= 99; slot++) {
+    const { e2e, testDb } = resolveHarnessCoordinates({
+      ...worktree,
+      env: { E2E_SLOT: String(slot) },
+    });
+    for (const port of [e2e.postgresPort, e2e.appPort, testDb.postgresPort]) {
+      assert.ok(Number(port) < 32768, `slot ${slot}: port ${port}`);
+      assert.ok(!ports.has(port), `slot ${slot}: port ${port} reused`);
+      ports.add(port);
+    }
+  }
 });
 
 test("an empty E2E_SLOT is ignored", () => {
@@ -178,7 +196,7 @@ test("empty port overrides are ignored", () => {
     env: { PLAYWRIGHT_POSTGRES_PORT: "", PLAYWRIGHT_APP_PORT: "" },
   });
 
-  assert.equal(coordinates.e2e.postgresPort, "55432");
+  assert.equal(coordinates.e2e.postgresPort, "25400");
   assert.equal(coordinates.e2e.appPort, "3100");
 });
 
@@ -192,23 +210,23 @@ test("PLAYWRIGHT_POSTGRES_PORT and PLAYWRIGHT_APP_PORT override e2e only", () =>
   assert.equal(coordinates.e2e.appPort, "4000");
   assert.equal(
     coordinates.testDb.postgresPort,
-    String(55600 + coordinates.slot),
+    String(25600 + coordinates.slot),
   );
 });
 
 test("PLAYWRIGHT_DATABASE_URL points both commands elsewhere", () => {
   const coordinates = resolveHarnessCoordinates({
     ...worktree,
-    env: { PLAYWRIGHT_DATABASE_URL: "postgresql://ci@127.0.0.1:55432/postgres" },
+    env: { PLAYWRIGHT_DATABASE_URL: "postgresql://ci@127.0.0.1:25400/postgres" },
   });
 
   assert.equal(
     coordinates.e2e.databaseUrl,
-    "postgresql://ci@127.0.0.1:55432/postgres",
+    "postgresql://ci@127.0.0.1:25400/postgres",
   );
   assert.equal(
     coordinates.testDb.databaseUrl,
-    "postgresql://ci@127.0.0.1:55432/postgres",
+    "postgresql://ci@127.0.0.1:25400/postgres",
   );
 });
 
@@ -221,8 +239,8 @@ test("an empty PLAYWRIGHT_DATABASE_URL is ignored", () => {
     env: { PLAYWRIGHT_DATABASE_URL: "" },
   });
 
-  assert.equal(coordinates.e2e.databaseUrl, url("55432"));
-  assert.equal(coordinates.testDb.databaseUrl, url("55600"));
+  assert.equal(coordinates.e2e.databaseUrl, url("25400"));
+  assert.equal(coordinates.testDb.databaseUrl, url("25600"));
 });
 
 test("empty Postgres credentials fall back to the compose file's defaults", () => {
@@ -234,7 +252,7 @@ test("empty Postgres credentials fall back to the compose file's defaults", () =
   });
 
   assert.deepEqual(coordinates.postgres, defaultPostgres);
-  assert.equal(coordinates.e2e.databaseUrl, url("55432"));
+  assert.equal(coordinates.e2e.databaseUrl, url("25400"));
 });
 
 test("Postgres credentials are used and URL-encoded", () => {
@@ -245,10 +263,10 @@ test("Postgres credentials are used and URL-encoded", () => {
 
   assert.equal(
     coordinates.e2e.databaseUrl,
-    "postgresql://shelter:p%40ss%3Aword@127.0.0.1:55432/e2e",
+    "postgresql://shelter:p%40ss%3Aword@127.0.0.1:25400/e2e",
   );
   assert.equal(
     coordinates.testDb.databaseUrl,
-    "postgresql://shelter:p%40ss%3Aword@127.0.0.1:55600/e2e",
+    "postgresql://shelter:p%40ss%3Aword@127.0.0.1:25600/e2e",
   );
 });
