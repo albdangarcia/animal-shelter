@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 /**
  * Mirrors the rebuilt detail page: the accent band paints immediately — it is
  * the top of the page and continues the nav's surface, so it must not arrive
- * late — with placeholders for the name, meta line, location and CTA, then the
+ * late — with placeholders for the name, meta line and CTA, then the
  * gallery and the hairline facts rows below.
  */
 const Loading = () => {
@@ -11,14 +11,23 @@ const Loading = () => {
     <>
       <section className="bg-organic-accent-100">
         <div className="mx-auto w-full max-w-6xl px-5 py-12 sm:px-8 sm:py-16 lg:px-14">
-          {/* Name at clamp(40px,6vw,76px), leading 0.94 */}
-          <Skeleton className="mb-2.5 h-[clamp(38px,5.7vw,72px)] w-[min(100%,320px)] rounded-[16px]" />
-          {/* Caprasimo meta line */}
-          <Skeleton className="mb-[18px] h-[26px] w-[min(100%,280px)] rounded-full" />
-          {/* Location */}
-          <Skeleton className="mb-7 h-[19px] w-40 rounded-full" />
+          {/* Use the same typography so 1lh follows the organic theme's line height. */}
+          <Skeleton className="mb-2.5 h-[1lh] font-display text-[clamp(40px,6vw,76px)] leading-[0.94] w-[min(100%,320px)] rounded-[16px]" />
+          {/* Breed, age and weight use the same line boxes and wrapping gap as
+              the loaded metadata. There is no location row on this page. */}
+          <div className="mb-[18px] flex flex-wrap items-center gap-2.5 font-display text-[22px] leading-[1.55]">
+            <Skeleton className="h-[1lh] w-[min(100%,248px)] rounded-full" />
+            <div className="inline-flex items-center gap-2.5">
+              <Skeleton className="size-[6px] rounded-full" />
+              <Skeleton className="h-[1lh] w-[77px] rounded-full" />
+            </div>
+            <div className="inline-flex items-center gap-2.5">
+              <Skeleton className="size-[6px] rounded-full" />
+              <Skeleton className="h-[1lh] w-[92px] rounded-full" />
+            </div>
+          </div>
           {/* Adopt CTA pill — 13px 26px around 15px text */}
-          <Skeleton className="h-[44px] w-44 rounded-full" />
+          <Skeleton className="h-[calc(1lh+26px)] w-44 font-display text-[15px] leading-[1.2] rounded-full" />
         </div>
       </section>
 
