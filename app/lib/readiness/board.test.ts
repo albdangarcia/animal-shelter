@@ -195,6 +195,7 @@ test("filters narrow by species, location and stage together", () => {
 
   assert.deepEqual(names({ species: ["Cat"] }), ["Leo"]);
   assert.deepEqual(names({ locations: [FOSTER_LOCATION] }), ["Juniper"]);
+  assert.deepEqual(names({ locations: [UNPLACED_LOCATION] }), ["Leo"]);
   assert.deepEqual(names({ locations: ["loc-dogs", UNPLACED_LOCATION] }), ["Frisco", "Leo"]);
   assert.deepEqual(names({ stages: ["DRAFT"] }), ["Leo"]);
   assert.deepEqual(names({ species: ["Dog"], stages: ["DRAFT"] }), []);
