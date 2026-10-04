@@ -4,7 +4,6 @@ import { cuidSchema } from "../zod-schemas/common.schemas";
 import prisma from "@/app/lib/prisma";
 import { revalidatePath } from "next/cache";
 import {
-  AnimalListingStatus,
   ApplicationSource,
   ApplicationStatus,
 } from "@/prisma/generated/enums";
@@ -14,7 +13,7 @@ import {
   REACTIVATION_BLOCKING_STATUSES,
   formatStatusList,
 } from "../utils/application-status";
-import { ConflictError } from "../utils/errors";
+import { ConflictError, NotFoundError } from "../utils/errors";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
 import {
   deriveApplicationStatus,
@@ -43,6 +42,11 @@ import { ActionResult } from "../types";
 import { z } from "zod";
 import { isOwnedByUser } from "../auth/ownership";
 import { syncPersonToUser } from "../services/user-person-sync";
+import {
+  checkWithdrawal,
+  recordWithdrawal,
+  type WithdrawableApplication,
+} from "../services/application-withdrawal";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 type MyAdoptionAppResult = FormResult<MyAdoptionAppFormInput>;
@@ -198,16 +202,14 @@ const _withdrawMyAdoptionApplication = async (
   }
   const validatedApplicationId = parsedApplicationId.data;
 
-  // Declare 'application' here to make it accessible in the transaction block
-  let application;
-
   // Verify ownership and status
+  let withdrawable: WithdrawableApplication;
   try {
-    application = await prisma.adoptionApplication.findUnique({
-      where: { id: validatedApplicationId },
-      select: { applicantId: true, ...DERIVATION_APPLICATION_SELECT },
-    });
+    withdrawable = await checkWithdrawal(validatedApplicationId, user.personId);
   } catch (error) {
+    if (error instanceof NotFoundError || error instanceof ConflictError) {
+      return { success: false, message: error.message };
+    }
     console.error(
       "Error verifying application ownership for withdrawal:",
       error,
@@ -219,68 +221,11 @@ const _withdrawMyAdoptionApplication = async (
     };
   }
 
-  if (!isOwnedByUser(application, user.personId)) {
-    return { success: false, message: "Adoption Application not found." };
-  }
-
-  const nonWithdrawableStatuses: EffectiveApplicationStatus[] = [
-    EffectiveApplicationStatus.ADOPTED,
-    EffectiveApplicationStatus.WITHDRAWN,
-    EffectiveApplicationStatus.REJECTED,
-    // Nothing left to withdraw from: the animal has already left the shelter.
-    EffectiveApplicationStatus.CLOSED,
-  ];
-
-  // What the application effectively is, not what the column holds.
-  const currentStatus = await effectiveApplicationStatus(application);
-
-  if (nonWithdrawableStatuses.includes(currentStatus)) {
-    return {
-      success: false,
-      message: `Cannot withdraw application. Its status is currently "${formatSingleEnumOption(currentStatus)}".`,
-    };
-  }
-
   // Update the application status and create a history record
   try {
-    await prisma.$transaction(async (tx) => {
-      // The read above only produces the friendly error. Behind the animal
-      // lock no outcome can adopt or close the application before this
-      // transaction writes.
-      const statusNow = await effectiveStatusBehindLock(tx, application);
-      if (!statusNow || nonWithdrawableStatuses.includes(statusNow)) {
-        throw new ConflictError(
-          `Cannot withdraw application. Its status is currently "${formatSingleEnumOption(statusNow ?? currentStatus)}".`,
-        );
-      }
-
-      // Update the application's status to WITHDRAWN
-      await tx.adoptionApplication.update({
-        where: { id: validatedApplicationId },
-        data: { status: ApplicationStatus.WITHDRAWN },
-      });
-
-      // Create the history record
-      await tx.applicationStatusHistory.create({
-        data: {
-          applicationId: validatedApplicationId,
-          status: ApplicationStatus.WITHDRAWN,
-          statusChangeReason: "Application withdrawn by user.",
-          changedById: user.personId,
-        },
-      });
-
-      if (statusNow === ApplicationStatus.APPROVED) {
-        // it will only update if the animal is PENDING_ADOPTION
-        await tx.animal.updateMany({
-          where: {
-            id: application.animalId,
-            listingStatus: AnimalListingStatus.PENDING_ADOPTION,
-          },
-          data: { listingStatus: AnimalListingStatus.PUBLISHED },
-        });
-      }
-    });
+    await prisma.$transaction((tx) =>
+      recordWithdrawal(tx, withdrawable, user.personId),
+    );
   } catch (error) {
     if (error instanceof ConflictError) {
       return { success: false, message: error.message };
