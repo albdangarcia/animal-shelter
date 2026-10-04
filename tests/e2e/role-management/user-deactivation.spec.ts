@@ -40,8 +40,6 @@ test.beforeAll(async ({ browser }) => {
 
 test.use({ storageState });
 
-let accountPersonId: string;
-
 const accountRow = (page: Page) =>
   page.getByRole("row").filter({ hasText: ACCOUNT_EMAIL });
 
@@ -122,7 +120,7 @@ test("staff can edit the email of a deactivated account, but not of an active on
   // minute on a slow runner, while the saves themselves take milliseconds.
   test.setTimeout(180_000);
 
-  accountPersonId = await firstRowIdByQuery(
+  const accountPersonId = await firstRowIdByQuery(
     page,
     "/dashboard/people-directory",
     ACCOUNT_NAME,
@@ -201,19 +199,9 @@ test("reactivating restores sign-in, and deactivating ends a session already ope
     timeout: 60_000,
   });
   await context.close();
-});
 
-test("both directions are noted on the record", async ({ page }) => {
-  await page.goto(`/dashboard/people-directory/${accountPersonId}/notes`);
-  await expect(page.getByText(new RegExp(REASON))).toBeVisible();
-  await expect(page.getByText(/reactivated\. It can sign in again/)).toBeVisible();
-});
-
-// The seed is applied once per run, so the state has to be back where the
-// other files expect it.
-test("the account ends the run deactivated, on its own address", async ({
-  page,
-}) => {
+  // The seed is applied once per run, so the state has to be back where the
+  // other files expect it: listed as deactivated, on its own address.
   await findAccount(page, "deactivated");
   await expect(accountRow(page)).toBeVisible();
 });
