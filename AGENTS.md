@@ -24,6 +24,8 @@ There is no component-test layer yet, so widget behaviour (pickers, dialogs, fil
 
 **For a new server rule**, write database tests for every case, plus at most one browser test showing it on screen. The model to copy is outcome reversal: `prisma/outcome-reversal.test.ts` covers every rule (refusals, locks, units, listings, applications), and `tests/e2e/animals/outcome-reversal.spec.ts` has two journeys.
 
+**Database tests drive auth-free modules.** A database test must not import, even indirectly, `@/auth`, `app/lib/auth/session`, or anything that imports `RequirePermission` or `withAuthenticatedUser`: that builds the auth setup, which fails in CI. Put the logic in a module with no auth or `next/*` imports (a service in `app/lib/services/`, or a query module beside its `*.data.ts`), and let the action or `*.data.ts` file wrap it. Run one file with `npm run test:db -- prisma/<file>.test.ts`.
+
 These rules are for new tests. Do not delete or move existing browser tests as a side effect of other work.
 
 ## Running tests locally
