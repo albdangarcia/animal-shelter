@@ -135,6 +135,8 @@ export const getPlaywrightEnv = (): NodeJS.ProcessEnv => {
     PLAYWRIGHT_POSTGRES_PORT: E2E_POSTGRES_PORT,
     COMPOSE_PROJECT_NAME: E2E_DOCKER_PROJECT_NAME,
     PLAYWRIGHT_NEXT_DIST_DIR: E2E_NEXT_DIST_DIR,
+    // Images skip /_next/image on the e2e server; next.config.ts says why.
+    PLAYWRIGHT_UNOPTIMIZED_IMAGES: "1",
     BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN ?? "",
     NEXT_TELEMETRY_DISABLED: "1",
   };
