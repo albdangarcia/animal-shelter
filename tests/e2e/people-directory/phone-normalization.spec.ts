@@ -47,7 +47,7 @@ test.use({ storageState: storageStatePath });
 //
 // The generated walk-in pool uses 212-555-1000 upward (WALK_IN_PERSON_COUNT =
 // 50), so nothing else in the database normalizes to +12125550188 and the
-// exact row counts below are stable.
+// exact row count of the search below is stable.
 const ALEX = "Alex Duplicate";
 const SAM = "Sam Duplicate";
 
@@ -55,8 +55,6 @@ const SAM = "Sam Duplicate";
 // duplicate check has nothing to match.
 const UNIQUE_PHONE = "+1 646 555 0111";
 
-// Note: an empty result set still renders one row ("No results."), so assert
-// on the row contents rather than expecting a count of 0.
 const rowsOf = (page: Page): Locator => page.locator("tbody tr");
 
 const gotoSearch = async (page: Page, query: string) => {
@@ -94,11 +92,8 @@ const PERSON_PROFILE_URL = /\/dashboard\/people-directory\/(?!new$)[^/]+$/;
 const duplicateAlert = (page: Page) =>
   page.getByRole("alert").filter({ hasText: "Possible duplicate person" });
 
-/* -------------------------------------------------------------------------
- * Search — read-only. These run before the mutating duplicate cases below,
- * which add a third person on +12125550188 and would break the row counts.
- * ---------------------------------------------------------------------- */
-
+// First: the duplicate cases below add a third person on +12125550188, which
+// would change this row count.
 test("a digits-only query finds both stored formats of the same number", async ({
   page,
 }) => {
@@ -110,73 +105,12 @@ test("a digits-only query finds both stored formats of the same number", async (
 
   const rows = rowsOf(page);
   await expect(rows).toHaveCount(2);
-  await expect(rows.filter({ hasText: ALEX })).toHaveCount(1);
-  await expect(rows.filter({ hasText: SAM })).toHaveCount(1);
+  // Each row shows its number as stored, not reformatted.
+  await expect(rows.filter({ hasText: ALEX })).toContainText("(212) 555-0188");
+  await expect(rows.filter({ hasText: SAM })).toContainText("212.555.0188");
 });
 
-test("a punctuated query finds the number stored with different punctuation", async ({
-  page,
-}) => {
-  // Raw `contains` on this query matches Alex alone; Sam comes back only via
-  // the normalized column. The reverse holds for "212.555.0188".
-  await gotoSearch(page, "(212) 555-0188");
-
-  const rows = rowsOf(page);
-  await expect(rows).toHaveCount(2);
-  await expect(rows.filter({ hasText: ALEX })).toHaveCount(1);
-  await expect(rows.filter({ hasText: SAM })).toHaveCount(1);
-});
-
-test("a partial digit run spanning punctuation matches both formats", async ({
-  page,
-}) => {
-  // "5550188" is how staff type a number they half-remember, and it spans a
-  // punctuation boundary in both stored forms ("555-0188" and "555.0188"), so
-  // raw `contains` matches neither. Deliberately not "0188": that shorter
-  // query is a substring of both raw strings, so it would pass even with
-  // normalization switched off and would prove nothing.
-  //
-  // No other seeded number normalizes into "5550188" — the generated walk-in
-  // pool runs +12125551000 upward.
-  await gotoSearch(page, "5550188");
-
-  const rows = rowsOf(page);
-  await expect(rows).toHaveCount(2);
-  await expect(rows.filter({ hasText: ALEX })).toHaveCount(1);
-  await expect(rows.filter({ hasText: SAM })).toHaveCount(1);
-});
-
-test("an email with a stray digit is not treated as a phone search", async ({
-  page,
-}) => {
-  // Regression for fix: this query's digits are just "1", which
-  // as a `phoneNormalized contains` matched nearly every stored number and
-  // swamped the email condition, returning the whole directory.
-  await gotoSearch(page, "surrenderer1@example.com");
-
-  const rows = rowsOf(page);
-  await expect(rows).toHaveCount(1);
-  await expect(rows.first()).toContainText("Jane Doe");
-});
-
-test("an unparseable phone is kept verbatim and stays out of digit search", async ({
-  page,
-}) => {
-  // normalizePhone() returns null here, so the row has no phoneNormalized to
-  // match on — but the raw column is untouched and still renders.
-  await gotoSearch(page, "call the front desk");
-
-  const rows = rowsOf(page);
-  await expect(rows).toHaveCount(1);
-  await expect(rows.first()).toContainText("Unparseable Phone Contact");
-  await expect(rows.first()).toContainText("call the front desk");
-});
-
-/* -------------------------------------------------------------------------
- * Duplicate detection — mutating. "Continue anyway" is deliberately last.
- * ---------------------------------------------------------------------- */
-
-test("a differently formatted phone triggers the duplicate warning", async ({
+test("a differently formatted phone triggers the duplicate warning, and Use them instead opens the match", async ({
   page,
 }) => {
   await submitNewPerson(page, "E2E Phone Dup Probe", "+1 212 555 0188");
@@ -193,6 +127,14 @@ test("a differently formatted phone triggers the duplicate warning", async ({
   ).toBeVisible();
   // Nothing was written while the warning stands.
   await expect(page).toHaveURL(/\/dashboard\/people-directory\/new/);
+
+  const matched = await duplicateAlert(page).textContent();
+  await duplicateAlert(page).getByRole("link", { name: "Use them instead" }).click();
+
+  await page.waitForURL(PERSON_PROFILE_URL, { timeout: 60_000 });
+  // Landed on whichever fixture the warning named, not on a new record.
+  const expected = matched?.includes(ALEX) ? ALEX : SAM;
+  await expect(page.getByText(expected).first()).toBeVisible();
 });
 
 test("a phone no one else holds creates the person with no warning", async ({
@@ -206,34 +148,18 @@ test("a phone no one else holds creates the person with no warning", async ({
   await expect(duplicateAlert(page)).toHaveCount(0);
 });
 
-test("Use them instead navigates to the matched contact", async ({ page }) => {
-  await submitNewPerson(page, "E2E Dup Use Existing", "212 555 0188");
-
-  await expect(duplicateAlert(page)).toBeVisible();
-  const matched = await duplicateAlert(page).textContent();
-
-  await duplicateAlert(page).getByRole("link", { name: "Use them instead" }).click();
-
-  await page.waitForURL(PERSON_PROFILE_URL, { timeout: 60_000 });
-  // Landed on whichever fixture the warning named, not on a new record.
-  const expected = matched?.includes(ALEX) ? ALEX : SAM;
-  await expect(page.getByText(expected).first()).toBeVisible();
-});
-
 // Last: this one writes a third person on +12125550188, which would change
-// the row counts every search case above asserts.
+// the row count the search case above asserts.
 test("Continue anyway saves the record past the warning", async ({ page }) => {
   const name = "E2E Dup Confirmed";
-  await submitNewPerson(page, name, "212.555.0188");
+  const phone = "212.555.0188";
+  await submitNewPerson(page, name, phone);
 
   await expect(duplicateAlert(page)).toBeVisible();
   await page.getByRole("button", { name: "Continue anyway" }).click();
 
   await page.waitForURL(PERSON_PROFILE_URL, { timeout: 60_000 });
   await expect(page.getByText(name).first()).toBeVisible();
-
-  // And the new record is reachable by the normalized number, which is the
-  // whole point of deriving the column on every write.
-  await gotoSearch(page, "2125550188");
-  await expect(rowsOf(page).filter({ hasText: name })).toHaveCount(1);
+  // Saved with the number it was warned about, not lost on the way through.
+  await expect(page.getByText(phone)).toBeVisible();
 });

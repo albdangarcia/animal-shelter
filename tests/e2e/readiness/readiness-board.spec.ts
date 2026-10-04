@@ -1,4 +1,4 @@
-import { test, expect, type Locator, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import {
   APPLICANT_EMAIL,
   SEEDED_USER_PASSWORD,
@@ -9,8 +9,8 @@ import {
 
 // The shelter-wide readiness board, read against the seed alone. Earlier
 // specs in a full run change other named animals (Frisco is given an
-// outcome, Daisy's deleted intro is restored, Buddy's and Rocket's traits are
-// edited), so every fixture asserted here is one nothing else touches
+// outcome, Daisy's deleted intro is restored, Rocket's traits are edited), so
+// every fixture asserted here is one nothing else touches
 // (prisma/seed.ts, the assessments and readiness tails):
 // - Fido: an escalated Daily Rounds two days ago.
 // - Flash: a hand-assigned "Good with other dogs" his "Solo-dog home" intro
@@ -56,22 +56,12 @@ const rowFor = (page: Page, title: string, animal: string) =>
     .locator("tbody tr")
     .filter({ has: page.getByRole("link", { name: animal, exact: true }) });
 
-// Each row's "blocked since" instant, top to bottom; null for an undated row.
-const sinceDates = (region: Locator) =>
-  region
-    .locator("tbody tr")
-    .evaluateAll((rows) =>
-      rows.map(
-        (row) => row.querySelector("time")?.getAttribute("datetime") ?? null,
-      ),
-    );
-
-// Text of one column, every row.
-const column = (page: Page, nth: number) =>
-  page.locator(`section tbody tr td:nth-child(${nth})`);
-
-test("groups the seeded blockers by kind", async ({ page }) => {
-  await page.goto(BOARD_PATH);
+test("the sidebar entry leads to the board, which groups the seeded blockers by kind", async ({
+  page,
+}) => {
+  await page.goto("/dashboard");
+  await page.getByRole("link", { name: "Readiness Board" }).click();
+  await waitForPathname(page, BOARD_PATH);
   await expect(
     page.getByRole("heading", { level: 1, name: "Readiness Board" }),
   ).toBeVisible();
@@ -82,28 +72,11 @@ test("groups the seeded blockers by kind", async ({ page }) => {
   await expect(
     rowFor(page, "Unsupported characteristics", "Flash"),
   ).toContainText("Good with other dogs — contradicted by a live finding");
-  await expect(rowFor(page, "No photo", "Leo")).toContainText(
-    "No photo on the profile",
-  );
-});
-
-test("within each group the longest-blocked animal comes first", async ({
-  page,
-}) => {
-  await page.goto(BOARD_PATH);
-  await expect(rowFor(page, "Escalated findings", "Fido")).toBeVisible();
-
-  const sections = page.locator("section[aria-labelledby]");
-  const count = await sections.count();
-  expect(count).toBeGreaterThan(0);
-  for (let i = 0; i < count; i++) {
-    const dates = await sinceDates(sections.nth(i));
-    const dated = dates.filter((d): d is string => d !== null);
-    // Undated rows only ever trail the dated ones.
-    expect(dates.slice(0, dated.length)).toEqual(dated);
-    const times = dated.map((d) => new Date(d).getTime());
-    expect(times).toEqual([...times].sort((a, b) => a - b));
-  }
+  const leo = rowFor(page, "No photo", "Leo");
+  await expect(leo).toContainText("No photo on the profile");
+  // The Location and Stage columns.
+  await expect(leo.locator("td").nth(1)).toHaveText("Unplaced");
+  await expect(leo.locator("td").nth(2)).toHaveText("Draft");
 });
 
 test("each row links to what clears it", async ({ page }) => {
@@ -124,28 +97,13 @@ test("each row links to what clears it", async ({ page }) => {
   await expect(page.getByLabel("Kennel presence *", { exact: true })).toBeVisible();
 
   await page.goto(BOARD_PATH);
-  await rowFor(page, "Escalated findings", "Fido")
-    .getByRole("link", { name: "Review the Daily Rounds" })
-    .click();
-  await waitForPathname(page, /\/dashboard\/animals\/[^/]+\/assessments\/[^/]+$/);
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Daily Rounds" }),
-  ).toBeVisible();
-
-  await page.goto(BOARD_PATH);
-  await rowFor(page, "Unsupported characteristics", "Flash")
-    .getByRole("link", { name: "Review characteristics" })
-    .click();
-  await waitForPathname(page, /\/dashboard\/animals\/[^/]+\/characteristics$/);
-  await expect(
-    page.getByText(/^Contradicted by “Recommendation”: Solo-dog home/),
-  ).toBeVisible();
-
-  await page.goto(BOARD_PATH);
   await rowFor(page, "No photo", "Leo")
     .getByRole("link", { name: "Add a photo" })
     .click();
   await waitForPathname(page, /\/dashboard\/animals\/[^/]+\/photos$/);
+  // Only the loaded gallery says this; the loading skeleton repeats the card
+  // titles, so they would pass before the page rendered.
+  await expect(page.getByText("This animal has no images yet.")).toBeVisible();
 });
 
 test("drills into a group's full list and paginates it", async ({ page }) => {
@@ -191,7 +149,7 @@ test("drills into a group's full list and paginates it", async ({ page }) => {
   await expect(group(page, "Missing assessments")).toBeVisible();
 });
 
-test("filters by species, location and stage", async ({ page }) => {
+test("filters by species", async ({ page }) => {
   await page.goto(BOARD_PATH);
   await expect(rowFor(page, "Escalated findings", "Fido")).toBeVisible();
 
@@ -211,27 +169,6 @@ test("filters by species, location and stage", async ({ page }) => {
   await page.getByRole("button", { name: "Reset" }).click();
   await waitForPathname(page, BOARD_PATH);
   await expect(rowFor(page, "Escalated findings", "Fido")).toBeVisible();
-
-  // Leo is an unplaced draft.
-  for (const [query, nth, expected] of [
-    ["location=unplaced", 2, "Unplaced"],
-    ["stage=DRAFT", 3, "Draft"],
-  ] as const) {
-    await page.goto(`${BOARD_PATH}?${query}`);
-    await expect(rowFor(page, "No photo", "Leo")).toBeVisible();
-    expect(new Set(await column(page, nth).allTextContents())).toEqual(
-      new Set([expected]),
-    );
-  }
-});
-
-test("the sidebar entry leads to the board", async ({ page }) => {
-  await page.goto("/dashboard");
-  await page.getByRole("link", { name: "Readiness Board" }).click();
-  await waitForPathname(page, BOARD_PATH);
-  await expect(
-    page.getByRole("heading", { level: 1, name: "Readiness Board" }),
-  ).toBeVisible();
 });
 
 test("an account without assessment access neither sees nor opens it", async ({

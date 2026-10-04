@@ -37,9 +37,16 @@ const makeActor = async () => {
  * The state the bug produces: one `Person` record, holding an address that is
  * really somebody else's, with that somebody else's account auto-linked to it.
  */
+const STREET = {
+  address: "12 Carmine St",
+  city: "New York",
+  state: "NY",
+  zipCode: "10014",
+};
+
 const makeMislink = async (label: string, email: string) => {
   const person = await prisma.person.create({
-    data: { name: label, email, phone: "212-555-0100" },
+    data: { name: label, email, phone: "212-555-0100", ...STREET },
     select: { id: true },
   });
   const user = await prisma.user.create({
@@ -71,8 +78,9 @@ test("the login moves to a new record and the history stays behind", async (t) =
   const { personId, userId } = await makeMislink("Bob Recordholder", email);
 
   // Something on the original record that must not travel with the account.
+  const NOTE_CONTENT = "Walked in about a terrier on Tuesday.";
   const note = await prisma.personNote.create({
-    data: { personId, content: "Walked in about a terrier on Tuesday." },
+    data: { personId, content: NOTE_CONTENT },
     select: { id: true },
   });
 
@@ -97,18 +105,28 @@ test("the login moves to a new record and the history stays behind", async (t) =
     await t.test("the original record is staff-editable again", async () => {
       const original = await prisma.person.findUniqueOrThrow({
         where: { id: personId },
-        select: { user: { select: { id: true } }, phone: true },
+        select: {
+          user: { select: { id: true } },
+          phone: true,
+          address: true,
+          city: true,
+          state: true,
+          zipCode: true,
+        },
       });
-      assert.equal(original.user, null);
-      assert.equal(original.phone, "212-555-0100", "its details are intact");
+      const { user, phone, ...street } = original;
+      assert.equal(user, null);
+      assert.equal(phone, "212-555-0100", "its details are intact");
+      assert.deepEqual(street, STREET, "its street address is intact");
     });
 
     await t.test("its notes stay on the record they were about", async () => {
       const stayed = await prisma.personNote.findUniqueOrThrow({
         where: { id: note.id },
-        select: { personId: true },
+        select: { personId: true, content: true },
       });
       assert.equal(stayed.personId, personId);
+      assert.equal(stayed.content, NOTE_CONTENT, "and say what they said");
     });
 
     await t.test("the replacement starts empty", async () => {
@@ -130,6 +148,32 @@ test("the login moves to a new record and the history stays behind", async (t) =
         assert.equal(notes.length, 1, `exactly one unlink note on ${id}`);
         assert.equal(notes[0].authorId, actor.personId);
       }
+    });
+
+    // What each note has to tell whoever reads it later: on the original,
+    // that the login moved and to whom; on the replacement, which record it
+    // was taken off.
+    await t.test("each note says what happened and where the login went", async () => {
+      const contentOn = async (id: string) =>
+        (
+          await prisma.personNote.findFirstOrThrow({
+            where: { personId: id, content: { contains: "unlink" } },
+            select: { content: true },
+          })
+        ).content;
+
+      const original = await contentOn(personId);
+      assert.match(original, /unlinked from this record and moved to a new person record/);
+      assert.ok(original.includes(email), "names the account");
+      assert.ok(original.includes('"Bob Recordholder Account"'), "names the new record");
+
+      const replacement = await contentOn(replacementPersonId);
+      assert.match(replacement, /^Created by unlinking a login account/);
+      assert.ok(replacement.includes(email), "names the account");
+      assert.ok(
+        replacement.includes('from the record of "Bob Recordholder"'),
+        "names the record it came from",
+      );
     });
 
     // The invariant at the top of note-audit: every note mutation writes one
