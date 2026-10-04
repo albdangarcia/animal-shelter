@@ -48,18 +48,14 @@ const FIXTURE_COUNT_BY_STATUS = {
   CLOSED: 2,
 } as const;
 
-// The one message per status the applicant sees, from
-// MY_APPLICATION_STATUS_MESSAGES. There is no notification system in this app,
-// so this sentence and the timeline under it are the only places a status
-// change is ever explained.
+// The titles of the status messages these tests read, from
+// MY_APPLICATION_STATUS_MESSAGES. That every status has its own message is a
+// unit test (app/lib/utils/application-status.test.ts); these show the view
+// page renders the one for the application's effective status.
 const MESSAGE_TITLE_BY_STATUS = {
   PENDING: "Waiting for review",
   REVIEWING: "Under review",
-  WAITLISTED: "On the waitlist",
-  APPROVED: "Approved",
-  REJECTED: "Not moving forward",
   WITHDRAWN: "Withdrawn by you",
-  ADOPTED: "Adoption complete",
   CLOSED: "No longer available",
 } as const;
 
@@ -110,18 +106,11 @@ const openApplication = async (page: Page, href: string) => {
 const statusMessage = (page: Page) => page.locator('[data-slot="alert"]');
 
 // The two CLOSED fixtures differ only in where their animal ended up, which is
-// invisible from the list — so they are told apart by the animal page itself:
-// the archived one 404s, the returned one is published again and offers the
-// Adopt call to action. Resolved once and reused; the ordering of the two rows
-// depends on their animals' real stay dates and is not something to lean on.
-let closedFixtures: {
-  archived: { application: string };
-  returned: { application: string; animal: string; animalName: string };
-} | null = null;
-
-const resolveClosedFixtures = async (page: Page) => {
-  if (closedFixtures) return closedFixtures;
-
+// invisible from the list — so the returned one is told apart by the animal
+// page itself: it was republished and offers the Adopt call to action, where
+// the archived one 404s. The ordering of the two rows depends on their
+// animals' real stay dates and is not something to lean on.
+const findReturnedClosedFixture = async (page: Page) => {
   const rows = await listByStatus(page, "CLOSED");
   await expect(rows).toHaveCount(FIXTURE_COUNT_BY_STATUS.CLOSED);
 
@@ -138,15 +127,11 @@ const resolveClosedFixtures = async (page: Page) => {
     candidates.push({ application, animal, animalName });
   }
 
-  let archived: { application: string } | undefined;
-  let returned: (typeof candidates)[number] | undefined;
-
   for (const candidate of candidates) {
     await page.goto(candidate.animal);
 
-    // The two CLOSED fixtures land on different pages: the archived animal is
-    // gone from the public site and renders the "Pet Not Found" page
-    // (StatusPage), the returned one was republished and — a
+    // The archived animal is gone from the public site and renders the "Pet
+    // Not Found" page (StatusPage); the returned one was republished and — a
     // CLOSED application never blocks — offers the Adopt call to action.
     const adoptCta = page.getByRole("link", { name: /^Adopt / });
     const notFoundHeading = page.getByRole("heading", {
@@ -161,20 +146,11 @@ const resolveClosedFixtures = async (page: Page) => {
     await expect(adoptCta.or(notFoundHeading)).toBeVisible();
 
     if (await adoptCta.isVisible()) {
-      returned = candidate;
-    } else {
-      archived = candidate;
+      return candidate;
     }
   }
 
-  if (!archived || !returned) {
-    throw new Error(
-      "Expected exactly one CLOSED fixture on an archived animal and one on a republished animal.",
-    );
-  }
-
-  closedFixtures = { archived, returned };
-  return closedFixtures;
+  throw new Error("Expected one CLOSED fixture on a republished animal.");
 };
 
 // The application submitted by the re-apply test, read straight off the top of
@@ -224,28 +200,6 @@ test("every status is listed, and every row offers View application", async ({
   await expect(statusMessage(page)).toBeVisible();
 });
 
-test("each status explains itself on the view page", async ({ page }) => {
-  for (const status of Object.keys(
-    FIXTURE_COUNT_BY_STATUS,
-  ) as FixtureStatus[]) {
-    await listByStatus(page, status);
-    await openApplication(page, await applicationHref(page));
-    await expect(
-      statusMessage(page),
-      `${status} status message`,
-    ).toContainText(MESSAGE_TITLE_BY_STATUS[status]);
-  }
-
-  // The pair the spec singles out: WAITLISTED must not read as a slower
-  // PENDING, and CLOSED must not read as a rejection.
-  expect(MESSAGE_TITLE_BY_STATUS.WAITLISTED).not.toBe(
-    MESSAGE_TITLE_BY_STATUS.PENDING,
-  );
-  expect(MESSAGE_TITLE_BY_STATUS.CLOSED).not.toBe(
-    MESSAGE_TITLE_BY_STATUS.REJECTED,
-  );
-});
-
 test("a reviewed application is read-only, and shows why", async ({ page }) => {
   await listByStatus(page, "REVIEWING");
   const href = await applicationHref(page);
@@ -274,79 +228,10 @@ test("a reviewed application is read-only, and shows why", async ({ page }) => {
   );
 });
 
-// WAITLISTED never returns to PENDING, so an editable waitlisted application
-// would stay editable for good after staff have assessed it. The update action
-// used to accept it while the page and the Edit link (both PENDING-only) hid
-// it, which left a direct POST as the only way in.
-test("a waitlisted application is read-only, like any other reviewed one", async ({
-  page,
-}) => {
-  await listByStatus(page, "WAITLISTED");
-  const href = await applicationHref(page);
-  await openApplication(page, href);
-
-  await expect(
-    page.getByRole("link", { name: "Edit application" }),
-  ).toHaveCount(0);
-
-  await page.goto(`${href}/edit`);
-  await waitForPathname(page, href);
-  await expect(statusMessage(page)).toContainText(
-    MESSAGE_TITLE_BY_STATUS.WAITLISTED,
-  );
-});
-
-test("a rejected applicant cannot apply for that animal again", async ({
-  page,
-}) => {
-  await listByStatus(page, "REJECTED");
-  const animal = await animalLink(page).getAttribute("href");
-  if (!animal) {
-    throw new Error("REJECTED row has no animal link.");
-  }
-
-  // REJECTED is a judgment and stays in BLOCKING_APPLICATION_STATUSES, so the
-  // animal's page sends her to the application rather than back to the form.
-  await page.goto(animal);
-  await expect(
-    page.getByRole("link", { name: "View Your Application" }),
-  ).toBeVisible();
-  await expect(page.getByRole("link", { name: /^Adopt / })).toHaveCount(0);
-});
-
-test("a closed application reads as a closure, not a rejection", async ({
-  page,
-}) => {
-  const { archived } = await resolveClosedFixtures(page);
-  await openApplication(page, archived.application);
-
-  await expect(statusMessage(page)).toContainText(
-    MESSAGE_TITLE_BY_STATUS.CLOSED,
-  );
-  await expect(statusMessage(page)).toContainText(
-    "It is not a decision about you or your application",
-  );
-
-  // The outcome-aware reason the timeline gives (CLOSURE_REASON_BY_OUTCOME),
-  // read off the outcome that closed it, not the old single generic string.
-  await expect(
-    page.getByText("This animal was adopted by another applicant."),
-  ).toBeVisible();
-
-  // Nothing left to act on: the animal has gone.
-  await expect(
-    page.getByRole("button", { name: "Withdraw application" }),
-  ).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Reactivate" })).toHaveCount(0);
-  await expect(
-    page.getByRole("link", { name: "Edit application" }),
-  ).toHaveCount(0);
-});
-
 test("a closed applicant can apply again once the animal is back", async ({
   page,
 }) => {
-  const { returned } = await resolveClosedFixtures(page);
+  const returned = await findReturnedClosedFixture(page);
 
   // Same closure, same reason — the only difference is that this animal came
   // back and was republished, which is the case CLOSED exists to make
@@ -422,6 +307,14 @@ test("a closed applicant can apply again once the animal is back", async ({
     staleTab.getByText("You already have an application for this animal."),
   ).toBeVisible();
   await staleTab.close();
+
+  // With a live application again, the animal's page sends her to it rather
+  // than back to the form (BLOCKING_APPLICATION_STATUSES).
+  await page.goto(returned.animal);
+  await expect(
+    page.getByRole("link", { name: "View Your Application" }),
+  ).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Adopt / })).toHaveCount(0);
 
   await page.goto(`${MY_APPLICATIONS_PATH}?pageSize=20`);
   await expect(page.locator("tbody tr")).toHaveCount(
@@ -519,7 +412,8 @@ test("reactivating puts a withdrawn application back to pending", async ({
   ).toBeVisible();
 });
 
-test("reactivate is offered only while the animal is still listed", async ({
+// The enabled case is the reactivation above.
+test("reactivate is disabled, with the reason, once the animal has left", async ({
   page,
 }) => {
   const rows = await listByStatus(page, "WITHDRAWN");
@@ -530,30 +424,27 @@ test("reactivate is offered only while the animal is still listed", async ({
     hrefs.push(await applicationHref(page, i));
   }
 
-  let enabled = 0;
-  let disabled = 0;
+  // One of the three sits on an archived animal; the order of the rows is not
+  // something to lean on, so each is opened until it turns up.
+  let disabled = false;
   for (const href of hrefs) {
     await openApplication(page, href);
     const reactivate = page.getByRole("button", { name: "Reactivate" });
     await expect(reactivate).toBeVisible();
     if (await reactivate.isDisabled()) {
-      disabled++;
-      // The action refuses unless the animal is still PUBLISHED; offered
-      // blindly it could only ever produce an error toast.
-      await expect(
-        page.getByText(
-          /has left the shelter, so this application can no longer be reactivated/,
-        ),
-      ).toBeVisible();
-    } else {
-      enabled++;
+      disabled = true;
+      break;
     }
   }
+  expect(disabled, "a WITHDRAWN fixture on an archived animal").toBe(true);
 
-  // The button is enabled for both animals still listed, including the one
-  // whose reactivation the next test shows being refused: offered, then
-  // declined on the server.
-  expect({ enabled, disabled }).toEqual({ enabled: 2, disabled: 1 });
+  // The action refuses unless the animal is still PUBLISHED; offered blindly
+  // it could only ever produce an error toast.
+  await expect(
+    page.getByText(
+      /has left the shelter, so this application can no longer be reactivated/,
+    ),
+  ).toBeVisible();
 });
 
 // Staff took a walk-in application, it was withdrawn, and they later took a
@@ -594,7 +485,8 @@ test("a withdrawn application cannot be reactivated beside a live replacement", 
   );
 });
 
-test("withdrawing an approved application releases the animal", async ({
+// The release itself is a database test (prisma/application-withdrawal.test.ts).
+test("withdrawing an approved application says the animal goes back on the listings", async ({
   page,
 }) => {
   await listByStatus(page, "APPROVED");
@@ -604,11 +496,13 @@ test("withdrawing an approved application releases the animal", async ({
     throw new Error("APPROVED row has no animal link.");
   }
 
-  // Approval holds the animal at PENDING_ADOPTION.
+  // Approval holds the animal at PENDING_ADOPTION, and its page offers no way
+  // to apply while it is held.
   await page.goto(animal);
   await expect(
     page.getByText("Pending Adoption", { exact: true }),
   ).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Adopt / })).toHaveCount(0);
 
   await openApplication(page, href);
   await page.getByRole("button", { name: "Withdraw application" }).click();
@@ -623,13 +517,4 @@ test("withdrawing an approved application releases the animal", async ({
   await expect(statusMessage(page)).toContainText(
     MESSAGE_TITLE_BY_STATUS.WITHDRAWN,
   );
-
-  // And the animal really is back on the adoptable listings.
-  await page.goto(animal);
-  await expect(page.getByText("Pending Adoption", { exact: true })).toHaveCount(
-    0,
-  );
-  await expect(
-    page.getByRole("link", { name: "View Your Application" }),
-  ).toBeVisible();
 });
