@@ -7,6 +7,14 @@ import type { NextConfig } from "next";
 // not add its own types folder to tsconfig.json's `include`.
 const e2eDistDir = process.env.PLAYWRIGHT_NEXT_DIST_DIR;
 
+// Also set only for the Playwright web server. The e2e server serves images
+// as-is instead of through /_next/image: one optimization that never finished
+// (sharp on CI's Linux) left a page's `load` event pending until the test timed
+// out, and every later request for the same image waited on it. No spec checks
+// resizing, so the optimizer only adds a way to hang.
+const e2eUnoptimizedImages =
+  process.env.PLAYWRIGHT_UNOPTIMIZED_IMAGES === "1";
+
 const nextConfig: NextConfig = {
   ...(e2eDistDir && {
     distDir: e2eDistDir,
@@ -14,6 +22,7 @@ const nextConfig: NextConfig = {
   }),
   reactCompiler: true,
   images: {
+    ...(e2eUnoptimizedImages && { unoptimized: true }),
     // Allow loading images from specific remote domains
     remotePatterns: [
       {
