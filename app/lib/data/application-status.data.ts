@@ -10,7 +10,11 @@ import {
   toDerivationOutcome,
   type EffectiveApplicationStatus,
 } from "../utils/derive-application-status";
-import { adoptionReason, closureReason } from "../utils/application-status";
+import {
+  STATUS_SORT_RANK,
+  adoptionReason,
+  closureReason,
+} from "../utils/application-status";
 
 // How a read site gets an adoption application's effective status out of the
 // database. The rule itself is `deriveApplicationStatus`; this file only feeds
@@ -330,21 +334,6 @@ export async function effectiveStatusBehindLock(
   });
   return row && effectiveApplicationStatus(row, tx);
 }
-
-// The order a status sort puts applications in: the order a review moves
-// through, then the consequences. A record rather than a list so that a status
-// added to or removed from the enum is a type error here until someone places
-// it.
-const STATUS_SORT_RANK: Record<EffectiveApplicationStatus, number> = {
-  PENDING: 0,
-  REVIEWING: 1,
-  WAITLISTED: 2,
-  APPROVED: 3,
-  REJECTED: 4,
-  WITHDRAWN: 5,
-  ADOPTED: 6,
-  CLOSED: 7,
-};
 
 export type ApplicationPage = {
   ids: string[];
