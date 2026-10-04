@@ -149,7 +149,7 @@ test("removing the unit then deleting the location succeeds", async ({
   ).not.toBeVisible();
 });
 
-test("the deleted location only shows under the Deleted status filter, and can't receive new units", async ({
+test("the deleted location only shows under the Deleted status filter, can't receive new units, and shows with the active ones when both are selected", async ({
   page,
 }) => {
   await page.goto(locationsPath);
@@ -168,17 +168,14 @@ test("the deleted location only shows under the Deleted status filter, and can't
   await expect(
     card.getByRole("button", { name: "Add Unit" }).first(),
   ).toBeDisabled();
-});
 
-test("selecting both Active and Deleted shows all locations", async ({
-  page,
-}) => {
-  await page.goto(`${locationsPath}?status=active%2Cdeleted`);
+  // Both statuses selected shows everything: the deleted location, and a
+  // location seeded active all along.
+  await page.getByRole("button", { name: "Status" }).click();
+  await page.getByRole("option", { name: "Active", exact: true }).click();
+  await page.keyboard.press("Escape");
 
-  await expect(
-    page.getByRole("heading", { name: locationName, exact: true }),
-  ).toBeVisible();
-  // A location seeded active all along should still show up alongside it.
+  await expect(card).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Cat room", exact: true }),
   ).toBeVisible();

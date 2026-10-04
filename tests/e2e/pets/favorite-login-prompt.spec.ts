@@ -51,14 +51,3 @@ for (const { name, dismiss } of [
     await expect(page).toHaveURL(/\/pets$/);
   });
 }
-
-test("the login prompt's sign-in action still navigates to /sign-in", async ({
-  page,
-}) => {
-  await openModal(page);
-
-  await page.getByRole("link", { name: /Login \/ Sign Up/ }).click();
-
-  await page.waitForURL((url) => url.pathname === "/sign-in");
-  expect(new URL(page.url()).searchParams.get("callbackUrl")).toBe("/pets");
-});

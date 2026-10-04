@@ -97,7 +97,9 @@ const openPalette = async (page: Page, via: "shortcut" | "search bar") => {
 test.describe("staff", () => {
   test.use({ storageState: staffState });
 
-  test("⌘K, a name, Enter — and the animal's page", async ({ page }) => {
+  test("⌘K, a name, Enter — and the animal's page; then a person and their applications, in separate groups", async ({
+    page,
+  }) => {
     await page.goto("/dashboard/animals");
     await expect(themeToggle(page)).toBeVisible();
 
@@ -118,14 +120,10 @@ test.describe("staff", () => {
     await expect(
       page.getByText(ANIMAL_NAME, { exact: true }).first(),
     ).toBeVisible();
-  });
 
-  test("a person and their applications, in separate groups", async ({
-    page,
-  }) => {
-    await page.goto("/dashboard");
-    await expect(themeToggle(page)).toBeVisible();
-
+    // Reopened here rather than searched before him: cmdk keeps a highlight
+    // from the previous query's rows, so Godzilla would not be the one Enter
+    // takes.
     await openPalette(page, "shortcut");
     await searchInput(page).fill("Jane");
 

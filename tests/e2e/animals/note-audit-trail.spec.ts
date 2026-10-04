@@ -38,52 +38,40 @@ const INTAKE_NOTE = "Initial intake notes";
 const editRows = (page: Page) =>
   page.locator("li").filter({ hasText: "edited a note" });
 
+// The route's loading.tsx shows the same description as the feed, so wait for
+// a row with text in it: the skeleton's rows have none. Buddy always has
+// activity, so the loaded feed is never the empty state.
 const gotoActivity = async (page: Page, id: string) => {
   await page.goto(`/dashboard/animals/${id}`);
-  await expect(
-    page.getByText("most recent activity logs for this animal").first(),
-  ).toBeVisible();
+  const feed = page
+    .locator('[data-slot="card"]')
+    .filter({ hasText: "most recent activity logs for this animal" });
+  await expect(feed.locator("li").filter({ hasText: /\S/ }).first()).toBeVisible();
 };
 
-test("no-op save writes nothing: no 'edited by' line, no new activity row", async ({
+test("editing an animal note stamps 'edited by Admin User' and feeds the activity log, and a save with no changes writes nothing", async ({
   page,
 }) => {
   const id = await buddyId(page);
 
-  // Baseline the activity feed *before* the no-op. Comparing a before/after
-  // count (rather than asserting an absolute 0) keeps this green when
-  // Playwright's serial-mode retry re-runs the group and the sibling test's
-  // real edit is still in the (once-per-run reseeded) database.
+  // Baseline the activity feed before either save. Comparing before and after
+  // (rather than asserting an absolute count) keeps this green when a retry
+  // runs after an earlier attempt's edit is already in the (once-per-run
+  // reseeded) database.
   await gotoActivity(page, id);
   const activityBefore = await editRows(page).count();
 
   await page.goto(`/dashboard/animals/${id}/notes`);
-  const card = noteCard(page, INTAKE_NOTE);
-  await expect(card).toHaveCount(1);
-  await expect(card.getByText(/edited by/i)).toHaveCount(0);
+  const intakeCard = noteCard(page, INTAKE_NOTE);
+  await expect(intakeCard).toHaveCount(1);
+  await expect(intakeCard.getByText(/edited by/i)).toHaveCount(0);
 
-  await openNoteEditDialog(page, card);
-  // Submit with every field untouched — the guard short-circuits before the txn.
+  // Submit with every field untouched: the form sends back what it loaded,
+  // and the guard short-circuits before the transaction.
+  await openNoteEditDialog(page, intakeCard);
   await page.getByRole("button", { name: "Update Note" }).click();
   await expect(page.getByText("No changes to save.")).toBeVisible();
 
-  // Footer still has no "edited by" line...
-  await page.goto(`/dashboard/animals/${id}/notes`);
-  await expect(noteCard(page, INTAKE_NOTE).getByText(/edited by/i)).toHaveCount(
-    0,
-  );
-
-  // ...and the activity feed (animal index, suffix "") gained no row.
-  await gotoActivity(page, id);
-  await expect(editRows(page)).toHaveCount(activityBefore);
-});
-
-test("editing an animal note stamps 'edited by Admin User' and feeds the activity log", async ({
-  page,
-}) => {
-  const id = await buddyId(page);
-
-  await page.goto(`/dashboard/animals/${id}/notes`);
   const card = noteCard(page, MEDICAL_NOTE);
   await openNoteEditDialog(page, card);
 
@@ -96,10 +84,14 @@ test("editing an animal note stamps 'edited by Admin User' and feeds the activit
   // Footer: the denormalized last-editor line (revalidated, no manual reload).
   const editedCard = noteCard(page, revised);
   await expect(editedCard.getByText(/edited by Admin User/)).toBeVisible();
+  // The same revalidation re-read the intake note: the no-op left no line.
+  await expect(intakeCard.getByText(/edited by/i)).toHaveCount(0);
 
-  // Activity feed on the animal index: "Admin User edited a note", and the
-  // "Show details" expander carries the category label.
+  // Activity feed on the animal index: exactly one new "edited a note" row,
+  // from the real edit and none from the no-op. It is "Admin User edited a
+  // note", and the "Show details" expander carries the category label.
   await gotoActivity(page, id);
+  await expect(editRows(page)).toHaveCount(activityBefore + 1);
   const row = page
     .locator("li")
     .filter({ hasText: "Admin User" })
