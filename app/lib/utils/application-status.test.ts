@@ -11,6 +11,7 @@ import {
   REACTIVATION_BLOCKING_STATUSES,
   STAFF_EDITABLE_STATUSES,
   STAFF_OVERRIDABLE_APPLICATION_STATUSES,
+  STATUS_SORT_RANK,
   allowedNextStatuses,
   formatStatusList,
   isAllowedTransition,
@@ -179,5 +180,32 @@ test("every status has its own message; Waitlisted is not Pending, Closed is not
   assert.match(
     CLOSED.description,
     /It is not a decision about you or your application/,
+  );
+});
+
+// A status sort walks the review in the order staff move through it, then the
+// two statuses an outcome causes. No two statuses may tie: tied rows fall back
+// to newest first, which would mix them on the page. The input is reversed so
+// that a tie, or a rank that compares as one, cannot leave it in order.
+test("a status sort puts the review stages in order, then the decisions, then adopted and closed", () => {
+  const ranks = Object.values(EffectiveApplicationStatus).map(
+    (status) => STATUS_SORT_RANK[status],
+  );
+  assert.ok(ranks.every(Number.isInteger), ranks.join(", "));
+  assert.equal(new Set(ranks).size, ranks.length, ranks.join(", "));
+  assert.deepEqual(
+    Object.values(EffectiveApplicationStatus)
+      .reverse()
+      .sort((a, b) => STATUS_SORT_RANK[a] - STATUS_SORT_RANK[b]),
+    [
+      EffectiveApplicationStatus.PENDING,
+      EffectiveApplicationStatus.REVIEWING,
+      EffectiveApplicationStatus.WAITLISTED,
+      EffectiveApplicationStatus.APPROVED,
+      EffectiveApplicationStatus.REJECTED,
+      EffectiveApplicationStatus.WITHDRAWN,
+      EffectiveApplicationStatus.ADOPTED,
+      EffectiveApplicationStatus.CLOSED,
+    ],
   );
 });

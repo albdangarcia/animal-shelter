@@ -363,6 +363,47 @@ test("the status filter, sort and pages follow the outcomes, not the column", as
   assert.equal(unfiltered.totalRows, 3);
 });
 
+// A filter is applied to every match before the page is cut, so a later page
+// holds the later matches, not the matches among the later rows. Here the
+// three open applications are the newest, so cutting first would leave the
+// first page of closed ones empty.
+test("a status filter pages through its own matches", async () => {
+  const animalId = await makeAnimal("Filtered paging");
+  const closed = [];
+  for (const hours of [8, 7, 6]) {
+    closed.push(await makeApplication(animalId, { submittedAt: hoursAgo(hours) }));
+  }
+  await prisma.outcome.create({
+    data: {
+      animalId,
+      type: OutcomeType.TRANSFER_OUT,
+      outcomeDate: "2026-01-01",
+      staffMemberId: staffId,
+      createdAt: hoursAgo(5),
+    },
+  });
+  for (const hours of [4, 3, 2]) {
+    await makeApplication(animalId, { submittedAt: hoursAgo(hours) });
+  }
+
+  const page = (offset: number) =>
+    pageApplicationsByEffectiveStatus({
+      where: { animalId },
+      orderBy: { submittedAt: "desc" },
+      statuses: ["CLOSED"],
+      statusSort: undefined,
+      offset,
+      pageSize: 2,
+    });
+
+  const first = await page(0);
+  const second = await page(2);
+  assert.deepEqual(first.ids, [closed[2].id, closed[1].id]);
+  assert.deepEqual(second.ids, [closed[0].id]);
+  assert.equal(first.totalRows, 3);
+  assert.equal(second.totalRows, 3);
+});
+
 // The history table records decisions only. What an outcome did to an
 // application is read off the outcome itself, so the timeline still says who
 // recorded it, when, and why, in its place after the decisions.
