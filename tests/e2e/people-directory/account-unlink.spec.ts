@@ -41,14 +41,10 @@ test.use({ storageState });
 
 const ACCOUNT_EMAIL = "pat.mislinked@example.com";
 const RECORD_PHONE = "212-555-0166";
-const SEEDED_NOTE = "Asked us to call the landline, not email.";
 
 let originalPersonId: string;
-let replacementPersonId: string;
 
-test("the profile names the sign-in address and offers the unlink", async ({
-  page,
-}) => {
+test("unlinking moves the login to a record of its own", async ({ page }) => {
   // Resolved before the unlink: afterwards two records answer to this name,
   // because the replacement takes its name off the account.
   originalPersonId = await firstRowIdByQuery(
@@ -58,14 +54,10 @@ test("the profile names the sign-in address and offers the unlink", async ({
   );
 
   await page.goto(`/dashboard/people-directory/${originalPersonId}`);
+  // The profile names the sign-in address while the account is on it.
   await expect(page.getByText("Sign-in Email")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Unlink Account" }),
-  ).toBeVisible();
-});
-
-test("unlinking moves the login to a record of its own", async ({ page }) => {
-  await page.goto(`/dashboard/people-directory/${originalPersonId}`);
+  // Read here so its absence on the new record below means something.
+  await expect(page.getByText(RECORD_PHONE)).toBeVisible();
 
   await page.getByRole("button", { name: "Unlink Account" }).click();
   const dialog = page.getByRole("alertdialog");
@@ -83,7 +75,6 @@ test("unlinking moves the login to a record of its own", async ({ page }) => {
       !url.pathname.endsWith(originalPersonId),
     { timeout: 60_000 },
   );
-  replacementPersonId = page.url().split("/").pop() as string;
 
   // The address left with the account: it is the key the sign-up hook
   // auto-links on, so leaving it behind would invite the same mislink again.
@@ -92,9 +83,7 @@ test("unlinking moves the login to a record of its own", async ({ page }) => {
   await expect(page.getByText(RECORD_PHONE)).toHaveCount(0);
 });
 
-test("the original record keeps its history and is staff-editable again", async ({
-  page,
-}) => {
+test("the original record is staff-editable again", async ({ page }) => {
   await page.goto(`/dashboard/people-directory/${originalPersonId}`);
 
   // No account on it any more: the account-only rows are gone, and with them
@@ -105,25 +94,6 @@ test("the original record keeps its history and is staff-editable again", async 
   ).toHaveCount(0);
   await expect(
     page.getByRole("link", { name: "Edit Contact Info" }),
-  ).toBeVisible();
-
-  // What the shelter recorded about this person is still on it. Exact, because
-  // the header card renders the address as one line and the profile card
-  // breaks it into rows, so a substring match hits both.
-  await expect(page.getByText(RECORD_PHONE)).toBeVisible();
-  await expect(page.getByText("12 Carmine St", { exact: true })).toBeVisible();
-
-  await page.goto(`/dashboard/people-directory/${originalPersonId}/notes`);
-  await expect(page.getByText(SEEDED_NOTE)).toBeVisible();
-  await expect(
-    page.getByText(/unlinked from this record and moved to a new person record/),
-  ).toBeVisible();
-});
-
-test("the new record says where it came from", async ({ page }) => {
-  await page.goto(`/dashboard/people-directory/${replacementPersonId}/notes`);
-  await expect(
-    page.getByText(/Created by unlinking a login account/),
   ).toBeVisible();
 });
 

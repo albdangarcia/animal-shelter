@@ -69,36 +69,19 @@ const fillStable = async (field: Locator, text: string) => {
   }).toPass({ timeout: 15_000 });
 };
 
-let alexId: string;
-
-test("a person with no household profile shows the empty state and an Add button", async ({
+test("adding a household from the empty state saves it and shows the new values on the profile", async ({
   page,
 }) => {
-  alexId = await personIdByName(page, "Alex Duplicate");
+  const alexId = await personIdByName(page, "Alex Duplicate");
   await page.goto(`/dashboard/people-directory/${alexId}`);
   await expect(
     page.getByText("No household information on file."),
   ).toBeVisible();
   // Button asChild renders a plain <a>, so the accessible role is "link".
-  await expect(
-    page.getByRole("link", { name: "Add Household Info" }),
-  ).toBeVisible();
-});
-
-test("clicking Add Household Info navigates to the household edit route", async ({
-  page,
-}) => {
-  await page.goto(`/dashboard/people-directory/${alexId}`);
   await page.getByRole("link", { name: "Add Household Info" }).click();
   await page.waitForURL(`**/dashboard/people-directory/*/household/edit`, {
     timeout: 60_000,
   });
-});
-
-test("saving the household form redirects back to the profile and shows the new values", async ({
-  page,
-}) => {
-  await page.goto(`/dashboard/people-directory/${alexId}/household/edit`);
 
   await page.getByLabel("Living Situation *").click();
   await page.getByRole("option", { name: "Rent Apartment" }).click();
@@ -135,10 +118,6 @@ test("saving the household form redirects back to the profile and shows the new 
 
   // And it says who wrote it: the seeded admin is the one signed in here.
   await expect(page.getByText(/Last edited by Admin User on /)).toBeVisible();
-});
-
-test("the button now reads Edit Household Info", async ({ page }) => {
-  await page.goto(`/dashboard/people-directory/${alexId}`);
   await expect(
     page.getByRole("link", { name: "Edit Household Info" }),
   ).toBeVisible();
