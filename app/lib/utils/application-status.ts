@@ -175,6 +175,21 @@ export const STAFF_EDITABLE_STATUSES: EffectiveApplicationStatus[] = [
   ApplicationStatus.APPROVED,
 ];
 
+// The order a status sort puts applications in: the order a review moves
+// through, then the consequences. A record rather than a list so that a status
+// added to or removed from the enum is a type error here until someone places
+// it.
+export const STATUS_SORT_RANK: Record<EffectiveApplicationStatus, number> = {
+  PENDING: 0,
+  REVIEWING: 1,
+  WAITLISTED: 2,
+  APPROVED: 3,
+  REJECTED: 4,
+  WITHDRAWN: 5,
+  ADOPTED: 6,
+  CLOSED: 7,
+};
+
 // The applicant-visible reason the status history gives for an application an
 // outcome closed. Keyed by all six OutcomeTypes because every one of them
 // closes open applications — an animal that was transferred, reunited with its

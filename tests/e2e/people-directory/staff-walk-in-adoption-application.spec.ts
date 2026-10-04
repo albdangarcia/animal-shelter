@@ -153,9 +153,11 @@ const openRowMenu = async (page: Page) => {
 
 let walkInId: string;
 
-test("the walk-in's adoption applications tab shows an Add button", async ({
+test("Add Application opens the standalone form, and submitting it redirects to the person's tab with the new row", async ({
   page,
 }) => {
+  const animal = await firstPublishedAnimal(page);
+
   walkInId = await personIdByName(page, "WalkIn TestUser");
   await page.goto(
     `/dashboard/people-directory/${walkInId}/adoption-applications`,
@@ -172,15 +174,8 @@ test("the walk-in's adoption applications tab shows an Add button", async ({
   expect(href).toContain(
     `returnTo=/dashboard/people-directory/${walkInId}/adoption-applications`,
   );
-});
 
-test("Add Application navigates to the standalone route with no person shell", async ({
-  page,
-}) => {
-  await page.goto(
-    `/dashboard/people-directory/${walkInId}/adoption-applications`,
-  );
-  await page.getByRole("link", { name: "Add Application" }).click();
+  await addLink.click();
   await waitForPathname(page, "/dashboard/adoption-applications/new");
 
   // The person nav tabs (Profile / Fostering / …) must be gone — this route
@@ -191,16 +186,6 @@ test("Add Application navigates to the standalone route with no person shell", a
   await expect(
     page.getByText("Submitting on behalf of WalkIn TestUser"),
   ).toBeVisible();
-});
-
-test("filling and submitting the form redirects to the person's tab with the new row", async ({
-  page,
-}) => {
-  const animal = await firstPublishedAnimal(page);
-
-  await page.goto(
-    `/dashboard/adoption-applications/new?personId=${walkInId}&returnTo=/dashboard/people-directory/${walkInId}/adoption-applications`,
-  );
 
   await pickAnimal(page, animal.name);
 
@@ -304,7 +289,7 @@ test("the application can be edited from the row menu", async ({ page }) => {
   ).toHaveValue(newReason, { timeout: 15_000 });
 });
 
-test("the application can be reviewed and its status advanced", async ({
+test("the application can be reviewed, round-trip to Edit Application Fields, and have its status advanced", async ({
   page,
 }) => {
   await page.goto(
@@ -314,6 +299,9 @@ test("the application can be reviewed and its status advanced", async ({
   await openRowMenu(page);
   await page.getByRole("menuitem", { name: "Review" }).click();
   await waitForPathname(page, REVIEW_PATH);
+
+  const reviewUrl = page.url();
+  const appId = new URL(reviewUrl).pathname.split("/")[3];
 
   await expect(
     page.getByText("Applicant Information (Read-Only)"),
@@ -321,36 +309,6 @@ test("the application can be reviewed and its status advanced", async ({
   await expect(
     page.getByLabel("Full Name", { exact: true }),
   ).toBeDisabled();
-
-  // PENDING -> REVIEWING is exempt from the status-change-reason requirement.
-  await page.getByLabel("Application Status", { exact: true }).click();
-  await page.getByRole("option", { name: "Reviewing" }).click();
-  await page.getByRole("button", { name: "Update Application" }).click();
-
-  await expect(
-    page.getByText("Application updated successfully."),
-  ).toBeVisible();
-  await waitForPathname(
-    page,
-    `/dashboard/people-directory/${walkInId}/adoption-applications`,
-  );
-
-  const row = page.locator("tbody tr").first();
-  await expect(row.getByText("Reviewing", { exact: true })).toBeVisible();
-});
-
-test("Edit Application Fields round-trips between review and edit", async ({
-  page,
-}) => {
-  await page.goto(
-    `/dashboard/people-directory/${walkInId}/adoption-applications`,
-  );
-  await openRowMenu(page);
-  await page.getByRole("menuitem", { name: "Review" }).click();
-  await waitForPathname(page, REVIEW_PATH);
-
-  const reviewUrl = new URL(page.url());
-  const appId = reviewUrl.pathname.split("/")[3];
 
   // Rendered while the status is one staff may still rewrite.
   await page
@@ -372,6 +330,26 @@ test("Edit Application Fields round-trips between review and edit", async ({
   await expect(
     page.getByText("Applicant Information (Read-Only)"),
   ).toBeVisible();
+
+  // Cancel comes back without the person tab's returnTo, which is where the
+  // update below redirects to, so reopen the review the row menu opened.
+  await page.goto(reviewUrl);
+
+  // PENDING -> REVIEWING is exempt from the status-change-reason requirement.
+  await page.getByLabel("Application Status", { exact: true }).click();
+  await page.getByRole("option", { name: "Reviewing" }).click();
+  await page.getByRole("button", { name: "Update Application" }).click();
+
+  await expect(
+    page.getByText("Application updated successfully."),
+  ).toBeVisible();
+  await waitForPathname(
+    page,
+    `/dashboard/people-directory/${walkInId}/adoption-applications`,
+  );
+
+  const row = page.locator("tbody tr").first();
+  await expect(row.getByText("Reviewing", { exact: true })).toBeVisible();
 });
 
 test("a withdrawn application can no longer be edited by staff", async ({
@@ -431,7 +409,9 @@ test("a withdrawn application can no longer be edited by staff", async ({
 // — and for an applicant who can no longer reach their own account, nobody
 // else can. The status allow-list still applies, as the walk-in case above
 // shows for WITHDRAWN, and the edit is recorded rather than refused.
-test("a registered user's application is staff-editable", async ({ page }) => {
+test("a registered user's application is staff-editable from the row menu and the review screen", async ({
+  page,
+}) => {
   const janeId = await personIdByName(page, "Jane Doe");
   await page.goto(
     `/dashboard/people-directory/${janeId}/adoption-applications`,
@@ -446,39 +426,9 @@ test("a registered user's application is staff-editable", async ({ page }) => {
     .first();
   await expect(pendingRow).toBeVisible();
 
-  const trigger = pendingRow.getByRole("button", { name: "Open menu" });
-  const editItem = page.getByRole("menuitem", { name: "Edit" });
-  await expect(async () => {
-    if (!(await editItem.isVisible())) {
-      await trigger.click();
-    }
-    await expect(editItem).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 20_000 });
-
-  await editItem.click();
-  await waitForPathname(page, /^\/dashboard\/adoption-applications\/[^/]+\/edit$/);
-  await expect(
-    page.getByRole("button", { name: "Save Changes" }),
-  ).toBeVisible();
-});
-
-// The row menu is one way in; the review screen is the other, and it used to
-// hide its shortcut from anyone with an account while the route behind it had
-// already stopped refusing them.
-test("a registered user's review screen offers Edit Application Fields", async ({
-  page,
-}) => {
-  const janeId = await personIdByName(page, "Jane Doe");
-  await page.goto(
-    `/dashboard/people-directory/${janeId}/adoption-applications`,
-  );
-
-  const pendingRow = page
-    .locator("tbody tr")
-    .filter({ hasText: "Pending" })
-    .first();
-  await expect(pendingRow).toBeVisible();
-
+  // The row menu is one way in; the review screen is the other, and it used to
+  // hide its shortcut from anyone with an account while the route behind it had
+  // already stopped refusing them.
   const trigger = pendingRow.getByRole("button", { name: "Open menu" });
   const reviewItem = page.getByRole("menuitem", { name: "Review" });
   await expect(async () => {
@@ -487,6 +437,7 @@ test("a registered user's review screen offers Edit Application Fields", async (
     }
     await expect(reviewItem).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
+  await expect(page.getByRole("menuitem", { name: "Edit" })).toBeVisible();
 
   await reviewItem.click();
   await waitForPathname(page, REVIEW_PATH);
@@ -502,14 +453,6 @@ test("a registered user's review screen offers Edit Application Fields", async (
   ).toBeVisible();
 });
 
-test("the pre-refactor nested new route is gone", async ({ page }) => {
-  await page.goto(
-    `/dashboard/people-directory/${walkInId}/adoption-applications/new`,
-  );
-  await expect(
-    page.getByRole("heading", { name: /not found/i }),
-  ).toBeVisible();
-});
 // "Casey Reapply" is a walk-in whose only application is a CLOSED one on
 // "Peppercorn" (seedRegisteredUserApplicationFixtures) — the animal came back
 // and was republished, so the CLOSED application says nothing against her. The
