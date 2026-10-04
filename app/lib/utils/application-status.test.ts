@@ -6,6 +6,8 @@ import {
   ALLOWED_APPLICATION_TRANSITIONS,
   APPLICANT_EDITABLE_STATUSES,
   BLOCKING_APPLICATION_STATUSES,
+  MY_APPLICATION_STATUS_MESSAGES,
+  NON_WITHDRAWABLE_STATUSES,
   REACTIVATION_BLOCKING_STATUSES,
   STAFF_EDITABLE_STATUSES,
   STAFF_OVERRIDABLE_APPLICATION_STATUSES,
@@ -21,6 +23,13 @@ import {
 
 test("an applicant can only edit an application nobody has picked up yet", () => {
   assert.deepEqual(APPLICANT_EDITABLE_STATUSES, [ApplicationStatus.PENDING]);
+});
+
+// The animal has left, so there is nothing to withdraw from and nothing to
+// change. Reactivate is offered only at WITHDRAWN, so CLOSED never reaches it.
+test("a closed application offers no withdraw or edit", () => {
+  assert.ok(NON_WITHDRAWABLE_STATUSES.includes(EffectiveApplicationStatus.CLOSED));
+  assert.ok(!APPLICANT_EDITABLE_STATUSES.includes(EffectiveApplicationStatus.CLOSED));
 });
 
 test("staff can edit at every status the applicant can", () => {
@@ -102,6 +111,12 @@ test("a closed application never stands in the way of a new one", () => {
   assert.ok(!ACTIVE_APPLICATION_STATUSES.includes(EffectiveApplicationStatus.CLOSED));
 });
 
+// A rejection is a decision, and re-applying is not the way to appeal it: the
+// animal's page sends the applicant to their application instead of the form.
+test("a rejection blocks a new application for the same animal", () => {
+  assert.ok(BLOCKING_APPLICATION_STATUSES.includes(ApplicationStatus.REJECTED));
+});
+
 test("only the statuses staff may override separate active from blocking", () => {
   assert.deepEqual(
     BLOCKING_APPLICATION_STATUSES.filter(
@@ -146,4 +161,23 @@ test("a status change needs a reason unless nothing changes or review starts", (
   assert.equal(statusChangeNeedsReason(PENDING, REVIEWING), false);
   assert.equal(statusChangeNeedsReason(PENDING, REJECTED), true);
   assert.equal(statusChangeNeedsReason(REVIEWING, APPROVED), true);
+});
+
+// The status message is the only place a status change is explained to the
+// applicant, so no two statuses may read alike. Waitlisted must not read as a
+// slower Pending, and Closed must not read as a rejection.
+test("every status has its own message; Waitlisted is not Pending, Closed is not Rejected", () => {
+  const titles = Object.values(MY_APPLICATION_STATUS_MESSAGES).map(
+    (message) => message.title,
+  );
+  assert.equal(titles.length, Object.values(EffectiveApplicationStatus).length);
+  assert.equal(new Set(titles).size, titles.length, titles.join(" | "));
+
+  const { PENDING, WAITLISTED, REJECTED, CLOSED } = MY_APPLICATION_STATUS_MESSAGES;
+  assert.notEqual(WAITLISTED.title, PENDING.title);
+  assert.notEqual(CLOSED.title, REJECTED.title);
+  assert.match(
+    CLOSED.description,
+    /It is not a decision about you or your application/,
+  );
 });
