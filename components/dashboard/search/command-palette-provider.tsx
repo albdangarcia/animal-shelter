@@ -29,6 +29,21 @@ const CommandPaletteContext = createContext<CommandPaletteContextValue | null>(
  */
 export const useCommandPalette = () => useContext(CommandPaletteContext);
 
+// `opens` counts the times the palette has been opened. It keys the palette, so
+// each open mounts a fresh one rather than resuming the last query and results.
+type PaletteState = { open: boolean; opens: number };
+
+const opened = (state: PaletteState): PaletteState =>
+  state.open ? state : { open: true, opens: state.opens + 1 };
+
+const closed = (state: PaletteState): PaletteState => ({
+  ...state,
+  open: false,
+});
+
+const toggled = (state: PaletteState) =>
+  state.open ? closed(state) : opened(state);
+
 interface CommandPaletteProviderProps {
   navItems: PaletteNavItem[];
   children: ReactNode;
@@ -45,7 +60,10 @@ export const CommandPaletteProvider = ({
   navItems,
   children,
 }: CommandPaletteProviderProps) => {
-  const [open, setOpen] = useState(false);
+  const [{ open, opens }, setPalette] = useState<PaletteState>({
+    open: false,
+    opens: 0,
+  });
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -53,7 +71,7 @@ export const CommandPaletteProvider = ({
       if (event.key.toLowerCase() !== "k") return;
       if (!event.metaKey && !event.ctrlKey) return;
       event.preventDefault();
-      setOpen((previous) => !previous);
+      setPalette(toggled);
     };
 
     document.addEventListener("keydown", handleKeyDown);
@@ -62,14 +80,19 @@ export const CommandPaletteProvider = ({
 
   // Not wrapped in useMemo: `reactCompiler` is on, so the compiler keeps this
   // object stable between renders on its own.
-  const value = { open: () => setOpen(true) };
+  const value = { open: () => setPalette(opened) };
 
   return (
     // React 19 renders the context itself as the provider; `.Provider` is
     // deprecated.
     <CommandPaletteContext value={value}>
       {children}
-      <CommandPalette navItems={navItems} open={open} onOpenChange={setOpen} />
+      <CommandPalette
+        key={opens}
+        navItems={navItems}
+        open={open}
+        onOpenChange={(next) => setPalette(next ? opened : closed)}
+      />
     </CommandPaletteContext>
   );
 };

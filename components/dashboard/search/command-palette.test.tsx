@@ -275,6 +275,88 @@ test("the shortcut closes the palette too, and the next open starts on the first
   await expectHighlighted("/dashboard");
 });
 
+// Every way of closing resets the box, the same as Escape does above.
+test("the shortcut closes the palette too, and the next open starts blank", async () => {
+  await renderPalette();
+  await openWithShortcut();
+  await userEvent.fill(searchBox(), "go");
+  await rowIsThere(G1);
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+  await userEvent.keyboard("{Meta>}k{/Meta}");
+  await expect.element(palette()).not.toBeInTheDocument();
+  await openWithShortcut();
+
+  await expect.element(searchBox()).toHaveValue("");
+  await rowIsThere("/dashboard");
+  expect(headings()).toEqual(["Pages"]);
+  expect(rowFor(G1)).toBeNull();
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+});
+
+// The dialog stays mounted while it fades out, so a reopen inside that fade
+// has to start blank as well. The fade is stretched here so the reopen cannot
+// land after it on a slow runner.
+test("reopening with the shortcut while the palette is still fading out starts blank", async () => {
+  const slowFade = document.createElement("style");
+  slowFade.textContent = '[data-state="closed"] { animation-duration: 5s !important; }';
+  document.head.append(slowFade);
+  try {
+    await renderPalette();
+    await openWithShortcut();
+    await userEvent.fill(searchBox(), "go");
+    await rowIsThere(G1);
+
+    await userEvent.keyboard("{Meta>}k{/Meta}");
+    // Still on screen, still holding the old query: the fade has not ended.
+    await expect.element(searchBox()).toHaveValue("go");
+    await openWithShortcut();
+
+    await expect.element(searchBox()).toHaveValue("");
+    await expect.element(searchBox()).toHaveFocus();
+    await rowIsThere("/dashboard");
+    expect(headings()).toEqual(["Pages"]);
+    expect(rowFor(G1)).toBeNull();
+  } finally {
+    slowFade.remove();
+  }
+});
+
+test("an answer that arrives after the shortcut closed the palette does not show on the next open", async () => {
+  const held = holdAnswerTo("go");
+  await renderPalette();
+  await openWithShortcut();
+  await userEvent.fill(searchBox(), "go");
+  await held.requested();
+
+  await userEvent.keyboard("{Meta>}k{/Meta}");
+  await expect.element(palette()).not.toBeInTheDocument();
+  await openWithShortcut();
+  await rowIsThere("/dashboard");
+
+  // The stub ignores the abort signal, as a response already on its way would.
+  // If the palette reads the body, wait for that and for the frames React needs
+  // to commit what it does with it; a palette that drops the response unread
+  // has nothing to wait for. Then look for what must not be there.
+  const reads = vi.spyOn(Response.prototype, "json");
+  try {
+    held.answer(ANSWERS.go);
+    await vi
+      .waitFor(() => expect(reads).toHaveBeenCalled(), { timeout: 500 })
+      .catch(() => {});
+    await Promise.all(reads.mock.results.map((read) => read.value));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  } finally {
+    reads.mockRestore();
+  }
+
+  await expect.element(searchBox()).toHaveValue("");
+  expect(headings()).toEqual(["Pages"]);
+  expect(rowFor(G1)).toBeNull();
+});
+
 test.each(["Control", "Meta"])("%s+K opens the palette", async (modifier) => {
   await renderPalette();
 
