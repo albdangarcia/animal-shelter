@@ -13,8 +13,9 @@
     "lint": "eslint --max-warnings 0",
     "e2e": "playwright test",
     "test": "tsx --test \"app/**/*.test.ts\"",
+    "test:components": "vitest run",
     "test:db": "tsx scripts/test-db.ts",
-    "test:all": "npm test && npm run test:db",
+    "test:all": "npm test && npm run test:components && npm run test:db",
     "e2e:headed": "playwright test --headed",
     "e2e:ui": "playwright test --ui",
     "e2e:install": "playwright install chromium",
@@ -94,12 +95,16 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.7",
     "@playwright/test": "^1.60.0",
+    "@rolldown/plugin-babel": "^0.2.4",
     "@tailwindcss/postcss": "^4.1.14",
-    "@types/node": "^20.19.21",
+    "@types/node": "^24.19.1",
     "@types/pg": "^8.21.0",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/browser-playwright": "^5.0.3",
     "dotenv": "^18.0.0",
     "eslint": "^9",
     "eslint-config-next": "^16.3.5",
@@ -108,7 +113,9 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.12",
     "tw-animate-css": "^1.3.4",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3",
+    "vitest-browser-react": "^2.3.0"
   },
   "allowScripts": {
     "@prisma/engines@7.10.0": true,

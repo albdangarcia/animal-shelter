@@ -16,9 +16,10 @@ Before writing a test, ask: *if this failed, what would be broken?* Put it in th
 |---|---|---|---|
 | a calculation, a formatter or a validation schema is wrong | unit, no database | `app/**/*.test.ts` | `npm test` |
 | the wrong thing is saved, refused or logged (locks, transactions, audit rows) | database, real Postgres | `prisma/**/*.test.ts` | `npm run test:db` |
+| a widget behaves wrong: a picker, a dialog, a filter control | component, real Chromium | `components/**/*.test.tsx` | `npm run test:components` |
 | a user cannot finish a task, or a page is not wired to the rule | browser | `tests/e2e/**` | `npm run e2e` |
 
-There is no component-test layer yet, so widget behaviour (pickers, dialogs, filter controls) stays in the browser for now.
+**A component test is for a shared client widget** (`components/forms`, `components/table-common`, the `components/ui` wrappers, the command palette, the login prompt): what a click, a key or a value does to it. It runs in Vitest browser mode, so it gets real layout and focus and reads like a Playwright test. A whole form that imports server actions stays in the browser; the browser keeps one test per form that shows the page is wired to its widgets (for the date picker, a trigger found by its `"<Label> *:"` name). The model to copy is `components/forms/date-fields.test.tsx`.
 
 **A browser test is for what only a browser can show:** a whole journey; that a refusal reaches the screen; who sees which actions; redirects and sign-in; layout; time zones.
 
@@ -30,7 +31,7 @@ These rules are for new tests. Do not delete or move existing browser tests as a
 
 ## Running tests locally
 
-- Run the unit and database tests freely.
+- Run the unit, component and database tests freely. `npm run test:components` needs Playwright's Chromium (`npm run e2e:install`).
 - For the browser, run only the specs you touched **plus the specs that cover the pages, components and server actions you changed**, with `npx playwright test <paths>`. Find them by grepping `tests/e2e` for the route, component or action name; a change to a shared component such as a picker can break specs you never opened.
 - Run the whole browser suite locally only when the change touches something every spec depends on: the seed, `playwright/global-setup.ts`, auth, or the shared helpers in `tests/e2e/support`. Otherwise leave it to CI, where the full suite runs as a required check.
 

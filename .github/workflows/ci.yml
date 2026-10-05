@@ -32,6 +32,26 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+      # The component tests (`npm run test:components`) run in Vitest browser
+      # mode, so they need Chromium. Same version, cache key and install steps
+      # as the e2e shards, so a run shares one cached browser.
+      - name: Resolve Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ steps.pw.outputs.version }}
+      - name: Install Playwright (browser + system deps)
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+      - name: Install Playwright system deps (browser cached)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+      - run: npm run test:components
+
   # Nothing else in CI exercises the migration files: the e2e harness builds its
   # schema with `prisma db push`, while Vercel's build runs `prisma migrate
   # deploy`. So a schema.prisma change committed without a generated migration

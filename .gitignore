@@ -18,6 +18,8 @@
 /coverage
 /playwright-report
 /test-results
+# Vitest browser mode's failure screenshots
+/.vitest
 
 # production
 /build
