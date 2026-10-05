@@ -187,6 +187,8 @@ export const CommandPalette = ({
   const [results, setResults] = useState<GlobalSearchResults | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [failed, setFailed] = useState(false);
+  // The highlighted row, as its href. See `activeHref`.
+  const [highlighted, setHighlighted] = useState("");
 
   // Aborts the previous in-flight search whenever a newer one starts, so a slow
   // response can't overwrite the results for what the user has since typed.
@@ -297,6 +299,27 @@ export const CommandPalette = ({
 
   const resultGroups = toResultGroups(results);
 
+  // cmdk picks the first row when the query changes, but at that moment the
+  // rows on screen are still the old results. When the new ones replace them
+  // it keeps the old value, and a new row selects itself only while none is
+  // set, so nothing was highlighted and Enter did nothing until ↓. So the
+  // palette keeps the highlight itself: the row the user moved to while it is
+  // still on screen, the first row otherwise. It hands that to cmdk as `value`.
+  const rowHrefs = [
+    ...pageMatches.map((item) => item.url),
+    ...resultGroups.flatMap((group) => group.rows.map((row) => row.href)),
+  ];
+  const activeHref = rowHrefs.includes(highlighted)
+    ? highlighted
+    : (rowHrefs[0] ?? "");
+
+  // What is kept follows what is shown. A row that left the list stops being
+  // the user's pick, or it would take the highlight back the next time it
+  // appeared; and a closed palette keeps none, whichever way it was closed
+  // (the ⌘K shortcut closes it without going through `handleOpenChange`).
+  const shownHref = open ? activeHref : "";
+  if (highlighted !== shownHref) setHighlighted(shownHref);
+
   const hasRows = pageMatches.length > 0 || resultGroups.length > 0;
   // Nothing to say before the user has typed, and no empty flash while the
   // first request for this query is still out.
@@ -337,6 +360,8 @@ export const CommandPalette = ({
           // Pages are matched by hand above, so cmdk must not filter again — it
           // would score against the item value, which here is a URL.
           shouldFilter={false}
+          value={activeHref}
+          onValueChange={setHighlighted}
           onKeyDown={handleKeyDown}
         >
           <div className="relative">

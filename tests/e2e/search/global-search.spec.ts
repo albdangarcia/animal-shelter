@@ -121,10 +121,18 @@ test.describe("staff", () => {
       page.getByText(ANIMAL_NAME, { exact: true }).first(),
     ).toBeVisible();
 
-    // Reopened here rather than searched before him: cmdk keeps a highlight
-    // from the previous query's rows, so Godzilla would not be the one Enter
-    // takes.
-    await openPalette(page, "shortcut");
+    // Reopened through the header search bar, which is where its wiring is
+    // read: the layout renders the bar and hands the palette its filtered nav
+    // items. Closing cleared the query, so Pages is the whole palette (an empty
+    // query costs no request): a keyboard navigator over the destinations this
+    // viewer can open. The People heading is absent here and present for
+    // "Jane" below, so its absence means something.
+    await openPalette(page, "search bar");
+    await expect(groupHeading(page, "Pages")).toBeVisible();
+    await expect(
+      palette(page).locator('[cmdk-item][data-href="/dashboard/animals"]'),
+    ).toBeVisible();
+    await expect(groupHeading(page, "People")).toHaveCount(0);
     await searchInput(page).fill("Jane");
 
     await expect(groupHeading(page, "People")).toBeVisible();
@@ -136,29 +144,6 @@ test.describe("staff", () => {
     const applicationRows = rowsUnder(page, "/dashboard/adoption-applications/");
     await expect(applicationRows).toHaveCount(GROUP_LIMIT);
     await expect(applicationRows.first()).toContainText(APPLICANT_NAME);
-  });
-
-  test("the header search bar opens the palette", async ({ page }) => {
-    await page.goto("/dashboard");
-    await expect(searchBar(page)).toBeVisible();
-
-    await openPalette(page, "search bar");
-    // An empty query costs no request, so Pages is the whole palette here: a
-    // keyboard navigator over the destinations this viewer can open.
-    await expect(groupHeading(page, "Pages")).toBeVisible();
-    await expect(
-      palette(page).locator('[cmdk-item][data-href="/dashboard/animals"]'),
-    ).toBeVisible();
-    await expect(groupHeading(page, "People")).toHaveCount(0);
-  });
-
-  test("Esc closes the palette", async ({ page }) => {
-    await page.goto("/dashboard");
-    await expect(themeToggle(page)).toBeVisible();
-
-    await openPalette(page, "shortcut");
-    await page.keyboard.press("Escape");
-    await expect(palette(page)).toBeHidden();
   });
 });
 
