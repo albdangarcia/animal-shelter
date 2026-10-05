@@ -191,32 +191,6 @@ test("a general placement cannot be converted to an adoption", async ({
   ).toBeVisible();
 });
 
-test("the calendar refuses a past expected return date", async ({ page }) => {
-  const today = shelterToday();
-  // On the 1st there is no past day rendered in the current month, so the
-  // guard is vacuously satisfied and there is nothing to assert.
-  test.skip(today.getDate() === 1, "No past day is in view on the 1st.");
-
-  await openCreateFormForAvailableFoster(page);
-  // DateField composes the label with the current value into the trigger's
-  // accessible name ("Expected Return Date: No expected date"), so a screen
-  // reader announces the selected date and not just the field name.
-  await page
-    .getByRole("button", { name: /^Expected Return Date:/ })
-    .click();
-
-  const calendar = page.getByRole("dialog");
-  await expect(calendar).toBeVisible();
-  // Day 1 of the current month is always in the past here, so the picker must
-  // refuse it. The server enforces the same rule via CreateFosterPlacementSchema
-  // (covered by app/lib/zod-schemas/foster.schemas.test.ts) — this only proves
-  // the client half.
-  await expect(dayCell(calendar, startOfMonth(today))).toBeDisabled();
-  // The boundary: a placement expected back *today* is still selectable, which
-  // is the same rule isFosterPlacementOverdue and attention-queue signal 3 use.
-  await expect(dayCell(calendar, today)).toBeEnabled();
-});
-
 test("a placement can record an expected return date", async ({ page }) => {
   await openCreateFormForAvailableFoster(page);
 
@@ -230,12 +204,26 @@ test("a placement can record an expected return date", async ({ page }) => {
     .getByRole("button", { name: /^Expected Return Date:/ })
     .click();
   const calendar = page.getByRole("dialog");
+  await expect(calendar).toBeVisible();
+
+  // The form refuses a past day. Day 1 of the current month is in the past,
+  // except on the 1st, when no past day is in view to read. The server
+  // enforces the same rule via CreateFosterPlacementSchema (covered by
+  // app/lib/zod-schemas/foster.schemas.test.ts); this proves the form passes
+  // it to the picker, whose half is components/forms/date-fields.test.tsx's.
+  const today = shelterToday();
+  if (today.getDate() !== 1) {
+    await expect(dayCell(calendar, startOfMonth(today))).toBeDisabled();
+  }
+  // The boundary: a placement expected back *today* is still selectable, which
+  // is the same rule isFosterPlacementOverdue and attention-queue signal 3 use.
+  await expect(dayCell(calendar, today)).toBeEnabled();
+
   // Next month's 15th is always in the future, whatever today is.
   await calendar.getByRole("button", { name: /Go to the Next Month/i }).click();
-  const now = shelterToday();
   await dayCell(
     calendar,
-    new Date(now.getFullYear(), now.getMonth() + 1, 15),
+    new Date(today.getFullYear(), today.getMonth() + 1, 15),
   ).click();
   await expect(page.getByText("No expected date")).toBeHidden();
 

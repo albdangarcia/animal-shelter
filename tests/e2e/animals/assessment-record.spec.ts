@@ -58,6 +58,12 @@ test("record an assessment, then edit it without losing answers", async ({
 
   await page.goto(`/dashboard/animals/${id}/assessments/create`);
   await pickOption(page, "Template *", "Handling Sensitivity");
+  // The form passes `required` to its date: the trigger's name carries the
+  // asterisk, and the picker keeps the day when it is clicked again
+  // (components/forms/date-fields.test.tsx).
+  await expect(
+    page.getByRole("button", { name: /^Observed on \*:/ }),
+  ).toBeVisible();
 
   await pickOption(page, "Collar and leash application *", "Accepts readily");
   await pickOption(page, "Gentle restraint for exam", "Tolerates");

@@ -285,8 +285,9 @@ This method mirrors the live production environment. It's ideal for testing the 
 | Command | What it runs | Database |
 |---|---|---|
 | `npm test` | Unit tests (`app/**/*.test.ts`) via `node:test` | None |
+| `npm run test:components` | Component tests (`components/**/*.test.tsx`) via Vitest browser mode, in real Chromium; needs Playwright's browser (`npm run e2e:install`) | None |
 | `npm run test:db` | Database tests (`prisma/**/*.test.ts`) via `node:test`; `npm run test:db -- prisma/<file>.test.ts` runs one file | Its own throwaway `docker-compose.playwright.yml` container, on port 25600 in the main checkout — **never** the dev database |
-| `npm run test:all` | `npm test` then `npm run test:db` | As above |
+| `npm run test:all` | `npm test`, then `npm run test:components`, then `npm run test:db` | As above |
 | `npm run e2e` | Playwright suite (see [End-to-End Tests](#end-to-end-tests)) | Another throwaway container from the same file, on port 25400 in the main checkout, reset and seeded |
 
 `npm run test:db` (`scripts/test-db.ts`) needs Docker with `docker compose` — the same requirement as `npm run e2e`. It brings its container up (idempotent), runs `prisma db push`, then the tests, and leaves the container running, so the next run starts faster. Files named after `--` run alone, after the same start-up; each must be a plain path to an existing file, so a typo fails instead of running zero tests. The tests run with a minimal environment, like CI's `db-tests` job, so `.env` does not reach them: a test that only passes with your `.env` fails here, not first on the PR. Set `PLAYWRIGHT_DATABASE_URL` to point the tests somewhere else; a value in a `.env*` file wins over one set in the shell. CI runs the equivalent steps directly in the `db-tests` job.
