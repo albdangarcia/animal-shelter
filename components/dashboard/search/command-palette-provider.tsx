@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -65,12 +66,26 @@ export const CommandPaletteProvider = ({
     opens: 0,
   });
 
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+
+  // Taken as an open is requested, while focus is still where the user left it.
+  // A palette that is still on screen is one that is fading out, however it
+  // was dismissed, and the reopen replaces it: what it was opened from stays
+  // the target, since focus may already have gone to the page by now.
+  const rememberFocus = () => {
+    if (contentRef.current) return;
+    const active = document.activeElement;
+    returnFocusRef.current = active instanceof HTMLElement ? active : null;
+  };
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // A modifier means this still fires while focus sits in a form field.
       if (event.key.toLowerCase() !== "k") return;
       if (!event.metaKey && !event.ctrlKey) return;
       event.preventDefault();
+      rememberFocus();
       setPalette(toggled);
     };
 
@@ -80,7 +95,12 @@ export const CommandPaletteProvider = ({
 
   // Not wrapped in useMemo: `reactCompiler` is on, so the compiler keeps this
   // object stable between renders on its own.
-  const value = { open: () => setPalette(opened) };
+  const value = {
+    open: () => {
+      rememberFocus();
+      setPalette(opened);
+    },
+  };
 
   return (
     // React 19 renders the context itself as the provider; `.Provider` is
@@ -92,6 +112,8 @@ export const CommandPaletteProvider = ({
         navItems={navItems}
         open={open}
         onOpenChange={(next) => setPalette(next ? opened : closed)}
+        contentRef={contentRef}
+        returnFocusRef={returnFocusRef}
       />
     </CommandPaletteContext>
   );
