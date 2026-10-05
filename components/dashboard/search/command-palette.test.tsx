@@ -357,6 +357,131 @@ test("an answer that arrives after the shortcut closed the palette does not show
   expect(rowFor(G1)).toBeNull();
 });
 
+// Closing hands focus back to whatever had it when the palette opened, so a
+// keyboard user carries on from where they were instead of from the top of the
+// page.
+
+// Radix returns focus in a timeout that runs after the dialog has unmounted, so
+// a test that expects focus *not* to move has to let that timeout pass first.
+const afterFocusReturn = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+test("Escape returns focus to the search bar that opened the palette", async () => {
+  await renderPalette();
+  await searchBar().click();
+  await expect.element(palette()).toBeVisible();
+
+  await userEvent.keyboard("{Escape}");
+
+  await expect.element(palette()).not.toBeInTheDocument();
+  await expect.element(searchBar()).toHaveFocus();
+});
+
+test("the close button and the shortcut return focus to the search bar too", async () => {
+  await renderPalette();
+  await searchBar().click();
+  await palette().getByRole("button", { name: "Close" }).click();
+  await expect.element(palette()).not.toBeInTheDocument();
+  await expect.element(searchBar()).toHaveFocus();
+
+  await searchBar().click();
+  await expect.element(palette()).toBeVisible();
+  await userEvent.keyboard("{Meta>}k{/Meta}");
+  await expect.element(palette()).not.toBeInTheDocument();
+  await expect.element(searchBar()).toHaveFocus();
+});
+
+test("opened with the shortcut, Escape returns focus to the element that had it", async () => {
+  await renderPalette();
+  searchBar().element().focus();
+  await openWithShortcut();
+  await expect.element(palette()).toBeVisible();
+
+  await userEvent.keyboard("{Escape}");
+
+  await expect.element(palette()).not.toBeInTheDocument();
+  await expect.element(searchBar()).toHaveFocus();
+});
+
+// With nothing focused there is nothing to go back to, and the search bar is
+// not a stand-in: focus must not jump to it for a palette it did not open.
+test("opened with the shortcut from nowhere, Escape does not move focus to the search bar", async () => {
+  await renderPalette();
+  await openWithShortcut();
+  await expect.element(palette()).toBeVisible();
+
+  await userEvent.keyboard("{Escape}");
+
+  await expect.element(palette()).not.toBeInTheDocument();
+  await afterFocusReturn();
+  expect(document.activeElement).toBe(document.body);
+});
+
+// The reopen replaces the dialog that is still fading out, and with it the
+// element holding focus: the search bar is still where focus goes back to.
+test("reopening while the palette is still fading out still returns focus to the search bar", async () => {
+  const slowFade = document.createElement("style");
+  slowFade.textContent = '[data-state="closed"] { animation-duration: 5s !important; }';
+  document.head.append(slowFade);
+  try {
+    await renderPalette();
+    await searchBar().click();
+    await expect.element(palette()).toBeVisible();
+
+    await userEvent.keyboard("{Meta>}k{/Meta}");
+    await expect.element(searchBox()).toBeVisible();
+    await openWithShortcut();
+    await expect.element(searchBox()).toHaveFocus();
+  } finally {
+    slowFade.remove();
+  }
+
+  await userEvent.keyboard("{Escape}");
+
+  await expect.element(palette()).not.toBeInTheDocument();
+  await expect.element(searchBar()).toHaveFocus();
+});
+
+// Clicking outside drops focus onto the page while the dialog is still fading
+// out, which is no reason to forget what the palette was opened from.
+test("reopening after a click outside, while the palette is still fading out, still returns focus to the search bar", async () => {
+  const slowFade = document.createElement("style");
+  slowFade.textContent = '[data-state="closed"] { animation-duration: 5s !important; }';
+  document.head.append(slowFade);
+  try {
+    await renderPalette();
+    await searchBar().click();
+    await expect.element(palette()).toBeVisible();
+
+    await page
+      .elementLocator(document.querySelector('[data-slot="dialog-overlay"]')!)
+      .click({ position: { x: 5, y: 5 } });
+    await vi.waitFor(() => expect(document.activeElement).toBe(document.body));
+    await openWithShortcut();
+    await expect.element(searchBox()).toHaveFocus();
+  } finally {
+    slowFade.remove();
+  }
+
+  await userEvent.keyboard("{Escape}");
+
+  await expect.element(palette()).not.toBeInTheDocument();
+  await expect.element(searchBar()).toHaveFocus();
+});
+
+// A picked row navigates, and the new page decides where focus starts.
+test("picking a row leaves focus to the page it opens", async () => {
+  await renderPalette();
+  await searchBar().click();
+  await rowIsThere("/dashboard/animals");
+
+  await userEvent.keyboard("{ArrowDown}{Enter}");
+
+  expect(routerCalls).toEqual([{ method: "push", href: "/dashboard/animals" }]);
+  await expect.element(palette()).not.toBeInTheDocument();
+  await afterFocusReturn();
+  expect(document.activeElement).toBe(document.body);
+});
+
 test.each(["Control", "Meta"])("%s+K opens the palette", async (modifier) => {
   await renderPalette();
 

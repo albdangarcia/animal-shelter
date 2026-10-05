@@ -7,6 +7,7 @@ import {
   useState,
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
@@ -167,6 +168,10 @@ interface CommandPaletteProps {
   navItems: PaletteNavItem[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The dialog, so the provider can tell whether one is still on screen. */
+  contentRef: RefObject<HTMLDivElement | null>;
+  /** Where focus goes when the palette closes. See `CommandPaletteProvider`. */
+  returnFocusRef: RefObject<HTMLElement | null>;
 }
 
 /**
@@ -181,6 +186,8 @@ export const CommandPalette = ({
   navItems,
   open,
   onOpenChange,
+  contentRef,
+  returnFocusRef,
 }: CommandPaletteProps) => {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -266,6 +273,8 @@ export const CommandPalette = ({
   };
 
   const goTo = (href: string) => {
+    // The page it opens decides where focus starts, not the bar behind it.
+    returnFocusRef.current = null;
     handleOpenChange(false);
     router.push(href);
   };
@@ -346,7 +355,13 @@ export const CommandPalette = ({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="overflow-hidden p-0">
+      <DialogContent
+        ref={contentRef}
+        className="overflow-hidden p-0"
+        // Radix hands focus back only to a `DialogTrigger`, and the search bar
+        // is a plain button outside this dialog.
+        onCloseAutoFocus={() => returnFocusRef.current?.focus()}
+      >
         <DialogHeader className="sr-only">
           <DialogTitle>Search</DialogTitle>
           <DialogDescription>
