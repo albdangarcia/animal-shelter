@@ -2,11 +2,19 @@ import { expect, test, type Page } from "@playwright/test";
 
 // /pets is public — no auth setup needed.
 //
+// What each filter control writes, and that it follows a URL it did not change
+// (a Reset), is checked in the component tests:
+// components/table-common/server-side-filters.test.tsx (the faceted filters and
+// the sort, shared with every list) and
+// components/public-pages/pets/pets-filters.test.tsx (the species pills, the
+// search box, Reset). This spec keeps what only the real page shows: that it
+// gives each control the parameter its server reads, and that the Next router's
+// back button leaves a control matching the URL.
+//
 // These assertions are deliberately about the CONTROLS and the URL, never about
 // the filtered pet cards: the seed's per-species counts vary a lot run to run
 // (one seed gives 3 birds, another 11), so "expect N bird cards" is flaky by
-// construction. The bug under test is that a filter control keeps displaying a
-// stale value after the server state (the URL) has moved on.
+// construction.
 
 // Every species row is seeded unconditionally in prisma/seed.ts
 // (seedLookupTables creates Dog/Cat/Bird/Rabbit/Reptile/Other regardless of how
@@ -29,79 +37,31 @@ const sortTrigger = (page: Page) =>
 const facetButton = (page: Page, title: string) =>
   page.getByRole("button", { name: new RegExp(`^${title}`) });
 
-test("selecting a species then resetting clears the species dropdown", async ({
+// Every parameter /pets reads, in its control: the page passes each control
+// the `paramKey` its server reads. Reset is a client navigation, so the same
+// controls re-render with the bare URL without remounting; one that kept its
+// own state would go on showing its filter. The grid may be empty with every
+// filter on: only the controls are read.
+test("every filter in the URL shows in its control, and Reset clears them all", async ({
   page,
 }) => {
-  await page.goto("/pets");
-
-  await selectSpecies(page, "Bird");
-  await page.waitForURL((url) => url.searchParams.get("category") === "Bird");
-  await expect(speciesPill(page, "Bird")).toHaveAttribute(
-    "aria-pressed",
-    "true",
+  // "Black" is seeded unconditionally.
+  await page.goto(
+    "/pets?category=Dog&color=Black&sex=MALE&size=SMALL&sort=createdAt.asc&query=bud",
   );
 
-  await page.getByRole("button", { name: "Reset" }).click();
-
-  await page.waitForURL(
-    (url) => url.pathname === "/pets" && url.search === "",
-  );
-  // The control must follow the URL back to the unfiltered state.
-  await expect(speciesPill(page, "All")).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await expect(speciesPill(page, "Bird")).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
-  expect(new URL(page.url()).searchParams.has("category")).toBe(false);
-});
-
-test("resetting several filters at once clears every control", async ({
-  page,
-}) => {
-  await page.goto("/pets");
-
-  // Species (Radix Select)
-  await selectSpecies(page, "Dog");
-  await page.waitForURL((url) => url.searchParams.get("category") === "Dog");
-
-  // Color (faceted popover) — "Black" is seeded unconditionally.
-  await facetButton(page, "Color").click();
-  await page.getByRole("option", { name: "Black", exact: true }).click();
-  await page.waitForURL((url) => url.searchParams.get("color") === "Black");
-  await page.keyboard.press("Escape");
-
-  // Sex (faceted popover) — exact, else "Male" also matches "Female".
-  await facetButton(page, "Sex").click();
-  await page.getByRole("option", { name: "Male", exact: true }).click();
-  await page.waitForURL((url) => url.searchParams.get("sex") === "MALE");
-  await page.keyboard.press("Escape");
-
-  // Size (faceted popover)
-  await facetButton(page, "Size").click();
-  await page.getByRole("option", { name: "Small", exact: true }).click();
-  await page.waitForURL((url) => url.searchParams.get("size") === "SMALL");
-  await page.keyboard.press("Escape");
-
-  // Sort (Radix Select) — "Oldest" is distinct from "Oldest pets".
-  await sortTrigger(page).click();
-  await page.getByRole("option", { name: "Oldest", exact: true }).click();
-  await page.waitForURL(
-    (url) => url.searchParams.get("sort") === "createdAt.asc",
-  );
-
-  // Search box (debounced input)
-  await page.getByRole("searchbox").fill("bud");
-  await page.waitForURL((url) => url.searchParams.get("query") === "bud");
-
-  // Sanity check that the filters actually took before resetting.
   await expect(speciesPill(page, "Dog")).toHaveAttribute(
     "aria-pressed",
     "true",
   );
+  // At this viewport the trigger shows its selection's labels. Case-sensitive,
+  // so "Male" does not match "Female".
+  await expect(facetButton(page, "Color")).toContainText("Black");
+  await expect(facetButton(page, "Sex")).toContainText("Male");
+  await expect(facetButton(page, "Size")).toContainText("Small");
+  // "Oldest", not "Oldest pets".
   await expect(sortTrigger(page)).toHaveText("Oldest");
+  await expect(page.getByRole("searchbox")).toHaveValue("bud");
 
   await page.getByRole("button", { name: "Reset" }).click();
   await page.waitForURL(
@@ -112,6 +72,10 @@ test("resetting several filters at once clears every control", async ({
   await expect(speciesPill(page, "All")).toHaveAttribute(
     "aria-pressed",
     "true",
+  );
+  await expect(speciesPill(page, "Dog")).toHaveAttribute(
+    "aria-pressed",
+    "false",
   );
   await expect(facetButton(page, "Color")).toHaveText("Color");
   await expect(facetButton(page, "Sex")).toHaveText("Sex");
