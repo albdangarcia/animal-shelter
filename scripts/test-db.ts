@@ -16,11 +16,13 @@
  * `.env*` held (i.e. dev) and wrote to / deleted from it.
  *
  * Requires Docker with `docker compose` — already a requirement for
- * `npm run e2e`. `docker compose ... up -d --wait` is idempotent, so this is a
- * no-op when the container is already running. The container is left up
- * afterwards, the same way CI's `db-tests` job leaves it, so the next run
- * skips the start-up; `docker compose -p <project> down -v` removes it (the
- * project name is in the first line this script logs).
+ * `npm run e2e`. `docker compose ... up -d --wait` is idempotent, so a
+ * container left over from an interrupted run is reused. When the run ends,
+ * pass or fail, `docker compose ... down -v` removes the container and its
+ * volume, as `playwright/global-teardown.ts` does for e2e, so a worktree leaves
+ * nothing behind to clean up. A run killed outright (SIGKILL, power loss)
+ * skips that; `docker compose -p <project> down -v` removes it (the project
+ * name is in the first line this script logs).
  *
  * Mirrors the steps of CI's `db-tests` job (`.github/workflows/ci.yml`):
  * compose up --wait → `prisma db push` → `tsx --test`. CI's job uses the e2e
@@ -141,11 +143,8 @@ const run = (
     });
   });
 
-async function main() {
-  console.log(
-    `test:db harness: ${describeHarness(TEST_DB_DOCKER_PROJECT_NAME, TEST_DB_DATABASE_URL)}`,
-  );
-  await run(
+const compose = (...args: string[]) =>
+  run(
     "docker",
     [
       "compose",
@@ -153,28 +152,46 @@ async function main() {
       TEST_DB_DOCKER_PROJECT_NAME,
       "-f",
       E2E_DOCKER_COMPOSE_FILE,
-      "up",
-      "-d",
-      "--wait",
+      ...args,
     ],
     env,
   );
-  await run("npx", ["prisma", "db", "push"], env);
-  await run(
-    process.execPath,
-    [
-      // From the checkout, not `require`, so it works whether this file runs
-      // as CommonJS or as an ES module.
-      createRequire(path.join(process.cwd(), "package.json")).resolve(
-        "tsx/cli",
-      ),
-      "--test",
-      ...(fileArgs.length > 0 ? fileArgs : ["prisma/**/*.test.ts"]),
-    ],
-    // No NODE_ENV, as in CI; Next's ProcessEnv type declares it required.
-    testEnv as NodeJS.ProcessEnv,
+
+async function main() {
+  console.log(
+    `test:db harness: ${describeHarness(TEST_DB_DOCKER_PROJECT_NAME, TEST_DB_DATABASE_URL)}`,
   );
+  try {
+    await compose("up", "-d", "--wait");
+    await run("npx", ["prisma", "db", "push"], env);
+    await run(
+      process.execPath,
+      [
+        // From the checkout, not `require`, so it works whether this file runs
+        // as CommonJS or as an ES module.
+        createRequire(path.join(process.cwd(), "package.json")).resolve(
+          "tsx/cli",
+        ),
+        "--test",
+        ...(fileArgs.length > 0 ? fileArgs : ["prisma/**/*.test.ts"]),
+      ],
+      // No NODE_ENV, as in CI; Next's ProcessEnv type declares it required.
+      testEnv as NodeJS.ProcessEnv,
+    );
+  } finally {
+    console.log("Stopping test:db PostgreSQL container...");
+    try {
+      await compose("down", "-v", "--remove-orphans");
+    } catch (error) {
+      console.error("Failed to tear down the test:db PostgreSQL.", error);
+    }
+  }
 }
+
+// Ctrl-C reaches this process and the test child together. Without a handler
+// Node would exit at once and skip the teardown; with one, the child exits, the
+// run above rejects, and `finally` runs.
+process.on("SIGINT", () => {});
 
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
