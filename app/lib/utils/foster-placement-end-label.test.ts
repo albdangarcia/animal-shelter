@@ -75,6 +75,26 @@ test("describePlacementEnd: a plain return reads as its reason", () => {
   );
 });
 
+test("describePlacementEnd: an adoption reversed after the foster adopted is marked reversed", () => {
+  // The placement a reversal leaves ended (the animal was re-intaked since) is
+  // still ADOPTED_BY_FOSTER and linked to the adoption, which no longer stands.
+  assert.equal(
+    describePlacementEnd({
+      returnReason: FosterReturnReason.ADOPTED_BY_FOSTER,
+      outcome: { type: OutcomeType.ADOPTION, reversedAt: REVERSED_AT },
+    }),
+    "Adopted By Foster (reversed)",
+  );
+  // With no outcome linked there is nothing to have reversed.
+  assert.equal(
+    describePlacementEnd({
+      returnReason: FosterReturnReason.ADOPTED_BY_FOSTER,
+      outcome: null,
+    }),
+    "Adopted By Foster",
+  );
+});
+
 test("describePlacementEnd: an outcome-ended placement whose outcome is gone reads as its reason", () => {
   assert.equal(
     describePlacementEnd({
