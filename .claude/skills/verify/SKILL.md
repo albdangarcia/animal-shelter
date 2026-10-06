@@ -7,7 +7,7 @@ description: How to boot this app locally and drive it end-to-end for verificati
 
 ## Environment
 
-- Local Postgres runs in a long-lived docker container (`some-postgres`, port 5432)
+- Local Postgres runs in a long-lived docker container (`animal-shelter-postgres`, port 5432)
   independent of the Playwright e2e docker-compose stack. Check `docker ps` — if it's
   up, `.env`'s `DATABASE_URL` already points at it and `npm run dev` works with no
   extra setup.
