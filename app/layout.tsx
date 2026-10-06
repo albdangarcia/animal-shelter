@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { openSans, fontgeist, caprasimo, figtree } from "../components/fonts";
+import { fontgeist, caprasimo, figtree } from "../components/fonts";
 import { Toaster } from "@/components/ui/sonner";
 import { ThemeProvider } from "@/components/light-dark-theme/theme-provider";
 
@@ -17,7 +17,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${fontgeist.className} ${openSans.variable} ${caprasimo.variable} ${figtree.variable} antialiased`}
+        className={`${fontgeist.className} ${caprasimo.variable} ${figtree.variable} antialiased`}
       >
         <ThemeProvider
           attribute="class"
