@@ -83,13 +83,17 @@ const expectDescriptionPersists = async (
 
 // The edit form of an animal with a locked listing status once sent a status
 // the action refuses, so it could not save at all. Pending adoption is the
-// case that regressed silently; it matters as much as archived.
+// case that regressed silently; it matters as much as archived. The same
+// reloaded form also shows the locks each status carries: both statuses pin
+// the listing status select, but only an archived animal (it has left) loses
+// the location and unit cascade, while a pending-adoption animal is still in
+// the shelter and can be moved between kennels.
 test("an archived or pending-adoption animal's description can be edited and persists", async ({
   page,
 }) => {
-  for (const [status, label] of [
-    ["ARCHIVED", "Archived"],
-    ["PENDING_ADOPTION", "Pending Adoption"],
+  for (const [status, label, cascadeLocked] of [
+    ["ARCHIVED", "Archived", true],
+    ["PENDING_ADOPTION", "Pending Adoption", false],
   ] as const) {
     const animalId = await firstAnimalIdByStatus(page, status);
     const description = `${label} edit check ${Date.now()}`;
@@ -99,27 +103,23 @@ test("an archived or pending-adoption animal's description can be edited and per
     // The form exposes no path to a different status, so the save left it as
     // it was: the edit form still shows it, and the status filter still
     // returns the animal.
-    await expect(
-      page.getByLabel("Listing Status *", { exact: true }),
-    ).toContainText(label);
-    expect(await firstAnimalIdByStatus(page, status)).toBe(animalId);
-  }
-});
-
-test("the listing status select is disabled and pinned to the current value for locked statuses", async ({
-  page,
-}) => {
-  for (const [status, label] of [
-    ["ARCHIVED", "Archived"],
-    ["PENDING_ADOPTION", "Pending Adoption"],
-  ] as const) {
-    const animalId = await firstAnimalIdByStatus(page, status);
-    await page.goto(`/dashboard/animals/${animalId}/edit`);
     const statusSelect = page.getByLabel("Listing Status *", { exact: true });
     await expect(statusSelect).toBeVisible();
-    await expect(statusSelect).toBeDisabled();
-    // A disabled select showing only this label offers no other value.
     await expect(statusSelect).toContainText(label);
+    await expect(statusSelect).toBeDisabled();
+
+    // An archived animal is always Unplaced, so its Unit select is disabled
+    // with or without the lock; only the Location read guards it. Unit is not
+    // read for a pending-adoption animal: whether it is enabled depends on
+    // whether the seeded animal has a location.
+    const location = page.getByLabel("Location", { exact: true });
+    if (cascadeLocked) {
+      await expect(location).toBeDisabled();
+      await expect(page.getByLabel("Unit", { exact: true })).toBeDisabled();
+    } else {
+      await expect(location).toBeEnabled();
+    }
+    expect(await firstAnimalIdByStatus(page, status)).toBe(animalId);
   }
 });
 
@@ -129,13 +129,4 @@ test("an in-care animal's ordinary edit still saves", async ({ page }) => {
   const description = `Published edit check ${Date.now()}`;
   await saveDescription(page, animalId, description);
   await expectDescriptionPersists(page, animalId, description);
-});
-
-test("an archived animal's edit form disables the location and unit cascade", async ({
-  page,
-}) => {
-  const animalId = await firstAnimalIdByStatus(page, "ARCHIVED");
-  await page.goto(`/dashboard/animals/${animalId}/edit`);
-  await expect(page.getByLabel("Location", { exact: true })).toBeDisabled();
-  await expect(page.getByLabel("Unit", { exact: true })).toBeDisabled();
 });
