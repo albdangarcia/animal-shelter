@@ -68,32 +68,7 @@ test("the staff review page renders the application's status history", async ({
   await expect(page.getByText("by Olivia Chen").first()).toBeVisible();
 });
 
-test("the review form says which of its two note fields the applicant sees", async ({
-  page,
-}) => {
-  await openReviewPage(page);
-
-  // Internal Notes had no visibility hint at all. Once the timeline ships on
-  // the applicant's page, the contrast between these two fields has to be
-  // obvious from the form itself.
-  await expect(
-    page.getByText("Staff-only. Never shown to the applicant."),
-  ).toBeVisible();
-
-  // The reason field only renders once a different status is picked. Nothing
-  // is submitted here — this is about what the form promises before staff
-  // commit to anything.
-  await page.getByLabel("Application Status", { exact: true }).click();
-  await page.getByRole("option", { name: "Waitlisted" }).click();
-
-  await expect(
-    page.getByText(
-      "Shared with the applicant — shown on their application page and recorded in the status history below.",
-    ),
-  ).toBeVisible();
-});
-
-test("the reason field is marked required only when the change needs a reason", async ({
+test("the review form marks the reason required only when needed, and says which note the applicant sees", async ({
   page,
 }) => {
   // One of Jane Doe's PENDING fixtures. There can be more than one (a withdrawn
@@ -121,10 +96,22 @@ test("the reason field is marked required only when the change needs a reason", 
   await expect(optionalReason).toHaveCount(0);
   await expect(requiredReason).toHaveCount(0);
 
+  // Internal Notes had no visibility hint at all. Once the timeline ships on
+  // the applicant's page, the contrast between these two fields has to be
+  // obvious from the form itself: this hint now, the reason field's below.
+  await expect(
+    page.getByText("Staff-only. Never shown to the applicant."),
+  ).toBeVisible();
+
   await status.click();
   await page.getByRole("option", { name: "Rejected", exact: true }).click();
   await expect(requiredReason).toBeVisible();
   await expect(optionalReason).toHaveCount(0);
+  await expect(
+    page.getByText(
+      "Shared with the applicant — shown on their application page and recorded in the status history below.",
+    ),
+  ).toBeVisible();
 
   // Picking a new application up for review is the one change the server lets
   // through without a reason.
