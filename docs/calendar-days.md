@@ -25,8 +25,7 @@ A field's name says which kind it is, and its type must agree.
 | ends `At`                         | instant      | `DateTime`               |
 
 Examples of each, so the shapes are unambiguous: `intakeDate`, `outcomeDate`,
-`birthDate`, `dateLost`, `dateOfRecord`, `dueDate` and `expectedEndDate` are
-days. `createdAt`, `updatedAt`, `publishedAt`, `submittedAt`, `recordedAt` are
+`birthDate`, `dateLost`, `dueDate` and `expectedEndDate` are days. `createdAt`, `updatedAt`, `publishedAt`, `submittedAt`, `recordedAt` are
 instants.
 
 `recordedAt` on a vitals log is the instructive case. A measurement is taken at

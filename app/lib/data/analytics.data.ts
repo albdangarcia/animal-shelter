@@ -259,12 +259,6 @@ export type TaskAnalyticsPayload = Prisma.TaskGetPayload<{
     dueDate: true;
     animal: { select: { id: true; name: true } };
     assignee: { select: { id: true; name: true } };
-    medicationLog: {
-      select: {
-        id: true;
-        schedule: { select: { medicationName: true } };
-      };
-    };
     createdBy: { select: { id: true; name: true } };
     createdAt: true;
     updatedAt: true;
@@ -302,12 +296,6 @@ const _fetchAnalyticsTaskTableData = async (): Promise<
         dueDate: true,
         animal: { select: { id: true, name: true } },
         assignee: { select: { id: true, name: true } },
-        medicationLog: {
-          select: {
-            id: true,
-            schedule: { select: { medicationName: true } },
-          },
-        },
         createdBy: { select: { id: true, name: true } },
         createdAt: true,
         updatedAt: true,

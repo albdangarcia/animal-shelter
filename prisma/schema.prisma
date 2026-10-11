@@ -77,7 +77,6 @@ model Person {
 
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
-  MedicationLog     MedicationLog[]
   AnimalActivityLog AnimalActivityLog[]
   aiActionLogs      AiActionLog[]
   vitalsLogs        VitalsLog[]
@@ -491,7 +490,6 @@ model Animal {
   // profile with no record of who claimed them.
   animalCharacteristics AnimalCharacteristic[]
   animalImages         AnimalImage[]
-  medicalRecords       MedicalRecord[]
   vitalsLogs           VitalsLog[]
   notes                AnimalNote[]
   tasks                Task[]
@@ -501,9 +499,6 @@ model Animal {
   Outcome              Outcome[]
   activityLog          AnimalActivityLog[]
   healthStatus         AnimalHealthStatus?
-  //  This is a "denormalized" field that you would update to true after a
-  // MedicalRecord for the procedure is created. It makes sorting and filtering trivial.
-
   // denormalized flags to animal
   // isMixedBreed    Boolean           @default(false)
   isSpayedNeutered Boolean @default(false)
@@ -516,8 +511,6 @@ model Animal {
   currentUnitId String? @map(name: "current_unit_id")
   currentUnit   Unit?   @relation(fields: [currentUnitId], references: [id], onDelete: SetNull)
 
-  MedicationSchedule MedicationSchedule[]
-  MedicationLog      MedicationLog[]
   assessments        Assessment[]
 
   createdAt   DateTime  @default(now()) @map(name: "created_at")
@@ -810,33 +803,6 @@ model Outcome {
 // MEDICAL
 // ═══════════════════════════════════════════════════
 
-enum MedicalRecordType {
-  VACCINATION // For recording immunizations like Rabies, DHPP, etc.
-  PROCEDURE // For surgeries like spay/neuter, dental cleaning
-  MEDICATION // For prescribed drugs
-  ALLERGY // To note known allergies
-  CHECKUP // A general vet visit or check-up
-  NOTE // A general health-related note
-}
-
-model MedicalRecord {
-  id           String            @id @default(cuid())
-  type         MedicalRecordType
-  title        String // e.g., "Rabies Vaccine", "Annual Checkup"
-  details      String? // Longer notes from the vet or staff
-  dateOfRecord String          @map(name: "date_of_record") // The date the event occurred
-  documentUrl  String?           @map(name: "document_url") // link to a PDF or image of the vet record
-
-  animalId String @map(name: "animal_id")
-  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([animalId])
-  @@map(name: "medical_records")
-}
-
 /// A dated set of measurements taken on one occasion. Append-mostly: corrections are
 /// edits by staff, removals are soft deletes. Weight is stored in INTEGER GRAMS —
 /// see the units note on Animal.currentWeightGrams.
@@ -846,8 +812,8 @@ model VitalsLog {
   /// When the measurement was TAKEN (backdatable — fosters report late).
   /// Distinct from createdAt, which is when the row was written.
   /// An instant, not a calendar day: a measurement is taken at a time, so unlike
-  /// Intake.intakeDate and MedicalRecord.dateOfRecord (days, no time of day) it
-  /// is a DateTime. See docs/calendar-days.md.
+  /// Intake.intakeDate (a day, no time of day) it is a DateTime. See
+  /// docs/calendar-days.md.
   recordedAt DateTime @default(now()) @map(name: "recorded_at")
 
   /// At least one of the three measurement fields must be present. `notes` does NOT
@@ -871,72 +837,6 @@ model VitalsLog {
 
   @@index([animalId, recordedAt])
   @@map("vitals_logs")
-}
-
-// Shelters deal with dozens of animals on different medications with varying schedules 
-// (twice a day, every 3 days, etc.). Automating this prevents missed doses, which is critical for animal health.
-// Using Cron Jobs
-
-// In this scenario, MedicalRecord can be used for one-off events
-// like vaccines or procedures, while MedicationLog handles recurring treatments.
-model MedicationSchedule {
-  id             String  @id @default(cuid())
-  medicationName String // e.g., "Doxycycline", "Metronidazole"
-  dosage         Float // e.g., 100, 0.5
-  dosageUnit     String // e.g., "mg", "ml", "tablet(s)"
-  route          String // e.g., "Oral", "Topical", "Injectable"
-  instructions   String?
-  isActive       Boolean @default(true)
-
-  // The calendar day this schedule starts, as `yyyy-MM-dd`. Not an instant,
-  // and no default: every writer states the day. See docs/calendar-days.md.
-  startDate      String
-  repeatInterval Int // e.g., 1
-  repeatUnit     String // "Days", "Weeks"
-  timesPerDay    Int       @default(1) // How many times within that day
-  // The optional calendar day this schedule ends, as `yyyy-MM-dd`. Not an
-  // instant. See docs/calendar-days.md.
-  endByDate      String?
-
-  animalId String @map("animal_id")
-  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
-
-  // Link to the logs of when this was administered
-  administrations MedicationLog[]
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([animalId])
-  @@map("medication_schedules")
-}
-
-// Model to log every single time a medication is given
-model MedicationLog {
-  id String @id @default(cuid())
-
-  administeredAt DateTime @default(now())
-  notes          String?
-
-  // The staff member who gave the medication
-  administeredById String
-  administeredBy   Person @relation(fields: [administeredById], references: [id])
-
-  // The schedule this administration belongs to
-  scheduleId String
-  schedule   MedicationSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-
-  // The animal who received it (denormalized for easy querying)
-  animalId String
-  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
-
-  // Optionally, link to the task that prompted this action
-  taskId String? @unique
-  task   Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
-
-  @@index([animalId])
-  @@index([scheduleId])
-  @@map("medication_logs")
 }
 
 // ═══════════════════════════════════════════════════
@@ -1067,8 +967,8 @@ model Assessment {
   assessor   Person @relation(fields: [assessorId], references: [id])
 
   /// When the observation was MADE (backdatable — same convention as
-  /// VitalsLog.recordedAt and MedicalRecord.dateOfRecord). Distinct from
-  /// createdAt, which is when the row was written.
+  /// VitalsLog.recordedAt). Distinct from createdAt, which is when the row was
+  /// written.
   observedAt DateTime @default(now()) @map(name: "observed_at")
 
   signal  AssessmentSignal @default(NO_CONCERNS)
@@ -1457,8 +1357,6 @@ model Task {
   assigneeId String? @map(name: "assignee_id")
   assignee   Person? @relation("TasksAssignedTo", fields: [assigneeId], references: [id], onDelete: SetNull)
 
-  medicationLog MedicationLog?
-
   createdById String @map("created_by_id")
   createdBy   Person @relation("TasksCreatedBy", fields: [createdById], references: [id])
 
@@ -1569,7 +1467,6 @@ enum AnimalActivityType {
   FIELD_UPDATE // A direct field on the animal model was changed (e.g., name, description)
   NOTE_ADDED // A note was created for this animal
   PHOTO_UPLOADED // A new photo was added
-  MEDICAL_RECORD_ADDED // A medical record was created
   ASSESSMENT_COMPLETED // An assessment was finished
   VITALS_RECORDED // A vitals entry (weight/temperature/body condition) was recorded
   TASK_CREATED // A task was created

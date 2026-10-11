@@ -25,11 +25,6 @@ export type { AttentionQueueItem, AttentionReason } from "./attention-queue";
 //   2. Acute health status (see ACUTE_HEALTH_STATUSES) with no open task
 //   3. Open foster placement past its expectedEndDate
 //
-// Intended fourth signal, once it has data: missed medication —
-// `MedicationSchedule` with no `MedicationLog` today. `MedicationSchedule` /
-// `MedicationLog` exist in the schema but have no forms and no seed data, so a
-// query against them would silently return nothing and look like it works.
-//
 // Queue-wide precondition: ARCHIVED animals (adopted / transferred / deceased)
 // are excluded from every signal. Their state is frozen history — an item on
 // one can never clear, which is exactly what this queue is defined against. A

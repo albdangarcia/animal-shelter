@@ -5059,9 +5059,6 @@ async function seedPartnerNote(opts: {
 async function clearDatabase() {
   console.log("Clearing existing data...");
 
-  await prisma.medicationLog.deleteMany();
-  await prisma.medicationSchedule.deleteMany();
-
   // Assessments before persons (assessorId is Restrict) and before the
   // template rows they FK to. Answers -> assessments -> fields -> templates.
   await prisma.assessmentAnswer.deleteMany();
@@ -5105,7 +5102,6 @@ async function clearDatabase() {
   await prisma.householdProfile.deleteMany();
 
   await prisma.animalImage.deleteMany();
-  await prisma.medicalRecord.deleteMany();
   await prisma.animal.deleteMany();
 
   // Units reference Location; Animal references Unit (SetNull). Animals are
