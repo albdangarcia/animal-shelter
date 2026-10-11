@@ -9,6 +9,7 @@ import {
 import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry.data";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { MedicalEntryList } from "./medical-entry-list";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
 
@@ -16,10 +17,11 @@ interface Props {
   /** Vaccines and tests that aren't voided, newest first. */
   entries: MedicalEntryDisplay[];
   names: Record<string, string>;
+  today: CalendarDay;
   controls: MedicalControls | null;
 }
 
-const VaccinesAndTests = ({ entries, names, controls }: Props) => {
+const VaccinesAndTests = ({ entries, names, today, controls }: Props) => {
   const vaccines = entries.filter(
     (entry) => entry.kind === MedicalEntryKind.VACCINE,
   );
@@ -69,6 +71,7 @@ const VaccinesAndTests = ({ entries, names, controls }: Props) => {
                 <MedicalEntryList
                   entries={doses}
                   names={names}
+                  today={today}
                   controls={controls}
                   className="space-y-2"
                 />
@@ -87,6 +90,7 @@ const VaccinesAndTests = ({ entries, names, controls }: Props) => {
             <MedicalEntryList
               entries={tests}
               names={names}
+              today={today}
               controls={controls}
               className="space-y-2"
             />

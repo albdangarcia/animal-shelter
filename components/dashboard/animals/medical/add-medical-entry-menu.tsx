@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { CalendarPlus, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,6 +14,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { MedicalEntryKind } from "@/prisma/generated/enums";
@@ -24,25 +25,31 @@ import {
   useConfirmedOpenChange,
 } from "@/hooks/use-confirmed-open-change";
 import { MedicalEntryForm } from "./medical-entry-form";
+import { ScheduleMedicalEntryForm } from "./schedule-medical-entry-form";
 import { DiscardChangesDialog } from "./discard-changes-dialog";
+import { ADD_ENTRY_BUTTON_ID } from "./use-entry-dialog-focus";
 
 interface Props {
   animalId: string;
   options: MedicalEntryFormOptions;
 }
 
-/** Where focus goes when the entry it was on is voided and leaves the page. */
-export const ADD_ENTRY_BUTTON_ID = "add-medical-entry";
+/** What the menu's dialog is doing: recording care of a kind, or scheduling. */
+type Mode = { record: MedicalEntryKind } | "schedule";
 
-/** "+ Add entry": pick a kind, then record it in a dialog. */
+/**
+ * "+ Add entry": pick a kind and record care already given, or schedule care
+ * for a due day, in a dialog.
+ */
 export function AddMedicalEntryMenu({ animalId, options }: Props) {
-  const [kind, setKind] = useState<MedicalEntryKind | null>(null);
+  const [mode, setMode] = useState<Mode | null>(null);
+  const kind = mode && mode !== "schedule" ? mode.record : null;
   const formRef = useRef<DirtyFormHandle>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
     useConfirmedOpenChange(
       () => formRef.current?.isDirty() ?? false,
-      (open) => !open && setKind(null),
+      (open) => !open && setMode(null),
     );
   // The dialog opens from a menu item that is gone by the time it closes, so
   // focus goes back to the menu's button rather than to the page.
@@ -62,14 +69,22 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           {Object.values(MedicalEntryKind).map((value) => (
-            <DropdownMenuItem key={value} onSelect={() => setKind(value)}>
+            <DropdownMenuItem
+              key={value}
+              onSelect={() => setMode({ record: value })}
+            >
               {MEDICAL_ITEM_KIND_LABELS[value]}
             </DropdownMenuItem>
           ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setMode("schedule")}>
+            <CalendarPlus className="mr-2 size-4" />
+            Schedule…
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <Dialog open={kind !== null} onOpenChange={guardedOnOpenChange}>
+      <Dialog open={mode !== null} onOpenChange={guardedOnOpenChange}>
         <DialogContent
           className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto"
           onCloseAutoFocus={returnFocus}
@@ -90,7 +105,24 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
                 animalId={animalId}
                 kind={kind}
                 options={options}
-                onFormSubmit={() => setKind(null)}
+                onFormSubmit={() => setMode(null)}
+                ref={formRef}
+              />
+            </>
+          )}
+          {mode === "schedule" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Schedule care</DialogTitle>
+                <DialogDescription>
+                  Plan a vaccine, test or treatment for the day it is due. How
+                  it was given is recorded when it is.
+                </DialogDescription>
+              </DialogHeader>
+              <ScheduleMedicalEntryForm
+                animalId={animalId}
+                options={options}
+                onFormSubmit={() => setMode(null)}
                 ref={formRef}
               />
             </>

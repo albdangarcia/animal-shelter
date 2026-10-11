@@ -23,12 +23,19 @@ const Page = async ({ params }: Props) => {
 
 const PageContent = async ({ params }: Props) => {
   const { id: animalId } = await params;
-  const [{ entries, names }, controls] = await Promise.all([
+  const [{ entries, names, today }, controls] = await Promise.all([
     fetchVaccinesAndTests(animalId),
     fetchMedicalControls(animalId),
   ]);
 
-  return <VaccinesAndTests entries={entries} names={names} controls={controls} />;
+  return (
+    <VaccinesAndTests
+      entries={entries}
+      names={names}
+      today={today}
+      controls={controls}
+    />
+  );
 };
 
 export default Page;

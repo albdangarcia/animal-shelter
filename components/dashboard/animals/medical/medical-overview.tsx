@@ -15,6 +15,7 @@ import { formatWeight } from "@/app/lib/utils/weight-format";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
 import { MedicalEntryList } from "./medical-entry-list";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
+import { DUE_HEADING_ID } from "./use-entry-dialog-focus";
 
 const rabiesText = (rabies: RabiesStatus) => {
   switch (rabies.status) {
@@ -38,14 +39,16 @@ interface Props {
 
 const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) => {
   const base = `/dashboard/animals/${animalId}/medical`;
-  const { rabies, currentWeightGrams, recentEntries, names } = overview;
+  const { rabies, currentWeightGrams, dueEntries, recentEntries, names, today } =
+    overview;
 
   return (
     <Card className="@container/card">
       <CardHeader>
         <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
         <CardDescription>
-          Vaccines, tests and treatments this animal has been given.
+          Vaccines, tests and treatments: what is due, and what this animal
+          has been given.
         </CardDescription>
         {controls?.canManage && (
           <CardAction>
@@ -89,6 +92,27 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
           </div>
         </dl>
 
+        <section aria-labelledby={DUE_HEADING_ID} className="space-y-3">
+          {/* Takes focus when a declined row leaves the list and there is no
+              Add entry button to send it to. */}
+          <h3 id={DUE_HEADING_ID} tabIndex={-1} className="font-medium">
+            Due
+          </h3>
+          {dueEntries.length > 0 ? (
+            <MedicalEntryList
+              entries={dueEntries}
+              names={names}
+              today={today}
+              controls={controls}
+              due
+            />
+          ) : (
+            <p className="rounded-lg border-2 border-dashed px-6 py-8 text-center text-sm text-muted-foreground">
+              Nothing scheduled.
+            </p>
+          )}
+        </section>
+
         <section aria-labelledby="recent-medical-entries" className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 id="recent-medical-entries" className="font-medium">
@@ -105,6 +129,7 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
             <MedicalEntryList
               entries={recentEntries}
               names={names}
+              today={today}
               controls={controls}
             />
           ) : (

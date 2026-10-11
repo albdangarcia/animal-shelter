@@ -13,6 +13,7 @@ import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry.data";
 import { MEDICAL_ITEM_KIND_LABELS } from "@/app/lib/constants/medical";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { MedicalEntryList } from "./medical-entry-list";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
 
@@ -25,17 +26,25 @@ interface Props {
   entries: MedicalEntryDisplay[];
   totalPages: number;
   names: Record<string, string>;
+  today: CalendarDay;
   controls: MedicalControls | null;
 }
 
-const MedicalHistory = ({ entries, totalPages, names, controls }: Props) => {
+const MedicalHistory = ({
+  entries,
+  totalPages,
+  names,
+  today,
+  controls,
+}: Props) => {
   return (
     <Card className="@container/card">
       <CardHeader>
         <CardTitle className="@[650px]/card:text-xl">History</CardTitle>
         <CardDescription>
-          Every entry, newest first. Voided entries stay here, struck
-          through, with who voided them and why.
+          Every entry, newest first by the day given or due, so care still
+          to come is at the top. Voided entries stay here, struck through,
+          with who voided them and why.
         </CardDescription>
         {controls?.canManage && (
           <CardAction>
@@ -55,7 +64,12 @@ const MedicalHistory = ({ entries, totalPages, names, controls }: Props) => {
       </CardHeader>
       <CardContent>
         {entries.length > 0 ? (
-          <MedicalEntryList entries={entries} names={names} controls={controls} />
+          <MedicalEntryList
+            entries={entries}
+            names={names}
+            today={today}
+            controls={controls}
+          />
         ) : (
           <div className="text-center py-12 px-6 border-2 border-dashed rounded-lg">
             <p className="font-semibold text-lg">No Entries Found</p>

@@ -55,3 +55,22 @@ test("describeEntryChanges: one row per changed field, in form order", () => {
     ],
   );
 });
+
+test("formatEntryFieldValue: statuses read as words, and due dates as dates", () => {
+  assert.equal(formatEntryFieldValue("status", "SCHEDULED", names), "Scheduled");
+  assert.equal(formatEntryFieldValue("status", "COMPLETED", names), "Given");
+  assert.equal(formatEntryFieldValue("status", "DECLINED", names), "Declined");
+  assert.equal(formatEntryFieldValue("dueDate", "2026-10-14", names), "Oct 14, 2026");
+  assert.equal(formatEntryFieldValue("dueDate", null, names), "none");
+  assert.equal(
+    formatEntryFieldValue("declineReason", "Reaction noted last time.", names),
+    "Reaction noted last time.",
+  );
+});
+
+test("describeEntryChanges: a reschedule reads as the due date before and after", () => {
+  assert.deepEqual(
+    describeEntryChanges({ dueDate: "2026-10-14" }, { dueDate: "2026-10-20" }, names),
+    [{ field: "dueDate", label: "Due date", from: "Oct 14, 2026", to: "Oct 20, 2026" }],
+  );
+});

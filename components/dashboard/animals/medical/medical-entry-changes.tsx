@@ -7,6 +7,29 @@ import { Button } from "@/components/ui/button";
 import { TimeAgo } from "@/components/common/time-ago";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
 import { describeEntryChanges } from "@/app/lib/utils/medical-entry-changes";
+import {
+  MedicalEntryEventAction,
+  MedicalEntryStatus,
+} from "@/prisma/generated/enums";
+
+type EntryEvent = MedicalEntryDisplay["events"][number];
+
+// What each later event reads as, before its actor.
+const EVENT_VERB: Record<Exclude<EntryEvent["action"], "CREATED">, string> = {
+  EDITED: "Edited",
+  VOIDED: "Voided",
+  COMPLETED: "Recorded as given",
+  RESCHEDULED: "Rescheduled",
+  DECLINED: "Declined",
+};
+
+/** The reason a void or a decline stored, from its event's `after`. */
+const reasonOf = (event: EntryEvent) => {
+  const after = (event.after ?? {}) as { voidReason?: string; declineReason?: string };
+  return event.action === MedicalEntryEventAction.VOIDED
+    ? after.voidReason
+    : after.declineReason;
+};
 
 interface Props {
   events: MedicalEntryDisplay["events"];
@@ -15,20 +38,29 @@ interface Props {
 }
 
 /**
- * Who recorded the entry, and behind a toggle every change made since: who,
- * when, and each field's value before and after, or why it was voided.
+ * Who recorded or scheduled the entry, and behind a toggle every change made
+ * since: who, when, and each field's value before and after, or why it was
+ * voided or declined.
  */
 export function MedicalEntryChanges({ events, names }: Props) {
   const [open, setOpen] = useState(false);
-  const created = events.find((event) => event.action === "CREATED");
-  const later = events.filter((event) => event.action !== "CREATED");
+  const created = events.find(
+    (event) => event.action === MedicalEntryEventAction.CREATED,
+  );
+  const later = events.filter(
+    (event) => event.action !== MedicalEntryEventAction.CREATED,
+  );
+  const scheduled =
+    (created?.after as { status?: string } | null)?.status ===
+    MedicalEntryStatus.SCHEDULED;
 
   return (
     <div className="mt-3 border-t pt-2 text-sm text-muted-foreground">
       <div className="flex flex-wrap items-center gap-x-2">
         {created && (
           <span>
-            Recorded by {created.actor.name} <TimeAgo date={created.createdAt} />
+            {scheduled ? "Scheduled" : "Recorded"} by {created.actor.name}{" "}
+            <TimeAgo date={created.createdAt} />
           </span>
         )}
         {later.length > 0 && (
@@ -53,12 +85,14 @@ export function MedicalEntryChanges({ events, names }: Props) {
           {later.map((event) => (
             <li key={event.id}>
               <p>
-                {event.action === "VOIDED" ? "Voided" : "Edited"} by{" "}
+                {EVENT_VERB[event.action as keyof typeof EVENT_VERB]} by{" "}
                 {event.actor.name} <TimeAgo date={event.createdAt} />
-                {event.action === "VOIDED" &&
-                  `: ${(event.after as { voidReason?: string } | null)?.voidReason ?? ""}`}
+                {(event.action === MedicalEntryEventAction.VOIDED ||
+                  event.action === MedicalEntryEventAction.DECLINED) &&
+                  `: ${reasonOf(event) ?? ""}`}
               </p>
-              {event.action === "EDITED" && (
+              {(event.action === MedicalEntryEventAction.EDITED ||
+                event.action === MedicalEntryEventAction.RESCHEDULED) && (
                 <ul className="ml-4 list-disc">
                   {describeEntryChanges(event.before, event.after, names).map(
                     (change) => (

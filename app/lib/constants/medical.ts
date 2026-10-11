@@ -1,6 +1,7 @@
 import type {
   DoseUnit,
   MedicalEntrySource,
+  MedicalEntryStatus,
   MedicalItemKind,
   MedicalRoute,
   TestResult,
@@ -46,6 +47,12 @@ export const MEDICAL_ENTRY_SOURCE_LABELS: Record<MedicalEntrySource, string> = {
   IN_HOUSE: "In house",
   OUTSIDE_VET: "Outside vet",
   BEFORE_INTAKE: "Before intake",
+};
+
+export const MEDICAL_ENTRY_STATUS_LABELS: Record<MedicalEntryStatus, string> = {
+  SCHEDULED: "Scheduled",
+  COMPLETED: "Given",
+  DECLINED: "Declined",
 };
 
 export const TEST_RESULT_LABELS: Record<TestResult, string> = {

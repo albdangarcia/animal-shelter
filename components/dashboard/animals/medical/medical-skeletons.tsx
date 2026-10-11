@@ -34,7 +34,8 @@ export const MedicalOverviewSkeleton = () => (
     <CardHeader>
       <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
       <CardDescription>
-        Vaccines, tests and treatments this animal has been given.
+        Vaccines, tests and treatments: what is due, and what this animal has
+        been given.
       </CardDescription>
     </CardHeader>
     <CardContent className="space-y-6">
@@ -46,6 +47,8 @@ export const MedicalOverviewSkeleton = () => (
           </div>
         ))}
       </div>
+      <Skeleton className="h-5 w-12" />
+      <EntryRowsSkeleton rows={1} />
       <div className="flex items-center justify-between">
         <Skeleton className="h-5 w-32" />
         <Skeleton className="h-4 w-16" />
@@ -60,8 +63,9 @@ export const MedicalHistorySkeleton = () => (
     <CardHeader>
       <CardTitle className="@[650px]/card:text-xl">History</CardTitle>
       <CardDescription>
-        Every entry, newest first. Voided entries stay here, struck through,
-        with who voided them and why.
+        Every entry, newest first by the day given or due, so care still to
+        come is at the top. Voided entries stay here, struck through, with
+        who voided them and why.
       </CardDescription>
       <div className="mt-4">
         <Skeleton className="h-8 w-24" />

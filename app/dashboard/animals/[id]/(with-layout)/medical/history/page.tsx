@@ -25,7 +25,7 @@ const Page = async ({ params, searchParams }: Props) => {
 const PageContent = async ({ params, searchParams }: Props) => {
   const { id: animalId } = await params;
   const { page = "1", kind } = await searchParams;
-  const [{ entries, totalPages, names }, controls] = await Promise.all([
+  const [{ entries, totalPages, names, today }, controls] = await Promise.all([
     fetchMedicalHistory(animalId, Number(page), kind),
     fetchMedicalControls(animalId),
   ]);
@@ -35,6 +35,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
       entries={entries}
       totalPages={totalPages}
       names={names}
+      today={today}
       controls={controls}
     />
   );

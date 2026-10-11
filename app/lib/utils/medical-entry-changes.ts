@@ -6,12 +6,14 @@
 import type {
   DoseUnit,
   MedicalEntrySource,
+  MedicalEntryStatus,
   MedicalRoute,
   TestResult,
 } from "@/prisma/generated/enums";
 import {
   DOSE_UNIT_LABELS,
   MEDICAL_ENTRY_SOURCE_LABELS,
+  MEDICAL_ENTRY_STATUS_LABELS,
   MEDICAL_ROUTE_LABELS,
   TEST_RESULT_LABELS,
 } from "@/app/lib/constants/medical";
@@ -19,12 +21,15 @@ import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 
 export const MEDICAL_ENTRY_FIELD_LABELS: Record<string, string> = {
   itemId: "Item",
+  status: "Status",
+  dueDate: "Due date",
   completedDate: "Date given",
   source: "Source",
   vetPartnerId: "Vet clinic",
   vetName: "Vet",
   administeredById: "Given by",
   notes: "Notes",
+  declineReason: "Reason declined",
   manufacturer: "Manufacturer",
   lotNumber: "Lot number",
   lotExpiryDate: "Lot expiry",
@@ -58,10 +63,13 @@ export const formatEntryFieldValue = (
     case "vetPartnerId":
     case "administeredById":
       return names[value as string] ?? "a record that no longer exists";
+    case "dueDate":
     case "completedDate":
     case "lotExpiryDate":
     case "validUntilDate":
       return formatShelterDayOrNA(value as string);
+    case "status":
+      return MEDICAL_ENTRY_STATUS_LABELS[value as MedicalEntryStatus] ?? String(value);
     case "source":
       return MEDICAL_ENTRY_SOURCE_LABELS[value as MedicalEntrySource] ?? String(value);
     case "route":
@@ -91,7 +99,10 @@ export interface EntryFieldChange {
   to: string;
 }
 
-/** What an EDITED event changed, one row per field, in form order. */
+/**
+ * What an event changed, one row per field, in form order: an EDITED event's
+ * corrections, or a RESCHEDULED event's due date.
+ */
 export const describeEntryChanges = (
   before: unknown,
   after: unknown,

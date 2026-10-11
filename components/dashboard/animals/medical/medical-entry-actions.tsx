@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Ban, Loader2, MoreHorizontal, Pencil } from "lucide-react";
 import { toast } from "sonner";
@@ -30,6 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
+import { MedicalEntryStatus } from "@/prisma/generated/enums";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import { voidMedicalEntry } from "@/app/lib/actions/medical-entry.actions";
 import {
@@ -42,8 +43,8 @@ import {
 } from "@/hooks/use-confirmed-open-change";
 import { MedicalEntryForm } from "./medical-entry-form";
 import { DiscardChangesDialog } from "./discard-changes-dialog";
-import { ADD_ENTRY_BUTTON_ID } from "./add-medical-entry-menu";
-import { entryDayText } from "./medical-entry-item";
+import { useEntryDialogFocus } from "./use-entry-dialog-focus";
+import { entryLabel } from "./medical-entry-item";
 
 interface Props {
   animalId: string;
@@ -51,7 +52,11 @@ interface Props {
   options: MedicalEntryFormOptions;
 }
 
-/** Edit and Void for one entry that isn't voided. */
+/**
+ * The row menu for one entry that isn't voided: Void, and Edit when it was
+ * given. Care not given isn't corrected in place: scheduled care is
+ * rescheduled, or voided and scheduled again, and a decline is final.
+ */
 export function MedicalEntryActions({ animalId, entry, options }: Props) {
   const router = useRouter();
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -60,29 +65,13 @@ export function MedicalEntryActions({ animalId, entry, options }: Props) {
   const [reasonError, setReasonError] = useState<string | undefined>();
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<DirtyFormHandle>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
     useConfirmedOpenChange(
       () => formRef.current?.isDirty() ?? false,
       setIsEditOpen,
     );
-  // The dialog opens from a menu item that is gone by the time it closes, so
-  // focus goes back to the menu's button rather than to the page. A void
-  // takes the button away too, before or after the dialog closes; then
-  // focus goes to Add entry.
-  const focusAddEntry = () =>
-    document.getElementById(ADD_ENTRY_BUTTON_ID)?.focus();
-  const returnFocus = (event: Event) => {
-    event.preventDefault();
-    if (triggerRef.current) triggerRef.current.focus();
-    else focusAddEntry();
-  };
-  useLayoutEffect(() => {
-    const trigger = triggerRef.current;
-    return () => {
-      if (trigger && document.activeElement === trigger) focusAddEntry();
-    };
-  }, []);
+  // The dialogs open from a menu item that is gone by the time they close.
+  const { triggerRef, returnFocus } = useEntryDialogFocus();
 
   // Checked as the server checks it, trimmed, so an over-long reason is
   // explained before anything is sent.
@@ -91,7 +80,8 @@ export function MedicalEntryActions({ animalId, entry, options }: Props) {
   const shownError = tooLong
     ? `The reason cannot exceed ${MEDICAL_REASON_MAX_LENGTH} characters.`
     : reasonError;
-  const what = `${entry.item.name} (${entryDayText(entry.completedDate)})`;
+  const what = entryLabel(entry);
+  const given = entry.status === MedicalEntryStatus.COMPLETED;
   const noun = MEDICAL_ITEM_KIND_LABELS[entry.kind].toLowerCase();
 
   const handleVoid = () => {
@@ -127,10 +117,12 @@ export function MedicalEntryActions({ animalId, entry, options }: Props) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setIsEditOpen(true)}>
-            <Pencil className="mr-2 h-4 w-4" />
-            Edit
-          </DropdownMenuItem>
+          {given && (
+            <DropdownMenuItem onSelect={() => setIsEditOpen(true)}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             variant="destructive"
             onSelect={() => setIsVoidOpen(true)}
@@ -184,18 +176,35 @@ export function MedicalEntryActions({ animalId, entry, options }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>Void {what}?</AlertDialogTitle>
             <AlertDialogDescription asChild>
-              <div className="space-y-2">
-                <p>
-                  This is for an entry that should never have been recorded,
-                  such as one entered against the wrong animal. To fix a
-                  detail, edit it instead.
-                </p>
-                <p>
-                  The entry stays in the history, struck through, and stops
-                  counting. A void can&apos;t be undone: if it was right after
-                  all, record it again.
-                </p>
-              </div>
+              {given ? (
+                <div className="space-y-2">
+                  <p>
+                    This is for an entry that should never have been
+                    recorded, such as one entered against the wrong animal.
+                    To fix a detail, edit it instead.
+                  </p>
+                  <p>
+                    The entry stays in the history, struck through, and stops
+                    counting. A void can&apos;t be undone: if it was right
+                    after all, record it again.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p>
+                    This is for care that should never have been scheduled,
+                    such as care scheduled for the wrong animal or the wrong
+                    item.
+                    {entry.status === MedicalEntryStatus.SCHEDULED &&
+                      " To move it to another day, reschedule it instead."}
+                  </p>
+                  <p>
+                    The entry stays in the history, struck through, and stops
+                    counting. A void can&apos;t be undone: if it was right
+                    after all, schedule it again.
+                  </p>
+                </div>
+              )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="space-y-1">
