@@ -88,6 +88,23 @@ test("MEDICAL_MANAGE starts at STAFF", () => {
   assert.equal(can(Role.STAFF, AppPermissions.MEDICAL_MANAGE), true);
 });
 
+// Giving care that is already scheduled is still giving care, not an
+// observation, so it isn't part of the volunteer exception below.
+test("MEDICAL_ADMINISTER starts at STAFF", () => {
+  assert.equal(can(Role.VOLUNTEER, AppPermissions.MEDICAL_ADMINISTER), false);
+  assert.equal(can(Role.STAFF, AppPermissions.MEDICAL_ADMINISTER), true);
+});
+
+// Screens gated on MEDICAL_MANAGE also offer recording scheduled care, which
+// is gated on MEDICAL_ADMINISTER, so a manager must always hold both.
+test("every role holding MEDICAL_MANAGE also holds MEDICAL_ADMINISTER", () => {
+  for (const role of Object.values(Role)) {
+    if (can(role, AppPermissions.MEDICAL_MANAGE)) {
+      assert.equal(can(role, AppPermissions.MEDICAL_ADMINISTER), true, role);
+    }
+  }
+});
+
 // The catalog is shelter-wide configuration: retiring an item hides it from
 // every new entry, so recording care is deliberately not enough for it.
 test("MEDICAL_SETTINGS_MANAGE stops at ADMIN", () => {
@@ -101,6 +118,7 @@ test("the documented volunteer exception: VOLUNTEER holds ANIMAL_VITALS_MANAGE",
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_INFO_MANAGE), false);
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_NOTE_MANAGE), false);
   assert.equal(can(Role.VOLUNTEER, AppPermissions.MEDICAL_MANAGE), false);
+  assert.equal(can(Role.VOLUNTEER, AppPermissions.MEDICAL_ADMINISTER), false);
 });
 
 test("an unknown role string returns false rather than throwing", () => {

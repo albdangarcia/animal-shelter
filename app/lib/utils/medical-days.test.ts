@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addCalendarMonths, rabiesStatus } from "./medical-days";
+import {
+  addCalendarMonths,
+  dueDateIssue,
+  latestDueDate,
+  rabiesStatus,
+} from "./medical-days";
 import { calendarDay } from "./shelter-day";
 
 const day = calendarDay;
@@ -50,4 +55,19 @@ test("rabiesStatus: valid through the valid-until day, expired the day after", (
     status: "EXPIRED",
     validUntilDate: "2026-10-10",
   });
+});
+
+test("dueDateIssue: from today up to five years ahead", () => {
+  const today = day("2026-10-10");
+  assert.equal(latestDueDate(today), "2031-10-10");
+  assert.equal(dueDateIssue(today, today), null);
+  assert.equal(dueDateIssue(day("2031-10-10"), today), null);
+  assert.equal(
+    dueDateIssue(day("2026-10-09"), today),
+    "The due date can't be in the past.",
+  );
+  assert.equal(
+    dueDateIssue(day("2031-10-11"), today),
+    "The due date can't be more than 5 years from today.",
+  );
 });

@@ -1,13 +1,15 @@
 // The medical entry reads with no auth or `next/*` imports, so database tests
 // can call them. `medical-entry.data.ts` wraps them behind MEDICAL_READ.
 //
-// A voided entry counts for nothing, so every read that derives a fact (the
-// latest rabies vaccine, which entries are current) leaves voided entries out.
-// Only the history reads them.
+// A read that derives a fact (the latest rabies vaccine, which entries are
+// current) counts only completed entries that aren't voided: scheduled care
+// hasn't happened, declined care never will, and a voided entry counts for
+// nothing. The due list reads scheduled entries that aren't voided. Only the
+// history reads every entry.
 
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
-import type { Prisma } from "@/prisma/generated/client";
-import { MedicalEntryKind } from "@/prisma/generated/enums";
+import { Prisma } from "@/prisma/generated/client";
+import { MedicalEntryKind, MedicalEntryStatus } from "@/prisma/generated/enums";
 import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
 type Db = TransactionClient | typeof prisma;
@@ -29,6 +31,7 @@ export const findLatestRabiesVaccine = async (
     where: {
       animalId,
       kind: MedicalEntryKind.VACCINE,
+      status: MedicalEntryStatus.COMPLETED,
       voidedAt: null,
       // Whether it was a rabies vaccine is read off what was recorded, not
       // the item as it is now, so changing the catalog can't reclassify it.
@@ -59,8 +62,11 @@ export const findLatestRabiesVaccine = async (
 export const MEDICAL_ENTRY_DISPLAY_SELECT = {
   id: true,
   kind: true,
+  status: true,
+  dueDate: true,
   completedDate: true,
   source: true,
+  declineReason: true,
   vetName: true,
   notes: true,
   createdAt: true,
@@ -123,18 +129,36 @@ const NEWEST_FIRST = [
   { id: "desc" },
 ] as const satisfies Prisma.MedicalEntryOrderByWithRelationInput[];
 
-/** The animal's latest entries that aren't voided, newest first. */
+/** The animal's latest completed entries that aren't voided, newest first. */
 export const findRecentMedicalEntries = (db: Db, animalId: string, take: number) =>
   db.medicalEntry.findMany({
-    where: { animalId, voidedAt: null },
+    where: { animalId, status: MedicalEntryStatus.COMPLETED, voidedAt: null },
     orderBy: NEWEST_FIRST,
     take,
     select: MEDICAL_ENTRY_DISPLAY_SELECT,
   });
 
 /**
- * One page of the animal's entries, voided ones included: the history is the
- * only read that shows them. `kinds` empty means every kind.
+ * The animal's scheduled care that isn't voided, soonest due first. Overdue
+ * care is in it: whether an entry is overdue is worked out against the
+ * shelter's today by whoever shows it.
+ */
+export const findDueMedicalEntries = (db: Db, animalId: string) =>
+  db.medicalEntry.findMany({
+    where: { animalId, status: MedicalEntryStatus.SCHEDULED, voidedAt: null },
+    orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+    select: MEDICAL_ENTRY_DISPLAY_SELECT,
+  });
+
+/**
+ * One page of the animal's entries, whatever their status, voided ones
+ * included: the history is the only read that shows them all. `kinds` empty
+ * means every kind.
+ *
+ * Newest first by the day given or, for care not given, the day due, so
+ * upcoming care comes first and care given on an unknown day before intake
+ * comes last. Prisma can't order by that, so the page's ids are picked in SQL
+ * and the entries read by id.
  */
 export const findMedicalHistoryPage = async (
   db: Db,
@@ -145,24 +169,36 @@ export const findMedicalHistoryPage = async (
     animalId,
     ...(options.kinds.length > 0 && { kind: { in: options.kinds } }),
   };
-  const [total, entries] = await Promise.all([
+  const kindFilter =
+    options.kinds.length > 0
+      ? Prisma.sql`AND kind::text IN (${Prisma.join(options.kinds)})`
+      : Prisma.empty;
+  const [total, page] = await Promise.all([
     db.medicalEntry.count({ where }),
-    db.medicalEntry.findMany({
-      where,
-      orderBy: NEWEST_FIRST,
-      skip: (options.page - 1) * options.perPage,
-      take: options.perPage,
-      select: MEDICAL_ENTRY_DISPLAY_SELECT,
-    }),
+    db.$queryRaw<{ id: string }[]>`
+      SELECT id FROM medical_entries
+      WHERE animal_id = ${animalId} ${kindFilter}
+      ORDER BY coalesce(completed_date, due_date) DESC NULLS LAST,
+        created_at DESC, id DESC
+      LIMIT ${options.perPage} OFFSET ${(options.page - 1) * options.perPage}`,
   ]);
+  const ids = page.map((row) => row.id);
+  const rows = await db.medicalEntry.findMany({
+    where: { id: { in: ids } },
+    select: MEDICAL_ENTRY_DISPLAY_SELECT,
+  });
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const entries = ids.flatMap((id) => byId.get(id) ?? []);
   return { entries, totalPages: Math.max(1, Math.ceil(total / options.perPage)) };
 };
 
-/** The animal's vaccines and tests that aren't voided, newest first. */
+/** The animal's completed vaccines and tests that aren't voided, newest
+ * first. */
 export const findVaccinesAndTests = (db: Db, animalId: string) =>
   db.medicalEntry.findMany({
     where: {
       animalId,
+      status: MedicalEntryStatus.COMPLETED,
       voidedAt: null,
       kind: { in: [MedicalEntryKind.VACCINE, MedicalEntryKind.TEST] },
     },

@@ -3,6 +3,7 @@ import type { Prisma } from "@/prisma/generated/client";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import {
   AnimalActivityType,
+  AnimalListingStatus,
   DoseUnit,
   MedicalEntryEventAction,
   MedicalEntryKind,
@@ -22,7 +23,7 @@ import {
   formatShelterDay,
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
-import { addCalendarMonths } from "@/app/lib/utils/medical-days";
+import { addCalendarMonths, dueDateIssue } from "@/app/lib/utils/medical-days";
 import { lockMedicalItemForUse } from "@/app/lib/services/medical-catalog";
 import {
   DOSE_UNIT_LABELS,
@@ -32,8 +33,13 @@ import {
 } from "@/app/lib/constants/medical";
 
 /**
- * Recording, correcting and voiding a vaccine, test or treatment given to an
- * animal.
+ * Scheduling, recording, correcting and voiding a vaccine, test or treatment
+ * for an animal.
+ *
+ * Scheduled care is an entry with a due day and nothing else: no source, no
+ * details row. Lot numbers and results are written only when it is given, so
+ * they exist only for care that happened. Every read that derives a fact
+ * counts only completed entries.
  *
  * A correction edits the entry in place and writes an EDITED event holding the
  * before and after values of only what changed, plus a MEDICAL_ENTRY_EDITED
@@ -110,6 +116,15 @@ export type MedicalEntryInput =
   | TestEntryInput
   | TreatmentEntryInput;
 
+/** Care to schedule: what, for whom, and the day it is due. */
+export interface ScheduleMedicalEntryInput {
+  animalId: string;
+  kind: MedicalEntryKind;
+  itemId: string;
+  dueDate: CalendarDay;
+  notes?: string | null;
+}
+
 export type MedicalEntryEdit =
   | { status: "edited"; entryId: string; animalId: string; changeSummary: string }
   | { status: "unchanged"; entryId: string; animalId: string };
@@ -166,12 +181,36 @@ const tidy = (value: string | null | undefined): string | null => {
 // transaction (one connection) can't do, so an entry and its details, and an
 // item and its lists, are read one after the other.
 
-/** The entry as stored, flat, behind its kind. Null when it doesn't exist. */
-const readStoredEntry = async (tx: TransactionClient, entryId: string) => {
+type StoredEntry = {
+  kind: MedicalEntryKind;
+  dueDate: string | null;
+  voidedAt: Date | null;
+} & (
+  | { status: typeof MedicalEntryStatus.COMPLETED; values: EntryValues }
+  // Scheduled and declined care was never given, so it has no values to
+  // compare and no details row.
+  | {
+      status:
+        | typeof MedicalEntryStatus.SCHEDULED
+        | typeof MedicalEntryStatus.DECLINED;
+      values: null;
+    }
+);
+
+/**
+ * The entry as stored, its given care flat behind its kind. Null when it
+ * doesn't exist.
+ */
+const readStoredEntry = async (
+  tx: TransactionClient,
+  entryId: string,
+): Promise<StoredEntry | null> => {
   const entry = await tx.medicalEntry.findUnique({
     where: { id: entryId },
     select: {
       kind: true,
+      status: true,
+      dueDate: true,
       itemId: true,
       completedDate: true,
       source: true,
@@ -183,7 +222,15 @@ const readStoredEntry = async (tx: TransactionClient, entryId: string) => {
     },
   });
   if (!entry) return null;
-  const { kind, voidedAt, ...common } = entry;
+  const { kind, status, dueDate, voidedAt, source, ...rest } = entry;
+  if (status !== MedicalEntryStatus.COMPLETED) {
+    return { kind, status, dueDate, voidedAt, values: null };
+  }
+  if (!source) {
+    throw new Error(`Completed medical entry ${entryId} has no source.`);
+  }
+  const common = { ...rest, source };
+  const stored = { kind, status, dueDate, voidedAt };
 
   switch (kind) {
     case MedicalEntryKind.VACCINE: {
@@ -201,7 +248,7 @@ const readStoredEntry = async (tx: TransactionClient, entryId: string) => {
         durationMonths: vaccine.durationMonths,
         validUntilDate: vaccine.validUntilDate,
       };
-      return { kind, voidedAt, values };
+      return { ...stored, values };
     }
     case MedicalEntryKind.TEST: {
       const test = await tx.testDetails.findUniqueOrThrow({
@@ -218,7 +265,7 @@ const readStoredEntry = async (tx: TransactionClient, entryId: string) => {
         lotExpiryDate: test.lotExpiryDate,
         results,
       };
-      return { kind, voidedAt, values };
+      return { ...stored, values };
     }
     case MedicalEntryKind.TREATMENT: {
       const treatment = await tx.treatmentDetails.findUniqueOrThrow({
@@ -230,7 +277,7 @@ const readStoredEntry = async (tx: TransactionClient, entryId: string) => {
         doseUnit: treatment.doseUnit,
         route: treatment.route,
       };
-      return { kind, voidedAt, values };
+      return { ...stored, values };
     }
   }
 };
@@ -270,6 +317,8 @@ const RABIES_MAX_MONTHS = 36;
 
 interface AnimalFacts {
   speciesId: string;
+  /** Out of the shelter's care: its listing is archived. */
+  archived: boolean;
   firstIntakeDate: CalendarDay | null;
   latestIntakeDate: CalendarDay | null;
 }
@@ -280,7 +329,11 @@ const readAnimal = async (
 ): Promise<AnimalFacts> => {
   const animal = await tx.animal.findUnique({
     where: { id: animalId },
-    select: { speciesId: true, intake: { select: { intakeDate: true } } },
+    select: {
+      speciesId: true,
+      listingStatus: true,
+      intake: { select: { intakeDate: true } },
+    },
   });
   if (!animal) {
     throw new NotFoundError("Animal not found.");
@@ -288,6 +341,7 @@ const readAnimal = async (
   const days = animal.intake.map((intake) => calendarDay(intake.intakeDate)).sort();
   return {
     speciesId: animal.speciesId,
+    archived: animal.listingStatus === AnimalListingStatus.ARCHIVED,
     firstIntakeDate: days[0] ?? null,
     latestIntakeDate: days[days.length - 1] ?? null,
   };
@@ -349,7 +403,7 @@ const checkItemPickable = (
   }
   if (item.retiredAt) {
     throw new MedicalEntryRefusal(
-      `${item.name} has been retired from the catalog and can't be recorded.`,
+      `${item.name} has been retired from the catalog and can't be used for new entries.`,
       "itemId",
     );
   }
@@ -404,6 +458,17 @@ const checkDay = (
       `Care given before intake can't be dated after the animal's intake on ${formatShelterDay(animal.latestIntakeDate)}.`,
       "completedDate",
     );
+  }
+};
+
+/**
+ * Refuses a due day the scheduling rules don't allow: before today, or too
+ * far ahead.
+ */
+export const checkDueDate = (dueDate: CalendarDay, today: CalendarDay) => {
+  const issue = dueDateIssue(dueDate, today);
+  if (issue) {
+    throw new MedicalEntryRefusal(issue, "dueDate");
   }
 };
 
@@ -787,6 +852,77 @@ const sameValue = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /**
+ * Schedules a vaccine, test or treatment for a due day. The entry holds the
+ * item, the day and any notes, and nothing about how it will be given: that
+ * is written when it is recorded as given.
+ *
+ * Only an animal in the shelter's care can have care scheduled. Recording,
+ * declining and voiding what is already scheduled work after it leaves, so
+ * its open entries can still be cleared.
+ */
+export async function scheduleMedicalEntry(
+  tx: TransactionClient,
+  input: ScheduleMedicalEntryInput,
+  actorId: string,
+  today: CalendarDay,
+): Promise<{ entryId: string; animalId: string }> {
+  const { animalId } = input;
+  await lockAnimal(tx, animalId);
+
+  const animal = await readAnimal(tx, animalId);
+  if (animal.archived) {
+    throw new MedicalEntryRefusal(
+      "This animal has left the shelter's care, so nothing can be scheduled for it.",
+    );
+  }
+  // Held until commit, as when recording.
+  await lockMedicalItemForUse(tx, input.itemId);
+  const item = await readItem(tx, input.itemId);
+  checkItemPickable(item, input.kind, animal);
+  checkDueDate(input.dueDate, today);
+
+  const notes = tidy(input.notes);
+  const entry = await tx.medicalEntry.create({
+    data: {
+      animalId,
+      kind: input.kind,
+      itemId: item.id,
+      status: MedicalEntryStatus.SCHEDULED,
+      dueDate: input.dueDate,
+      notes,
+      createdById: actorId,
+    },
+    select: { id: true },
+  });
+
+  await tx.medicalEntryEvent.create({
+    data: {
+      entryId: entry.id,
+      action: MedicalEntryEventAction.CREATED,
+      actorId,
+      after: asJson({
+        kind: input.kind,
+        status: MedicalEntryStatus.SCHEDULED,
+        itemId: item.id,
+        dueDate: input.dueDate,
+        notes,
+      }),
+    },
+  });
+
+  await tx.animalActivityLog.create({
+    data: {
+      animalId,
+      activityType: AnimalActivityType.MEDICAL_ENTRY_SCHEDULED,
+      changedById: actorId,
+      changeSummary: `${item.name} ${KIND_NOUN[input.kind]} scheduled for ${dayText(input.dueDate)}.`,
+    },
+  });
+
+  return { entryId: entry.id, animalId };
+}
+
+/**
  * Records a vaccine, test or treatment as given. Blank defaults (manufacturer,
  * route, dose) are filled in from the catalog item, so changing the item's
  * defaults later never rewrites this entry.
@@ -924,7 +1060,18 @@ export async function editMedicalEntry(
   }
   if (entry.voidedAt) {
     throw new ConflictError(
-      "This entry was voided, so it can't be edited. Record it again instead.",
+      entry.status === MedicalEntryStatus.COMPLETED
+        ? "This entry was voided, so it can't be edited. Record it again instead."
+        : "This entry was voided, so it can't be edited. Schedule it again instead.",
+    );
+  }
+  // Only care that was given is corrected. Scheduled care is rescheduled, or
+  // voided and scheduled again; a declined entry is final.
+  if (entry.status !== MedicalEntryStatus.COMPLETED) {
+    throw new ConflictError(
+      entry.status === MedicalEntryStatus.SCHEDULED
+        ? "This entry is scheduled and hasn't been given, so it can't be edited. Reschedule it, or void it and schedule it again."
+        : "This entry was declined, so it can't be edited. If it was declined in error, void it.",
     );
   }
   if (input.kind !== entry.kind) {
@@ -1056,8 +1203,8 @@ export async function editMedicalEntry(
 }
 
 /**
- * Voids an entry recorded in error. Write-once: an entry already voided is
- * refused, and nothing un-voids one.
+ * Voids an entry recorded or scheduled in error, whatever its status.
+ * Write-once: an entry already voided is refused, and nothing un-voids one.
  */
 export async function voidMedicalEntry(
   tx: TransactionClient,
@@ -1089,6 +1236,8 @@ export async function voidMedicalEntry(
     where: { id: entryId },
     select: {
       kind: true,
+      status: true,
+      dueDate: true,
       completedDate: true,
       voidedAt: true,
       item: { select: { name: true } },
@@ -1121,7 +1270,12 @@ export async function voidMedicalEntry(
       animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_VOIDED,
       changedById: actorId,
-      changeSummary: `${entry.item.name} ${KIND_NOUN[entry.kind]} ${KIND_VERB[entry.kind]} on ${dayText(entry.completedDate)} was voided. Reason: ${trimmedReason}`,
+      // Care that was never given is named by the day it was due.
+      changeSummary: `${entry.item.name} ${KIND_NOUN[entry.kind]} ${
+        entry.status === MedicalEntryStatus.COMPLETED
+          ? `${KIND_VERB[entry.kind]} on ${dayText(entry.completedDate)}`
+          : `due ${dayText(entry.dueDate)}`
+      } was voided. Reason: ${trimmedReason}`,
     },
   });
 

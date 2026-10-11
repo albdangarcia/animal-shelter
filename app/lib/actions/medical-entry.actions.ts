@@ -12,14 +12,17 @@ import { AppPermissions } from "../auth/permissions";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   MedicalEntryFormSchema,
+  ScheduleMedicalEntrySchema,
   VoidMedicalEntrySchema,
   type MedicalEntryFormInput,
+  type ScheduleMedicalEntryFormInput,
   type VoidMedicalEntryInput,
 } from "../zod-schemas/medical-entry.schemas";
 import {
   MedicalEntryRefusal,
   editMedicalEntry as editEntry,
   recordMedicalEntry as recordEntry,
+  scheduleMedicalEntry as scheduleEntry,
   voidMedicalEntry as voidEntry,
 } from "../services/medical-entry";
 import { NO_OP_EDIT_MESSAGE } from "../services/note-audit";
@@ -105,6 +108,46 @@ const _recordMedicalEntry = async (
   return { ok: true, message: "Entry recorded." };
 };
 
+const _scheduleMedicalEntry = async (
+  user: SessionUser,
+  animalId: string,
+  values: ScheduleMedicalEntryFormInput,
+): Promise<FormResult<ScheduleMedicalEntryFormInput>> => {
+  const parsedAnimalId = cuidSchema.safeParse(animalId);
+  if (!parsedAnimalId.success) {
+    return { ok: false, message: "Invalid animal ID format." };
+  }
+  const validated = ScheduleMedicalEntrySchema.safeParse(values);
+  if (!validated.success) {
+    return {
+      ok: false,
+      message: "Missing or invalid fields. Nothing was scheduled.",
+      fieldErrors: z.flattenError(validated.error)
+        .fieldErrors as FieldErrors<ScheduleMedicalEntryFormInput>,
+    };
+  }
+
+  const today = await getShelterToday();
+  try {
+    await prisma.$transaction((tx) =>
+      scheduleEntry(
+        tx,
+        { ...validated.data, animalId: parsedAnimalId.data },
+        user.personId,
+        today,
+      ),
+    );
+  } catch (error) {
+    const refusal = refused<ScheduleMedicalEntryFormInput>(error);
+    if (refusal) return refusal;
+    console.error("Database error scheduling medical entry:", error);
+    return { ok: false, message: "Database Error: Failed to schedule entry." };
+  }
+
+  revalidateMedical(parsedAnimalId.data);
+  return { ok: true, message: "Entry scheduled." };
+};
+
 const _editMedicalEntry = async (
   user: SessionUser,
   entryId: string,
@@ -177,6 +220,10 @@ const _voidMedicalEntry = async (
 
 export const recordMedicalEntry = withAuthenticatedUser(
   RequirePermission(AppPermissions.MEDICAL_MANAGE)(_recordMedicalEntry),
+);
+
+export const scheduleMedicalEntry = withAuthenticatedUser(
+  RequirePermission(AppPermissions.MEDICAL_MANAGE)(_scheduleMedicalEntry),
 );
 
 export const editMedicalEntry = withAuthenticatedUser(

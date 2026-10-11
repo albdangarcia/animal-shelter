@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { z } from "zod";
 import {
   MedicalEntryFormSchema,
+  ScheduleMedicalEntrySchema,
   VoidMedicalEntrySchema,
   rabiesDurationIssue,
   type MedicalEntryFormInput,
@@ -120,4 +121,16 @@ test("VoidMedicalEntrySchema: the reason is required and kept trimmed", () => {
   assert.deepEqual(VoidMedicalEntrySchema.parse({ reason: " Wrong animal. " }), {
     reason: "Wrong animal.",
   });
+});
+
+test("ScheduleMedicalEntrySchema: the due date is required and a real day", () => {
+  const base = { kind: "VACCINE", itemId: "item", notes: "  " } as const;
+  const parsed = ScheduleMedicalEntrySchema.parse({ ...base, dueDate: "2026-10-14" });
+  assert.equal(parsed.dueDate, "2026-10-14");
+  assert.equal(parsed.notes, null);
+  for (const dueDate of [undefined, "", "2026-02-30"]) {
+    const result = ScheduleMedicalEntrySchema.safeParse({ ...base, dueDate });
+    assert.equal(result.success, false, String(dueDate));
+    assert.ok(z.flattenError(result.error!).fieldErrors.dueDate, String(dueDate));
+  }
 });

@@ -394,7 +394,7 @@ test("an unused item can change kind; one in use can't", async () => {
       analytes: [],
     }),
     (error: Error) =>
-      error instanceof ConflictError && /recorded on animals/.test(error.message),
+      error instanceof ConflictError && /used on animals/.test(error.message),
   );
   // ...while the rest of it can still be corrected.
   await update(used.id, vaccine({ name: uniqueName("In use, renamed") }));

@@ -162,6 +162,31 @@ export const rabiesDurationIssue = (
     ? "A rabies vaccine needs its duration."
     : null;
 
+/**
+ * Care to schedule. Whether the due day is in range needs the shelter's today,
+ * so the service checks that.
+ */
+export const ScheduleMedicalEntrySchema = z.object({
+  kind: z.enum(MedicalEntryKind, { error: "Choose what to schedule." }),
+  itemId: common.itemId,
+  dueDate: z
+    .string({ error: "The due date is required." })
+    .min(1, "The due date is required.")
+    .transform((value, ctx): CalendarDay => {
+      const day = parseCalendarDay(value);
+      if (day === null) {
+        ctx.addIssue({ code: "custom", message: "The due date isn't a valid date." });
+        return z.NEVER;
+      }
+      return day;
+    }),
+  notes: common.notes,
+});
+
+export type ScheduleMedicalEntryFormInput = z.input<
+  typeof ScheduleMedicalEntrySchema
+>;
+
 export const VoidMedicalEntrySchema = z.object({
   reason: z
     .string()

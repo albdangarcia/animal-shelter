@@ -105,7 +105,9 @@ const fromEntry = (entry: MedicalEntryDisplay): EntryFormState => ({
   itemId: entry.itemId,
   completedDate: entry.completedDate,
   dateUnknown: entry.completedDate === null,
-  source: entry.source,
+  // Only completed entries are edited, and every one has a source; the
+  // fallback is the record form's default.
+  source: entry.source ?? MedicalEntrySource.IN_HOUSE,
   vetPartnerId: entry.vetPartnerId,
   vetName: entry.vetName ?? "",
   notes: entry.notes ?? "",

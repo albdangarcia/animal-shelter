@@ -55,7 +55,11 @@ export const AppPermissions = {
   // Reading every medical page and record on an animal: vaccines, tests and
   // treatments, and who recorded, corrected or voided each one.
   MEDICAL_READ: "medical:read",
-  // Recording, correcting and voiding medical entries. Held apart from
+  // Recording as given, or declining, care that is already scheduled. It
+  // can't create new care: what to give and when is decided by someone
+  // holding MEDICAL_MANAGE, and this only says whether it happened.
+  MEDICAL_ADMINISTER: "medical:administer",
+  // Scheduling, recording, correcting and voiding medical entries. Held apart from
   // ANIMAL_VITALS_MANAGE because an entry states what the shelter did to the
   // animal, not what someone observed, so it is staff work.
   MEDICAL_MANAGE: "medical:manage",

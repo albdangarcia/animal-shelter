@@ -49,6 +49,7 @@ const staffPermissions: readonly AppPermission[] = [
   AppPermissions.ANIMAL_NOTE_MANAGE,
   AppPermissions.ANIMAL_TASK_MANAGE,
   AppPermissions.ANIMAL_ASSESSMENT_MANAGE,
+  AppPermissions.MEDICAL_ADMINISTER,
   AppPermissions.MEDICAL_MANAGE,
   AppPermissions.APPLICATIONS_MANAGE_STATUS,
   AppPermissions.OUTCOMES_MANAGE,

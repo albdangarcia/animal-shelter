@@ -19,7 +19,7 @@ export const entryDayText = (completedDate: string | null) =>
 /** Who gave the care: the shelter (and who), or the outside vet. */
 const sourceText = (entry: MedicalEntryDisplay) =>
   [
-    MEDICAL_ENTRY_SOURCE_LABELS[entry.source],
+    entry.source && MEDICAL_ENTRY_SOURCE_LABELS[entry.source],
     entry.vetPartner?.name,
     entry.vetName,
     entry.administeredBy ? `by ${entry.administeredBy.name}` : null,

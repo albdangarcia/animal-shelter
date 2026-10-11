@@ -299,7 +299,7 @@ export const updateMedicalItem = async (
     const used = await tx.medicalEntry.count({ where: { itemId } });
     if (used > 0) {
       throw new ConflictError(
-        `This ${KIND_NOUN[current.kind]} has been recorded on animals, so it can't become a ${KIND_NOUN[item.kind]}. Retire it and add a new item instead.`,
+        `This ${KIND_NOUN[current.kind]} has been used on animals, so it can't become a ${KIND_NOUN[item.kind]}. Retire it and add a new item instead.`,
       );
     }
   }
