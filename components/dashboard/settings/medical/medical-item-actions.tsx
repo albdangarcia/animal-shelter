@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
   retireMedicalItem,
   unretireMedicalItem,
 } from "@/app/lib/actions/medical-catalog.actions";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 import { MedicalItemForm } from "./medical-item-form";
 
 interface Props {
@@ -33,13 +34,7 @@ interface Props {
 export function MedicalItemActions({ item, species }: Props) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  // The dialog opens from a menu item that is gone by the time it closes, so
-  // focus goes back to the menu's button rather than to the page.
-  const returnFocus = (event: Event) => {
-    event.preventDefault();
-    triggerRef.current?.focus();
-  };
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const setRetired = (retire: boolean) => {
     startTransition(async () => {
