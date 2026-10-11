@@ -83,6 +83,10 @@ model Person {
   assessments       Assessment[]
   characteristicsAssigned AnimalCharacteristic[] @relation("CharacteristicAssignedBy")
   characteristicsRemoved  AnimalCharacteristic[] @relation("CharacteristicRemovedBy")
+  medicalEntriesCreated      MedicalEntry[]      @relation("MedicalEntryCreatedBy")
+  medicalEntriesAdministered MedicalEntry[]      @relation("MedicalEntryAdministeredBy")
+  medicalEntriesVoided       MedicalEntry[]      @relation("MedicalEntryVoidedBy")
+  medicalEntryEvents         MedicalEntryEvent[] @relation("MedicalEntryEventActor")
 
   @@index([phoneNormalized])
   @@map("persons")
@@ -315,6 +319,7 @@ model Partner {
 
   transferredInAnimals  Intake[]
   transferredOutAnimals Outcome[]
+  medicalEntries        MedicalEntry[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -491,6 +496,7 @@ model Animal {
   animalCharacteristics AnimalCharacteristic[]
   animalImages         AnimalImage[]
   vitalsLogs           VitalsLog[]
+  medicalEntries       MedicalEntry[]
   notes                AnimalNote[]
   tasks                Task[]
   favorites            Favorite[]
@@ -529,6 +535,7 @@ model Species {
 
   fosterProfiles     FosterProfile[]     @relation("FosterProfileSpeciesCapability")
   fosterApplications FosterApplication[] @relation("FosterApplicationSpeciesCapability")
+  medicalItems       MedicalItem[]       @relation("MedicalItemSpecies")
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -837,6 +844,296 @@ model VitalsLog {
 
   @@index([animalId, recordedAt])
   @@map("vitals_logs")
+}
+
+/// What a catalog item is. An entry's kind must match its item's kind.
+enum MedicalItemKind {
+  VACCINE
+  TEST
+  TREATMENT
+}
+
+/// What a medical entry records. Each kind has its own one-to-one details
+/// table.
+enum MedicalEntryKind {
+  VACCINE
+  TEST
+  TREATMENT
+}
+
+/// Where an entry stands. Every writer states it; there is no default.
+enum MedicalEntryStatus {
+  COMPLETED
+}
+
+/// Who gave the care: the shelter itself, an outside vet while the animal was
+/// in the shelter's care, or anyone before the animal arrived.
+enum MedicalEntrySource {
+  IN_HOUSE
+  OUTSIDE_VET
+  BEFORE_INTAKE
+}
+
+enum MedicalEntryEventAction {
+  CREATED
+  EDITED
+  VOIDED
+}
+
+enum TestResult {
+  POSITIVE
+  NEGATIVE
+  INCONCLUSIVE
+  INVALID
+}
+
+enum MedicalRoute {
+  ORAL
+  SUBCUTANEOUS
+  INTRAMUSCULAR
+  INTRANASAL
+  TOPICAL
+  OPHTHALMIC
+  OTIC
+  INTRAVENOUS
+  TRANSDERMAL
+}
+
+enum DoseUnit {
+  MG
+  ML
+  TABLET
+  CAPSULE
+  DROP
+  APPLICATION
+  UNIT
+}
+
+/// A vaccine, test or treatment the shelter uses, managed by admins. Retiring
+/// an item (`retiredAt`) hides it from the pickers for new entries; entries
+/// that already use it keep it and keep showing it, and retiring can be undone.
+/// Items are never deleted while an entry points at them.
+///
+/// The defaults (manufacturer, route, dose) are copied onto an entry's details
+/// when it is recorded, so changing a default never rewrites history. The name
+/// is not copied: a rename (a typo fix) shows on old entries.
+model MedicalItem {
+  id           String          @id @default(cuid())
+  kind         MedicalItemKind
+  name         String
+  manufacturer String?
+
+  /// The species this item applies to. Empty means every species.
+  species Species[] @relation("MedicalItemSpecies")
+
+  /// Defaults for treatments (route, dose and unit) and vaccines (route only).
+  defaultRoute      MedicalRoute? @map(name: "default_route")
+  defaultDoseAmount Float?        @map(name: "default_dose_amount")
+  defaultDoseUnit   DoseUnit?     @map(name: "default_dose_unit")
+
+  /// The booster or repeat interval. Stored for scheduling the next dose; not
+  /// read by anything yet.
+  repeatIntervalDays Int? @map(name: "repeat_interval_days")
+
+  /// Rabies vaccines carry a tag number, a duration and a valid-until day.
+  /// Only vaccines can be rabies vaccines.
+  isRabies Boolean @default(false) @map(name: "is_rabies")
+
+  /// What a test reports, one result per analyte. Only tests have analytes.
+  analytes MedicalItemAnalyte[]
+  entries  MedicalEntry[]
+
+  retiredAt DateTime? @map(name: "retired_at")
+  createdAt DateTime  @default(now()) @map(name: "created_at")
+  updatedAt DateTime  @updatedAt @map(name: "updated_at")
+
+  @@unique([kind, name])
+  @@map("medical_items")
+}
+
+/// One thing a test reports, such as "FeLV antigen" on a combination snap
+/// test. A row, not a string on the item, so a result can point at it.
+/// Retiring an analyte stops new results asking for it; old results keep it.
+model MedicalItemAnalyte {
+  id        String      @id @default(cuid())
+  itemId    String      @map(name: "item_id")
+  item      MedicalItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  name      String
+  sortOrder Int         @map(name: "sort_order")
+
+  results TestAnalyteResult[]
+
+  retiredAt DateTime? @map(name: "retired_at")
+  createdAt DateTime  @default(now()) @map(name: "created_at")
+  updatedAt DateTime  @updatedAt @map(name: "updated_at")
+
+  @@unique([itemId, name])
+  @@map("medical_item_analytes")
+}
+
+/// One vaccine, test or treatment given to an animal. The lifecycle every kind
+/// shares lives here; what is particular to a kind lives in its details row.
+/// `kind` must match the item's kind, and neither `kind` nor `animalId` changes
+/// after the entry is written: a wrong one is voided and recorded again.
+/// Every change is written to `events`, with before and after values.
+model MedicalEntry {
+  id       String             @id @default(cuid())
+  animalId String             @map(name: "animal_id")
+  animal   Animal             @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  kind     MedicalEntryKind
+  itemId   String             @map(name: "item_id")
+  item     MedicalItem        @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  status   MedicalEntryStatus
+
+  /// The calendar day the care was given, as `yyyy-MM-dd`. Null only when the
+  /// source is BEFORE_INTAKE and nobody knows the day: the care happened, but
+  /// its day is not on record. The service and the form schema enforce this,
+  /// since a check constraint can't be declared here. See
+  /// docs/calendar-days.md.
+  completedDate String?            @map(name: "completed_date")
+  source        MedicalEntrySource
+
+  /// The vet clinic that gave the care, or a vet's name when the clinic is
+  /// not a partner. Never set for IN_HOUSE care.
+  vetPartnerId String?  @map(name: "vet_partner_id")
+  vetPartner   Partner? @relation(fields: [vetPartnerId], references: [id])
+  vetName      String?  @map(name: "vet_name")
+
+  administeredById String? @map(name: "administered_by_id")
+  administeredBy   Person? @relation("MedicalEntryAdministeredBy", fields: [administeredById], references: [id])
+
+  notes String?
+
+  /// Voiding marks an entry that should never have been recorded: it is kept,
+  /// but counts for nothing (it is left out of every derived fact, such as
+  /// whether rabies is current). Write-once, as `Outcome.reversedAt` is:
+  /// nothing clears `voidedAt`, so a void made in error is answered by
+  /// recording the entry again, and the record still shows this one was
+  /// voided, when, by whom and why. The reason is required whenever
+  /// `voidedAt` is set.
+  voidedAt   DateTime? @map(name: "voided_at")
+  voidedById String?   @map(name: "voided_by_id")
+  voidedBy   Person?   @relation("MedicalEntryVoidedBy", fields: [voidedById], references: [id])
+  voidReason String?   @map(name: "void_reason")
+
+  createdById String @map(name: "created_by_id")
+  createdBy   Person @relation("MedicalEntryCreatedBy", fields: [createdById], references: [id])
+
+  vaccine   VaccineDetails?
+  test      TestDetails?
+  treatment TreatmentDetails?
+  events    MedicalEntryEvent[]
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@index([animalId, kind])
+  @@index([itemId])
+  @@map("medical_entries")
+}
+
+/// What was given with a vaccine. Manufacturer and route start as the item's
+/// defaults and are stored here, so changing the catalog never rewrites them.
+model VaccineDetails {
+  id      String       @id @default(cuid())
+  entryId String       @unique @map(name: "entry_id")
+  entry   MedicalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  manufacturer  String?
+  lotNumber     String?       @map(name: "lot_number")
+  lotExpiryDate String?       @map(name: "lot_expiry_date")
+  route         MedicalRoute?
+  site          String?
+
+  /// Rabies only. `validUntilDate` is the completed day plus `durationMonths`,
+  /// clamped to the end of the month, and null when the completed day is
+  /// unknown. Only the entry service writes it, whenever either input changes.
+  /// It's stored because it is printed on a certificate; whether rabies is
+  /// valid today is still worked out when someone looks.
+  rabiesTagNumber String? @map(name: "rabies_tag_number")
+  durationMonths  Int?    @map(name: "duration_months")
+  validUntilDate  String? @map(name: "valid_until_date")
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@map("vaccine_details")
+}
+
+/// The kit a test was run with, and one result per analyte the item reports.
+model TestDetails {
+  id      String       @id @default(cuid())
+  entryId String       @unique @map(name: "entry_id")
+  entry   MedicalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  lotNumber     String? @map(name: "lot_number")
+  lotExpiryDate String? @map(name: "lot_expiry_date")
+
+  results TestAnalyteResult[]
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@map("test_details")
+}
+
+/// One analyte's result. `analyteName` is the name frozen when the result was
+/// written, so renaming the analyte in the catalog doesn't rewrite it.
+model TestAnalyteResult {
+  id            String             @id @default(cuid())
+  testDetailsId String             @map(name: "test_details_id")
+  testDetails   TestDetails        @relation(fields: [testDetailsId], references: [id], onDelete: Cascade)
+  analyteId     String             @map(name: "analyte_id")
+  analyte       MedicalItemAnalyte @relation(fields: [analyteId], references: [id], onDelete: Restrict)
+  analyteName   String             @map(name: "analyte_name")
+  result        TestResult
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@unique([testDetailsId, analyteId])
+  @@map("test_analyte_results")
+}
+
+/// A one-off dose of a preventative, such as a dewormer. Courses of
+/// medication are not treatments.
+model TreatmentDetails {
+  id      String       @id @default(cuid())
+  entryId String       @unique @map(name: "entry_id")
+  entry   MedicalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  doseAmount Float?        @map(name: "dose_amount")
+  doseUnit   DoseUnit?     @map(name: "dose_unit")
+  route      MedicalRoute?
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@map("treatment_details")
+}
+
+/// Append-only audit trail for medical entries. `before` and `after` hold the
+/// raw stored values, keyed by field name, of only the fields that changed;
+/// detail fields use their own names (`lotNumber`) and test results use
+/// `results`. CREATED stores the whole entry in `after`, and VOIDED stores
+/// `{ voidReason }`. Each event is also written to AnimalActivityLog as
+/// readable text for the activity feed.
+model MedicalEntryEvent {
+  id      String                  @id @default(cuid())
+  entryId String                  @map(name: "entry_id")
+  entry   MedicalEntry            @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  action  MedicalEntryEventAction
+
+  actorId String @map(name: "actor_id")
+  actor   Person @relation("MedicalEntryEventActor", fields: [actorId], references: [id])
+
+  before Json?
+  after  Json?
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+
+  @@index([entryId])
+  @@map("medical_entry_events")
 }
 
 // ═══════════════════════════════════════════════════
@@ -1486,6 +1783,9 @@ enum AnimalActivityType {
   OUTCOME_CORRECTED // An existing outcome's date, notes, partner or owner was edited
   OUTCOME_REVERSED // An outcome was voided as recorded in error
   INTAKE_CORRECTED // An existing intake's date, type, source, found address or notes was edited
+  MEDICAL_ENTRY_RECORDED // A vaccine, test or treatment was recorded as given
+  MEDICAL_ENTRY_EDITED // A recorded medical entry was corrected
+  MEDICAL_ENTRY_VOIDED // A medical entry was voided as recorded in error
 }
 
 model AnimalActivityLog {

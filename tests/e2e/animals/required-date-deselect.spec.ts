@@ -90,7 +90,7 @@ const openVitalsForm = async (page: Page) => {
   const animalId = await firstValue(
     `SELECT id AS value FROM animals WHERE name = 'Frisco' ORDER BY id`,
   );
-  await page.goto(`/dashboard/animals/${animalId}/vitals`);
+  await page.goto(`/dashboard/animals/${animalId}/medical/vitals`);
   // A click that lands before hydration settles opens nothing; re-clicking an
   // open dialog's trigger is not possible, so click only while it is closed.
   const dialog = page.getByRole("dialog", { name: "Record Vitals" });

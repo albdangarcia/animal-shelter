@@ -28,6 +28,7 @@ const volunteerPermissions: readonly AppPermission[] = [
   AppPermissions.ANIMAL_PHOTO_READ,
   AppPermissions.ANIMAL_VITALS_READ,
   AppPermissions.ANIMAL_VITALS_MANAGE,
+  AppPermissions.MEDICAL_READ,
   AppPermissions.APPLICATIONS_READ,
   AppPermissions.INTAKE_READ,
   AppPermissions.OUTCOMES_READ,
@@ -48,6 +49,7 @@ const staffPermissions: readonly AppPermission[] = [
   AppPermissions.ANIMAL_NOTE_MANAGE,
   AppPermissions.ANIMAL_TASK_MANAGE,
   AppPermissions.ANIMAL_ASSESSMENT_MANAGE,
+  AppPermissions.MEDICAL_MANAGE,
   AppPermissions.APPLICATIONS_MANAGE_STATUS,
   AppPermissions.OUTCOMES_MANAGE,
   AppPermissions.PERSONS_MANAGE,
@@ -68,6 +70,7 @@ const adminPermissions: readonly AppPermission[] = [
   AppPermissions.MANAGE_ASSESSMENT_TEMPLATES,
   AppPermissions.MANAGE_ANIMAL_TAXONOMY,
   AppPermissions.MANAGE_LOCATIONS,
+  AppPermissions.MEDICAL_SETTINGS_MANAGE,
 ] as const;
 
 export const rolePermissions: Record<Role, readonly AppPermission[]> = {

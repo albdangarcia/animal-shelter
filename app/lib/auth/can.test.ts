@@ -76,11 +76,31 @@ test("INTAKE_READ and OUTCOMES_READ start at VOLUNTEER, their MANAGE at STAFF", 
   }
 });
 
+// Volunteers read the medical record, as they read the rest of the animal's
+// history; recording or correcting care is staff work.
+test("MEDICAL_READ starts at VOLUNTEER", () => {
+  assert.equal(can(Role.USER, AppPermissions.MEDICAL_READ), false);
+  assert.equal(can(Role.VOLUNTEER, AppPermissions.MEDICAL_READ), true);
+});
+
+test("MEDICAL_MANAGE starts at STAFF", () => {
+  assert.equal(can(Role.VOLUNTEER, AppPermissions.MEDICAL_MANAGE), false);
+  assert.equal(can(Role.STAFF, AppPermissions.MEDICAL_MANAGE), true);
+});
+
+// The catalog is shelter-wide configuration: retiring an item hides it from
+// every new entry, so recording care is deliberately not enough for it.
+test("MEDICAL_SETTINGS_MANAGE stops at ADMIN", () => {
+  assert.equal(can(Role.STAFF, AppPermissions.MEDICAL_SETTINGS_MANAGE), false);
+  assert.equal(can(Role.ADMIN, AppPermissions.MEDICAL_SETTINGS_MANAGE), true);
+});
+
 test("the documented volunteer exception: VOLUNTEER holds ANIMAL_VITALS_MANAGE", () => {
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_VITALS_MANAGE), true);
   // ...and it is genuinely an exception: no other MANAGE permission leaks to it.
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_INFO_MANAGE), false);
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_NOTE_MANAGE), false);
+  assert.equal(can(Role.VOLUNTEER, AppPermissions.MEDICAL_MANAGE), false);
 });
 
 test("an unknown role string returns false rather than throwing", () => {

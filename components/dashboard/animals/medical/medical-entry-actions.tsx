@@ -1,0 +1,232 @@
+"use client";
+
+import { useLayoutEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { Ban, Loader2, MoreHorizontal, Pencil } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
+import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
+import { voidMedicalEntry } from "@/app/lib/actions/medical-entry.actions";
+import { VOID_REASON_MAX_LENGTH } from "@/app/lib/zod-schemas/medical-entry.schemas";
+import { MEDICAL_ITEM_KIND_LABELS } from "@/app/lib/constants/medical";
+import {
+  DirtyFormHandle,
+  useConfirmedOpenChange,
+} from "@/hooks/use-confirmed-open-change";
+import { MedicalEntryForm } from "./medical-entry-form";
+import { DiscardChangesDialog } from "./discard-changes-dialog";
+import { ADD_ENTRY_BUTTON_ID } from "./add-medical-entry-menu";
+import { entryDayText } from "./medical-entry-item";
+
+interface Props {
+  animalId: string;
+  entry: MedicalEntryDisplay;
+  options: MedicalEntryFormOptions;
+}
+
+/** Edit and Void for one entry that isn't voided. */
+export function MedicalEntryActions({ animalId, entry, options }: Props) {
+  const router = useRouter();
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isVoidOpen, setIsVoidOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [reasonError, setReasonError] = useState<string | undefined>();
+  const [isPending, startTransition] = useTransition();
+  const formRef = useRef<DirtyFormHandle>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
+    useConfirmedOpenChange(
+      () => formRef.current?.isDirty() ?? false,
+      setIsEditOpen,
+    );
+  // The dialog opens from a menu item that is gone by the time it closes, so
+  // focus goes back to the menu's button rather than to the page. A void
+  // takes the button away too, before or after the dialog closes; then
+  // focus goes to Add entry.
+  const focusAddEntry = () =>
+    document.getElementById(ADD_ENTRY_BUTTON_ID)?.focus();
+  const returnFocus = (event: Event) => {
+    event.preventDefault();
+    if (triggerRef.current) triggerRef.current.focus();
+    else focusAddEntry();
+  };
+  useLayoutEffect(() => {
+    const trigger = triggerRef.current;
+    return () => {
+      if (trigger && document.activeElement === trigger) focusAddEntry();
+    };
+  }, []);
+
+  // Checked as the server checks it, trimmed, so an over-long reason is
+  // explained before anything is sent.
+  const trimmedLength = reason.trim().length;
+  const tooLong = trimmedLength > VOID_REASON_MAX_LENGTH;
+  const shownError = tooLong
+    ? `The reason cannot exceed ${VOID_REASON_MAX_LENGTH} characters.`
+    : reasonError;
+  const what = `${entry.item.name} (${entryDayText(entry.completedDate)})`;
+  const noun = MEDICAL_ITEM_KIND_LABELS[entry.kind].toLowerCase();
+
+  const handleVoid = () => {
+    setReasonError(undefined);
+    startTransition(async () => {
+      const result = await voidMedicalEntry(entry.id, { reason });
+      if (result.ok) {
+        toast.success(result.message);
+        setIsVoidOpen(false);
+        setReason("");
+        return;
+      }
+      setReasonError(result.fieldErrors?.reason?.[0]);
+      toast.error(result.message);
+      // Refused for a reason other than the form's, most likely because
+      // someone voided it first. Refreshing shows the entry as it now is.
+      if (!result.fieldErrors) router.refresh();
+    });
+  };
+
+  return (
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            aria-label={`Actions for ${what}`}
+          >
+            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => setIsEditOpen(true)}>
+            <Pencil className="mr-2 h-4 w-4" />
+            Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            variant="destructive"
+            onSelect={() => setIsVoidOpen(true)}
+          >
+            <Ban className="mr-2 h-4 w-4" />
+            Void…
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <Dialog open={isEditOpen} onOpenChange={guardedOnOpenChange}>
+        <DialogContent
+          className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto"
+          onCloseAutoFocus={returnFocus}
+        >
+          <DialogHeader>
+            <DialogTitle>Edit {noun}</DialogTitle>
+            <DialogDescription>
+              Correct what was recorded. Every change is kept in the
+              entry&apos;s history, with what it was before.
+            </DialogDescription>
+          </DialogHeader>
+          <MedicalEntryForm
+            animalId={animalId}
+            kind={entry.kind}
+            options={options}
+            entry={entry}
+            onFormSubmit={() => setIsEditOpen(false)}
+            ref={formRef}
+          />
+        </DialogContent>
+      </Dialog>
+      <DiscardChangesDialog
+        open={isConfirmOpen}
+        onConfirm={confirmDiscard}
+        onCancel={cancelDiscard}
+      />
+
+      <AlertDialog
+        open={isVoidOpen}
+        onOpenChange={(open) => {
+          if (isPending) return;
+          setIsVoidOpen(open);
+          if (!open) {
+            setReason("");
+            setReasonError(undefined);
+          }
+        }}
+      >
+        <AlertDialogContent onCloseAutoFocus={returnFocus}>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Void {what}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                <p>
+                  This is for an entry that should never have been recorded,
+                  such as one entered against the wrong animal. To fix a
+                  detail, edit it instead.
+                </p>
+                <p>
+                  The entry stays in the history, struck through, and stops
+                  counting. A void can&apos;t be undone: if it was right after
+                  all, record it again.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-1">
+            <Textarea
+              value={reason}
+              onChange={(e) => {
+                setReason(e.target.value);
+                setReasonError(undefined);
+              }}
+              placeholder="Why is this entry being voided?"
+              aria-label="Reason for voiding"
+              aria-invalid={!!shownError}
+              disabled={isPending}
+            />
+            {shownError && (
+              <p className="text-destructive text-sm">{shownError}</p>
+            )}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleVoid();
+              }}
+              disabled={isPending || trimmedLength === 0 || tooLong}
+            >
+              {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Void Entry
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}

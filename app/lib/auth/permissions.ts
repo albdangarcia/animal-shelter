@@ -51,6 +51,19 @@ export const AppPermissions = {
   ANIMAL_VITALS_READ: "animal_vitals:read",
   ANIMAL_VITALS_MANAGE: "animal_vitals:manage",
 
+  // Medical Record Permissions
+  // Reading every medical page and record on an animal: vaccines, tests and
+  // treatments, and who recorded, corrected or voided each one.
+  MEDICAL_READ: "medical:read",
+  // Recording, correcting and voiding medical entries. Held apart from
+  // ANIMAL_VITALS_MANAGE because an entry states what the shelter did to the
+  // animal, not what someone observed, so it is staff work.
+  MEDICAL_MANAGE: "medical:manage",
+  // The catalog of vaccines, tests and treatments staff pick from (admins
+  // only). Retiring an item hides it from new entries shelter-wide, so it is
+  // configuration, not record-keeping.
+  MEDICAL_SETTINGS_MANAGE: "medical_settings:manage",
+
   // Animal Note Permissions
   ANIMAL_NOTE_READ: "animal_note:read",
   ANIMAL_NOTE_MANAGE: "animal_note:manage",

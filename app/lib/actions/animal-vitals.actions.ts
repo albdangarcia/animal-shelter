@@ -135,7 +135,11 @@ const _createVitalsEntry = async (
     return { ok: false, message: "Database Error: Failed to record vitals." };
   }
 
-  revalidatePath(`/dashboard/animals/${animalId}/vitals`);
+  revalidatePath(`/dashboard/animals/${animalId}/medical/vitals`);
+
+  // The Medical overview shows the current weight.
+
+  revalidatePath(`/dashboard/animals/${animalId}/medical`);
   revalidatePath(`/dashboard/animals/${animalId}`);
   return { ok: true, message: "Vitals entry recorded successfully." };
 };
@@ -190,7 +194,11 @@ const _updateVitalsEntry = async (
     return { ok: false, message: "Database Error: Failed to update vitals entry." };
   }
 
-  revalidatePath(`/dashboard/animals/${animalId}/vitals`);
+  revalidatePath(`/dashboard/animals/${animalId}/medical/vitals`);
+
+  // The Medical overview shows the current weight.
+
+  revalidatePath(`/dashboard/animals/${animalId}/medical`);
   revalidatePath(`/dashboard/animals/${animalId}`);
   return { ok: true, message: "Vitals entry updated successfully." };
 };
@@ -228,7 +236,11 @@ const _deleteVitalsEntry = async (
       });
     });
 
-    revalidatePath(`/dashboard/animals/${animalId}/vitals`);
+    revalidatePath(`/dashboard/animals/${animalId}/medical/vitals`);
+
+    // The Medical overview shows the current weight.
+
+    revalidatePath(`/dashboard/animals/${animalId}/medical`);
     revalidatePath(`/dashboard/animals/${animalId}`);
     return { message: "Vitals entry deleted successfully." };
   } catch (error) {
@@ -270,7 +282,11 @@ const _restoreVitalsEntry = async (
       });
     });
 
-    revalidatePath(`/dashboard/animals/${animalId}/vitals`);
+    revalidatePath(`/dashboard/animals/${animalId}/medical/vitals`);
+
+    // The Medical overview shows the current weight.
+
+    revalidatePath(`/dashboard/animals/${animalId}/medical`);
     revalidatePath(`/dashboard/animals/${animalId}`);
     return { message: "Vitals entry restored successfully." };
   } catch (error) {

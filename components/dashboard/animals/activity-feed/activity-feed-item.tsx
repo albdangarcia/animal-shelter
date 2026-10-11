@@ -17,6 +17,8 @@ import {
   Trash2,
   Weight,
   UserPlus,
+  Syringe,
+  Ban,
   LucideProps,
 } from "lucide-react";
 import { AnimalActivityType } from "@/prisma/generated/enums";
@@ -96,6 +98,18 @@ const activityConfig: Record<
   [AnimalActivityType.VITALS_RECORDED]: {
     icon: Weight,
     text: "recorded vitals",
+  },
+  [AnimalActivityType.MEDICAL_ENTRY_RECORDED]: {
+    icon: Syringe,
+    text: "recorded a medical entry",
+  },
+  [AnimalActivityType.MEDICAL_ENTRY_EDITED]: {
+    icon: Pencil,
+    text: "edited a medical entry",
+  },
+  [AnimalActivityType.MEDICAL_ENTRY_VOIDED]: {
+    icon: Ban,
+    text: "voided a medical entry",
   },
   [AnimalActivityType.TASK_CREATED]: {
     icon: ClipboardList,

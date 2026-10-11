@@ -21,7 +21,7 @@ const animalTabDefinitions = [
   { suffix: "/tasks", label: "Tasks" },
   { suffix: "/journey", label: "Journey" },
   { suffix: "/notes", label: "Notes" },
-  { suffix: "/vitals", label: "Vitals" },
+  { suffix: "/medical", label: "Medical" },
   { suffix: "/characteristics", label: "Characteristics" },
   { suffix: "/assessments", label: "Assessments" },
   { suffix: "/adoption-applications", label: "Applications" },

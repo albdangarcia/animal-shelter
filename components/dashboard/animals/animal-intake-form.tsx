@@ -638,7 +638,7 @@ const AnimalForm = ({
                       </p>
                     )}
                     <Link
-                      href={`/dashboard/animals/${animal.id}/vitals`}
+                      href={`/dashboard/animals/${animal.id}/medical/vitals`}
                       className="text-xs text-primary underline underline-offset-2 mt-1 inline-block"
                     >
                       View vitals history

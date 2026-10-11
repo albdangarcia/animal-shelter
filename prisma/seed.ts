@@ -31,6 +31,12 @@ import {
   FosterPlacementType,
   FosterReturnReason,
   AssessmentSignal,
+  DoseUnit,
+  MedicalEntryKind,
+  MedicalEntrySource,
+  MedicalItemKind,
+  MedicalRoute,
+  TestResult,
 } from "@/prisma/generated/enums";
 import {
   getRandomDate,
@@ -49,6 +55,17 @@ import {
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
 import { recordNoteMutation } from "@/app/lib/services/note-audit";
+import {
+  createMedicalItem,
+  retireMedicalItem,
+  type MedicalItemInput,
+} from "@/app/lib/services/medical-catalog";
+import {
+  editMedicalEntry,
+  recordMedicalEntry,
+  voidMedicalEntry,
+  type MedicalEntryInput,
+} from "@/app/lib/services/medical-entry";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -5072,6 +5089,19 @@ async function clearDatabase() {
   // relative to the task delete below doesn't matter — it just has to precede
   // the person delete.
   await prisma.aiActionLog.deleteMany();
+  // Medical entries cascade from Animal, but their person FKs (created by,
+  // administered by, voided by, event actor) are not cascades, and a test
+  // result's analyte and an entry's item are Restrict. So: results before
+  // analytes, events and details before entries, entries before items, and
+  // all of it before the animal, partner, species and person deletes below.
+  await prisma.testAnalyteResult.deleteMany();
+  await prisma.medicalEntryEvent.deleteMany();
+  await prisma.vaccineDetails.deleteMany();
+  await prisma.testDetails.deleteMany();
+  await prisma.treatmentDetails.deleteMany();
+  await prisma.medicalEntry.deleteMany();
+  await prisma.medicalItemAnalyte.deleteMany();
+  await prisma.medicalItem.deleteMany();
   await prisma.animalActivityLog.deleteMany();
   await prisma.task.deleteMany();
   await prisma.intake.deleteMany();
@@ -6127,6 +6157,367 @@ async function seedReadinessFixtures() {
   console.log(`Removed photos from ${animalsWithoutPhotos.join(", ")}.`);
 }
 
+// The medical catalog a fresh shelter starts with: generic, clinical names, no
+// brands. Species are named, not ids, and resolved when seeded.
+type SeedMedicalItem = Omit<MedicalItemInput, "speciesIds" | "analytes"> & {
+  species: string[];
+  analytes?: string[];
+  retired?: boolean;
+};
+
+const medicalCatalogDefaults: SeedMedicalItem[] = [
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "DHPP",
+    species: ["Dog"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+    repeatIntervalDays: 14,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Bordetella",
+    species: ["Dog"],
+    defaultRoute: MedicalRoute.INTRANASAL,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Canine influenza",
+    species: ["Dog"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Leptospirosis",
+    species: ["Dog"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "FVRCP",
+    species: ["Cat"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+    repeatIntervalDays: 14,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Rabies 1-year",
+    species: ["Dog", "Cat"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+    repeatIntervalDays: 365,
+    isRabies: true,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Rabies 3-year",
+    species: ["Dog", "Cat"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+    repeatIntervalDays: 1095,
+    isRabies: true,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Bordetella intranasal (old stock)",
+    species: ["Dog"],
+    defaultRoute: MedicalRoute.INTRANASAL,
+    retired: true,
+  },
+  {
+    kind: MedicalItemKind.TEST,
+    name: "FeLV/FIV combo",
+    species: ["Cat"],
+    analytes: ["FeLV antigen", "FIV antibody"],
+  },
+  {
+    kind: MedicalItemKind.TEST,
+    name: "Heartworm antigen",
+    species: ["Dog"],
+    analytes: ["Heartworm antigen"],
+    repeatIntervalDays: 365,
+  },
+  {
+    kind: MedicalItemKind.TEST,
+    name: "Parvovirus antigen",
+    species: ["Dog"],
+    analytes: ["Parvovirus antigen"],
+  },
+  {
+    kind: MedicalItemKind.TEST,
+    name: "Fecal flotation",
+    species: [],
+    analytes: ["Intestinal parasites"],
+  },
+  {
+    kind: MedicalItemKind.TEST,
+    name: "Ringworm culture",
+    species: [],
+    analytes: ["Dermatophytes"],
+  },
+  {
+    kind: MedicalItemKind.TREATMENT,
+    name: "Pyrantel pamoate",
+    species: [],
+    defaultRoute: MedicalRoute.ORAL,
+    defaultDoseUnit: DoseUnit.ML,
+    repeatIntervalDays: 14,
+  },
+  {
+    kind: MedicalItemKind.TREATMENT,
+    name: "Fenbendazole",
+    species: [],
+    defaultRoute: MedicalRoute.ORAL,
+    defaultDoseUnit: DoseUnit.ML,
+  },
+  {
+    kind: MedicalItemKind.TREATMENT,
+    name: "Praziquantel",
+    species: [],
+    defaultRoute: MedicalRoute.ORAL,
+    defaultDoseUnit: DoseUnit.TABLET,
+  },
+  {
+    kind: MedicalItemKind.TREATMENT,
+    name: "Selamectin",
+    species: ["Dog", "Cat"],
+    defaultRoute: MedicalRoute.TOPICAL,
+    defaultDoseAmount: 1,
+    defaultDoseUnit: DoseUnit.APPLICATION,
+    repeatIntervalDays: 30,
+  },
+];
+
+// Through the catalog service in a real transaction, as the settings page
+// writes, so a default that breaks a catalog rule fails the seed. Fixed
+// values only: no random draws.
+async function seedMedicalCatalog() {
+  console.log("Seeding medical catalog...");
+
+  const species = await prisma.species.findMany({
+    select: { id: true, name: true },
+  });
+  const speciesId = (name: string) => {
+    const found = species.find((row) => row.name === name);
+    if (!found) {
+      throw new Error(`seedMedicalCatalog: species ${name} was not seeded.`);
+    }
+    return found.id;
+  };
+
+  for (const { species: names, analytes, retired, ...item } of medicalCatalogDefaults) {
+    await prisma.$transaction(async (tx) => {
+      const { id } = await createMedicalItem(tx, {
+        ...item,
+        speciesIds: names.map(speciesId),
+        analytes: (analytes ?? []).map((name) => ({ name })),
+      });
+      if (retired) {
+        await retireMedicalItem(tx, id);
+      }
+    });
+  }
+
+  console.log(`Seeded ${medicalCatalogDefaults.length} medical catalog items.`);
+}
+
+// Medical entries on four hand-authored animals, covering every state an
+// entry can be in: recorded, corrected by someone else, voided, given before
+// intake on an unknown day, and a rabies vaccine that has expired. Every write
+// goes through the entry service in a real transaction, as the actions do, so
+// a fixture that breaks an entry rule fails the seed rather than writing a row
+// the product never could. Days are fixed offsets from each animal's intake,
+// clamped to today, with no random draws.
+async function seedMedicalEntries() {
+  console.log("Seeding medical entries...");
+
+  const today = shelterToday(seedTimezone);
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  const downtownVet = await prisma.partner.findFirst({
+    where: { name: "Downtown Veterinary Clinic" },
+  });
+  if (!olivia || !benjamin || !downtownVet) {
+    throw new Error(
+      "seedMedicalEntries: staff or Downtown Veterinary Clinic fixtures not found.",
+    );
+  }
+
+  const items = await prisma.medicalItem.findMany({
+    select: {
+      id: true,
+      name: true,
+      analytes: { select: { id: true, name: true } },
+    },
+  });
+  const item = (name: string) => {
+    const found = items.find((row) => row.name === name);
+    if (!found) {
+      throw new Error(`seedMedicalEntries: catalog item ${name} was not seeded.`);
+    }
+    return found;
+  };
+  const negativeResults = (name: string) =>
+    item(name).analytes.map((analyte) => ({
+      analyteId: analyte.id,
+      result: TestResult.NEGATIVE,
+    }));
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        birthDate: true,
+        intake: { select: { intakeDate: true } },
+      },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(`seedMedicalEntries: ${name} was not seeded with an intake.`);
+    }
+    const days = row.intake.map((intake) => calendarDay(intake.intakeDate)).sort();
+    return {
+      id: row.id,
+      birthDate: calendarDay(row.birthDate),
+      firstIntake: days[0],
+      latestIntake: days[days.length - 1],
+    };
+  };
+  // A day in the current stay, `offset` days after it began, never after today.
+  const inStay = (intake: CalendarDay, offset: number): CalendarDay => {
+    const day = shiftDayKey(intake, offset);
+    return day > today ? today : day;
+  };
+
+  const record = (
+    animalId: string,
+    input: MedicalEntryInput,
+    actorId = olivia.id,
+  ) =>
+    prisma.$transaction((tx) =>
+      recordMedicalEntry(tx, { ...input, animalId }, actorId, today),
+    );
+
+  // --- Frisco: in-house care, one entry corrected by someone else ----------
+  const frisco = await animal("Frisco");
+  const dhpp: MedicalEntryInput = {
+    kind: MedicalEntryKind.VACCINE,
+    itemId: item("DHPP").id,
+    completedDate: inStay(frisco.latestIntake, 1),
+    source: MedicalEntrySource.IN_HOUSE,
+    lotNumber: "DH-2291A",
+    lotExpiryDate: shiftDayKey(today, 240),
+    site: "Right shoulder",
+  };
+  const friscoDhpp = await record(frisco.id, dhpp);
+  // Olivia typed the lot from the wrong vial; Benjamin corrects it.
+  await prisma.$transaction((tx) =>
+    editMedicalEntry(
+      tx,
+      friscoDhpp.entryId,
+      { ...dhpp, lotNumber: "DH-2291B" },
+      benjamin.id,
+      today,
+    ),
+  );
+  await record(frisco.id, {
+    kind: MedicalEntryKind.VACCINE,
+    itemId: item("Rabies 3-year").id,
+    completedDate: inStay(frisco.latestIntake, 2),
+    source: MedicalEntrySource.IN_HOUSE,
+    lotNumber: "RB-7730",
+    lotExpiryDate: shiftDayKey(today, 300),
+    site: "Right hind leg",
+    rabiesTagNumber: "R-10482",
+    durationMonths: 36,
+  });
+  await record(frisco.id, {
+    kind: MedicalEntryKind.TEST,
+    itemId: item("Heartworm antigen").id,
+    completedDate: inStay(frisco.latestIntake, 2),
+    source: MedicalEntrySource.IN_HOUSE,
+    results: negativeResults("Heartworm antigen"),
+  });
+  await record(frisco.id, {
+    kind: MedicalEntryKind.TREATMENT,
+    itemId: item("Pyrantel pamoate").id,
+    completedDate: inStay(frisco.latestIntake, 1),
+    source: MedicalEntrySource.IN_HOUSE,
+    doseAmount: 3,
+  });
+
+  // --- Buddy: rabies before intake on an unknown day, and a voided entry --
+  const buddy = await animal("Buddy");
+  await record(buddy.id, {
+    kind: MedicalEntryKind.VACCINE,
+    itemId: item("Rabies 1-year").id,
+    completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE,
+    vetName: "Lakeside Animal Hospital (from his collar tag)",
+    rabiesTagNumber: "LK-55821",
+    durationMonths: 12,
+  });
+  const buddyDewormer = await record(buddy.id, {
+    kind: MedicalEntryKind.TREATMENT,
+    itemId: item("Fenbendazole").id,
+    completedDate: inStay(buddy.latestIntake, 1),
+    source: MedicalEntrySource.IN_HOUSE,
+    doseAmount: 16,
+  });
+  await prisma.$transaction((tx) =>
+    voidMedicalEntry(
+      tx,
+      buddyDewormer.entryId,
+      "Entered against the wrong animal.",
+      benjamin.id,
+    ),
+  );
+
+  // --- Whiskers: tested and vaccinated at a partner clinic -----------------
+  const whiskers = await animal("Whiskers");
+  const clinicDay = inStay(whiskers.latestIntake, 3);
+  await record(whiskers.id, {
+    kind: MedicalEntryKind.VACCINE,
+    itemId: item("FVRCP").id,
+    completedDate: clinicDay,
+    source: MedicalEntrySource.OUTSIDE_VET,
+    vetPartnerId: downtownVet.id,
+  });
+  await record(whiskers.id, {
+    kind: MedicalEntryKind.TEST,
+    itemId: item("FeLV/FIV combo").id,
+    completedDate: clinicDay,
+    source: MedicalEntrySource.OUTSIDE_VET,
+    vetPartnerId: downtownVet.id,
+    results: negativeResults("FeLV/FIV combo"),
+  });
+
+  // --- Leo: a one-year rabies vaccine given more than a year ago -----------
+  const leo = await animal("Leo");
+  const leoRabiesDay = shiftDayKey(today, -400);
+  if (leoRabiesDay < leo.birthDate) {
+    throw new Error(
+      "seedMedicalEntries: Leo is too young for a rabies vaccine that has expired; move the fixture.",
+    );
+  }
+  await record(leo.id, {
+    kind: MedicalEntryKind.VACCINE,
+    itemId: item("Rabies 1-year").id,
+    completedDate: leoRabiesDay,
+    source:
+      leoRabiesDay < leo.firstIntake
+        ? MedicalEntrySource.BEFORE_INTAKE
+        : MedicalEntrySource.IN_HOUSE,
+    ...(leoRabiesDay < leo.firstIntake && {
+      vetName: "Records that arrived with him",
+    }),
+    rabiesTagNumber: "R-08817",
+    durationMonths: 12,
+  });
+
+  console.log("Seeded medical entries for Frisco, Buddy, Whiskers and Leo.");
+}
+
 let seedTimezone = fallbackShelterSettings().timezone;
 
 export async function main() {
@@ -6187,6 +6578,8 @@ async function seedAll() {
   await seedAssessmentTemplates();
   await seedAssessments();
   await seedReadinessFixtures();
+  await seedMedicalCatalog();
+  await seedMedicalEntries();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }
