@@ -34,10 +34,12 @@ import {
   restoreSpecies,
 } from "@/app/lib/actions/species-catalog.actions";
 import { toast } from "sonner";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 function SpeciesActions({ species }: { species: SpeciesModel }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const onSoftDelete = () => {
     startTransition(() => {
@@ -69,7 +71,12 @@ function SpeciesActions({ species }: { species: SpeciesModel }) {
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+          >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -93,7 +100,10 @@ function SpeciesActions({ species }: { species: SpeciesModel }) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent
+        className="sm:max-w-[480px]"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Species</DialogTitle>
           <DialogDescription>

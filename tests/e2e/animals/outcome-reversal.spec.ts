@@ -453,6 +453,8 @@ test("a reversed adoption un-adopts, reopens, drops out of the report, and can b
   await confirm.click();
   await expect(page.getByText(/^Outcome reversed\./)).toBeVisible();
   await expect(dialog).toBeHidden();
+  // Focus goes back to the menu's button, not to the page.
+  await expect(firstRow.getByRole("button", { name: "Open menu" })).toBeFocused();
 
   // The row stays on the list, marked, and links to its read-only record.
   await expect(firstRow.getByText("Reversed", { exact: true })).toBeVisible();
@@ -502,11 +504,12 @@ test("a reversed adoption un-adopts, reopens, drops out of the report, and can b
   await expect(
     secondReverser.getByText("This outcome has already been reversed."),
   ).toBeVisible();
-  // The refusal refreshes the list, so the row it was refused on now shows
-  // what happened, with only the record link available.
+  // The refusal closes the dialog and refreshes the list, so the row it was
+  // refused on now shows what happened, with only the record link available.
+  // Focus is back on its menu's button, even while the refresh is running.
   await expect(staleDialog).toBeHidden();
   await expect(staleRow.getByText("Reversed", { exact: true })).toBeVisible();
-  await expect(staleRow.getByRole("button", { name: "Open menu" })).toBeVisible();
+  await expect(staleRow.getByRole("button", { name: "Open menu" })).toBeFocused();
   await secondReverser.close();
 
   // So is a correction to it, from a form opened before it was reversed.

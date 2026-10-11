@@ -24,6 +24,7 @@ import {
 } from "@/app/lib/actions/person-note.actions";
 import { toast } from "sonner";
 import { PersonNoteForm } from "./person-note-form";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface PersonNoteActionsProps {
   note: PersonNotePayload;
@@ -33,6 +34,7 @@ interface PersonNoteActionsProps {
 export function PersonNoteActions({ note, personId }: PersonNoteActionsProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const onSoftDelete = () => {
     startTransition(() => {
@@ -63,7 +65,12 @@ export function PersonNoteActions({ note, personId }: PersonNoteActionsProps) {
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+          >
             <MoreHorizontal className="h-4 w-4" />
             <span className="sr-only">Note actions</span>
           </Button>
@@ -88,7 +95,10 @@ export function PersonNoteActions({ note, personId }: PersonNoteActionsProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent
+        className="sm:max-w-[600px]"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Note</DialogTitle>
           <DialogDescription>

@@ -31,6 +31,7 @@ import { reverseOutcome } from "@/app/lib/actions/outcome.actions";
 import { REVERSAL_REASON_MAX_LENGTH } from "@/app/lib/zod-schemas/outcome.schema";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { OutcomeType } from "@/prisma/generated/enums";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface DataTableRowActionsProps {
   row: Row<StockFeatures, OutcomeWithDetails>;
@@ -49,6 +50,7 @@ export function DataTableRowActions({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [reasonError, setReasonError] = useState<string | undefined>();
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   // A reversed outcome is kept on the record as it was voided: it cannot be
   // corrected, and a reversal is never undone. Its row is read-only.
@@ -89,9 +91,13 @@ export function DataTableRowActions({
       setReasonError(result.fieldErrors?.reason?.[0]);
       toast.error(result.message);
       // Refused for a reason other than the form's, most likely because
-      // someone else reversed it first. Refreshing shows the row as it now
-      // is, which also takes this dialog and its menu away.
-      if (!result.fieldErrors) router.refresh();
+      // someone else reversed it first. The dialog has nothing left to do, so
+      // it closes, and refreshing shows the row as it now is.
+      if (!result.fieldErrors) {
+        setIsDialogOpen(false);
+        setReason("");
+        router.refresh();
+      }
     });
   };
 
@@ -110,9 +116,9 @@ export function DataTableRowActions({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
+            ref={triggerRef}
             variant="ghost"
             className="flex h-8 w-8 p-0 data-[state=open]:bg-muted"
-            disabled={isPending}
           >
             <MoreHorizontal className="h-4 w-4" />
             <span className="sr-only">Open menu</span>
@@ -140,7 +146,7 @@ export function DataTableRowActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={returnFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>
             Reverse {animalName}&apos;s {typeLabel} outcome?

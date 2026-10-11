@@ -186,6 +186,15 @@ test("reactivating restores sign-in, and deactivating ends a session already ope
   dialog = await openRowMenu(page, /^deactivate$/i);
   const confirm = dialog.getByRole("button", { name: /^deactivate$/i });
   await expect(confirm).toBeDisabled();
+  // Cancelling puts focus back on the menu's button, not on the page. (A
+  // confirmed change moves the account out of the filtered list, button and
+  // all.)
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(
+    accountRow(page).getByRole("button", { name: /open menu/i }),
+  ).toBeFocused();
+  dialog = await openRowMenu(page, /^deactivate$/i);
   await dialog.getByLabel("Reason").fill(REASON);
   await confirm.click();
   await expect(page.getByText("Account deactivated.")).toBeVisible();

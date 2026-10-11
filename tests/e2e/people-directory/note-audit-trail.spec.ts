@@ -46,7 +46,10 @@ test("editing a person note stamps 'edited by Admin User' on the Notes tab", asy
   await page.getByRole("button", { name: "Update Note" }).click();
   await expect(page.getByText("Note updated successfully.")).toBeVisible();
 
+  const editedCard = noteCard(page, revised);
+  await expect(editedCard.getByText(/edited by Admin User/)).toBeVisible();
+  // Focus goes back to the menu's button, not to the page.
   await expect(
-    noteCard(page, revised).getByText(/edited by Admin User/),
-  ).toBeVisible();
+    editedCard.getByRole("button", { name: /note actions/i }),
+  ).toBeFocused();
 });

@@ -24,6 +24,7 @@ import {
   setContactActive,
 } from "@/app/lib/actions/partner-contact.actions";
 import { toast } from "sonner";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface ContactActionsProps {
   contact: PartnerContactsPayload;
@@ -38,6 +39,7 @@ export function ContactActions({
 }: ContactActionsProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const onSetPrimary = () => {
     startTransition(() => {
@@ -92,7 +94,12 @@ export function ContactActions({
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+          >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -123,7 +130,10 @@ export function ContactActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent
+        className="sm:max-w-[600px]"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Contact</DialogTitle>
           <DialogDescription>

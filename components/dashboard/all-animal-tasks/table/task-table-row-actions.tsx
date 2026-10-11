@@ -32,6 +32,7 @@ import { TaskStatus } from "@/prisma/generated/enums";
 import { TaskStatusOptions } from "@/app/lib/utils/enum-formatter";
 import { TaskForm } from "../../animals/tasks/task-form";
 import { AllAnimalsTasksPayload } from "@/app/lib/data/all-animal-tasks.data";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface DataTableRowActionsProps {
   row: Row<StockFeatures, AllAnimalsTasksPayload>;
@@ -49,6 +50,7 @@ export function DataTableRowActions({
 }: DataTableRowActionsProps) {
   const task = row.original;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
   
   // Volunteers (read-only) get no row actions — every field is already
   // visible in the table, and all actions here are mutations.
@@ -76,6 +78,7 @@ export function DataTableRowActions({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
+            ref={triggerRef}
             variant="ghost"
             className="flex h-8 w-8 p-0 data-[state=open]:bg-muted"
           >
@@ -125,7 +128,10 @@ export function DataTableRowActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-150">
+      <DialogContent
+        className="sm:max-w-150"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Task</DialogTitle>
           <DialogDescription>

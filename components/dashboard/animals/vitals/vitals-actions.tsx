@@ -39,6 +39,7 @@ import {
   DirtyFormHandle,
   useConfirmedOpenChange,
 } from "@/hooks/use-confirmed-open-change";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface VitalsActionsProps {
   vitalsLog: AnimalVitalsListPayload;
@@ -58,6 +59,7 @@ export function VitalsActions({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<DirtyFormHandle>(null);
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
     useConfirmedOpenChange(
@@ -98,7 +100,12 @@ export function VitalsActions({
     <Dialog open={isDialogOpen} onOpenChange={guardedOnOpenChange}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+          >
             <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
             <span className="sr-only">More options</span>
           </Button>
@@ -128,7 +135,10 @@ export function VitalsActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent
+        className="sm:max-w-[600px]"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Vitals Entry</DialogTitle>
           <DialogDescription>

@@ -22,7 +22,6 @@ import type {
   StockFeatures,
 } from "@tanstack/react-table";
 import {
-  flexRender,
   stockFeatures,
   useTable,
   createSortedRowModel,
@@ -38,8 +37,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { renderColumnPart } from "@/components/table-common/render-column-part";
 
-interface DataTableProps<TData extends RowData, TExtra = Record<string, never>> {
+type TableRecord = RowData & { id: string };
+
+interface DataTableProps<TData extends TableRecord, TExtra = Record<string, never>> {
   columns?: ColumnDef<StockFeatures, TData>[];
   getColumns?: (props: TExtra) => ColumnDef<StockFeatures, TData>[];
   columnProps?: TExtra;
@@ -50,7 +52,7 @@ interface DataTableProps<TData extends RowData, TExtra = Record<string, never>> 
   toolbarProps?: TExtra;
 }
 
-const DataTable = <TData extends RowData, TExtra = Record<string, never>>({
+const DataTable = <TData extends TableRecord, TExtra = Record<string, never>>({
   columns: staticColumns,
   getColumns,
   columnProps,
@@ -82,6 +84,10 @@ const DataTable = <TData extends RowData, TExtra = Record<string, never>>({
     features,
     data,
     columns,
+    // By record, not by position: a row's menu keeps its state (an open
+    // dialog, a form's values) across a refresh, so it must stay with its
+    // record when the rows reorder.
+    getRowId: (row) => row.id,
     state: {
       sorting,
       columnVisibility,
@@ -110,7 +116,7 @@ const DataTable = <TData extends RowData, TExtra = Record<string, never>>({
                   <TableHead key={header.id} colSpan={header.colSpan}>
                     {header.isPlaceholder
                       ? null
-                      : flexRender(
+                      : renderColumnPart(
                           header.column.columnDef.header,
                           header.getContext(),
                         )}
@@ -128,7 +134,7 @@ const DataTable = <TData extends RowData, TExtra = Record<string, never>>({
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
-                      {flexRender(
+                      {renderColumnPart(
                         cell.column.columnDef.cell,
                         cell.getContext(),
                       )}

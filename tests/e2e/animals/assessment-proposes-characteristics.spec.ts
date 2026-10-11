@@ -260,6 +260,10 @@ test("renaming a trait in Settings keeps its citation and supersession linked", 
     await fillStable(dialog.getByLabel("Name *", { exact: true }), to);
     await dialog.getByRole("button", { name: "Update Characteristic" }).click();
     await expect(page.getByText("Characteristic updated successfully.")).toBeVisible();
+    // Focus goes back to the menu's button, not to the page.
+    await expect(
+      page.getByRole("button", { name: `Actions for ${to}` }),
+    ).toBeFocused();
   };
 
   await rename("Good with cats", "Cat-friendly");

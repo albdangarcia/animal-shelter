@@ -24,6 +24,7 @@ import {
   restoreCharacteristic,
 } from "@/app/lib/actions/characteristics-catalog.actions";
 import { toast } from "sonner";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface Props {
   characteristic: CharacteristicModel;
@@ -32,6 +33,7 @@ interface Props {
 export function CharacteristicActions({ characteristic }: Props) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const onSoftDelete = () => {
     startTransition(() => {
@@ -67,6 +69,7 @@ export function CharacteristicActions({ characteristic }: Props) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
+            ref={triggerRef}
             variant="ghost"
             size="icon"
             className="h-7 w-7"
@@ -95,7 +98,10 @@ export function CharacteristicActions({ characteristic }: Props) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent
+        className="sm:max-w-[480px]"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Characteristic</DialogTitle>
           <DialogDescription>

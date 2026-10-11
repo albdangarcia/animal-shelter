@@ -24,6 +24,7 @@ import {
 } from "@/app/lib/actions/partner-note.actions";
 import { toast } from "sonner";
 import { PartnerNoteForm } from "@/components/dashboard/partners-directory/notes/partner-note-form";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface PartnerNoteActionsProps {
   note: PartnerNotePayload;
@@ -36,6 +37,7 @@ export function PartnerNoteActions({
 }: PartnerNoteActionsProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const onSoftDelete = () => {
     startTransition(() => {
@@ -66,7 +68,12 @@ export function PartnerNoteActions({
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+          >
             <MoreHorizontal className="h-4 w-4" />
             <span className="sr-only">Note actions</span>
           </Button>
@@ -91,7 +98,10 @@ export function PartnerNoteActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-150">
+      <DialogContent
+        className="sm:max-w-150"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Note</DialogTitle>
           <DialogDescription>
