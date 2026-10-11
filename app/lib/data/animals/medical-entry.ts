@@ -151,6 +151,23 @@ export const findDueMedicalEntries = (db: Db, animalId: string) =>
   });
 
 /**
+ * The items the animal has open scheduled care for (scheduled, not voided).
+ * Recording one of these doesn't offer to schedule the next: it is already
+ * planned.
+ */
+export const findOpenScheduledItemIds = async (
+  db: Db,
+  animalId: string,
+): Promise<Set<string>> => {
+  const rows = await db.medicalEntry.findMany({
+    where: { animalId, status: MedicalEntryStatus.SCHEDULED, voidedAt: null },
+    distinct: ["itemId"],
+    select: { itemId: true },
+  });
+  return new Set(rows.map((row) => row.itemId));
+};
+
+/**
  * One page of the animal's entries, whatever their status, voided ones
  * included: the history is the only read that shows them all. `kinds` empty
  * means every kind.

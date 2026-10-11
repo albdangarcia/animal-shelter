@@ -12,7 +12,8 @@ import type { RabiesStatus } from "@/app/lib/utils/medical-days";
 import { formatShelterDay } from "@/app/lib/utils/shelter-day";
 import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { formatWeight } from "@/app/lib/utils/weight-format";
-import { MedicalEntryList, type MedicalManage } from "./medical-entry-list";
+import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
+import { MedicalEntryList } from "./medical-entry-list";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
 
 const rabiesText = (rabies: RabiesStatus) => {
@@ -32,10 +33,10 @@ interface Props {
   animalId: string;
   overview: MedicalOverviewData;
   unitSystem: WeightUnitSystem;
-  manage: MedicalManage;
+  controls: MedicalControls | null;
 }
 
-const MedicalOverview = ({ animalId, overview, unitSystem, manage }: Props) => {
+const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) => {
   const base = `/dashboard/animals/${animalId}/medical`;
   const { rabies, currentWeightGrams, recentEntries, names } = overview;
 
@@ -46,9 +47,12 @@ const MedicalOverview = ({ animalId, overview, unitSystem, manage }: Props) => {
         <CardDescription>
           Vaccines, tests and treatments this animal has been given.
         </CardDescription>
-        {manage && (
+        {controls?.canManage && (
           <CardAction>
-            <AddMedicalEntryMenu animalId={manage.animalId} options={manage.options} />
+            <AddMedicalEntryMenu
+              animalId={controls.animalId}
+              options={controls.options}
+            />
           </CardAction>
         )}
       </CardHeader>
@@ -101,7 +105,7 @@ const MedicalOverview = ({ animalId, overview, unitSystem, manage }: Props) => {
             <MedicalEntryList
               entries={recentEntries}
               names={names}
-              manage={manage}
+              controls={controls}
             />
           ) : (
             <p className="rounded-lg border-2 border-dashed px-6 py-8 text-center text-sm text-muted-foreground">

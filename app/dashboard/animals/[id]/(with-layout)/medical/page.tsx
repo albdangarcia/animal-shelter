@@ -2,7 +2,7 @@ import { IDParamType } from "@/app/lib/types";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { fetchMedicalManage } from "@/app/lib/data/medical-catalog.data";
+import { fetchMedicalControls } from "@/app/lib/data/medical-catalog.data";
 import { fetchMedicalOverview } from "@/app/lib/data/animals/medical-entry.data";
 import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import MedicalOverview from "@/components/dashboard/animals/medical/medical-overview";
@@ -24,10 +24,10 @@ const Page = async ({ params }: Props) => {
 
 const PageContent = async ({ params }: Props) => {
   const { id: animalId } = await params;
-  const [overview, settings, manage] = await Promise.all([
+  const [overview, settings, controls] = await Promise.all([
     fetchMedicalOverview(animalId),
     getShelterSettings(),
-    fetchMedicalManage(animalId),
+    fetchMedicalControls(animalId),
   ]);
 
   return (
@@ -35,7 +35,7 @@ const PageContent = async ({ params }: Props) => {
       animalId={animalId}
       overview={overview}
       unitSystem={settings.weightUnitSystem}
-      manage={manage}
+      controls={controls}
     />
   );
 };

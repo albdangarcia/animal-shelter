@@ -5,6 +5,7 @@ import {
   MedicalEntryFormSchema,
   ScheduleMedicalEntrySchema,
   VoidMedicalEntrySchema,
+  medicalEntryFieldErrors,
   rabiesDurationIssue,
   type MedicalEntryFormInput,
 } from "./medical-entry.schemas";
@@ -26,7 +27,7 @@ const fieldErrorsOf = (
   const result = MedicalEntryFormSchema.safeParse(values);
   assert.equal(result.success, false);
   if (result.success) throw new Error("unreachable");
-  return z.flattenError(result.error).fieldErrors;
+  return medicalEntryFieldErrors(result.error);
 };
 
 test("MedicalEntryFormSchema: days parse, and blank text reads as null", () => {
@@ -114,6 +115,39 @@ test("MedicalEntryFormSchema: every test result is chosen", () => {
       results: [{ analyteId: "a", result: undefined as never }],
     }).results,
   );
+});
+
+test("MedicalEntryFormSchema: the next dose's day is keyed by its dotted path", () => {
+  const values = {
+    kind: "VACCINE",
+    itemId: "item",
+    completedDate: "2026-09-01",
+    source: "IN_HOUSE",
+  } as const;
+  for (const dueDate of ["", "2026-02-30"]) {
+    const errors = fieldErrorsOf({ ...values, scheduleNext: { dueDate } });
+    assert.deepEqual(Object.keys(errors), ["scheduleNext.dueDate"], dueDate);
+  }
+  const parsed = MedicalEntryFormSchema.parse({
+    ...values,
+    scheduleNext: { dueDate: "2026-09-15" },
+  });
+  assert.deepEqual(parsed.scheduleNext, { dueDate: "2026-09-15" });
+  assert.equal(MedicalEntryFormSchema.parse(values).scheduleNext, null);
+});
+
+test("MedicalEntryFormSchema: a row's error is filed on its list", () => {
+  const errors = fieldErrorsOf({
+    kind: "TEST",
+    itemId: "item",
+    completedDate: "2026-09-01",
+    source: "IN_HOUSE",
+    results: [
+      { analyteId: "a", result: "NEGATIVE" },
+      { analyteId: "b", result: undefined as never },
+    ],
+  });
+  assert.deepEqual(Object.keys(errors), ["results"]);
 });
 
 test("VoidMedicalEntrySchema: the reason is required and kept trimmed", () => {

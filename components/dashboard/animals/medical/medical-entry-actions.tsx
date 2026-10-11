@@ -32,8 +32,10 @@ import {
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import { voidMedicalEntry } from "@/app/lib/actions/medical-entry.actions";
-import { VOID_REASON_MAX_LENGTH } from "@/app/lib/zod-schemas/medical-entry.schemas";
-import { MEDICAL_ITEM_KIND_LABELS } from "@/app/lib/constants/medical";
+import {
+  MEDICAL_ITEM_KIND_LABELS,
+  MEDICAL_REASON_MAX_LENGTH,
+} from "@/app/lib/constants/medical";
 import {
   DirtyFormHandle,
   useConfirmedOpenChange,
@@ -85,9 +87,9 @@ export function MedicalEntryActions({ animalId, entry, options }: Props) {
   // Checked as the server checks it, trimmed, so an over-long reason is
   // explained before anything is sent.
   const trimmedLength = reason.trim().length;
-  const tooLong = trimmedLength > VOID_REASON_MAX_LENGTH;
+  const tooLong = trimmedLength > MEDICAL_REASON_MAX_LENGTH;
   const shownError = tooLong
-    ? `The reason cannot exceed ${VOID_REASON_MAX_LENGTH} characters.`
+    ? `The reason cannot exceed ${MEDICAL_REASON_MAX_LENGTH} characters.`
     : reasonError;
   const what = `${entry.item.name} (${entryDayText(entry.completedDate)})`;
   const noun = MEDICAL_ITEM_KIND_LABELS[entry.kind].toLowerCase();

@@ -8,17 +8,18 @@ import {
 } from "@/components/ui/card";
 import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry.data";
-import { MedicalEntryList, type MedicalManage } from "./medical-entry-list";
+import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
+import { MedicalEntryList } from "./medical-entry-list";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
 
 interface Props {
   /** Vaccines and tests that aren't voided, newest first. */
   entries: MedicalEntryDisplay[];
   names: Record<string, string>;
-  manage: MedicalManage;
+  controls: MedicalControls | null;
 }
 
-const VaccinesAndTests = ({ entries, names, manage }: Props) => {
+const VaccinesAndTests = ({ entries, names, controls }: Props) => {
   const vaccines = entries.filter(
     (entry) => entry.kind === MedicalEntryKind.VACCINE,
   );
@@ -41,9 +42,12 @@ const VaccinesAndTests = ({ entries, names, manage }: Props) => {
           Each vaccine with its doses, latest first, and every test with its
           results. Voided entries are only in History.
         </CardDescription>
-        {manage && (
+        {controls?.canManage && (
           <CardAction>
-            <AddMedicalEntryMenu animalId={manage.animalId} options={manage.options} />
+            <AddMedicalEntryMenu
+              animalId={controls.animalId}
+              options={controls.options}
+            />
           </CardAction>
         )}
       </CardHeader>
@@ -65,7 +69,7 @@ const VaccinesAndTests = ({ entries, names, manage }: Props) => {
                 <MedicalEntryList
                   entries={doses}
                   names={names}
-                  manage={manage}
+                  controls={controls}
                   className="space-y-2"
                 />
               </section>
@@ -83,7 +87,7 @@ const VaccinesAndTests = ({ entries, names, manage }: Props) => {
             <MedicalEntryList
               entries={tests}
               names={names}
-              manage={manage}
+              controls={controls}
               className="space-y-2"
             />
           ) : (

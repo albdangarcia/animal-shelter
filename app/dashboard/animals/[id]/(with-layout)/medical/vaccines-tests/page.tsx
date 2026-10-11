@@ -2,7 +2,7 @@ import { IDParamType } from "@/app/lib/types";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { fetchMedicalManage } from "@/app/lib/data/medical-catalog.data";
+import { fetchMedicalControls } from "@/app/lib/data/medical-catalog.data";
 import { fetchVaccinesAndTests } from "@/app/lib/data/animals/medical-entry.data";
 import VaccinesAndTests from "@/components/dashboard/animals/medical/vaccines-and-tests";
 
@@ -23,12 +23,12 @@ const Page = async ({ params }: Props) => {
 
 const PageContent = async ({ params }: Props) => {
   const { id: animalId } = await params;
-  const [{ entries, names }, manage] = await Promise.all([
+  const [{ entries, names }, controls] = await Promise.all([
     fetchVaccinesAndTests(animalId),
-    fetchMedicalManage(animalId),
+    fetchMedicalControls(animalId),
   ]);
 
-  return <VaccinesAndTests entries={entries} names={names} manage={manage} />;
+  return <VaccinesAndTests entries={entries} names={names} controls={controls} />;
 };
 
 export default Page;

@@ -176,6 +176,7 @@ const itemChoices = (
       defaultRoute: own?.defaultRoute ?? null,
       defaultDoseAmount: own?.defaultDoseAmount ?? null,
       defaultDoseUnit: own?.defaultDoseUnit ?? null,
+      repeatIntervalDays: own?.repeatIntervalDays ?? null,
       analytes: recordedAnalytes,
     },
     ...others,

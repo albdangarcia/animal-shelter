@@ -70,3 +70,6 @@ export const formatDose = (amount: number, unit: DoseUnit): string => {
   const plural = COUNTED_UNITS.has(unit) && amount !== 1;
   return `${amount} ${plural ? `${label}s` : label}`;
 };
+
+/** The longest reason a void or a decline can carry. */
+export const MEDICAL_REASON_MAX_LENGTH = 1000;

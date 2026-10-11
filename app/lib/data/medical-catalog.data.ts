@@ -11,6 +11,7 @@ import {
   type MedicalCatalogItem,
   type PickableMedicalItem,
 } from "./medical-catalog";
+import { findOpenScheduledItemIds } from "./animals/medical-entry";
 import type { CalendarDay } from "../utils/shelter-day";
 
 export type { MedicalCatalogItem, PickableMedicalItem } from "./medical-catalog";
@@ -49,17 +50,22 @@ export const fetchMedicalCatalogSpecies = RequirePermission(
 )(_fetchMedicalCatalogSpecies);
 
 export interface MedicalEntryFormOptions {
-  /** The items staff can pick for this animal, every kind. */
-  items: PickableMedicalItem[];
-  /** Active vet clinic partners. */
+  /**
+   * The items staff can pick for this animal, every kind. `alreadyScheduled`
+   * says the animal has open scheduled care for the item, so recording it
+   * doesn't offer to schedule the next one.
+   */
+  items: (PickableMedicalItem & { alreadyScheduled: boolean })[];
+  /** Active vet clinics. */
   vetClinics: { id: string; name: string }[];
   /** The shelter's today: the date given starts there, and can't pass it. */
   today: CalendarDay;
 }
 
-// What the entry forms offer for one animal. Behind MEDICAL_MANAGE, not the
-// catalog's admin permission: staff recording care read the catalog, they
-// don't manage it.
+// What the entry forms offer for one animal. Behind MEDICAL_ADMINISTER, not
+// the catalog's admin permission: staff giving care read the catalog, they
+// don't manage it. Every role that may plan care may also give it, so the
+// planning forms can rely on this too.
 const _fetchMedicalEntryFormOptions = async (
   animalId: string,
 ): Promise<MedicalEntryFormOptions> => {
@@ -72,12 +78,13 @@ const _fetchMedicalEntryFormOptions = async (
       where: { id: id.data },
       select: { speciesId: true },
     });
-    const [items, vetClinics, today] = await Promise.all([
+    const [items, scheduled, vetClinics, today] = await Promise.all([
       Promise.all(
         Object.values(MedicalItemKind).map((kind) =>
           findPickableMedicalItems(prisma, animal.speciesId, kind),
         ),
       ),
+      findOpenScheduledItemIds(prisma, id.data),
       prisma.partner.findMany({
         where: { type: PartnerType.VET_CLINIC, isActive: true },
         orderBy: { name: "asc" },
@@ -85,7 +92,13 @@ const _fetchMedicalEntryFormOptions = async (
       }),
       getShelterToday(),
     ]);
-    return { items: items.flat(), vetClinics, today };
+    return {
+      items: items
+        .flat()
+        .map((item) => ({ ...item, alreadyScheduled: scheduled.has(item.id) })),
+      vetClinics,
+      today,
+    };
   } catch (error) {
     console.error("Failed to fetch medical entry form options:", error);
     throw new Error("Could not fetch the medical entry form options.");
@@ -93,16 +106,40 @@ const _fetchMedicalEntryFormOptions = async (
 };
 
 export const fetchMedicalEntryFormOptions = RequirePermission(
-  AppPermissions.MEDICAL_MANAGE,
+  AppPermissions.MEDICAL_ADMINISTER,
 )(_fetchMedicalEntryFormOptions);
 
 /**
- * For a Medical page: the entry forms' options when the viewer may record and
- * correct care, and null when they may only read.
+ * What a Medical page offers the viewer beyond reading: the entry forms'
+ * options, and which of the two medical write permissions they hold.
+ * `canAdminister` gives scheduled care (records or declines it); `canManage`
+ * plans and corrects care (schedules, reschedules, records ad hoc, edits,
+ * voids).
  */
-export const fetchMedicalManage = async (
+export interface MedicalControls {
+  animalId: string;
+  options: MedicalEntryFormOptions;
+  canManage: boolean;
+  canAdminister: boolean;
+}
+
+/**
+ * The viewer's controls on one animal's Medical pages, or null when they may
+ * only read. Every role holding MEDICAL_MANAGE also holds MEDICAL_ADMINISTER,
+ * so null means neither.
+ */
+export const fetchMedicalControls = async (
   animalId: string,
-): Promise<{ animalId: string; options: MedicalEntryFormOptions } | null> =>
-  (await hasPermission(AppPermissions.MEDICAL_MANAGE))
-    ? { animalId, options: await fetchMedicalEntryFormOptions(animalId) }
-    : null;
+): Promise<MedicalControls | null> => {
+  const [canManage, canAdminister] = await Promise.all([
+    hasPermission(AppPermissions.MEDICAL_MANAGE),
+    hasPermission(AppPermissions.MEDICAL_ADMINISTER),
+  ]);
+  if (!canAdminister) return null;
+  return {
+    animalId,
+    options: await fetchMedicalEntryFormOptions(animalId),
+    canManage,
+    canAdminister,
+  };
+};

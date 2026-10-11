@@ -25,8 +25,10 @@ import {
 } from "@/app/lib/utils/shelter-day";
 import { addCalendarMonths, dueDateIssue } from "@/app/lib/utils/medical-days";
 import { lockMedicalItemForUse } from "@/app/lib/services/medical-catalog";
+import { findOpenScheduledItemIds } from "@/app/lib/data/animals/medical-entry";
 import {
   DOSE_UNIT_LABELS,
+  MEDICAL_REASON_MAX_LENGTH,
   MEDICAL_ROUTE_LABELS,
   TEST_RESULT_LABELS,
   formatDose,
@@ -39,7 +41,9 @@ import {
  * Scheduled care is an entry with a due day and nothing else: no source, no
  * details row. Lot numbers and results are written only when it is given, so
  * they exist only for care that happened. Every read that derives a fact
- * counts only completed entries.
+ * counts only completed entries. Scheduled care is then recorded as given,
+ * rescheduled to another day, or declined with a reason; a declined entry is
+ * final.
  *
  * A correction edits the entry in place and writes an EDITED event holding the
  * before and after values of only what changed, plus a MEDICAL_ENTRY_EDITED
@@ -115,6 +119,23 @@ export type MedicalEntryInput =
   | VaccineEntryInput
   | TestEntryInput
   | TreatmentEntryInput;
+
+/** Recording care can also schedule the next dose of a repeating item. */
+export interface ScheduleNextInput {
+  dueDate: CalendarDay;
+}
+
+/** Care to record as given, and optionally the next dose to schedule. */
+export type RecordMedicalEntryInput = MedicalEntryInput & {
+  scheduleNext?: ScheduleNextInput | null;
+};
+
+/** What recording wrote: the entry, and the next one when it was scheduled. */
+export interface RecordedMedicalEntry {
+  entryId: string;
+  animalId: string;
+  nextEntryId: string | null;
+}
 
 /** Care to schedule: what, for whom, and the day it is due. */
 export interface ScheduleMedicalEntryInput {
@@ -295,6 +316,7 @@ interface CatalogItem {
   defaultDoseAmount: number | null;
   defaultDoseUnit: DoseUnit | null;
   isRabies: boolean;
+  repeatIntervalDays: number | null;
   retiredAt: Date | null;
   species: { id: string }[];
   analytes: { id: string; name: string; retiredAt: Date | null }[];
@@ -362,6 +384,7 @@ const readItem = async (
       defaultDoseAmount: true,
       defaultDoseUnit: true,
       isRabies: true,
+      repeatIntervalDays: true,
       retiredAt: true,
     },
   });
@@ -463,12 +486,16 @@ const checkDay = (
 
 /**
  * Refuses a due day the scheduling rules don't allow: before today, or too
- * far ahead.
+ * far ahead. `field` is the form field the day was typed in.
  */
-export const checkDueDate = (dueDate: CalendarDay, today: CalendarDay) => {
+export const checkDueDate = (
+  dueDate: CalendarDay,
+  today: CalendarDay,
+  field = "dueDate",
+) => {
   const issue = dueDateIssue(dueDate, today);
   if (issue) {
-    throw new MedicalEntryRefusal(issue, "dueDate");
+    throw new MedicalEntryRefusal(issue, field);
   }
 };
 
@@ -923,25 +950,175 @@ export async function scheduleMedicalEntry(
 }
 
 /**
- * Records a vaccine, test or treatment as given. Blank defaults (manufacturer,
- * route, dose) are filled in from the catalog item, so changing the item's
- * defaults later never rewrites this entry.
+ * Takes the entry's animal lock, then reads the entry as it is now, refusing
+ * it unless it is scheduled and not voided. `doing` completes "so it can't
+ * be …" in the refusal. Read behind the lock, so of two people acting on one
+ * scheduled entry at once, the second sees what the first did.
  */
-export async function recordMedicalEntry(
+const lockScheduledEntry = async (
   tx: TransactionClient,
-  input: MedicalEntryInput & { animalId: string },
+  entryId: string,
+  doing: string,
+) => {
+  // An entry's animal never changes, so it can be read before the lock.
+  const located = await tx.medicalEntry.findUnique({
+    where: { id: entryId },
+    select: { animalId: true },
+  });
+  if (!located) {
+    throw new NotFoundError("Medical entry not found.");
+  }
+  const { animalId } = located;
+  await lockAnimal(tx, animalId);
+
+  const entry = await tx.medicalEntry.findUniqueOrThrow({
+    where: { id: entryId },
+    select: {
+      kind: true,
+      status: true,
+      itemId: true,
+      dueDate: true,
+      voidedAt: true,
+      item: { select: { name: true } },
+    },
+  });
+  if (entry.voidedAt) {
+    throw new ConflictError(`This entry was voided, so it can't be ${doing}.`);
+  }
+  if (entry.status !== MedicalEntryStatus.SCHEDULED) {
+    throw new ConflictError(
+      entry.status === MedicalEntryStatus.COMPLETED
+        ? `This entry has already been recorded as given, so it can't be ${doing}.`
+        : `This entry was declined, so it can't be ${doing}.`,
+    );
+  }
+  if (!entry.dueDate) {
+    throw new Error(`Scheduled medical entry ${entryId} has no due date.`);
+  }
+  return {
+    animalId,
+    kind: entry.kind,
+    itemId: entry.itemId,
+    itemName: entry.item.name,
+    dueDate: calendarDay(entry.dueDate),
+  };
+};
+
+/**
+ * Moves scheduled care to another due day, under the same rules as
+ * scheduling it. The new day must differ from the current one.
+ */
+export async function rescheduleMedicalEntry(
+  tx: TransactionClient,
+  entryId: string,
+  dueDate: CalendarDay,
   actorId: string,
   today: CalendarDay,
 ): Promise<{ entryId: string; animalId: string }> {
-  const { animalId } = input;
-  await lockAnimal(tx, animalId);
+  const entry = await lockScheduledEntry(tx, entryId, "rescheduled");
+  if (dueDate === entry.dueDate) {
+    throw new MedicalEntryRefusal(
+      "That is already its due date. Pick another day.",
+      "dueDate",
+    );
+  }
+  checkDueDate(dueDate, today);
 
-  const animal = await readAnimal(tx, animalId);
-  // Held until commit, so the item can't change kind or retire between this
-  // check and the entry being written.
-  await lockMedicalItemForUse(tx, input.itemId);
-  const item = await readItem(tx, input.itemId);
-  checkItemPickable(item, input.kind, animal);
+  await tx.medicalEntry.update({ where: { id: entryId }, data: { dueDate } });
+  await tx.medicalEntryEvent.create({
+    data: {
+      entryId,
+      action: MedicalEntryEventAction.RESCHEDULED,
+      actorId,
+      before: { dueDate: entry.dueDate },
+      after: { dueDate },
+    },
+  });
+  await tx.animalActivityLog.create({
+    data: {
+      animalId: entry.animalId,
+      activityType: AnimalActivityType.MEDICAL_ENTRY_RESCHEDULED,
+      changedById: actorId,
+      changeSummary: `${entry.itemName} ${KIND_NOUN[entry.kind]} rescheduled from ${dayText(entry.dueDate)} to ${dayText(dueDate)}.`,
+    },
+  });
+
+  return { entryId, animalId: entry.animalId };
+}
+
+/**
+ * Declines scheduled care, with the reason it won't be given. The entry stays
+ * on the record as declined, and is final: one declined in error is voided
+ * and scheduled again.
+ */
+export async function declineMedicalEntry(
+  tx: TransactionClient,
+  entryId: string,
+  reason: string,
+  actorId: string,
+): Promise<{ entryId: string; animalId: string }> {
+  const declineReason = reason.trim();
+  if (!declineReason) {
+    throw new MedicalEntryRefusal(
+      "A reason for declining this entry is required.",
+      "reason",
+    );
+  }
+  if (declineReason.length > MEDICAL_REASON_MAX_LENGTH) {
+    throw new MedicalEntryRefusal(
+      `The reason cannot exceed ${MEDICAL_REASON_MAX_LENGTH} characters.`,
+      "reason",
+    );
+  }
+  const entry = await lockScheduledEntry(tx, entryId, "declined");
+
+  await tx.medicalEntry.update({
+    where: { id: entryId },
+    data: { status: MedicalEntryStatus.DECLINED, declineReason },
+  });
+  await tx.medicalEntryEvent.create({
+    data: {
+      entryId,
+      action: MedicalEntryEventAction.DECLINED,
+      actorId,
+      before: { status: MedicalEntryStatus.SCHEDULED },
+      after: { status: MedicalEntryStatus.DECLINED, declineReason },
+    },
+  });
+  await tx.animalActivityLog.create({
+    data: {
+      animalId: entry.animalId,
+      activityType: AnimalActivityType.MEDICAL_ENTRY_DECLINED,
+      changedById: actorId,
+      changeSummary: `${entry.itemName} ${KIND_NOUN[entry.kind]} due ${dayText(entry.dueDate)} was declined. Reason: ${declineReason}`,
+    },
+  });
+
+  return { entryId, animalId: entry.animalId };
+}
+
+// ---------------------------------------------------------------------------
+// Recording care as given
+// ---------------------------------------------------------------------------
+//
+// Recording ad hoc and recording care that was scheduled share these, so the
+// two can't drift: the same day, vet and per-kind rules, the same values, the
+// same details rows and the same activity text.
+
+/**
+ * The values care given stores, after the day, vet and per-kind rules. Blank
+ * defaults (manufacturer, route, dose) are filled in from the catalog item,
+ * since this is the first time the entry's details are written: changing the
+ * item's defaults later never rewrites it.
+ */
+const givenValues = async (
+  tx: TransactionClient,
+  input: MedicalEntryInput,
+  item: CatalogItem,
+  animal: AnimalFacts,
+  actorId: string,
+  today: CalendarDay,
+): Promise<EntryValues> => {
   checkDay(input.completedDate, input.source, animal, today);
 
   const vetPartnerId = input.vetPartnerId || null;
@@ -955,7 +1132,7 @@ export async function recordMedicalEntry(
         ? actorId
         : null;
 
-  const values = valuesFor(
+  return valuesFor(
     input,
     item,
     {
@@ -968,6 +1145,119 @@ export async function recordMedicalEntry(
     },
     { itemDefaults: true, ...catalogTerms(item) },
   );
+};
+
+/** The nested create for the kind's details row. */
+const detailsCreate = (kind: MedicalEntryKind, values: EntryValues) => ({
+  ...(kind === MedicalEntryKind.VACCINE && {
+    vaccine: { create: vaccineData(values) },
+  }),
+  ...(kind === MedicalEntryKind.TEST && {
+    test: {
+      create: {
+        ...testData(values),
+        results: { createMany: { data: values.results! } },
+      },
+    },
+  }),
+  ...(kind === MedicalEntryKind.TREATMENT && {
+    treatment: { create: treatmentData(values) },
+  }),
+});
+
+/** "DHPP vaccine recorded: given in house, on Oct 15, 2026 (due Oct 14, 2026)." */
+const recordedSummary = async (
+  tx: TransactionClient,
+  item: CatalogItem,
+  kind: MedicalEntryKind,
+  values: EntryValues,
+  dueDate: CalendarDay | null,
+) => {
+  const partnerName = values.vetPartnerId
+    ? (await readNames(tx, [values])).partners.get(values.vetPartnerId)
+    : undefined;
+  return `${item.name} ${KIND_NOUN[kind]} recorded: ${KIND_VERB[kind]} ${SOURCE_TEXT[values.source]}${partnerName ? ` at ${partnerName}` : ""}, on ${dayText(values.completedDate)}${
+    dueDate ? ` (due ${dayText(dueDate)})` : ""
+  }.${values.results ? ` Results: ${describeResults(values.results)}.` : ""}`;
+};
+
+/**
+ * Schedules the next dose of `item` after care given on `completedDate`, when
+ * asked to. The day is the caller's: the form suggests one (`nextDueDate`),
+ * and the scheduling rules apply to whatever is sent. Refused when the item
+ * doesn't repeat, the day given is unknown, the item is retired, or the
+ * animal already has the item scheduled, since then the next one is already
+ * planned. Returns the new entry's id.
+ */
+const scheduleNextDose = async (
+  tx: TransactionClient,
+  animalId: string,
+  kind: MedicalEntryKind,
+  item: CatalogItem,
+  completedDate: string | null,
+  next: ScheduleNextInput | null | undefined,
+  actorId: string,
+  today: CalendarDay,
+): Promise<string | null> => {
+  if (!next) return null;
+  if (item.repeatIntervalDays === null) {
+    throw new MedicalEntryRefusal(
+      `${item.name} doesn't repeat, so there is no next one to schedule.`,
+      "scheduleNext",
+    );
+  }
+  if (completedDate === null) {
+    throw new MedicalEntryRefusal(
+      "The next one can't be scheduled from an unknown date.",
+      "scheduleNext",
+    );
+  }
+  if (item.retiredAt) {
+    throw new MedicalEntryRefusal(
+      `${item.name} has been retired from the catalog, so the next one can't be scheduled.`,
+      "scheduleNext",
+    );
+  }
+  // Read after the care just recorded left the scheduled list, so recording
+  // a scheduled dose doesn't count as the next one being planned.
+  if ((await findOpenScheduledItemIds(tx, animalId)).has(item.id)) {
+    throw new MedicalEntryRefusal(
+      `${item.name} is already scheduled for this animal.`,
+      "scheduleNext",
+    );
+  }
+  checkDueDate(next.dueDate, today, "scheduleNext.dueDate");
+
+  const { entryId } = await scheduleMedicalEntry(
+    tx,
+    { animalId, kind, itemId: item.id, dueDate: next.dueDate },
+    actorId,
+    today,
+  );
+  return entryId;
+};
+
+/**
+ * Records a vaccine, test or treatment as given, with nothing scheduled
+ * before it. With `scheduleNext`, the next dose is scheduled in the same
+ * transaction.
+ */
+export async function recordMedicalEntry(
+  tx: TransactionClient,
+  input: RecordMedicalEntryInput & { animalId: string },
+  actorId: string,
+  today: CalendarDay,
+): Promise<RecordedMedicalEntry> {
+  const { animalId } = input;
+  await lockAnimal(tx, animalId);
+
+  const animal = await readAnimal(tx, animalId);
+  // Held until commit, so the item can't change kind or retire between this
+  // check and the entry being written.
+  await lockMedicalItemForUse(tx, input.itemId);
+  const item = await readItem(tx, input.itemId);
+  checkItemPickable(item, input.kind, animal);
+  const values = await givenValues(tx, input, item, animal, actorId, today);
 
   const entry = await tx.medicalEntry.create({
     data: {
@@ -976,20 +1266,7 @@ export async function recordMedicalEntry(
       status: MedicalEntryStatus.COMPLETED,
       createdById: actorId,
       ...entryData(values),
-      ...(input.kind === MedicalEntryKind.VACCINE && {
-        vaccine: { create: vaccineData(values) },
-      }),
-      ...(input.kind === MedicalEntryKind.TEST && {
-        test: {
-          create: {
-            ...testData(values),
-            results: { createMany: { data: values.results! } },
-          },
-        },
-      }),
-      ...(input.kind === MedicalEntryKind.TREATMENT && {
-        treatment: { create: treatmentData(values) },
-      }),
+      ...detailsCreate(input.kind, values),
     },
     select: { id: true },
   });
@@ -1007,21 +1284,117 @@ export async function recordMedicalEntry(
     },
   });
 
-  const partnerName = vetPartnerId
-    ? (await readNames(tx, [values])).partners.get(vetPartnerId)
-    : undefined;
   await tx.animalActivityLog.create({
     data: {
       animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_RECORDED,
       changedById: actorId,
-      changeSummary: `${item.name} ${KIND_NOUN[input.kind]} recorded: ${KIND_VERB[input.kind]} ${SOURCE_TEXT[input.source]}${partnerName ? ` at ${partnerName}` : ""}, on ${dayText(values.completedDate)}.${
-        values.results ? ` Results: ${describeResults(values.results)}.` : ""
-      }`,
+      changeSummary: await recordedSummary(tx, item, input.kind, values, null),
     },
   });
 
-  return { entryId: entry.id, animalId };
+  const nextEntryId = await scheduleNextDose(
+    tx,
+    animalId,
+    input.kind,
+    item,
+    values.completedDate,
+    input.scheduleNext,
+    actorId,
+    today,
+  );
+  return { entryId: entry.id, animalId, nextEntryId };
+}
+
+/**
+ * Records scheduled care as given. The entry keeps its due day and gains what
+ * was given; its details are written now, for the first time.
+ *
+ * The item can change within the kind (the dose given was another product
+ * than the one planned), and the catalog checks run only if it does: an item
+ * retired after the care was scheduled can still be recorded, since the
+ * entry isn't new. Care scheduled during the stay was given in house or by an
+ * outside vet, never before intake. It may be dated before its due day, if it
+ * was given early.
+ *
+ * Works for an animal that has left the shelter's care, so its open entries
+ * can still be cleared. With `scheduleNext`, the next dose is scheduled in
+ * the same transaction.
+ */
+export async function recordScheduledMedicalEntry(
+  tx: TransactionClient,
+  entryId: string,
+  input: RecordMedicalEntryInput,
+  actorId: string,
+  today: CalendarDay,
+): Promise<RecordedMedicalEntry> {
+  const entry = await lockScheduledEntry(tx, entryId, "recorded as given");
+  const { animalId } = entry;
+  if (input.kind !== entry.kind) {
+    throw new MedicalEntryRefusal(
+      `This entry is a scheduled ${KIND_NOUN[entry.kind]}, and an entry's kind can't change. Void it and record the ${KIND_NOUN[input.kind]} on its own.`,
+    );
+  }
+  if (input.source === MedicalEntrySource.BEFORE_INTAKE) {
+    throw new MedicalEntryRefusal(
+      "Care scheduled during the animal's stay can't have been given before intake.",
+      "source",
+    );
+  }
+
+  const animal = await readAnimal(tx, animalId);
+  await lockMedicalItemForUse(tx, input.itemId);
+  const item = await readItem(tx, input.itemId);
+  if (input.itemId !== entry.itemId) {
+    checkItemPickable(item, input.kind, animal);
+  }
+  const values = await givenValues(tx, input, item, animal, actorId, today);
+
+  await tx.medicalEntry.update({
+    where: { id: entryId },
+    data: {
+      status: MedicalEntryStatus.COMPLETED,
+      ...entryData(values),
+      ...detailsCreate(entry.kind, values),
+    },
+  });
+
+  await tx.medicalEntryEvent.create({
+    data: {
+      entryId,
+      action: MedicalEntryEventAction.COMPLETED,
+      actorId,
+      before: { status: MedicalEntryStatus.SCHEDULED },
+      after: asJson({ status: MedicalEntryStatus.COMPLETED, ...values }),
+    },
+  });
+
+  await tx.animalActivityLog.create({
+    data: {
+      animalId,
+      activityType: AnimalActivityType.MEDICAL_ENTRY_RECORDED,
+      changedById: actorId,
+      changeSummary: await recordedSummary(
+        tx,
+        item,
+        entry.kind,
+        values,
+        entry.dueDate,
+      ),
+    },
+  });
+
+  const nextEntryId = await scheduleNextDose(
+    tx,
+    animalId,
+    entry.kind,
+    item,
+    values.completedDate,
+    input.scheduleNext,
+    actorId,
+    today,
+  );
+  return { entryId, animalId, nextEntryId };
 }
 
 /**

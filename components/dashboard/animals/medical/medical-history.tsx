@@ -12,7 +12,8 @@ import { ServerSideFacetedFilter } from "@/components/table-common/server-side-f
 import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry.data";
 import { MEDICAL_ITEM_KIND_LABELS } from "@/app/lib/constants/medical";
-import { MedicalEntryList, type MedicalManage } from "./medical-entry-list";
+import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
+import { MedicalEntryList } from "./medical-entry-list";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
 
 const kindOptions = Object.values(MedicalEntryKind).map((kind) => ({
@@ -24,10 +25,10 @@ interface Props {
   entries: MedicalEntryDisplay[];
   totalPages: number;
   names: Record<string, string>;
-  manage: MedicalManage;
+  controls: MedicalControls | null;
 }
 
-const MedicalHistory = ({ entries, totalPages, names, manage }: Props) => {
+const MedicalHistory = ({ entries, totalPages, names, controls }: Props) => {
   return (
     <Card className="@container/card">
       <CardHeader>
@@ -36,9 +37,12 @@ const MedicalHistory = ({ entries, totalPages, names, manage }: Props) => {
           Every entry, newest first. Voided entries stay here, struck
           through, with who voided them and why.
         </CardDescription>
-        {manage && (
+        {controls?.canManage && (
           <CardAction>
-            <AddMedicalEntryMenu animalId={manage.animalId} options={manage.options} />
+            <AddMedicalEntryMenu
+              animalId={controls.animalId}
+              options={controls.options}
+            />
           </CardAction>
         )}
         <div className="mt-4 flex flex-row flex-wrap items-center gap-3">
@@ -51,7 +55,7 @@ const MedicalHistory = ({ entries, totalPages, names, manage }: Props) => {
       </CardHeader>
       <CardContent>
         {entries.length > 0 ? (
-          <MedicalEntryList entries={entries} names={names} manage={manage} />
+          <MedicalEntryList entries={entries} names={names} controls={controls} />
         ) : (
           <div className="text-center py-12 px-6 border-2 border-dashed rounded-lg">
             <p className="font-semibold text-lg">No Entries Found</p>

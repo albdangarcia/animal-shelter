@@ -1,7 +1,7 @@
 // Day arithmetic and derived facts for medical entries. Pure: no Prisma and no
 // clock, so the unit tests can pin every branch.
 
-import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import { shiftDayKey, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -79,4 +79,18 @@ export const dueDateIssue = (
     return `The due date can't be more than ${MAX_SCHEDULE_AHEAD_YEARS} years from today.`;
   }
   return null;
+};
+
+/**
+ * The day to suggest for the next dose of an item that repeats every
+ * `intervalDays`, after one given on `completedDate`. Never before today: if
+ * the next one should already have been given, it is due now.
+ */
+export const nextDueDate = (
+  completedDate: CalendarDay,
+  intervalDays: number,
+  today: CalendarDay,
+): CalendarDay => {
+  const next = shiftDayKey(completedDate, intervalDays);
+  return next < today ? today : next;
 };

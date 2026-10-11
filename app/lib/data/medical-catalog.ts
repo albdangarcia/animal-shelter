@@ -15,6 +15,7 @@ export const PICKABLE_MEDICAL_ITEM_SELECT = {
   defaultDoseAmount: true,
   defaultDoseUnit: true,
   isRabies: true,
+  repeatIntervalDays: true,
   analytes: {
     where: { retiredAt: null },
     orderBy: { sortOrder: "asc" },
@@ -25,7 +26,8 @@ export const PICKABLE_MEDICAL_ITEM_SELECT = {
 /**
  * The items staff can pick when recording care of `kind` on one animal: not
  * retired, of that kind, and for every species or the animal's own. Each
- * carries its defaults and, for a test, the analytes it reports, in order.
+ * carries its defaults, its repeat interval and, for a test, the analytes it
+ * reports, in order.
  */
 export const findPickableMedicalItems = (
   db: Db,

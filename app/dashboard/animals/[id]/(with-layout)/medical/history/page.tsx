@@ -2,7 +2,7 @@ import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { fetchMedicalManage } from "@/app/lib/data/medical-catalog.data";
+import { fetchMedicalControls } from "@/app/lib/data/medical-catalog.data";
 import { fetchMedicalHistory } from "@/app/lib/data/animals/medical-entry.data";
 import MedicalHistory from "@/components/dashboard/animals/medical/medical-history";
 
@@ -25,9 +25,9 @@ const Page = async ({ params, searchParams }: Props) => {
 const PageContent = async ({ params, searchParams }: Props) => {
   const { id: animalId } = await params;
   const { page = "1", kind } = await searchParams;
-  const [{ entries, totalPages, names }, manage] = await Promise.all([
+  const [{ entries, totalPages, names }, controls] = await Promise.all([
     fetchMedicalHistory(animalId, Number(page), kind),
-    fetchMedicalManage(animalId),
+    fetchMedicalControls(animalId),
   ]);
 
   return (
@@ -35,7 +35,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
       entries={entries}
       totalPages={totalPages}
       names={names}
-      manage={manage}
+      controls={controls}
     />
   );
 };

@@ -61,11 +61,17 @@ import {
   type MedicalItemInput,
 } from "@/app/lib/services/medical-catalog";
 import {
+  declineMedicalEntry,
   editMedicalEntry,
   recordMedicalEntry,
+  recordScheduledMedicalEntry,
+  rescheduleMedicalEntry,
+  scheduleMedicalEntry,
   voidMedicalEntry,
   type MedicalEntryInput,
 } from "@/app/lib/services/medical-entry";
+import { nextDueDate } from "@/app/lib/utils/medical-days";
+import { recordOutcome } from "@/app/lib/services/outcome-recording";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -6518,6 +6524,218 @@ async function seedMedicalEntries() {
   console.log("Seeded medical entries for Frisco, Buddy, Whiskers and Leo.");
 }
 
+// Scheduled care on hand-authored animals, covering each state scheduling
+// leaves an entry in: overdue, due today after a reschedule, upcoming, on a
+// fostered animal, declined, and recorded as given with the next dose
+// scheduled; and one generated animal that left with care still due. Every
+// write goes through the services in a real transaction, as the actions do. The services take the shelter's today as an
+// argument so that care planned in the past can be seeded by passing them the
+// day it was planned on. Fixed offsets from today or the animal's intake, with
+// no random draws.
+async function seedMedicalScheduling() {
+  console.log("Seeding scheduled medical care...");
+
+  const today = shelterToday(seedTimezone);
+  const daysFromToday = (offset: number) => shiftDayKey(today, offset);
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  if (!olivia || !benjamin) {
+    throw new Error("seedMedicalScheduling: staff fixtures not found.");
+  }
+
+  const items = await prisma.medicalItem.findMany({
+    select: { id: true, name: true, repeatIntervalDays: true },
+  });
+  const item = (name: string) => {
+    const found = items.find((row) => row.name === name);
+    if (!found) {
+      throw new Error(`seedMedicalScheduling: catalog item ${name} was not seeded.`);
+    }
+    return found;
+  };
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, intake: { select: { intakeDate: true } } },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(`seedMedicalScheduling: ${name} was not seeded with an intake.`);
+    }
+    const days = row.intake.map((intake) => calendarDay(intake.intakeDate)).sort();
+    return { id: row.id, name, latestIntake: days[days.length - 1] };
+  };
+  // Care is planned during a stay. A fixture day before the animal's intake
+  // means the hand-authored intake moved: move the fixture, not the rule.
+  const duringStay = (
+    subject: { name: string; latestIntake: CalendarDay },
+    day: CalendarDay,
+  ) => {
+    if (day < subject.latestIntake) {
+      throw new Error(
+        `seedMedicalScheduling: ${subject.name}'s fixture day ${day} is before the intake on ${subject.latestIntake}; move the fixture.`,
+      );
+    }
+    return day;
+  };
+
+  const schedule = (
+    animalId: string,
+    kind: MedicalEntryKind,
+    itemName: string,
+    dueDate: CalendarDay,
+    { actorId = olivia.id, plannedOn = today } = {},
+  ) =>
+    prisma.$transaction((tx) =>
+      scheduleMedicalEntry(
+        tx,
+        { animalId, kind, itemId: item(itemName).id, dueDate },
+        actorId,
+        plannedOn,
+      ),
+    );
+
+  // --- Fido: a DHPP booster planned ten days ago, due three days ago --------
+  const fido = await animal("Fido");
+  await schedule(fido.id, MedicalEntryKind.VACCINE, "DHPP", daysFromToday(-3), {
+    plannedOn: duringStay(fido, daysFromToday(-10)),
+  });
+
+  // --- Misty: planned by Olivia at intake, moved to today by Benjamin ------
+  const misty = await animal("Misty");
+  const mistyFvrcp = await schedule(
+    misty.id,
+    MedicalEntryKind.VACCINE,
+    "FVRCP",
+    daysFromToday(3),
+    { plannedOn: misty.latestIntake },
+  );
+  await prisma.$transaction((tx) =>
+    rescheduleMedicalEntry(tx, mistyFvrcp.entryId, today, benjamin.id, today),
+  );
+
+  // --- Whiskers: a rabies vaccine coming up --------------------------------
+  const whiskers = await animal("Whiskers");
+  await schedule(
+    whiskers.id,
+    MedicalEntryKind.VACCINE,
+    "Rabies 1-year",
+    daysFromToday(5),
+  );
+
+  // --- Juniper: a dewormer due while she is in foster ----------------------
+  const juniper = await animal("Juniper");
+  await schedule(
+    juniper.id,
+    MedicalEntryKind.TREATMENT,
+    "Pyrantel pamoate",
+    daysFromToday(2),
+  );
+
+  // --- Buddy: a vaccine declined on the vet's advice -----------------------
+  const buddy = await animal("Buddy");
+  const buddyLepto = await schedule(
+    buddy.id,
+    MedicalEntryKind.VACCINE,
+    "Leptospirosis",
+    daysFromToday(7),
+  );
+  await prisma.$transaction((tx) =>
+    declineMedicalEntry(
+      tx,
+      buddyLepto.entryId,
+      "Vet advised against it: reaction noted in his previous records.",
+      benjamin.id,
+    ),
+  );
+
+  // --- Daisy: a DHPP booster planned at intake and given three days late;
+  // recording it schedules the next one, on the day the form suggests ------
+  const daisy = await animal("Daisy");
+  const dhpp = item("DHPP");
+  const daisyGiven = daysFromToday(-1);
+  const daisyBooster = await schedule(
+    daisy.id,
+    MedicalEntryKind.VACCINE,
+    "DHPP",
+    duringStay(daisy, daysFromToday(-4)),
+    { plannedOn: daisy.latestIntake },
+  );
+  await prisma.$transaction((tx) =>
+    recordScheduledMedicalEntry(
+      tx,
+      daisyBooster.entryId,
+      {
+        kind: MedicalEntryKind.VACCINE,
+        itemId: dhpp.id,
+        completedDate: daisyGiven,
+        source: MedicalEntrySource.IN_HOUSE,
+        lotNumber: "DH-3104C",
+        lotExpiryDate: shiftDayKey(today, 200),
+        site: "Left shoulder",
+        scheduleNext: {
+          dueDate: nextDueDate(daisyGiven, dhpp.repeatIntervalDays!, today),
+        },
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- A dog transferred out with a booster still due ----------------------
+  // Leaving care doesn't close scheduled care: the entry stays open on the
+  // animal's page, to be declined there, and shelter-wide lists of due care
+  // leave the animal out. Claimed as the application fixtures claim theirs,
+  // never a hand-authored animal: specs and scenarios address those by name,
+  // and this outcome takes the animal out of care. One with no applications,
+  // open placement or tasks, so the outcome closes nothing else.
+  const leaving = await prisma.animal.findFirst({
+    where: {
+      name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+      species: { name: "Dog" },
+      listingStatus: { not: AnimalListingStatus.ARCHIVED },
+      intake: { some: {} },
+      adoptionApplications: { none: {} },
+      fosterPlacements: { none: { endDate: null } },
+      tasks: { none: {} },
+      medicalEntries: { none: {} },
+    },
+    orderBy: [{ name: "desc" }, { id: "asc" }],
+    select: { id: true, name: true },
+  });
+  const secondChance = await prisma.partner.findFirst({
+    where: { name: "Second Chance Rescue" },
+  });
+  if (!leaving || !secondChance) {
+    throw new Error(
+      "seedMedicalScheduling: no generated dog to transfer out, or Second Chance Rescue was not seeded.",
+    );
+  }
+  await schedule(leaving.id, MedicalEntryKind.VACCINE, "DHPP", daysFromToday(4));
+  await prisma.$transaction((tx) =>
+    recordOutcome(
+      tx,
+      {
+        animalId: leaving.id,
+        values: {
+          outcomeDate: today,
+          outcomeType: OutcomeType.TRANSFER_OUT,
+          destinationPartnerId: secondChance.id,
+          notes: "Transferred to Second Chance Rescue with a DHPP booster still due.",
+        },
+      },
+      benjamin.id,
+    ),
+  );
+
+  console.log(
+    `Seeded scheduled care for Fido, Misty, Whiskers, Juniper, Buddy, Daisy and ${leaving.name} (transferred out).`,
+  );
+}
+
 let seedTimezone = fallbackShelterSettings().timezone;
 
 export async function main() {
@@ -6580,6 +6798,7 @@ async function seedAll() {
   await seedReadinessFixtures();
   await seedMedicalCatalog();
   await seedMedicalEntries();
+  await seedMedicalScheduling();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

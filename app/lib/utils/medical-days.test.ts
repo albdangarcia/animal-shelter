@@ -4,6 +4,7 @@ import {
   addCalendarMonths,
   dueDateIssue,
   latestDueDate,
+  nextDueDate,
   rabiesStatus,
 } from "./medical-days";
 import { calendarDay } from "./shelter-day";
@@ -70,4 +71,21 @@ test("dueDateIssue: from today up to five years ahead", () => {
     dueDateIssue(day("2031-10-11"), today),
     "The due date can't be more than 5 years from today.",
   );
+});
+
+test("nextDueDate: the day given plus the interval", () => {
+  const today = calendarDay("2026-10-10");
+  assert.equal(nextDueDate(calendarDay("2026-10-10"), 14, today), "2026-10-24");
+  assert.equal(nextDueDate(calendarDay("2026-10-01"), 365, today), "2027-10-01");
+  // Across a month end, counted in days.
+  assert.equal(nextDueDate(calendarDay("2026-10-25"), 14, calendarDay("2026-10-25")), "2026-11-08");
+});
+
+test("nextDueDate: never before today", () => {
+  const today = calendarDay("2026-10-10");
+  // Given 20 days ago on a 14-day interval: the next one was due 6 days ago.
+  assert.equal(nextDueDate(calendarDay("2026-09-20"), 14, today), "2026-10-10");
+  // Falling exactly on today.
+  assert.equal(nextDueDate(calendarDay("2026-09-26"), 14, today), "2026-10-10");
+  assert.equal(nextDueDate(calendarDay("2026-09-27"), 14, today), "2026-10-11");
 });

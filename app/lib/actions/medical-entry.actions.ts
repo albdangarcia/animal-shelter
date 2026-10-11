@@ -11,17 +11,25 @@ import {
 import { AppPermissions } from "../auth/permissions";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
+  DeclineMedicalEntrySchema,
   MedicalEntryFormSchema,
+  RescheduleMedicalEntrySchema,
   ScheduleMedicalEntrySchema,
   VoidMedicalEntrySchema,
+  medicalEntryFieldErrors,
+  type DeclineMedicalEntryInput,
   type MedicalEntryFormInput,
+  type RescheduleMedicalEntryInput,
   type ScheduleMedicalEntryFormInput,
   type VoidMedicalEntryInput,
 } from "../zod-schemas/medical-entry.schemas";
 import {
   MedicalEntryRefusal,
+  declineMedicalEntry as declineEntry,
   editMedicalEntry as editEntry,
   recordMedicalEntry as recordEntry,
+  recordScheduledMedicalEntry as recordScheduledEntry,
+  rescheduleMedicalEntry as rescheduleEntry,
   scheduleMedicalEntry as scheduleEntry,
   voidMedicalEntry as voidEntry,
 } from "../services/medical-entry";
@@ -69,8 +77,9 @@ const invalidFields = (
 ): EntryResult => ({
   ok: false,
   message: "Missing or invalid fields. The entry was not saved.",
-  fieldErrors: z.flattenError(error)
-    .fieldErrors as FieldErrors<MedicalEntryFormInput>,
+  fieldErrors: medicalEntryFieldErrors(
+    error,
+  ) as FieldErrors<MedicalEntryFormInput>,
 });
 
 const _recordMedicalEntry = async (
@@ -105,6 +114,43 @@ const _recordMedicalEntry = async (
   }
 
   revalidateMedical(parsedAnimalId.data);
+  return { ok: true, message: "Entry recorded." };
+};
+
+const _recordScheduledMedicalEntry = async (
+  user: SessionUser,
+  entryId: string,
+  values: MedicalEntryFormInput,
+): Promise<EntryResult> => {
+  const parsedId = cuidSchema.safeParse(entryId);
+  if (!parsedId.success) {
+    return { ok: false, message: "Invalid entry ID format." };
+  }
+  const validated = MedicalEntryFormSchema.safeParse(values);
+  if (!validated.success) {
+    return invalidFields(validated.error);
+  }
+
+  const today = await getShelterToday();
+  let animalId: string;
+  try {
+    ({ animalId } = await prisma.$transaction((tx) =>
+      recordScheduledEntry(
+        tx,
+        parsedId.data,
+        validated.data,
+        user.personId,
+        today,
+      ),
+    ));
+  } catch (error) {
+    const refusal = refused<MedicalEntryFormInput>(error);
+    if (refusal) return refusal;
+    console.error("Database error recording scheduled medical entry:", error);
+    return { ok: false, message: "Database Error: Failed to record entry." };
+  }
+
+  revalidateMedical(animalId);
   return { ok: true, message: "Entry recorded." };
 };
 
@@ -218,8 +264,93 @@ const _voidMedicalEntry = async (
   return { ok: true, message: "Entry voided." };
 };
 
+const _rescheduleMedicalEntry = async (
+  user: SessionUser,
+  entryId: string,
+  values: RescheduleMedicalEntryInput,
+): Promise<FormResult<RescheduleMedicalEntryInput>> => {
+  const parsedId = cuidSchema.safeParse(entryId);
+  if (!parsedId.success) {
+    return { ok: false, message: "Invalid entry ID format." };
+  }
+  const validated = RescheduleMedicalEntrySchema.safeParse(values);
+  if (!validated.success) {
+    return {
+      ok: false,
+      message: "A valid due date is required. The entry was not rescheduled.",
+      fieldErrors: z.flattenError(validated.error)
+        .fieldErrors as FieldErrors<RescheduleMedicalEntryInput>,
+    };
+  }
+
+  const today = await getShelterToday();
+  let animalId: string;
+  try {
+    ({ animalId } = await prisma.$transaction((tx) =>
+      rescheduleEntry(
+        tx,
+        parsedId.data,
+        validated.data.dueDate,
+        user.personId,
+        today,
+      ),
+    ));
+  } catch (error) {
+    const refusal = refused<RescheduleMedicalEntryInput>(error);
+    if (refusal) return refusal;
+    console.error("Database error rescheduling medical entry:", error);
+    return { ok: false, message: "Database Error: Failed to reschedule entry." };
+  }
+
+  revalidateMedical(animalId);
+  return { ok: true, message: "Entry rescheduled." };
+};
+
+const _declineMedicalEntry = async (
+  user: SessionUser,
+  entryId: string,
+  values: DeclineMedicalEntryInput,
+): Promise<FormResult<DeclineMedicalEntryInput>> => {
+  const parsedId = cuidSchema.safeParse(entryId);
+  if (!parsedId.success) {
+    return { ok: false, message: "Invalid entry ID format." };
+  }
+  const validated = DeclineMedicalEntrySchema.safeParse(values);
+  if (!validated.success) {
+    return {
+      ok: false,
+      message: "A reason is required to decline this entry.",
+      fieldErrors: z.flattenError(validated.error)
+        .fieldErrors as FieldErrors<DeclineMedicalEntryInput>,
+    };
+  }
+
+  let animalId: string;
+  try {
+    ({ animalId } = await prisma.$transaction((tx) =>
+      declineEntry(tx, parsedId.data, validated.data.reason, user.personId),
+    ));
+  } catch (error) {
+    const refusal = refused<DeclineMedicalEntryInput>(error);
+    if (refusal) return refusal;
+    console.error("Database error declining medical entry:", error);
+    return { ok: false, message: "Database Error: Failed to decline entry." };
+  }
+
+  revalidateMedical(animalId);
+  return { ok: true, message: "Entry declined." };
+};
+
 export const recordMedicalEntry = withAuthenticatedUser(
   RequirePermission(AppPermissions.MEDICAL_MANAGE)(_recordMedicalEntry),
+);
+
+// Giving care that is already scheduled, which needs less than planning it.
+// Its "schedule the next one" is part of the same record.
+export const recordScheduledMedicalEntry = withAuthenticatedUser(
+  RequirePermission(AppPermissions.MEDICAL_ADMINISTER)(
+    _recordScheduledMedicalEntry,
+  ),
 );
 
 export const scheduleMedicalEntry = withAuthenticatedUser(
@@ -232,4 +363,13 @@ export const editMedicalEntry = withAuthenticatedUser(
 
 export const voidMedicalEntry = withAuthenticatedUser(
   RequirePermission(AppPermissions.MEDICAL_MANAGE)(_voidMedicalEntry),
+);
+
+export const rescheduleMedicalEntry = withAuthenticatedUser(
+  RequirePermission(AppPermissions.MEDICAL_MANAGE)(_rescheduleMedicalEntry),
+);
+
+// Declining care already scheduled is part of giving it, not of planning it.
+export const declineMedicalEntry = withAuthenticatedUser(
+  RequirePermission(AppPermissions.MEDICAL_ADMINISTER)(_declineMedicalEntry),
 );
