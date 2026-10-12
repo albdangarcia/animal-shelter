@@ -82,6 +82,12 @@ import {
   haveFormValuesChanged,
 } from "@/hooks/use-confirmed-open-change";
 
+/** What recording scheduled care needs of the entry: it fills in the rest. */
+export type ScheduledCare = Pick<
+  MedicalEntryDisplay,
+  "id" | "kind" | "itemId" | "notes"
+>;
+
 const NONE = "none";
 
 /**
@@ -167,7 +173,7 @@ const blank = (kind: MedicalEntryKind, today: string): EntryFormState => ({
  * in, and its notes.
  */
 const fromScheduled = (
-  scheduled: MedicalEntryDisplay,
+  scheduled: ScheduledCare,
   item: MedicalEntryFormItem | undefined,
   today: CalendarDay,
 ): EntryFormState => ({
@@ -192,7 +198,7 @@ const itemChoices = (
   kind: MedicalEntryKind,
   options: MedicalEntryFormOptions,
   entry?: MedicalEntryDisplay,
-  scheduled?: MedicalEntryDisplay,
+  scheduled?: ScheduledCare,
 ): MedicalEntryFormItem[] => {
   const ofKind = options.items.filter((item) => item.kind === kind);
   if (scheduled) {
@@ -276,7 +282,7 @@ interface Props {
   /** Present when editing. */
   entry?: MedicalEntryDisplay;
   /** Present when recording scheduled care as given. */
-  scheduled?: MedicalEntryDisplay;
+  scheduled?: ScheduledCare;
   onFormSubmit: () => void;
   ref?: React.Ref<DirtyFormHandle>;
 }

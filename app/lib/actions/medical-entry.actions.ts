@@ -36,6 +36,10 @@ import {
 import { NO_OP_EDIT_MESSAGE } from "../services/note-audit";
 import { getShelterToday } from "../data/shelter-settings.data";
 import {
+  fetchMedicalEntryFormOptions,
+  type MedicalEntryFormOptions,
+} from "../data/medical-catalog.data";
+import {
   ConflictError,
   NotFoundError,
   PreconditionFailedError,
@@ -44,13 +48,15 @@ import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 type EntryResult = FormResult<MedicalEntryFormInput>;
 
-// The Medical pages, and the animal's page for its activity feed.
+// The Medical pages, the animal's page for its activity feed, and the
+// shelter-wide due list.
 const revalidateMedical = (animalId: string) => {
   const animalPath = `/dashboard/animals/${animalId}`;
   revalidatePath(animalPath);
   revalidatePath(`${animalPath}/medical`);
   revalidatePath(`${animalPath}/medical/history`);
   revalidatePath(`${animalPath}/medical/vaccines-tests`);
+  revalidatePath("/dashboard/medical/due");
 };
 
 /** A refusal from the service, keyed to its field when it has one. */
@@ -341,6 +347,27 @@ const _declineMedicalEntry = async (
   return { ok: true, message: "Entry declined." };
 };
 
+const _loadMedicalEntryFormOptions = async (
+  _user: SessionUser,
+  animalId: string,
+): Promise<
+  { ok: true; options: MedicalEntryFormOptions } | { ok: false; message: string }
+> => {
+  const parsedAnimalId = cuidSchema.safeParse(animalId);
+  if (!parsedAnimalId.success) {
+    return { ok: false, message: "Invalid animal ID format." };
+  }
+  try {
+    return {
+      ok: true,
+      options: await fetchMedicalEntryFormOptions(parsedAnimalId.data),
+    };
+  } catch (error) {
+    console.error("Error loading medical entry form options:", error);
+    return { ok: false, message: "Could not load the form. Try again." };
+  }
+};
+
 export const recordMedicalEntry = withAuthenticatedUser(
   RequirePermission(AppPermissions.MEDICAL_MANAGE)(_recordMedicalEntry),
 );
@@ -372,4 +399,13 @@ export const rescheduleMedicalEntry = withAuthenticatedUser(
 // Declining care already scheduled is part of giving it, not of planning it.
 export const declineMedicalEntry = withAuthenticatedUser(
   RequirePermission(AppPermissions.MEDICAL_ADMINISTER)(_declineMedicalEntry),
+);
+
+// What the record form offers for one animal, read when the form opens on a
+// page that lists many animals' care, rather than for every row up front.
+// Behind the same permission as giving scheduled care.
+export const loadMedicalEntryFormOptions = withAuthenticatedUser(
+  RequirePermission(AppPermissions.MEDICAL_ADMINISTER)(
+    _loadMedicalEntryFormOptions,
+  ),
 );

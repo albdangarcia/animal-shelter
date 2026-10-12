@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { toAttentionQueueView } from "./attention-queue";
 import type { AttentionQueueItem } from "@/app/lib/data/animals/attention-queue";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
-import { TaskPriority } from "@/prisma/generated/enums";
+import { MedicalEntryKind, TaskPriority } from "@/prisma/generated/enums";
 
 const TODAY = calendarDay("2026-08-28");
 
@@ -55,6 +55,39 @@ test("the due date reaches the model as the day it is, not an instant", () => {
   assert.equal(reason.kind, "TASK_DUE");
   if (reason.kind !== "TASK_DUE") return;
   assert.equal(reason.dueDate, "2026-08-20");
+});
+
+const withMedical = (dueDate: string): AttentionQueueItem => ({
+  animalId: "a3",
+  name: "Fido",
+  species: "Dog",
+  currentUnit: "Medical wing · MED-1",
+  reasons: [
+    {
+      kind: "MEDICAL_DUE",
+      entryId: "e1",
+      itemName: "DHPP",
+      entryKind: MedicalEntryKind.VACCINE,
+      dueDate: calendarDay(dueDate),
+    },
+  ],
+});
+
+test("medical care due before today is overdue, and due today is not", () => {
+  const view = (dueDate: string) =>
+    toAttentionQueueView([withMedical(dueDate)], TODAY)[0].reasons[0];
+  assert.deepEqual(view("2026-08-27"), {
+    kind: "MEDICAL_DUE",
+    entryId: "e1",
+    itemName: "DHPP",
+    entryKind: MedicalEntryKind.VACCINE,
+    dueDate: "2026-08-27",
+    overdue: true,
+  });
+  assert.equal(
+    (view("2026-08-28") as { overdue?: boolean }).overdue,
+    false,
+  );
 });
 
 test("non-task reasons are unaffected", () => {

@@ -1,10 +1,14 @@
 // Pure merge/sort/dedupe logic for the attention queue — no Prisma imports, so
 // it is trivially unit-testable (see `attention-queue.test.ts`). The query in
-// `attention-queue.data.ts` stays dumb: it fetches the three candidate row sets
+// `attention-queue.data.ts` stays dumb: it fetches the four candidate row sets
 // and hands them here. This split is the shape recommended by
 // `docs/specs/ai-chat/03-attention-queue.md` §Acceptance.
 
-import type { AnimalHealthStatus, TaskPriority } from "@/prisma/generated/enums";
+import type {
+  AnimalHealthStatus,
+  MedicalEntryKind,
+  TaskPriority,
+} from "@/prisma/generated/enums";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 
 /**
@@ -43,12 +47,31 @@ export type AttentionAnimal = {
   currentUnit: string | null; // "Dog block A · A-3" or null (fostered / unplaced)
 };
 
+/**
+ * "Dog block A · A-3": the same "Location · Unit" convention as
+ * `app/lib/utils/location-activity.ts`. Null for an animal in no unit
+ * (fostered or unplaced). Shared by every signal's query, including the
+ * medical one in `app/lib/data/medical-due.ts`.
+ */
+export const attentionUnitLabel = (
+  unit: { name: string; location: { name: string } } | null,
+): string | null => (unit ? `${unit.location.name} · ${unit.name}` : null);
+
 export type TaskDueRow = {
   animal: AttentionAnimal;
   taskId: string;
   title: string;
   dueDate: CalendarDay;
   priority: TaskPriority;
+};
+
+/** Scheduled care due today or overdue. */
+export type MedicalDueRow = {
+  animal: AttentionAnimal;
+  entryId: string;
+  itemName: string;
+  kind: MedicalEntryKind;
+  dueDate: CalendarDay;
 };
 
 export type AcuteHealthRow = {
@@ -73,6 +96,13 @@ export type AttentionReason =
       dueDate: CalendarDay;
       priority: TaskPriority;
     }
+  | {
+      kind: "MEDICAL_DUE";
+      entryId: string;
+      itemName: string;
+      entryKind: MedicalEntryKind;
+      dueDate: CalendarDay;
+    }
   | { kind: "UNTASKED_ACUTE_HEALTH"; healthStatus: AnimalHealthStatus }
   | {
       kind: "FOSTER_OVERDUE";
@@ -90,14 +120,20 @@ export type AttentionQueueItem = {
 };
 
 // An animal's tier is its most time-sensitive reason. Lower = surfaced first.
-const TIER = { TASK_DUE: 1, UNTASKED_ACUTE_HEALTH: 2, FOSTER_OVERDUE: 3 } as const;
+const TIER = {
+  TASK_DUE: 1,
+  MEDICAL_DUE: 2,
+  UNTASKED_ACUTE_HEALTH: 3,
+  FOSTER_OVERDUE: 4,
+} as const;
 
 function reasonTier(reason: AttentionReason): number {
   return TIER[reason.kind];
 }
 
 // Order reasons within a single animal: overdue tasks first (earliest due, then
-// priority), then acute health, then foster. Deterministic.
+// priority), then medical care (earliest due), then acute health, then foster.
+// Deterministic.
 function compareReasons(a: AttentionReason, b: AttentionReason): number {
   const byTier = reasonTier(a) - reasonTier(b);
   if (byTier !== 0) return byTier;
@@ -109,21 +145,29 @@ function compareReasons(a: AttentionReason, b: AttentionReason): number {
     if (byPriority !== 0) return byPriority;
     return a.taskId.localeCompare(b.taskId);
   }
+  if (a.kind === "MEDICAL_DUE" && b.kind === "MEDICAL_DUE") {
+    return (
+      a.dueDate.localeCompare(b.dueDate) || a.entryId.localeCompare(b.entryId)
+    );
+  }
   return 0;
 }
 
 /**
- * Merge the three signal row sets into one deduplicated, ordered, capped list.
+ * Merge the four signal row sets into one deduplicated, ordered, capped list.
  *
  * An animal appears **once**, carrying every reason it matched. Sort tiers
- * (`docs/specs/ai-chat/03-attention-queue.md` §Sort order):
+ * (`docs/specs/ai-chat/03-attention-queue.md` §Sort order, with scheduled
+ * medical care added after tasks):
  *   1. has an overdue/due-today task — by earliest due date, then priority
- *   2. untasked acute health
- *   3. overdue foster placement — by earliest expected end date
+ *   2. has scheduled medical care overdue or due today — by earliest due date
+ *   3. untasked acute health
+ *   4. overdue foster placement — by earliest expected end date
  * An animal in more than one tier sorts by its highest (lowest-numbered) tier.
  */
 export function buildAttentionQueue(input: {
   tasksDue: TaskDueRow[];
+  medicalDue: MedicalDueRow[];
   acuteHealth: AcuteHealthRow[];
   fostersOverdue: FosterOverdueRow[];
 }): AttentionQueueItem[] {
@@ -148,6 +192,15 @@ export function buildAttentionQueue(input: {
       title: row.title,
       dueDate: row.dueDate,
       priority: row.priority,
+    });
+  }
+  for (const row of input.medicalDue) {
+    ensure(row.animal).reasons.push({
+      kind: "MEDICAL_DUE",
+      entryId: row.entryId,
+      itemName: row.itemName,
+      entryKind: row.kind,
+      dueDate: row.dueDate,
     });
   }
   for (const row of input.acuteHealth) {
@@ -178,6 +231,7 @@ export function buildAttentionQueue(input: {
       // Sort keys derived from the (now ordered) reasons.
       tier: Math.min(...sortedReasons.map(reasonTier)),
       firstTask: sortedReasons.find((r) => r.kind === "TASK_DUE"),
+      firstMedical: sortedReasons.find((r) => r.kind === "MEDICAL_DUE"),
       firstFoster: sortedReasons.find((r) => r.kind === "FOSTER_OVERDUE"),
     };
   });
@@ -191,6 +245,11 @@ export function buildAttentionQueue(input: {
       const byPriority =
         PRIORITY_RANK[a.firstTask.priority] - PRIORITY_RANK[b.firstTask.priority];
       if (byPriority !== 0) return byPriority;
+    }
+
+    if (a.tier === TIER.MEDICAL_DUE && a.firstMedical && b.firstMedical) {
+      const byDue = a.firstMedical.dueDate.localeCompare(b.firstMedical.dueDate);
+      if (byDue !== 0) return byDue;
     }
 
     if (a.tier === TIER.FOSTER_OVERDUE && a.firstFoster && b.firstFoster) {

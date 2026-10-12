@@ -29,6 +29,7 @@ export type IconName =
   | "IconDog"
   | "IconClipboardCheck"
   | "IconDoorEnter"
+  | "IconFirstAidKit"
 
 export interface NavItem {
   title: string;
@@ -180,6 +181,19 @@ export const navMainItems: readonly NavItem[] = [
     url: "/dashboard/reports",
     icon: "IconReport",
     permission: AppPermissions.REPORTS_READ,
+  },
+  {
+    title: "Medical",
+    url: "/dashboard/medical",
+    icon: "IconFirstAidKit",
+    permission: AppPermissions.MEDICAL_READ,
+    items: [
+      {
+        title: "Due",
+        url: "/dashboard/medical/due",
+        permission: AppPermissions.MEDICAL_READ,
+      },
+    ],
   },
   {
     title: "Animal Tasks",

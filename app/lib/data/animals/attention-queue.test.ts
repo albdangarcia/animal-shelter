@@ -6,6 +6,7 @@ import {
   type AcuteHealthRow,
   type AttentionAnimal,
   type FosterOverdueRow,
+  type MedicalDueRow,
   type TaskDueRow,
 } from "./attention-queue";
 import { calendarDay, shiftDayKey } from "@/app/lib/utils/shelter-day";
@@ -50,7 +51,24 @@ const fosterRow = (
   ...overrides,
 });
 
-const empty = { tasksDue: [], acuteHealth: [], fostersOverdue: [] };
+const medicalRow = (
+  a: AttentionAnimal,
+  overrides: Partial<Omit<MedicalDueRow, "animal">> = {},
+): MedicalDueRow => ({
+  animal: a,
+  entryId: `entry-${a.id}`,
+  itemName: "DHPP",
+  kind: "VACCINE",
+  dueDate: calendarDay("2026-08-20"),
+  ...overrides,
+});
+
+const empty = {
+  tasksDue: [],
+  medicalDue: [],
+  acuteHealth: [],
+  fostersOverdue: [],
+};
 
 test("no signals produces an empty queue", () => {
   assert.deepEqual(buildAttentionQueue(empty), []);
@@ -106,21 +124,73 @@ test("multiple overdue tasks on one animal each contribute a reason, ordered by 
   );
 });
 
-test("tiers order the queue: overdue task, then untasked acute health, then overdue foster", () => {
+test("tiers order the queue: overdue task, then medical care due, then untasked acute health, then overdue foster", () => {
   const queue = buildAttentionQueue({
     tasksDue: [taskRow(animal("has-task"))],
+    medicalDue: [medicalRow(animal("medical-only"))],
     acuteHealth: [acuteRow(animal("acute-only"))],
     fostersOverdue: [fosterRow(animal("foster-only"))],
   });
 
   assert.deepEqual(
     queue.map((item) => item.animalId),
-    ["has-task", "acute-only", "foster-only"],
+    ["has-task", "medical-only", "acute-only", "foster-only"],
+  );
+});
+
+test("an animal with a task and medical care due appears once, the task first", () => {
+  const luna = animal("luna");
+  const queue = buildAttentionQueue({
+    ...empty,
+    // The medical care is due earlier, but a task is the higher tier.
+    tasksDue: [taskRow(luna, { dueDate: calendarDay("2026-08-20") })],
+    medicalDue: [medicalRow(luna, { dueDate: calendarDay("2026-08-01") })],
+  });
+
+  assert.equal(queue.length, 1);
+  assert.deepEqual(
+    queue[0].reasons.map((reason) => reason.kind),
+    ["TASK_DUE", "MEDICAL_DUE"],
+  );
+});
+
+test("an animal's medical care due is ordered by due day, then entry", () => {
+  const bruno = animal("bruno");
+  const queue = buildAttentionQueue({
+    ...empty,
+    medicalDue: [
+      medicalRow(bruno, { entryId: "b-today", dueDate: calendarDay("2026-08-20") }),
+      medicalRow(bruno, { entryId: "a-today", dueDate: calendarDay("2026-08-20") }),
+      medicalRow(bruno, { entryId: "z-overdue", dueDate: calendarDay("2026-08-11") }),
+    ],
+  });
+
+  assert.deepEqual(
+    queue[0].reasons.map((reason) =>
+      reason.kind === "MEDICAL_DUE" ? reason.entryId : null,
+    ),
+    ["z-overdue", "a-today", "b-today"],
+  );
+});
+
+test("animals with medical care due sort by their earliest due day", () => {
+  const queue = buildAttentionQueue({
+    ...empty,
+    medicalDue: [
+      medicalRow(animal("a", { name: "Abe" }), { dueDate: calendarDay("2026-08-20") }),
+      medicalRow(animal("z", { name: "Zoe" }), { dueDate: calendarDay("2026-08-14") }),
+    ],
+  });
+
+  assert.deepEqual(
+    queue.map((item) => item.animalId),
+    ["z", "a"],
   );
 });
 
 test("an animal in more than one tier sorts by its highest tier", () => {
   const queue = buildAttentionQueue({
+    ...empty,
     tasksDue: [taskRow(animal("multi"))],
     acuteHealth: [acuteRow(animal("acute-only"))],
     fostersOverdue: [fosterRow(animal("multi"))],
@@ -202,6 +272,9 @@ test("reason payloads carry the fields each consumer needs, and no more", () => 
     tasksDue: [
       taskRow(bruno, { taskId: "task-9", title: "Dental follow-up", priority: "HIGH", dueDate: calendarDay("2026-08-19") }),
     ],
+    medicalDue: [
+      medicalRow(bruno, { entryId: "entry-4", itemName: "Rabies 1-year", kind: "VACCINE", dueDate: calendarDay("2026-08-18") }),
+    ],
     acuteHealth: [acuteRow(bruno, { healthStatus: "HOSPITALISED" })],
     fostersOverdue: [
       fosterRow(bruno, { placementId: "fp-3", fosterName: "Sam Rivera", expectedEndDate: calendarDay("2026-08-12") }),
@@ -220,6 +293,13 @@ test("reason payloads carry the fields each consumer needs, and no more", () => 
         title: "Dental follow-up",
         dueDate: calendarDay("2026-08-19"),
         priority: "HIGH",
+      },
+      {
+        kind: "MEDICAL_DUE",
+        entryId: "entry-4",
+        itemName: "Rabies 1-year",
+        entryKind: "VACCINE",
+        dueDate: calendarDay("2026-08-18"),
       },
       { kind: "UNTASKED_ACUTE_HEALTH", healthStatus: "HOSPITALISED" },
       {

@@ -1,4 +1,4 @@
-import { IDParamType, SearchParamsType } from "@/app/lib/types";
+import { IDParamType } from "@/app/lib/types";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -8,7 +8,8 @@ import MedicalHistory from "@/components/dashboard/animals/medical/medical-histo
 
 interface Props {
   params: IDParamType;
-  searchParams: SearchParamsType;
+  // A param given more than once arrives as a list.
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }
 
 const Page = async ({ params, searchParams }: Props) => {
@@ -24,9 +25,11 @@ const Page = async ({ params, searchParams }: Props) => {
 
 const PageContent = async ({ params, searchParams }: Props) => {
   const { id: animalId } = await params;
-  const { page = "1", kind } = await searchParams;
+  const { page, kind } = await searchParams;
+  // One page is shown: of a repeated `page`, the first. Every `kind` counts.
+  const pageNumber = Number([page ?? "1"].flat()[0]);
   const [{ entries, totalPages, names, today }, controls] = await Promise.all([
-    fetchMedicalHistory(animalId, Number(page), kind),
+    fetchMedicalHistory(animalId, pageNumber, kind),
     fetchMedicalControls(animalId),
   ]);
 

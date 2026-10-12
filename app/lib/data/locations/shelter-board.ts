@@ -171,15 +171,20 @@ export const queryShelterBoard = async (): Promise<ShelterBoardData> => {
     const unplaced = unplacedRows.map(toBoardAnimal);
 
     // Every row here matched `fosterPlacements: { some: { endDate: null } }`,
-    // so `fosterPlacements[0]` is always present.
-    const fostered: FosteredBoardAnimal[] = fosteredRows.map((animal) => {
+    // but Prisma reads the placements in a second query, and a placement can
+    // end (the animal is returned) between the two. Such an animal is no
+    // longer in foster, so it is left out rather than read as one.
+    const fostered: FosteredBoardAnimal[] = fosteredRows.flatMap((animal) => {
       const placement = animal.fosterPlacements[0];
-      return {
-        ...toBoardAnimal(animal),
-        fosterPersonId: placement.fosterProfile.person.id,
-        fosterPersonName: placement.fosterProfile.person.name,
-        since: placement.startDate,
-      };
+      if (!placement) return [];
+      return [
+        {
+          ...toBoardAnimal(animal),
+          fosterPersonId: placement.fosterProfile.person.id,
+          fosterPersonName: placement.fosterProfile.person.name,
+          since: placement.startDate,
+        },
+      ];
     });
 
     const onSite = locations.reduce(

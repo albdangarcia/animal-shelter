@@ -1,9 +1,9 @@
 import prisma from "@/app/lib/prisma";
 import { z } from "zod";
-import { MedicalEntryKind } from "@/prisma/generated/enums";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { cuidSchema, currentPageSchema } from "../../zod-schemas/common.schemas";
+import { medicalEntryKindsParam } from "../../zod-schemas/medical-entry.schemas";
 import { getShelterToday } from "../shelter-settings.data";
 import { rabiesStatus, type RabiesStatus } from "../../utils/medical-days";
 import type { CalendarDay } from "../../utils/shelter-day";
@@ -80,23 +80,14 @@ export const fetchMedicalOverview = RequirePermission(
 
 const HistoryArgsSchema = z.object({
   currentPage: currentPageSchema,
-  // An unknown kind in the URL is ignored rather than refused.
-  kinds: z
-    .string()
-    .optional()
-    .transform((value) =>
-      (value ?? "")
-        .split(",")
-        .filter((kind): kind is MedicalEntryKind =>
-          Object.values(MedicalEntryKind).includes(kind as MedicalEntryKind),
-        ),
-    ),
+  kinds: medicalEntryKindsParam,
 });
 
 const _fetchMedicalHistory = async (
   animalId: string,
   currentPageInput: number,
-  kindInput: string | undefined,
+  // A list when the URL repeats `kind`.
+  kindInput: string | string[] | undefined,
 ): Promise<{
   entries: MedicalEntryDisplay[];
   totalPages: number;

@@ -49,6 +49,22 @@ interface ServerSideFacetedFilterProps {
   badgeClassName?: string;
 }
 
+/**
+ * The values picked, from every copy of the parameter. The filter writes one
+ * comma-separated value, but a link can repeat it (`?kind=A&kind=B`), and a
+ * copy left unread would be dropped by the next pick.
+ */
+const selectedIn = (
+  searchParams: { getAll(name: string): string[] },
+  paramKey: string,
+) =>
+  new Set(
+    searchParams
+      .getAll(paramKey)
+      .flatMap((value) => value.split(","))
+      .filter(Boolean),
+  );
+
 export function ServerSideFacetedFilter({
   title,
   paramKey,
@@ -61,12 +77,11 @@ export function ServerSideFacetedFilter({
   const searchParams = useSearchParams();
   const { replace } = useRouter();
 
-  const selectedValues = new Set(searchParams.get(paramKey)?.split(","));
+  const selectedValues = selectedIn(searchParams, paramKey);
 
   const handleFilterChange = (value: string) => {
     const params = new URLSearchParams(searchParams);
-    const currentValues = params.get(paramKey)?.split(",") || [];
-    const newValues = new Set(currentValues.filter(Boolean));
+    const newValues = selectedIn(params, paramKey);
 
     if (newValues.has(value)) {
       newValues.delete(value);
@@ -74,6 +89,7 @@ export function ServerSideFacetedFilter({
       newValues.add(value);
     }
 
+    // `set` replaces every copy with the one value.
     if (newValues.size > 0) {
       params.set(paramKey, Array.from(newValues).join(","));
     } else {

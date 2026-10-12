@@ -56,6 +56,26 @@ const dueDate = z
     return day;
   });
 
+/**
+ * The kinds a Medical list is filtered to, from the URL's comma-separated
+ * `kind`. A `kind` given more than once arrives as a list, and counts every
+ * value. An unknown kind is ignored rather than refused; none means every
+ * kind.
+ */
+export const medicalEntryKindsParam = z
+  .union([z.string(), z.array(z.string())])
+  .optional()
+  .transform((value) => [
+    ...new Set(
+      [value ?? []]
+        .flat()
+        .flatMap((part) => part.split(","))
+        .filter((kind): kind is MedicalEntryKind =>
+          Object.values(MedicalEntryKind).includes(kind as MedicalEntryKind),
+        ),
+    ),
+  ]);
+
 const optionalId = cuidSchema
   .nullish()
   .or(z.literal(""))

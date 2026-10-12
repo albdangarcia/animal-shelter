@@ -5,6 +5,7 @@ import {
   MedicalEntryFormSchema,
   ScheduleMedicalEntrySchema,
   VoidMedicalEntrySchema,
+  medicalEntryKindsParam,
   medicalEntryFieldErrors,
   rabiesDurationIssue,
   type MedicalEntryFormInput,
@@ -167,4 +168,18 @@ test("ScheduleMedicalEntrySchema: the due date is required and a real day", () =
     assert.equal(result.success, false, String(dueDate));
     assert.ok(z.flattenError(result.error!).fieldErrors.dueDate, String(dueDate));
   }
+});
+
+test("medicalEntryKindsParam: a comma list or a repeated param, unknown kinds ignored", () => {
+  const kinds = (value: unknown) => medicalEntryKindsParam.parse(value);
+  assert.deepEqual(kinds(undefined), []);
+  assert.deepEqual(kinds(""), []);
+  assert.deepEqual(kinds("VACCINE,TREATMENT"), ["VACCINE", "TREATMENT"]);
+  assert.deepEqual(kinds("VACCINE,SURGERY"), ["VACCINE"]);
+  // `?kind=VACCINE&kind=TREATMENT,TEST&kind=VACCINE`
+  assert.deepEqual(kinds(["VACCINE", "TREATMENT,TEST", "VACCINE"]), [
+    "VACCINE",
+    "TREATMENT",
+    "TEST",
+  ]);
 });

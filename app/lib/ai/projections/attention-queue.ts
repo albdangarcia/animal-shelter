@@ -1,5 +1,6 @@
 import type {
   AnimalHealthStatus,
+  MedicalEntryKind,
   TaskPriority,
 } from "@/prisma/generated/enums";
 import type { AttentionQueueItem } from "@/app/lib/data/animals/attention-queue.data";
@@ -25,6 +26,15 @@ export type AttentionReasonView =
        */
       overdue: boolean;
       priority: TaskPriority;
+    }
+  | {
+      kind: "MEDICAL_DUE";
+      entryId: string;
+      itemName: string;
+      entryKind: MedicalEntryKind;
+      dueDate: string;
+      /** Stated, not implied, for the reason given on a task's `overdue`. */
+      overdue: boolean;
     }
   | { kind: "UNTASKED_ACUTE_HEALTH"; healthStatus: AnimalHealthStatus }
   | {
@@ -76,6 +86,16 @@ function toReasonView(
         // the same boundary the data layer's query draws.
         overdue: reason.dueDate < today,
         priority: reason.priority,
+      };
+    case "MEDICAL_DUE":
+      return {
+        kind: "MEDICAL_DUE",
+        entryId: reason.entryId,
+        itemName: reason.itemName,
+        entryKind: reason.entryKind,
+        dueDate: reason.dueDate,
+        // Care due at any point today is today's work, as for tasks.
+        overdue: reason.dueDate < today,
       };
     case "UNTASKED_ACUTE_HEALTH":
       return {

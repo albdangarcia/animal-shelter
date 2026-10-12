@@ -34,6 +34,7 @@ import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import {
   declineMedicalEntry,
+  loadMedicalEntryFormOptions,
   rescheduleMedicalEntry,
 } from "@/app/lib/actions/medical-entry.actions";
 import { RescheduleMedicalEntrySchema } from "@/app/lib/zod-schemas/medical-entry.schemas";
@@ -50,15 +51,29 @@ import {
   useConfirmedOpenChange,
 } from "@/hooks/use-confirmed-open-change";
 import { entryLabel } from "./medical-entry-item";
-import { MedicalEntryForm } from "./medical-entry-form";
+import { MedicalEntryForm, type ScheduledCare } from "./medical-entry-form";
 import { DiscardChangesDialog } from "./discard-changes-dialog";
 import { useEntryDialogFocus } from "./use-entry-dialog-focus";
 
+/** Scheduled care as its row shows it, and as its buttons need it. */
+export type DueCare = ScheduledCare &
+  Pick<MedicalEntryDisplay, "status" | "dueDate" | "completedDate"> & {
+    item: { name: string };
+  };
+
 interface Props {
   animalId: string;
-  entry: MedicalEntryDisplay;
-  /** What the record form offers for this animal. */
-  options: MedicalEntryFormOptions;
+  entry: DueCare;
+  /**
+   * What the record form offers for this animal. Left out on a page that
+   * lists many animals' care: the form reads them when it opens.
+   */
+  options?: MedicalEntryFormOptions;
+  /**
+   * The animal's name, on a page that lists more than one animal's care, so
+   * each button and dialog says whose care it is.
+   */
+  animalName?: string;
   /** The shelter's today: a due day can't be before it. */
   today: CalendarDay;
   canManage: boolean;
@@ -73,18 +88,36 @@ export function ScheduledEntryActions({
   animalId,
   entry,
   options,
+  animalName,
   today,
   canManage,
   canAdminister,
 }: Props) {
   if (!canManage && !canAdminister) return null;
+  // "DHPP (Due Oct 14, 2026)", or "DHPP (Due Oct 14, 2026) for Fido".
+  const what = animalName
+    ? `${entryLabel(entry)} for ${animalName}`
+    : entryLabel(entry);
   return (
     <div className="mt-3 flex flex-wrap gap-2">
       {canAdminister && (
-        <RecordButton animalId={animalId} entry={entry} options={options} />
+        <RecordButton
+          animalId={animalId}
+          entry={entry}
+          options={options}
+          animalName={animalName}
+          what={what}
+        />
       )}
-      {canManage && <RescheduleButton entry={entry} today={today} />}
-      {canAdminister && <DeclineButton entry={entry} />}
+      {canManage && (
+        <RescheduleButton
+          entry={entry}
+          today={today}
+          animalName={animalName}
+          what={what}
+        />
+      )}
+      {canAdminister && <DeclineButton entry={entry} what={what} />}
     </div>
   );
 }
@@ -93,17 +126,65 @@ function RecordButton({
   animalId,
   entry,
   options,
+  animalName,
+  what,
 }: {
   animalId: string;
-  entry: MedicalEntryDisplay;
-  options: MedicalEntryFormOptions;
+  entry: DueCare;
+  options?: MedicalEntryFormOptions;
+  animalName?: string;
+  what: string;
 }) {
   const [open, setOpen] = useState(false);
+  // The options the open form uses: the ones given, or the ones read when it
+  // opened.
+  const [formOptions, setFormOptions] = useState(options);
+  // Counts the openings, so a read that answers after its dialog closed, or
+  // after it was opened again, is dropped.
+  const opening = useRef(0);
   const formRef = useRef<DirtyFormHandle>(null);
   const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
-    useConfirmedOpenChange(() => formRef.current?.isDirty() ?? false, setOpen);
+    useConfirmedOpenChange(
+      () => formRef.current?.isDirty() ?? false,
+      (next: boolean) => {
+        if (!next) opening.current++;
+        setOpen(next);
+      },
+    );
   // Recording takes the row off the due list, button and all.
   const { triggerRef, returnFocus } = useEntryDialogFocus();
+
+  const openDialog = () => {
+    // Open at once, whether or not the options are here: the dialog holds
+    // the page while they load, so no other row's form can open meanwhile.
+    setOpen(true);
+    if (options) {
+      setFormOptions(options);
+      return;
+    }
+    // Read each time it opens, so what the form offers (whether the next
+    // dose is already planned, say) is as it is now.
+    setFormOptions(undefined);
+    const thisOpening = ++opening.current;
+    void (async () => {
+      let message: string;
+      try {
+        const result = await loadMedicalEntryFormOptions(animalId);
+        if (thisOpening !== opening.current) return;
+        if (result.ok) {
+          setFormOptions(result.options);
+          return;
+        }
+        message = result.message;
+      } catch {
+        if (thisOpening !== opening.current) return;
+        message = "Could not load the form. Try again.";
+      }
+      toast.error(message);
+      opening.current++;
+      setOpen(false);
+    })();
+  };
 
   return (
     <>
@@ -112,8 +193,8 @@ function RecordButton({
         type="button"
         variant="outline"
         size="sm"
-        aria-label={`Record ${entryLabel(entry)} as given`}
-        onClick={() => setOpen(true)}
+        aria-label={`Record ${what} as given`}
+        onClick={openDialog}
       >
         <Syringe className="mr-2 size-4" />
         Record
@@ -124,20 +205,33 @@ function RecordButton({
           onCloseAutoFocus={returnFocus}
         >
           <DialogHeader>
-            <DialogTitle>Record {entry.item.name} as given</DialogTitle>
+            <DialogTitle>
+              Record {entry.item.name}
+              {animalName && ` for ${animalName}`} as given
+            </DialogTitle>
             <DialogDescription>
               It was due {formatShelterDayOrNA(entry.dueDate)}. Record how it
               was given: the item&apos;s defaults are filled in.
             </DialogDescription>
           </DialogHeader>
-          <MedicalEntryForm
-            animalId={animalId}
-            kind={entry.kind}
-            options={options}
-            scheduled={entry}
-            onFormSubmit={() => setOpen(false)}
-            ref={formRef}
-          />
+          {formOptions ? (
+            <MedicalEntryForm
+              animalId={animalId}
+              kind={entry.kind}
+              options={formOptions}
+              scheduled={entry}
+              onFormSubmit={() => setOpen(false)}
+              ref={formRef}
+            />
+          ) : (
+            <p
+              role="status"
+              className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground"
+            >
+              <Loader2 className="size-4 animate-spin" />
+              Loading the form…
+            </p>
+          )}
         </DialogContent>
       </Dialog>
       <DiscardChangesDialog
@@ -154,9 +248,13 @@ type RescheduleState = { dueDate: string | null };
 function RescheduleButton({
   entry,
   today,
+  animalName,
+  what,
 }: {
-  entry: MedicalEntryDisplay;
+  entry: DueCare;
   today: CalendarDay;
+  animalName?: string;
+  what: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -216,7 +314,7 @@ function RescheduleButton({
         type="button"
         variant="outline"
         size="sm"
-        aria-label={`Reschedule ${entryLabel(entry)}`}
+        aria-label={`Reschedule ${what}`}
         onClick={openDialog}
       >
         <CalendarClock className="mr-2 size-4" />
@@ -225,7 +323,10 @@ function RescheduleButton({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[420px]" onCloseAutoFocus={returnFocus}>
           <DialogHeader>
-            <DialogTitle>Reschedule {entry.item.name}</DialogTitle>
+            <DialogTitle>
+              Reschedule {entry.item.name}
+              {animalName && ` for ${animalName}`}
+            </DialogTitle>
             <DialogDescription>
               It is due {formatShelterDayOrNA(entry.dueDate)}. Pick the day it
               is due instead. The change is kept in the entry&apos;s history.
@@ -263,7 +364,7 @@ function RescheduleButton({
   );
 }
 
-function DeclineButton({ entry }: { entry: MedicalEntryDisplay }) {
+function DeclineButton({ entry, what }: { entry: DueCare; what: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -271,7 +372,6 @@ function DeclineButton({ entry }: { entry: MedicalEntryDisplay }) {
   const [isPending, startTransition] = useTransition();
   // A decline takes the row off the due list, button and all.
   const { triggerRef, returnFocus } = useEntryDialogFocus();
-  const what = entryLabel(entry);
 
   // Checked as the server checks it, trimmed, so an over-long reason is
   // explained before anything is sent.
