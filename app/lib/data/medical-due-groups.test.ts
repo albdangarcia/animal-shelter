@@ -37,6 +37,7 @@ const row = (
     dueDate: calendarDay(dueDate),
     completedDate: null,
     itemId: `item-${options.item ?? "DHPP"}`,
+    procedure: null,
     notes: null,
     item: { name: options.item ?? "DHPP" },
   },

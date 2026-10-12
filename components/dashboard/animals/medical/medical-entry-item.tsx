@@ -6,7 +6,7 @@ import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
 import { MedicalEntryStatus } from "@/prisma/generated/enums";
 import {
   MEDICAL_ENTRY_SOURCE_LABELS,
-  MEDICAL_ITEM_KIND_LABELS,
+  MEDICAL_ENTRY_KIND_LABELS,
   MEDICAL_ROUTE_LABELS,
   TEST_RESULT_LABELS,
   formatDose,
@@ -15,6 +15,10 @@ import {
   formatShelterDayOrNA,
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
+import {
+  medicalEntryName,
+  type NameableMedicalEntry,
+} from "@/app/lib/utils/medical-entry-name";
 
 type EntryDay = Pick<MedicalEntryDisplay, "status" | "completedDate" | "dueDate">;
 
@@ -33,8 +37,8 @@ export const entryDayText = (entry: EntryDay) => {
 };
 
 /** An entry named for a heading or a button: "DHPP (Due Oct 14, 2026)". */
-export const entryLabel = (entry: EntryDay & { item: { name: string } }) =>
-  `${entry.item.name} (${entryDayText(entry)})`;
+export const entryLabel = (entry: EntryDay & NameableMedicalEntry) =>
+  `${medicalEntryName(entry)} (${entryDayText(entry)})`;
 
 /**
  * Whether scheduled care is late or due today, against the shelter's today.
@@ -135,19 +139,20 @@ export function MedicalEntryItem({ entry, today, actions, footer }: Props) {
   const due = dueState(entry, today);
   const details = detailPairs(entry);
   const source = sourceText(entry);
+  const name = medicalEntryName(entry);
 
   return (
     <li
       className="border rounded-lg p-4"
-      aria-label={`${entry.item.name}, ${entryDayText(entry)}${voided ? ", voided" : ""}`}
+      aria-label={`${name}, ${entryDayText(entry)}${voided ? ", voided" : ""}`}
     >
       <div className="flex items-start justify-between gap-4">
         <div className={clsx("min-w-0 flex-1", voided && "text-muted-foreground")}>
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className={clsx("text-sm font-semibold", voided && "line-through")}>
-              {entry.item.name}
+              {name}
             </span>
-            <Badge variant="outline">{MEDICAL_ITEM_KIND_LABELS[entry.kind]}</Badge>
+            <Badge variant="outline">{MEDICAL_ENTRY_KIND_LABELS[entry.kind]}</Badge>
             {voided && <Badge variant="destructive">Voided</Badge>}
             {due === "OVERDUE" && <Badge variant="destructive">Overdue</Badge>}
             {due === "DUE_TODAY" && <Badge>Due today</Badge>}

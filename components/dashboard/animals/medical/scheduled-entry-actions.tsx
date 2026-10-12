@@ -47,6 +47,10 @@ import {
 } from "@/app/lib/utils/shelter-day";
 import type { FieldErrors } from "@/app/lib/action-result";
 import {
+  medicalEntryName,
+  type NameableMedicalEntry,
+} from "@/app/lib/utils/medical-entry-name";
+import {
   DirtyFormHandle,
   useConfirmedOpenChange,
 } from "@/hooks/use-confirmed-open-change";
@@ -57,9 +61,8 @@ import { useEntryDialogFocus } from "./use-entry-dialog-focus";
 
 /** Scheduled care as its row shows it, and as its buttons need it. */
 export type DueCare = ScheduledCare &
-  Pick<MedicalEntryDisplay, "status" | "dueDate" | "completedDate"> & {
-    item: { name: string };
-  };
+  Pick<MedicalEntryDisplay, "status" | "dueDate" | "completedDate"> &
+  Pick<NameableMedicalEntry, "item">;
 
 interface Props {
   animalId: string;
@@ -206,7 +209,7 @@ function RecordButton({
         >
           <DialogHeader>
             <DialogTitle>
-              Record {entry.item.name}
+              Record {medicalEntryName(entry)}
               {animalName && ` for ${animalName}`} as given
             </DialogTitle>
             <DialogDescription>
@@ -324,7 +327,7 @@ function RescheduleButton({
         <DialogContent className="sm:max-w-[420px]" onCloseAutoFocus={returnFocus}>
           <DialogHeader>
             <DialogTitle>
-              Reschedule {entry.item.name}
+              Reschedule {medicalEntryName(entry)}
               {animalName && ` for ${animalName}`}
             </DialogTitle>
             <DialogDescription>

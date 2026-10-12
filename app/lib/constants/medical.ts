@@ -1,14 +1,73 @@
 import type {
   DoseUnit,
+  MedicalEntryKind,
   MedicalEntrySource,
   MedicalEntryStatus,
   MedicalItemKind,
   MedicalRoute,
+  SpayNeuterExemptionReason,
+  SurgeryEvidence,
+  SurgeryProcedure,
   TestResult,
 } from "@/prisma/generated/enums";
 
+/**
+ * The kinds of care given from the catalog: each entry points at an item.
+ * Surgeries and microchips have none.
+ */
+export const CATALOG_ENTRY_KINDS = [
+  "VACCINE",
+  "TEST",
+  "TREATMENT",
+] as const satisfies readonly MedicalEntryKind[];
+
+export type CatalogEntryKind = (typeof CATALOG_ENTRY_KINDS)[number];
+
+export const isCatalogEntryKind = (
+  kind: MedicalEntryKind,
+): kind is CatalogEntryKind =>
+  (CATALOG_ENTRY_KINDS as readonly MedicalEntryKind[]).includes(kind);
+
 // Display labels for the medical enums, in the order pickers list them.
 
+/** What kind of care an entry records, as its badge and filters read. */
+export const MEDICAL_ENTRY_KIND_LABELS: Record<MedicalEntryKind, string> = {
+  VACCINE: "Vaccine",
+  TEST: "Test",
+  TREATMENT: "Treatment",
+  SURGERY: "Surgery",
+  MICROCHIP: "Microchip",
+};
+
+export const SURGERY_PROCEDURE_LABELS: Record<SurgeryProcedure, string> = {
+  SPAY: "Spay",
+  NEUTER: "Neuter",
+  DENTAL: "Dental",
+  AMPUTATION: "Amputation",
+  ENUCLEATION: "Enucleation",
+  MASS_REMOVAL: "Mass removal",
+  OTHER: "Other",
+};
+
+export const SURGERY_EVIDENCE_LABELS: Record<SurgeryEvidence, string> = {
+  OWNER_RECORDS: "Owner records",
+  VET_RECORDS: "Vet records",
+  TATTOO: "Tattoo",
+  SCAR: "Scar",
+  FOUND_ON_EXAM: "Found on exam",
+};
+
+export const SPAY_NEUTER_EXEMPTION_REASON_LABELS: Record<
+  SpayNeuterExemptionReason,
+  string
+> = {
+  TOO_YOUNG_OR_UNDERWEIGHT: "Too young or underweight",
+  MEDICAL_RISK: "Medical risk",
+  PARTNER_WILL_ALTER: "Partner will alter",
+  OTHER: "Other",
+};
+
+/** What kind of product a catalog item is. */
 export const MEDICAL_ITEM_KIND_LABELS: Record<MedicalItemKind, string> = {
   VACCINE: "Vaccine",
   TEST: "Test",

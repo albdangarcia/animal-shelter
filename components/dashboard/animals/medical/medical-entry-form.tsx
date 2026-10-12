@@ -54,7 +54,8 @@ import {
 } from "@/app/lib/zod-schemas/medical-entry.schemas";
 import {
   MEDICAL_ENTRY_SOURCE_LABELS,
-  MEDICAL_ITEM_KIND_LABELS,
+  MEDICAL_ENTRY_KIND_LABELS,
+  isCatalogEntryKind,
   TEST_RESULT_LABELS,
 } from "@/app/lib/constants/medical";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
@@ -117,7 +118,8 @@ type EntryFormState = {
 
 const fromEntry = (entry: MedicalEntryDisplay): EntryFormState => ({
   kind: entry.kind,
-  itemId: entry.itemId,
+  // This form serves vaccines, tests and treatments, which all have an item.
+  itemId: entry.itemId ?? "",
   completedDate: entry.completedDate,
   dateUnknown: entry.completedDate === null,
   // Only completed entries are edited, and every one has a source; the
@@ -175,7 +177,7 @@ const fromScheduled = (
 ): EntryFormState => ({
   ...blank(scheduled.kind, today),
   ...(item && fillsFor(item)),
-  itemId: scheduled.itemId,
+  itemId: scheduled.itemId ?? "",
   notes: scheduled.notes ?? "",
 });
 
@@ -196,6 +198,8 @@ const itemChoices = (
   entry?: MedicalEntryDisplay,
   scheduled?: ScheduledCare,
 ): MedicalEntryFormItem[] => {
+  // Only care given from the catalog picks an item.
+  if (!isCatalogEntryKind(kind)) return [];
   const ofKind = options.items.filter((item) => item.kind === kind);
   if (scheduled) {
     if (ofKind.some((item) => item.id === scheduled.itemId)) return ofKind;
@@ -204,7 +208,7 @@ const itemChoices = (
     );
     return own ? [...ofKind, own].sort(byName) : ofKind;
   }
-  if (!entry) return ofKind;
+  if (!entry?.itemId || !entry.item) return ofKind;
   const recordedAnalytes = (entry.test?.results ?? []).map((row) => ({
     id: row.analyteId,
     name: row.analyteName,
@@ -240,6 +244,9 @@ const FILLED_FIELDS = {
   ],
   [MedicalEntryKind.TEST]: [],
   [MedicalEntryKind.TREATMENT]: ["route", "doseAmount", "doseUnit"],
+  // Not given from the catalog, so there is no item to fill anything in.
+  [MedicalEntryKind.SURGERY]: [],
+  [MedicalEntryKind.MICROCHIP]: [],
 } as const satisfies Record<MedicalEntryKind, readonly (keyof EntryFormState)[]>;
 
 type FilledField = (typeof FILLED_FIELDS)[MedicalEntryKind][number];
@@ -490,7 +497,7 @@ export function MedicalEntryForm({
   // The service files a refusal of the next dose itself (already scheduled,
   // retired) on `scheduleNext`, and one of its day on the day.
   const scheduleNextErrorMessage = form.formState.errors.scheduleNext?.message;
-  const noun = MEDICAL_ITEM_KIND_LABELS[kind].toLowerCase();
+  const noun = MEDICAL_ENTRY_KIND_LABELS[kind].toLowerCase();
   // Care scheduled during the stay was given then, never before intake.
   const sources = Object.values(MedicalEntrySource).filter(
     (value) => !scheduled || value !== MedicalEntrySource.BEFORE_INTAKE,
@@ -507,7 +514,7 @@ export function MedicalEntryForm({
             render={({ field }) => (
               <FormItem className="md:col-span-2">
                 <FormLabel htmlFor="itemId" required>
-                  {MEDICAL_ITEM_KIND_LABELS[kind]}
+                  {MEDICAL_ENTRY_KIND_LABELS[kind]}
                 </FormLabel>
                 <Select
                   onValueChange={pickItem}
@@ -812,7 +819,7 @@ export function MedicalEntryForm({
           </DialogClose>
           <Button type="submit" disabled={isPending}>
             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {entry ? "Save Changes" : `Record ${MEDICAL_ITEM_KIND_LABELS[kind]}`}
+            {entry ? "Save Changes" : `Record ${MEDICAL_ENTRY_KIND_LABELS[kind]}`}
           </Button>
         </DialogFooter>
       </form>

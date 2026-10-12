@@ -172,12 +172,94 @@ test("ScheduleMedicalEntrySchema: the due date is required and a real day", () =
   }
 });
 
+const surgery: MedicalEntryFormInput = {
+  kind: "SURGERY",
+  procedure: "SPAY",
+  completedDate: "2026-09-01",
+  source: "IN_HOUSE",
+};
+
+test("MedicalEntryFormSchema: a surgery names its procedure, and no item", () => {
+  const parsed = MedicalEntryFormSchema.parse({
+    ...surgery,
+    surgeon: " Dr. Patel ",
+    findings: "",
+  });
+  assert.equal(parsed.kind, "SURGERY");
+  assert.equal(parsed.kind === "SURGERY" && parsed.procedure, "SPAY");
+  assert.equal(parsed.kind === "SURGERY" && parsed.surgeon, "Dr. Patel");
+  assert.equal(parsed.kind === "SURGERY" && parsed.findings, null);
+  assert.equal(parsed.kind === "SURGERY" && parsed.evidence, null);
+  assert.equal("itemId" in parsed, false);
+  assert.deepEqual(
+    fieldErrorsOf({ ...surgery, procedure: undefined } as unknown as MedicalEntryFormInput)
+      .procedure,
+    ["Pick the procedure."],
+  );
+});
+
+test("MedicalEntryFormSchema: a surgery's evidence is for before intake, and required there", () => {
+  assert.deepEqual(
+    fieldErrorsOf({ ...surgery, source: "BEFORE_INTAKE", completedDate: null }).evidence,
+    ["Say what shows the surgery was done before intake."],
+  );
+  for (const source of ["IN_HOUSE", "OUTSIDE_VET"] as const) {
+    assert.deepEqual(
+      fieldErrorsOf({ ...surgery, source, evidence: "SCAR" }).evidence,
+      ["Evidence is only for a surgery done before intake."],
+      source,
+    );
+  }
+  const parsed = MedicalEntryFormSchema.parse({
+    ...surgery,
+    source: "BEFORE_INTAKE",
+    completedDate: null,
+    evidence: "TATTOO",
+  });
+  assert.equal(parsed.kind === "SURGERY" && parsed.evidence, "TATTOO");
+  assert.equal(parsed.completedDate, null);
+});
+
+test("ScheduleMedicalEntrySchema: a surgery takes a procedure, other care an item", () => {
+  const dueDate = "2026-10-14";
+  assert.deepEqual(
+    ScheduleMedicalEntrySchema.parse({ kind: "SURGERY", procedure: "NEUTER", dueDate }),
+    { kind: "SURGERY", procedure: "NEUTER", dueDate, notes: null },
+  );
+  assert.deepEqual(
+    ScheduleMedicalEntrySchema.parse({ kind: "TREATMENT", itemId: "item", dueDate }),
+    { kind: "TREATMENT", itemId: "item", dueDate, notes: null },
+  );
+  const errorsOf = (values: object) => {
+    const result = ScheduleMedicalEntrySchema.safeParse(values);
+    assert.equal(result.success, false);
+    return z.flattenError(result.error!).fieldErrors as Record<string, string[]>;
+  };
+  assert.deepEqual(errorsOf({ kind: "SURGERY", dueDate }).procedure, [
+    "Pick the procedure.",
+  ]);
+  assert.deepEqual(errorsOf({ kind: "VACCINE", procedure: "SPAY", dueDate }).itemId, [
+    "Pick an item.",
+  ]);
+  // A microchip can't be scheduled through this schema.
+  assert.deepEqual(errorsOf({ kind: "MICROCHIP", dueDate }).kind, [
+    "Choose what to schedule.",
+  ]);
+  // A blank form shows every field's message at once.
+  assert.deepEqual(Object.keys(errorsOf({ kind: "", itemId: "", dueDate: "" })).sort(), [
+    "dueDate",
+    "itemId",
+    "kind",
+  ]);
+});
+
 test("medicalEntryKindsParam: a comma list or a repeated param, unknown kinds ignored", () => {
   const kinds = (value: unknown) => medicalEntryKindsParam.parse(value);
   assert.deepEqual(kinds(undefined), []);
   assert.deepEqual(kinds(""), []);
   assert.deepEqual(kinds("VACCINE,TREATMENT"), ["VACCINE", "TREATMENT"]);
-  assert.deepEqual(kinds("VACCINE,SURGERY"), ["VACCINE"]);
+  assert.deepEqual(kinds("VACCINE,SURGERY"), ["VACCINE", "SURGERY"]);
+  assert.deepEqual(kinds("VACCINE,GROOMING"), ["VACCINE"]);
   // `?kind=VACCINE&kind=TREATMENT,TEST&kind=VACCINE`
   assert.deepEqual(kinds(["VACCINE", "TREATMENT,TEST", "VACCINE"]), [
     "VACCINE",

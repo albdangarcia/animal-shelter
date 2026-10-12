@@ -19,7 +19,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
-import { MEDICAL_ITEM_KIND_LABELS } from "@/app/lib/constants/medical";
+import {
+  CATALOG_ENTRY_KINDS,
+  MEDICAL_ENTRY_KIND_LABELS,
+} from "@/app/lib/constants/medical";
 import {
   DirtyFormHandle,
   useConfirmedOpenChange,
@@ -68,12 +71,14 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {Object.values(MedicalEntryKind).map((value) => (
+          {/* The record form serves only the kinds given from the
+              catalog: surgeries and microchips have no item to pick. */}
+          {CATALOG_ENTRY_KINDS.map((value) => (
             <DropdownMenuItem
               key={value}
               onSelect={() => setMode({ record: value })}
             >
-              {MEDICAL_ITEM_KIND_LABELS[value]}
+              {MEDICAL_ENTRY_KIND_LABELS[value]}
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
@@ -93,7 +98,7 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
             <>
               <DialogHeader>
                 <DialogTitle>
-                  Record a {MEDICAL_ITEM_KIND_LABELS[kind].toLowerCase()}
+                  Record a {MEDICAL_ENTRY_KIND_LABELS[kind].toLowerCase()}
                 </DialogTitle>
                 <DialogDescription>
                   Record care already given. Pick the item first: its defaults

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { MedicalEntryKind } from "@/prisma/generated/enums";
-import { MEDICAL_ITEM_KIND_LABELS } from "@/app/lib/constants/medical";
+import { MEDICAL_ENTRY_KIND_LABELS } from "@/app/lib/constants/medical";
 import {
   UPCOMING_DAYS,
   dueBucket,
@@ -27,6 +27,7 @@ import {
 import { ScheduledEntryActions } from "@/components/dashboard/animals/medical/scheduled-entry-actions";
 import { DUE_HEADING_ID } from "@/components/dashboard/animals/medical/use-entry-dialog-focus";
 import { sameNameDetails } from "@/app/lib/utils/medical-batch";
+import { medicalEntryName } from "@/app/lib/utils/medical-entry-name";
 import {
   DueRowCheckbox,
   DueSelection,
@@ -42,7 +43,7 @@ export const MEDICAL_DUE_DESCRIPTION = `Vaccines, tests and treatments that are 
 
 const kindOptions = Object.values(MedicalEntryKind).map((kind) => ({
   value: kind,
-  label: MEDICAL_ITEM_KIND_LABELS[kind],
+  label: MEDICAL_ENTRY_KIND_LABELS[kind],
 }));
 
 const BUCKET_TITLES: Record<MedicalDueBucket, string> = {
@@ -69,23 +70,31 @@ interface Props {
 /**
  * A row that can be picked to record with others: a vaccine or treatment,
  * for a viewer who may give scheduled care. Tests have results of their own,
- * so they are recorded one at a time.
+ * and surgeries and microchips details of their own, so they are recorded one
+ * at a time.
  */
 const selectableOf = (
   row: MedicalDueListRow,
   names: DueNames,
-): SelectableDue | null =>
-  row.entry.kind === MedicalEntryKind.TEST
-    ? null
-    : {
-        entryId: row.entry.id,
-        animalId: row.animal.id,
-        animalName: animalNameOf(row, names),
-        itemId: row.entry.itemId,
-        itemName: row.entry.item.name,
-        kind: row.entry.kind,
-        dueDate: row.entry.dueDate,
-      };
+): SelectableDue | null => {
+  const { entry } = row;
+  if (
+    (entry.kind !== MedicalEntryKind.VACCINE &&
+      entry.kind !== MedicalEntryKind.TREATMENT) ||
+    !entry.itemId
+  ) {
+    return null;
+  }
+  return {
+    entryId: entry.id,
+    animalId: row.animal.id,
+    animalName: animalNameOf(row, names),
+    itemId: entry.itemId,
+    itemName: medicalEntryName(entry),
+    kind: entry.kind,
+    dueDate: entry.dueDate,
+  };
+};
 
 /**
  * What tells each animal on the list from another of the same name, by id,
@@ -280,7 +289,7 @@ function DueRow({
   return (
     <li
       className="rounded-lg border p-3"
-      aria-label={`${name}: ${entry.item.name}, due ${formatShelterDay(entry.dueDate)}`}
+      aria-label={`${name}: ${medicalEntryName(entry)}, due ${formatShelterDay(entry.dueDate)}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <div className="flex min-w-0 items-start gap-3">
@@ -296,8 +305,8 @@ function DueRow({
             <span className="text-sm text-muted-foreground">{where}</span>
           </p>
           <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium">{entry.item.name}</span>
-            <Badge variant="outline">{MEDICAL_ITEM_KIND_LABELS[entry.kind]}</Badge>
+            <span className="font-medium">{medicalEntryName(entry)}</span>
+            <Badge variant="outline">{MEDICAL_ENTRY_KIND_LABELS[entry.kind]}</Badge>
           </p>
           </div>
         </div>

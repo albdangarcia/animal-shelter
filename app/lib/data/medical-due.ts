@@ -21,6 +21,7 @@ import {
   shiftDayKey,
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
+import { medicalEntryName } from "@/app/lib/utils/medical-entry-name";
 import {
   UPCOMING_DAYS,
   type MedicalDueListRow,
@@ -73,6 +74,7 @@ const DUE_ENTRY_SELECT = {
   dueDate: true,
   completedDate: true,
   itemId: true,
+  procedure: true,
   notes: true,
   item: { select: { name: true } },
 } as const satisfies Prisma.MedicalEntrySelect;
@@ -162,6 +164,7 @@ export const findMedicalDueForQueue = async (
       id: true,
       kind: true,
       dueDate: true,
+      procedure: true,
       item: { select: { name: true } },
       animal: {
         select: {
@@ -184,7 +187,7 @@ export const findMedicalDueForQueue = async (
       currentUnit: attentionUnitLabel(row.animal.currentUnit),
     },
     entryId: row.id,
-    itemName: row.item.name,
+    itemName: medicalEntryName(row),
     kind: row.kind,
     // `lte` matched, so the due day is there.
     dueDate: calendarDay(row.dueDate!),

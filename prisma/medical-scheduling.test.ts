@@ -32,7 +32,6 @@ import {
   scheduleMedicalEntry,
   voidMedicalEntry,
   type RecordMedicalEntryInput,
-  type ScheduleMedicalEntryInput,
   type VaccineEntryInput,
 } from "@/app/lib/services/medical-entry";
 import {
@@ -52,6 +51,7 @@ import { findMedicalEntryFormItems } from "@/app/lib/data/medical-catalog";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import { ConflictError } from "@/app/lib/utils/errors";
+import type { CatalogEntryKind } from "@/app/lib/constants/medical";
 
 // Random, not the time: the files run in parallel, and each cleans up the
 // catalog items whose names end in its own runId.
@@ -214,7 +214,12 @@ const makeAnimal = async (
 
 const schedule = (
   animalId: string,
-  overrides: Partial<Omit<ScheduleMedicalEntryInput, "animalId">> = {},
+  overrides: Partial<{
+    kind: CatalogEntryKind;
+    itemId: string;
+    dueDate: CalendarDay;
+    notes: string | null;
+  }> = {},
   actorId = staffId,
   today: CalendarDay = TODAY,
 ) =>

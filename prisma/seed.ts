@@ -71,6 +71,7 @@ import {
   type MedicalEntryInput,
 } from "@/app/lib/services/medical-entry";
 import { nextDueDate } from "@/app/lib/utils/medical-days";
+import type { CatalogEntryKind } from "@/app/lib/constants/medical";
 import { recordMedicalBatch } from "@/app/lib/services/medical-batch";
 import { recordOutcome } from "@/app/lib/services/outcome-recording";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
@@ -5106,6 +5107,8 @@ async function clearDatabase() {
   await prisma.vaccineDetails.deleteMany();
   await prisma.testDetails.deleteMany();
   await prisma.treatmentDetails.deleteMany();
+  await prisma.surgeryDetails.deleteMany();
+  await prisma.microchipDetails.deleteMany();
   await prisma.medicalEntry.deleteMany();
   await prisma.medicalItemAnalyte.deleteMany();
   await prisma.medicalItem.deleteMany();
@@ -6585,7 +6588,7 @@ async function seedMedicalScheduling() {
 
   const schedule = (
     animalId: string,
-    kind: MedicalEntryKind,
+    kind: CatalogEntryKind,
     itemName: string,
     dueDate: CalendarDay,
     { actorId = olivia.id, plannedOn = today } = {},

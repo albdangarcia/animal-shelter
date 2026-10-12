@@ -4,6 +4,7 @@
 
 import type { Sex } from "@/prisma/generated/enums";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import { medicalEntryName } from "@/app/lib/utils/medical-entry-name";
 import type { MedicalDueEntry } from "./medical-due";
 
 /** How many days after today the due list looks ahead. */
@@ -78,7 +79,7 @@ const groupOf = (place: MedicalDuePlace) => {
 const compareRows = (a: MedicalDueListRow, b: MedicalDueListRow) =>
   a.entry.dueDate.localeCompare(b.entry.dueDate) ||
   a.animal.name.localeCompare(b.animal.name) ||
-  a.entry.item.name.localeCompare(b.entry.item.name) ||
+  medicalEntryName(a.entry).localeCompare(medicalEntryName(b.entry)) ||
   a.entry.id.localeCompare(b.entry.id);
 
 /**

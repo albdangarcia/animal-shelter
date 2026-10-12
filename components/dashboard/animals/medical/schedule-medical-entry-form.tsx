@@ -32,7 +32,10 @@ import {
   ScheduleMedicalEntrySchema,
   type ScheduleMedicalEntryFormInput,
 } from "@/app/lib/zod-schemas/medical-entry.schemas";
-import { MEDICAL_ITEM_KIND_LABELS } from "@/app/lib/constants/medical";
+import {
+  CATALOG_ENTRY_KINDS,
+  MEDICAL_ENTRY_KIND_LABELS,
+} from "@/app/lib/constants/medical";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { dueDateIssue, latestDueDate } from "@/app/lib/utils/medical-days";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
@@ -118,7 +121,7 @@ export function ScheduleMedicalEntryForm({
     });
   };
 
-  const noun = kind ? MEDICAL_ITEM_KIND_LABELS[kind].toLowerCase() : null;
+  const noun = kind ? MEDICAL_ENTRY_KIND_LABELS[kind].toLowerCase() : null;
 
   return (
     <Form {...form}>
@@ -143,9 +146,11 @@ export function ScheduleMedicalEntryForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {Object.values(MedicalEntryKind).map((value) => (
+                    {/* This form schedules by catalog item, which
+                        surgeries and microchips don't have. */}
+                    {CATALOG_ENTRY_KINDS.map((value) => (
                       <SelectItem key={value} value={value}>
-                        {MEDICAL_ITEM_KIND_LABELS[value]}
+                        {MEDICAL_ENTRY_KIND_LABELS[value]}
                       </SelectItem>
                     ))}
                   </SelectContent>

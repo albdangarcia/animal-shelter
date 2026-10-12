@@ -11,6 +11,9 @@ import {
   MedicalEntryStatus,
   MedicalRoute,
   PartnerType,
+  Sex,
+  SurgeryEvidence,
+  SurgeryProcedure,
   TestResult,
 } from "@/prisma/generated/enums";
 import {
@@ -27,16 +30,29 @@ import { addCalendarMonths, dueDateIssue } from "@/app/lib/utils/medical-days";
 import { lockMedicalItemForUse } from "@/app/lib/services/medical-catalog";
 import { findOpenScheduledItemIds } from "@/app/lib/data/animals/medical-entry";
 import {
+  medicalEntryName,
+  type NameableMedicalEntry,
+} from "@/app/lib/utils/medical-entry-name";
+import {
   DOSE_UNIT_LABELS,
   MEDICAL_REASON_MAX_LENGTH,
   MEDICAL_ROUTE_LABELS,
+  SURGERY_EVIDENCE_LABELS,
+  SURGERY_PROCEDURE_LABELS,
   TEST_RESULT_LABELS,
   formatDose,
+  isCatalogEntryKind,
+  type CatalogEntryKind,
 } from "@/app/lib/constants/medical";
 
 /**
- * Scheduling, recording, correcting and voiding a vaccine, test or treatment
- * for an animal.
+ * Scheduling, recording, correcting and voiding a vaccine, test, treatment or
+ * surgery for an animal.
+ *
+ * Vaccines, tests and treatments are given from the catalog, and the steps
+ * that read the item (its lock, whether it can be picked, its defaults) run
+ * for them alone. A surgery has no item: its procedure says what it is, and a
+ * spay or neuter must suit the animal's sex.
  *
  * Scheduled care is an entry with a due day and nothing else: no source, no
  * details row. Lot numbers and results are written only when it is given, so
@@ -76,7 +92,6 @@ export class MedicalEntryRefusal extends PreconditionFailedError {
 }
 
 interface MedicalEntryCommonInput {
-  itemId: string;
   /** Null only for care given before intake on a day nobody knows. */
   completedDate: CalendarDay | null;
   source: MedicalEntrySource;
@@ -90,7 +105,12 @@ interface MedicalEntryCommonInput {
   notes?: string | null;
 }
 
-export interface VaccineEntryInput extends MedicalEntryCommonInput {
+/** Care given from the catalog names its item. */
+interface CatalogEntryCommonInput extends MedicalEntryCommonInput {
+  itemId: string;
+}
+
+export interface VaccineEntryInput extends CatalogEntryCommonInput {
   kind: typeof MedicalEntryKind.VACCINE;
   manufacturer?: string | null;
   lotNumber?: string | null;
@@ -101,24 +121,41 @@ export interface VaccineEntryInput extends MedicalEntryCommonInput {
   durationMonths?: number | null;
 }
 
-export interface TestEntryInput extends MedicalEntryCommonInput {
+export interface TestEntryInput extends CatalogEntryCommonInput {
   kind: typeof MedicalEntryKind.TEST;
   lotNumber?: string | null;
   lotExpiryDate?: CalendarDay | null;
   results: { analyteId: string; result: TestResult }[];
 }
 
-export interface TreatmentEntryInput extends MedicalEntryCommonInput {
+export interface TreatmentEntryInput extends CatalogEntryCommonInput {
   kind: typeof MedicalEntryKind.TREATMENT;
   doseAmount?: number | null;
   doseUnit?: DoseUnit | null;
   route?: MedicalRoute | null;
 }
 
+/**
+ * A surgery. It has no catalog item: its procedure says what it was. The
+ * surgeon is free text, since the surgeon is rarely a person in the system,
+ * so nobody is stored as having given it (`administeredById` is ignored).
+ */
+export interface SurgeryEntryInput extends MedicalEntryCommonInput {
+  kind: typeof MedicalEntryKind.SURGERY;
+  procedure: SurgeryProcedure;
+  surgeon?: string | null;
+  findings?: string | null;
+  anesthesiaNotes?: string | null;
+  /** What shows it was done, for a surgery done before intake, and only
+   * then. */
+  evidence?: SurgeryEvidence | null;
+}
+
 export type MedicalEntryInput =
   | VaccineEntryInput
   | TestEntryInput
-  | TreatmentEntryInput;
+  | TreatmentEntryInput
+  | SurgeryEntryInput;
 
 /** Recording care can also schedule the next dose of a repeating item. */
 export interface ScheduleNextInput {
@@ -137,14 +174,18 @@ export interface RecordedMedicalEntry {
   nextEntryId: string | null;
 }
 
-/** Care to schedule: what, for whom, and the day it is due. */
-export interface ScheduleMedicalEntryInput {
+/**
+ * Care to schedule: what, for whom, and the day it is due. Care from the
+ * catalog names its item, and a surgery its procedure.
+ */
+export type ScheduleMedicalEntryInput = {
   animalId: string;
-  kind: MedicalEntryKind;
-  itemId: string;
   dueDate: CalendarDay;
   notes?: string | null;
-}
+} & (
+  | { kind: CatalogEntryKind; itemId: string }
+  | { kind: typeof MedicalEntryKind.SURGERY; procedure: SurgeryProcedure }
+);
 
 /**
  * The batch an entry is written in, when one form wrote the same care for
@@ -181,7 +222,8 @@ interface StoredResult {
  * what an event's `before` and `after` hold, and what an edit compares.
  */
 interface EntryValues {
-  itemId: string;
+  /** Null for the kinds that aren't given from the catalog. */
+  itemId: string | null;
   completedDate: string | null;
   source: MedicalEntrySource;
   vetPartnerId: string | null;
@@ -204,6 +246,12 @@ interface EntryValues {
   // Treatment
   doseAmount?: number | null;
   doseUnit?: DoseUnit | null;
+  // Surgery. The procedure is on the entry; the rest are its details.
+  procedure?: SurgeryProcedure;
+  surgeon?: string | null;
+  findings?: string | null;
+  anesthesiaNotes?: string | null;
+  evidence?: SurgeryEvidence | null;
 }
 
 type EntryField = keyof EntryValues;
@@ -248,6 +296,7 @@ const readStoredEntry = async (
       status: true,
       dueDate: true,
       itemId: true,
+      procedure: true,
       completedDate: true,
       source: true,
       vetPartnerId: true,
@@ -258,7 +307,7 @@ const readStoredEntry = async (
     },
   });
   if (!entry) return null;
-  const { kind, status, dueDate, voidedAt, source, ...rest } = entry;
+  const { kind, status, dueDate, voidedAt, source, procedure, ...rest } = entry;
   if (status !== MedicalEntryStatus.COMPLETED) {
     return { kind, status, dueDate, voidedAt, values: null };
   }
@@ -315,6 +364,25 @@ const readStoredEntry = async (
       };
       return { ...stored, values };
     }
+    case MedicalEntryKind.SURGERY: {
+      if (!procedure) {
+        throw new Error(`Surgery entry ${entryId} has no procedure.`);
+      }
+      const surgery = await tx.surgeryDetails.findUniqueOrThrow({
+        where: { entryId },
+      });
+      const values: EntryValues = {
+        ...common,
+        procedure,
+        surgeon: surgery.surgeon,
+        findings: surgery.findings,
+        anesthesiaNotes: surgery.anesthesiaNotes,
+        evidence: surgery.evidence,
+      };
+      return { ...stored, values };
+    }
+    case MedicalEntryKind.MICROCHIP:
+      throw new Error(`Reading a recorded ${kind.toLowerCase()} isn't supported.`);
   }
 };
 
@@ -341,6 +409,22 @@ const KIND_NOUN: Record<MedicalEntryKind, string> = {
   VACCINE: "vaccine",
   TEST: "test",
   TREATMENT: "treatment",
+  SURGERY: "surgery",
+  MICROCHIP: "microchip",
+};
+
+// What the activity text calls the entry: "DHPP vaccine", "Spay surgery",
+// "Other surgery".
+const subjectText = (entry: NameableMedicalEntry) => {
+  const name = medicalEntryName(entry);
+  switch (entry.kind) {
+    case MedicalEntryKind.SURGERY:
+      return entry.procedure === SurgeryProcedure.OTHER ? name : `${name} surgery`;
+    case MedicalEntryKind.MICROCHIP:
+      return name;
+    default:
+      return `${name} ${KIND_NOUN[entry.kind]}`;
+  }
 };
 
 // How the activity text says the care happened.
@@ -348,12 +432,15 @@ const KIND_VERB: Record<MedicalEntryKind, string> = {
   VACCINE: "given",
   TEST: "run",
   TREATMENT: "given",
+  SURGERY: "done",
+  MICROCHIP: "implanted",
 };
 
 const RABIES_MAX_MONTHS = 36;
 
 interface AnimalFacts {
   speciesId: string;
+  sex: Sex;
   /** Out of the shelter's care: its listing is archived. */
   archived: boolean;
   firstIntakeDate: CalendarDay | null;
@@ -368,6 +455,7 @@ const readAnimal = async (
     where: { id: animalId },
     select: {
       speciesId: true,
+      sex: true,
       listingStatus: true,
       intake: { select: { intakeDate: true } },
     },
@@ -378,6 +466,7 @@ const readAnimal = async (
   const days = animal.intake.map((intake) => calendarDay(intake.intakeDate)).sort();
   return {
     speciesId: animal.speciesId,
+    sex: animal.sex,
     archived: animal.listingStatus === AnimalListingStatus.ARCHIVED,
     firstIntakeDate: days[0] ?? null,
     latestIntakeDate: days[days.length - 1] ?? null,
@@ -419,13 +508,19 @@ const readItem = async (
   return { ...item, kind: item.kind as MedicalEntryKind, species, analytes };
 };
 
-/** What a new entry on `item` is held to: the catalog as it is now. */
-const catalogTerms = (item: CatalogItem) => ({
-  isRabies: item.isRabies,
-  analytes: item.analytes
-    .filter((analyte) => !analyte.retiredAt)
-    .map(({ id, name }) => ({ id, name })),
-});
+/**
+ * What a new entry on `item` is held to: the catalog as it is now. Care with
+ * no item (a surgery) is held to nothing from it.
+ */
+const catalogTerms = (item: CatalogItem | null) =>
+  item
+    ? {
+        isRabies: item.isRabies,
+        analytes: item.analytes
+          .filter((analyte) => !analyte.retiredAt)
+          .map(({ id, name }) => ({ id, name })),
+      }
+    : { isRabies: false, analytes: [] };
 
 /** That the item can be picked for this animal and kind, as when recorded. */
 const checkItemPickable = (
@@ -452,6 +547,33 @@ const checkItemPickable = (
     throw new MedicalEntryRefusal(
       `${item.name} isn't for this animal's species.`,
       "itemId",
+    );
+  }
+};
+
+/**
+ * That a surgery names its procedure, and that a spay or neuter suits the
+ * animal: a spay is for a female and a neuter for a male. An animal whose sex
+ * isn't known can have either. Entries already stored aren't checked again
+ * when the animal's sex changes.
+ */
+const checkProcedure = (
+  procedure: SurgeryProcedure | null | undefined,
+  animal: AnimalFacts,
+) => {
+  if (!procedure) {
+    throw new MedicalEntryRefusal("Pick the procedure.", "procedure");
+  }
+  if (procedure === SurgeryProcedure.SPAY && animal.sex === Sex.MALE) {
+    throw new MedicalEntryRefusal(
+      "A spay is for a female, and this animal is male.",
+      "procedure",
+    );
+  }
+  if (procedure === SurgeryProcedure.NEUTER && animal.sex === Sex.FEMALE) {
+    throw new MedicalEntryRefusal(
+      "A neuter is for a male, and this animal is female.",
+      "procedure",
     );
   }
 };
@@ -562,7 +684,7 @@ const checkVet = async (
  */
 const valuesFor = (
   input: MedicalEntryInput,
-  item: CatalogItem,
+  item: CatalogItem | null,
   common: Omit<EntryValues, "itemId">,
   options: {
     itemDefaults: boolean;
@@ -570,6 +692,12 @@ const valuesFor = (
     analytes: { id: string; name: string }[];
   },
 ): EntryValues => {
+  if (input.kind === MedicalEntryKind.SURGERY) {
+    return surgeryValues(input, common);
+  }
+  if (!item) {
+    throw new Error(`A ${KIND_NOUN[input.kind]} entry needs its catalog item.`);
+  }
   const base: EntryValues = { itemId: item.id, ...common };
 
   if (input.kind === MedicalEntryKind.VACCINE) {
@@ -678,6 +806,41 @@ const valuesFor = (
   };
 };
 
+/**
+ * A surgery's values. Its evidence is what shows a surgery done before intake
+ * was done, so it is required then and refused otherwise. Nobody is stored
+ * as having given it: the surgeon is free text.
+ */
+const surgeryValues = (
+  input: SurgeryEntryInput,
+  common: Omit<EntryValues, "itemId">,
+): EntryValues => {
+  const evidence = input.evidence ?? null;
+  const beforeIntake = common.source === MedicalEntrySource.BEFORE_INTAKE;
+  if (beforeIntake && !evidence) {
+    throw new MedicalEntryRefusal(
+      "Say what shows the surgery was done before intake.",
+      "evidence",
+    );
+  }
+  if (!beforeIntake && evidence) {
+    throw new MedicalEntryRefusal(
+      "Evidence is only for a surgery done before intake.",
+      "evidence",
+    );
+  }
+  return {
+    itemId: null,
+    ...common,
+    administeredById: null,
+    procedure: input.procedure,
+    surgeon: tidy(input.surgeon),
+    findings: tidy(input.findings),
+    anesthesiaNotes: tidy(input.anesthesiaNotes),
+    evidence,
+  };
+};
+
 // The optional fields an edit may leave out. Left out (undefined) keeps what
 // is stored; null clears it.
 const KEPT_WHEN_LEFT_OUT = [
@@ -693,6 +856,10 @@ const KEPT_WHEN_LEFT_OUT = [
   "durationMonths",
   "doseAmount",
   "doseUnit",
+  "surgeon",
+  "findings",
+  "anesthesiaNotes",
+  "evidence",
 ] as const;
 
 const withStoredValues = (
@@ -734,8 +901,16 @@ const treatmentData = (values: EntryValues) => ({
   route: values.route ?? null,
 });
 
+const surgeryData = (values: EntryValues) => ({
+  surgeon: values.surgeon ?? null,
+  findings: values.findings ?? null,
+  anesthesiaNotes: values.anesthesiaNotes ?? null,
+  evidence: values.evidence ?? null,
+});
+
 const entryData = (values: EntryValues) => ({
   itemId: values.itemId,
+  procedure: values.procedure ?? null,
   completedDate: values.completedDate,
   source: values.source,
   vetPartnerId: values.vetPartnerId,
@@ -774,7 +949,20 @@ const describeResults = (results: StoredResult[] | undefined) =>
         .join(", ")
     : null;
 
-const FIELD_LABELS: Record<Exclude<EntryField, "notes">, string> = {
+// Free text that can run long: a change says it was added, edited or
+// removed, rather than quoting it.
+const PROSE_FIELDS = {
+  notes: "notes",
+  findings: "findings",
+  anesthesiaNotes: "anesthesia notes",
+} as const satisfies Partial<Record<EntryField, string>>;
+
+type ProseField = keyof typeof PROSE_FIELDS;
+
+const isProseField = (field: EntryField): field is ProseField =>
+  field in PROSE_FIELDS;
+
+const FIELD_LABELS: Record<Exclude<EntryField, ProseField>, string> = {
   itemId: "item",
   completedDate: "date given",
   source: "source",
@@ -792,6 +980,9 @@ const FIELD_LABELS: Record<Exclude<EntryField, "notes">, string> = {
   results: "results",
   doseAmount: "dose",
   doseUnit: "dose unit",
+  procedure: "procedure",
+  surgeon: "surgeon",
+  evidence: "evidence",
 };
 
 const SOURCE_TEXT: Record<MedicalEntrySource, string> = {
@@ -832,13 +1023,13 @@ const readNames = async (
 };
 
 const displayValue = (
-  field: Exclude<EntryField, "notes">,
+  field: Exclude<EntryField, ProseField>,
   values: EntryValues,
   names: Names,
 ): string | null => {
   switch (field) {
     case "itemId":
-      return names.items.get(values.itemId) ?? null;
+      return values.itemId ? (names.items.get(values.itemId) ?? null) : null;
     case "completedDate":
       return values.completedDate ? dayText(values.completedDate) : "unknown";
     case "lotExpiryDate":
@@ -868,6 +1059,14 @@ const displayValue = (
         : null;
     case "doseUnit":
       return values.doseUnit ? DOSE_UNIT_LABELS[values.doseUnit] : null;
+    case "procedure":
+      return values.procedure
+        ? SURGERY_PROCEDURE_LABELS[values.procedure].toLowerCase()
+        : null;
+    case "evidence":
+      return values.evidence
+        ? SURGERY_EVIDENCE_LABELS[values.evidence].toLowerCase()
+        : null;
     default:
       return (values[field] as string | null | undefined) ?? null;
   }
@@ -879,12 +1078,13 @@ const describeChange = (
   after: EntryValues,
   names: Names,
 ): string => {
-  if (field === "notes") {
-    return !before.notes
-      ? "notes were added"
-      : !after.notes
-        ? "notes were removed"
-        : "notes were edited";
+  if (isProseField(field)) {
+    const noun = PROSE_FIELDS[field];
+    return !before[field]
+      ? `${noun} were added`
+      : !after[field]
+        ? `${noun} were removed`
+        : `${noun} were edited`;
   }
   const from = displayValue(field, before, names);
   const to = displayValue(field, after, names);
@@ -902,9 +1102,9 @@ const sameValue = (a: unknown, b: unknown) =>
   JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /**
- * Schedules a vaccine, test or treatment for a due day. The entry holds the
- * item, the day and any notes, and nothing about how it will be given: that
- * is written when it is recorded as given.
+ * Schedules care for a due day. The entry holds the item (or, for a surgery,
+ * the procedure), the day and any notes, and nothing about how it will be
+ * given: that is written when it is recorded as given.
  *
  * Only an animal in the shelter's care can have care scheduled. Recording,
  * declining and voiding what is already scheduled work after it leaves, so
@@ -926,18 +1126,28 @@ export async function scheduleMedicalEntry(
       "This animal has left the shelter's care, so nothing can be scheduled for it.",
     );
   }
-  // Held until commit, as when recording.
-  await lockMedicalItemForUse(tx, input.itemId);
-  const item = await readItem(tx, input.itemId);
-  checkItemPickable(item, input.kind, animal);
+  let item: CatalogItem | null = null;
+  if (input.kind === MedicalEntryKind.SURGERY) {
+    checkProcedure(input.procedure, animal);
+  } else {
+    // Held until commit, as when recording.
+    await lockMedicalItemForUse(tx, input.itemId);
+    item = await readItem(tx, input.itemId);
+    checkItemPickable(item, input.kind, animal);
+  }
   checkDueDate(input.dueDate, today);
 
+  // What is planned: the item, or the surgery's procedure.
+  const planned =
+    input.kind === MedicalEntryKind.SURGERY
+      ? { procedure: input.procedure }
+      : { itemId: input.itemId };
   const notes = tidy(input.notes);
   const entry = await tx.medicalEntry.create({
     data: {
       animalId,
       kind: input.kind,
-      itemId: item.id,
+      ...planned,
       status: MedicalEntryStatus.SCHEDULED,
       dueDate: input.dueDate,
       notes,
@@ -955,7 +1165,7 @@ export async function scheduleMedicalEntry(
       after: asJson({
         kind: input.kind,
         status: MedicalEntryStatus.SCHEDULED,
-        itemId: item.id,
+        ...planned,
         dueDate: input.dueDate,
         notes,
         ...batchData(batch),
@@ -968,7 +1178,7 @@ export async function scheduleMedicalEntry(
       animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_SCHEDULED,
       changedById: actorId,
-      changeSummary: `${item.name} ${KIND_NOUN[input.kind]} scheduled for ${dayText(input.dueDate)}.${batchText(batch)}`,
+      changeSummary: `${subjectText({ kind: input.kind, item, procedure: input.kind === MedicalEntryKind.SURGERY ? input.procedure : null })} scheduled for ${dayText(input.dueDate)}.${batchText(batch)}`,
     },
   });
 
@@ -1003,6 +1213,7 @@ const lockScheduledEntry = async (
       kind: true,
       status: true,
       itemId: true,
+      procedure: true,
       dueDate: true,
       voidedAt: true,
       item: { select: { name: true } },
@@ -1025,7 +1236,8 @@ const lockScheduledEntry = async (
     animalId,
     kind: entry.kind,
     itemId: entry.itemId,
-    itemName: entry.item.name,
+    procedure: entry.procedure,
+    subject: subjectText(entry),
     dueDate: calendarDay(entry.dueDate),
   };
 };
@@ -1065,7 +1277,7 @@ export async function rescheduleMedicalEntry(
       animalId: entry.animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_RESCHEDULED,
       changedById: actorId,
-      changeSummary: `${entry.itemName} ${KIND_NOUN[entry.kind]} rescheduled from ${dayText(entry.dueDate)} to ${dayText(dueDate)}.`,
+      changeSummary: `${entry.subject} rescheduled from ${dayText(entry.dueDate)} to ${dayText(dueDate)}.`,
     },
   });
 
@@ -1097,6 +1309,14 @@ export async function declineMedicalEntry(
     );
   }
   const entry = await lockScheduledEntry(tx, entryId, "declined");
+  if (
+    entry.procedure === SurgeryProcedure.SPAY ||
+    entry.procedure === SurgeryProcedure.NEUTER
+  ) {
+    // A spay or neuter that won't be done is an exemption, which needs its
+    // reason; a plain decline would leave the animal's status unexplained.
+    throw new MedicalEntryRefusal("Record a spay/neuter exemption instead.");
+  }
 
   await tx.medicalEntry.update({
     where: { id: entryId },
@@ -1116,7 +1336,7 @@ export async function declineMedicalEntry(
       animalId: entry.animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_DECLINED,
       changedById: actorId,
-      changeSummary: `${entry.itemName} ${KIND_NOUN[entry.kind]} due ${dayText(entry.dueDate)} was declined. Reason: ${declineReason}`,
+      changeSummary: `${entry.subject} due ${dayText(entry.dueDate)} was declined. Reason: ${declineReason}`,
     },
   });
 
@@ -1135,12 +1355,13 @@ export async function declineMedicalEntry(
  * The values care given stores, after the day, vet and per-kind rules. Blank
  * defaults (manufacturer, route, dose) are filled in from the catalog item,
  * since this is the first time the entry's details are written: changing the
- * item's defaults later never rewrites it.
+ * item's defaults later never rewrites it. Care with no item (a surgery)
+ * takes `null`.
  */
 const givenValues = async (
   tx: TransactionClient,
   input: MedicalEntryInput,
-  item: CatalogItem,
+  item: CatalogItem | null,
   animal: AnimalFacts,
   actorId: string,
   today: CalendarDay,
@@ -1189,12 +1410,19 @@ const detailsCreate = (kind: MedicalEntryKind, values: EntryValues) => ({
   ...(kind === MedicalEntryKind.TREATMENT && {
     treatment: { create: treatmentData(values) },
   }),
+  ...(kind === MedicalEntryKind.SURGERY && {
+    surgery: { create: surgeryData(values) },
+  }),
 });
 
-/** "DHPP vaccine recorded: given in house, on Oct 15, 2026 (due Oct 14, 2026)." */
+/**
+ * "DHPP vaccine recorded: given in house, on Oct 15, 2026 (due Oct 14,
+ * 2026)." or "Neuter surgery recorded: done before intake, on an unknown
+ * date. Evidence: tattoo."
+ */
 const recordedSummary = async (
   tx: TransactionClient,
-  item: CatalogItem,
+  item: CatalogItem | null,
   kind: MedicalEntryKind,
   values: EntryValues,
   dueDate: CalendarDay | null,
@@ -1203,9 +1431,14 @@ const recordedSummary = async (
   const partnerName = values.vetPartnerId
     ? (await readNames(tx, [values])).partners.get(values.vetPartnerId)
     : undefined;
-  return `${item.name} ${KIND_NOUN[kind]} recorded: ${KIND_VERB[kind]} ${SOURCE_TEXT[values.source]}${partnerName ? ` at ${partnerName}` : ""}, on ${dayText(values.completedDate)}${
+  const subject = subjectText({ kind, item, procedure: values.procedure });
+  return `${subject} recorded: ${KIND_VERB[kind]} ${SOURCE_TEXT[values.source]}${partnerName ? ` at ${partnerName}` : ""}, on ${dayText(values.completedDate)}${
     dueDate ? ` (due ${dayText(dueDate)})` : ""
-  }.${values.results ? ` Results: ${describeResults(values.results)}.` : ""}${batchText(batch)}`;
+  }.${values.results ? ` Results: ${describeResults(values.results)}.` : ""}${
+    values.evidence
+      ? ` Evidence: ${SURGERY_EVIDENCE_LABELS[values.evidence].toLowerCase()}.`
+      : ""
+  }${batchText(batch)}`;
 };
 
 /**
@@ -1220,7 +1453,7 @@ const scheduleNextDose = async (
   tx: TransactionClient,
   animalId: string,
   kind: MedicalEntryKind,
-  item: CatalogItem,
+  item: CatalogItem | null,
   completedDate: string | null,
   next: ScheduleNextInput | null | undefined,
   actorId: string,
@@ -1228,6 +1461,9 @@ const scheduleNextDose = async (
   options: EntryWriteOptions,
 ): Promise<string | null> => {
   if (!next) return null;
+  if (!item || !isCatalogEntryKind(kind)) {
+    throw new MedicalEntryRefusal("Only a catalog item can repeat.", "scheduleNext");
+  }
   if (item.repeatIntervalDays === null) {
     throw new MedicalEntryRefusal(
       `${item.name} doesn't repeat, so there is no next one to schedule.`,
@@ -1267,9 +1503,9 @@ const scheduleNextDose = async (
 };
 
 /**
- * Records a vaccine, test or treatment as given, with nothing scheduled
- * before it. With `scheduleNext`, the next dose is scheduled in the same
- * transaction.
+ * Records care as given, with nothing scheduled before it. With
+ * `scheduleNext`, the next dose of a repeating catalog item is scheduled in
+ * the same transaction.
  */
 export async function recordMedicalEntry(
   tx: TransactionClient,
@@ -1282,11 +1518,16 @@ export async function recordMedicalEntry(
   await lockAnimal(tx, animalId);
 
   const animal = await readAnimal(tx, animalId);
-  // Held until commit, so the item can't change kind or retire between this
-  // check and the entry being written.
-  await lockMedicalItemForUse(tx, input.itemId);
-  const item = await readItem(tx, input.itemId);
-  checkItemPickable(item, input.kind, animal);
+  let item: CatalogItem | null = null;
+  if (input.kind === MedicalEntryKind.SURGERY) {
+    checkProcedure(input.procedure, animal);
+  } else {
+    // Held until commit, so the item can't change kind or retire between
+    // this check and the entry being written.
+    await lockMedicalItemForUse(tx, input.itemId);
+    item = await readItem(tx, input.itemId);
+    checkItemPickable(item, input.kind, animal);
+  }
   const values = await givenValues(tx, input, item, animal, actorId, today);
 
   const entry = await tx.medicalEntry.create({
@@ -1353,7 +1594,9 @@ export async function recordMedicalEntry(
  * The item can change within the kind (the dose given was another product
  * than the one planned), and the catalog checks run only if it does: an item
  * retired after the care was scheduled can still be recorded, since the
- * entry isn't new. Care scheduled during the stay was given in house or by an
+ * entry isn't new. A surgery's procedure can change the same way (a planned
+ * spay recorded as the neuter it was), and the sex rule runs only if it
+ * does. Care scheduled during the stay was given in house or by an
  * outside vet, never before intake. It may be dated before its due day, if it
  * was given early.
  *
@@ -1384,10 +1627,17 @@ export async function recordScheduledMedicalEntry(
   }
 
   const animal = await readAnimal(tx, animalId);
-  await lockMedicalItemForUse(tx, input.itemId);
-  const item = await readItem(tx, input.itemId);
-  if (input.itemId !== entry.itemId) {
-    checkItemPickable(item, input.kind, animal);
+  let item: CatalogItem | null = null;
+  if (input.kind === MedicalEntryKind.SURGERY) {
+    if (input.procedure !== entry.procedure) {
+      checkProcedure(input.procedure, animal);
+    }
+  } else {
+    await lockMedicalItemForUse(tx, input.itemId);
+    item = await readItem(tx, input.itemId);
+    if (input.itemId !== entry.itemId) {
+      checkItemPickable(item, input.kind, animal);
+    }
   }
   const values = await givenValues(tx, input, item, animal, actorId, today);
 
@@ -1457,7 +1707,9 @@ export async function recordScheduledMedicalEntry(
  * this animal's species) apply only when it does: a correction to the lot
  * number is not refused because the item was retired since it was given.
  * Likewise a test keeps asking for the results it was recorded with until its
- * item changes, so an analyte added to the catalog later doesn't block it.
+ * item changes, so an analyte added to the catalog later doesn't block it. A
+ * surgery's procedure can be corrected too, and the sex rule applies only
+ * when it changes.
  */
 export async function editMedicalEntry(
   tx: TransactionClient,
@@ -1506,11 +1758,30 @@ export async function editMedicalEntry(
   const before = entry.values;
   input = withStoredValues(input, before);
   const animal = await readAnimal(tx, animalId);
-  const itemChanged = input.itemId !== before.itemId;
-  await lockMedicalItemForUse(tx, input.itemId);
-  const item = await readItem(tx, input.itemId);
-  if (itemChanged) {
-    checkItemPickable(item, input.kind, animal);
+  let item: CatalogItem | null = null;
+  // What the entry is held to: see `valuesFor`.
+  let terms = catalogTerms(null);
+  if (input.kind === MedicalEntryKind.SURGERY) {
+    if (input.procedure !== before.procedure) {
+      checkProcedure(input.procedure, animal);
+    }
+  } else {
+    const itemChanged = input.itemId !== before.itemId;
+    await lockMedicalItemForUse(tx, input.itemId);
+    item = await readItem(tx, input.itemId);
+    if (itemChanged) {
+      checkItemPickable(item, input.kind, animal);
+    }
+    terms = itemChanged
+      ? catalogTerms(item)
+      : {
+          // Every rabies entry stores its duration.
+          isRabies: before.durationMonths != null,
+          analytes: (before.results ?? []).map((row) => ({
+            id: row.analyteId,
+            name: row.analyteName,
+          })),
+        };
   }
   checkDay(input.completedDate, input.source, animal, today);
 
@@ -1545,19 +1816,7 @@ export async function editMedicalEntry(
       administeredById,
       notes: tidy(input.notes),
     },
-    {
-      itemDefaults: false,
-      ...(itemChanged
-        ? catalogTerms(item)
-        : {
-            // Every rabies entry stores its duration.
-            isRabies: before.durationMonths != null,
-            analytes: (before.results ?? []).map((row) => ({
-              id: row.analyteId,
-              name: row.analyteName,
-            })),
-          }),
-    },
+    { itemDefaults: false, ...terms },
   );
 
   const changed = (Object.keys(after) as EntryField[]).filter(
@@ -1571,30 +1830,41 @@ export async function editMedicalEntry(
     where: { id: entryId },
     data: entryData(after),
   });
-  if (entry.kind === MedicalEntryKind.VACCINE) {
-    await tx.vaccineDetails.update({
-      where: { entryId },
-      data: vaccineData(after),
-    });
-  } else if (entry.kind === MedicalEntryKind.TEST) {
-    const details = await tx.testDetails.update({
-      where: { entryId },
-      data: testData(after),
-      select: { id: true },
-    });
-    if (changed.includes("results")) {
-      await tx.testAnalyteResult.deleteMany({
-        where: { testDetailsId: details.id },
+  switch (entry.kind) {
+    case MedicalEntryKind.VACCINE:
+      await tx.vaccineDetails.update({
+        where: { entryId },
+        data: vaccineData(after),
       });
-      await tx.testAnalyteResult.createMany({
-        data: after.results!.map((row) => ({ ...row, testDetailsId: details.id })),
+      break;
+    case MedicalEntryKind.TEST: {
+      const details = await tx.testDetails.update({
+        where: { entryId },
+        data: testData(after),
+        select: { id: true },
       });
+      if (changed.includes("results")) {
+        await tx.testAnalyteResult.deleteMany({
+          where: { testDetailsId: details.id },
+        });
+        await tx.testAnalyteResult.createMany({
+          data: after.results!.map((row) => ({ ...row, testDetailsId: details.id })),
+        });
+      }
+      break;
     }
-  } else {
-    await tx.treatmentDetails.update({
-      where: { entryId },
-      data: treatmentData(after),
-    });
+    case MedicalEntryKind.TREATMENT:
+      await tx.treatmentDetails.update({
+        where: { entryId },
+        data: treatmentData(after),
+      });
+      break;
+    case MedicalEntryKind.SURGERY:
+      await tx.surgeryDetails.update({
+        where: { entryId },
+        data: surgeryData(after),
+      });
+      break;
   }
 
   const pick = (values: EntryValues) =>
@@ -1610,7 +1880,12 @@ export async function editMedicalEntry(
   });
 
   const names = await readNames(tx, [before, after]);
-  const changeSummary = `${item.name} ${KIND_NOUN[entry.kind]} was corrected: ${joinList(
+  const subject = subjectText({
+    kind: entry.kind,
+    item,
+    procedure: after.procedure,
+  });
+  const changeSummary = `${subject} was corrected: ${joinList(
     changed.map((field) => describeChange(field, before, after, names)),
   )}.`;
   await tx.animalActivityLog.create({
@@ -1663,6 +1938,7 @@ export async function voidMedicalEntry(
       dueDate: true,
       completedDate: true,
       voidedAt: true,
+      procedure: true,
       item: { select: { name: true } },
     },
   });
@@ -1694,7 +1970,7 @@ export async function voidMedicalEntry(
       activityType: AnimalActivityType.MEDICAL_ENTRY_VOIDED,
       changedById: actorId,
       // Care that was never given is named by the day it was due.
-      changeSummary: `${entry.item.name} ${KIND_NOUN[entry.kind]} ${
+      changeSummary: `${subjectText(entry)} ${
         entry.status === MedicalEntryStatus.COMPLETED
           ? `${KIND_VERB[entry.kind]} on ${dayText(entry.completedDate)}`
           : `due ${dayText(entry.dueDate)}`

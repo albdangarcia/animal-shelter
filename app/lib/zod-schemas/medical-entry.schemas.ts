@@ -4,12 +4,16 @@ import {
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalRoute,
+  SurgeryEvidence,
+  SurgeryProcedure,
   TestResult,
 } from "@/prisma/generated/enums";
 import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import {
+  CATALOG_ENTRY_KINDS,
   MAX_BATCH_SIZE,
   MEDICAL_REASON_MAX_LENGTH,
+  type CatalogEntryKind,
 } from "@/app/lib/constants/medical";
 import { cuidSchema } from "./common.schemas";
 
@@ -88,8 +92,8 @@ const optionalId = cuidSchema
   .or(z.literal(""))
   .transform((value) => value || null);
 
-const common = {
-  itemId: z.string({ error: "Pick an item." }).min(1, "Pick an item."),
+// What every kind of care given shares.
+const given = {
   completedDate: optionalDay("The date given"),
   source: z.enum(MedicalEntrySource),
   vetPartnerId: optionalId,
@@ -104,7 +108,15 @@ const common = {
     .transform((value) => value ?? null),
 };
 
+// Care given from the catalog names its item.
+const common = {
+  itemId: z.string({ error: "Pick an item." }).min(1, "Pick an item."),
+  ...given,
+};
+
 const route = z.enum(MedicalRoute).nullish().transform((v) => v ?? null);
+
+const procedure = z.enum(SurgeryProcedure, { error: "Pick the procedure." });
 
 const VaccineEntrySchema = z.object({
   kind: z.literal(MedicalEntryKind.VACCINE),
@@ -149,6 +161,19 @@ const TreatmentEntrySchema = z.object({
   route,
 });
 
+// A surgery has no catalog item: its procedure says what it was. Whether a
+// spay or neuter suits the animal needs the animal, so the service checks
+// that.
+const SurgeryEntrySchema = z.object({
+  kind: z.literal(MedicalEntryKind.SURGERY),
+  ...given,
+  procedure,
+  surgeon: optionalText(200),
+  findings: optionalText(2000),
+  anesthesiaNotes: optionalText(2000),
+  evidence: z.enum(SurgeryEvidence).nullish().transform((v) => v ?? null),
+});
+
 /** The rules for care given that need only the form's own values. */
 const givenCareRules = (
   entry: {
@@ -159,6 +184,7 @@ const givenCareRules = (
     vetName: string | null;
     doseAmount?: number | null;
     doseUnit?: DoseUnit | null;
+    evidence?: SurgeryEvidence | null;
   },
   ctx: z.RefinementCtx,
 ) => {
@@ -200,6 +226,23 @@ const givenCareRules = (
       message: "A dose needs a unit.",
     });
   }
+  if (entry.kind === MedicalEntryKind.SURGERY) {
+    const beforeIntake = entry.source === MedicalEntrySource.BEFORE_INTAKE;
+    if (beforeIntake && !entry.evidence) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["evidence"],
+        message: "Say what shows the surgery was done before intake.",
+      });
+    }
+    if (!beforeIntake && entry.evidence) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["evidence"],
+        message: "Evidence is only for a surgery done before intake.",
+      });
+    }
+  }
 };
 
 export const MedicalEntryFormSchema = z
@@ -207,6 +250,7 @@ export const MedicalEntryFormSchema = z
     VaccineEntrySchema,
     TestEntrySchema,
     TreatmentEntrySchema,
+    SurgeryEntrySchema,
   ])
   .superRefine(givenCareRules);
 
@@ -246,13 +290,52 @@ export const rabiesDurationIssue = (
     ? "A rabies vaccine needs its duration."
     : null;
 
-/** Care to schedule. */
-export const ScheduleMedicalEntrySchema = z.object({
-  kind: z.enum(MedicalEntryKind, { error: "Choose what to schedule." }),
-  itemId: common.itemId,
-  dueDate,
-  notes: common.notes,
-});
+const SCHEDULED_KINDS = [...CATALOG_ENTRY_KINDS, MedicalEntryKind.SURGERY] as const;
+
+/**
+ * Care to schedule: an item for care given from the catalog, or a procedure
+ * for a surgery. One object rather than a union, so a blank form shows each
+ * field's own message.
+ */
+export const ScheduleMedicalEntrySchema = z
+  .object({
+    kind: z.enum(SCHEDULED_KINDS, { error: "Choose what to schedule." }),
+    itemId: z.string().nullish(),
+    procedure: procedure.nullish(),
+    dueDate,
+    notes: common.notes,
+  })
+  .superRefine((value, ctx) => {
+    if (value.kind === MedicalEntryKind.SURGERY) {
+      if (!value.procedure) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["procedure"],
+          message: "Pick the procedure.",
+        });
+      }
+    } else if (!value.itemId) {
+      ctx.addIssue({ code: "custom", path: ["itemId"], message: "Pick an item." });
+    }
+  }, {
+    // Run even when another field is wrong, so a blank form shows every
+    // message at once.
+    when: ({ value }) => typeof value === "object" && value !== null,
+  })
+  .transform(
+    ({ kind, itemId, procedure, dueDate, notes }):
+      | { kind: CatalogEntryKind; itemId: string; dueDate: CalendarDay; notes: string | null }
+      | {
+          kind: typeof MedicalEntryKind.SURGERY;
+          procedure: SurgeryProcedure;
+          dueDate: CalendarDay;
+          notes: string | null;
+        } =>
+      // The refinement has checked that the kind's own field is there.
+      kind === MedicalEntryKind.SURGERY
+        ? { kind, procedure: procedure!, dueDate, notes }
+        : { kind, itemId: itemId!, dueDate, notes },
+  );
 
 export type ScheduleMedicalEntryFormInput = z.input<
   typeof ScheduleMedicalEntrySchema

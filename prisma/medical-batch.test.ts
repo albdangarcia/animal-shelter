@@ -41,7 +41,10 @@ import {
   type MedicalItemInput,
 } from "@/app/lib/services/medical-catalog";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
-import { MAX_BATCH_SIZE } from "@/app/lib/constants/medical";
+import {
+  MAX_BATCH_SIZE,
+  type CatalogEntryKind,
+} from "@/app/lib/constants/medical";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
 // Random, not the time: the files run in parallel, and each cleans up the
@@ -216,7 +219,7 @@ const giveDewormer = (
 const schedule = (
   animalId: string,
   itemId: string,
-  kind: MedicalEntryKind = MedicalEntryKind.TREATMENT,
+  kind: CatalogEntryKind = MedicalEntryKind.TREATMENT,
   dueDate: CalendarDay = day("2026-10-12"),
 ) =>
   prisma.$transaction((tx) =>

@@ -50,7 +50,7 @@ import {
 } from "@/app/lib/zod-schemas/medical-entry.schemas";
 import {
   MAX_BATCH_SIZE,
-  MEDICAL_ITEM_KIND_LABELS,
+  MEDICAL_ENTRY_KIND_LABELS,
 } from "@/app/lib/constants/medical";
 import { latestDueDate } from "@/app/lib/utils/medical-days";
 import {
@@ -347,7 +347,7 @@ export function MedicalBatch({ options }: { options: MedicalBatchOptions }) {
                         <SelectContent>
                           {BATCH_KINDS.map((value) => (
                             <SelectItem key={value} value={value}>
-                              {MEDICAL_ITEM_KIND_LABELS[value]}
+                              {MEDICAL_ENTRY_KIND_LABELS[value]}
                             </SelectItem>
                           ))}
                         </SelectContent>

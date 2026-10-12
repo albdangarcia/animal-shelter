@@ -846,7 +846,8 @@ model VitalsLog {
   @@map("vitals_logs")
 }
 
-/// What a catalog item is. An entry's kind must match its item's kind.
+/// What a catalog item is. A vaccine, test or treatment entry's kind must
+/// match its item's kind.
 enum MedicalItemKind {
   VACCINE
   TEST
@@ -854,11 +855,49 @@ enum MedicalItemKind {
 }
 
 /// What a medical entry records. Each kind has its own one-to-one details
-/// table.
+/// table, written once the care is given.
+///
+/// Vaccines, tests and treatments are given from the catalog, so each entry
+/// points at a catalog item. Surgeries and microchips have no catalog item: a
+/// surgery says which procedure it is, and a microchip carries its number.
+/// New values go at the end (see `MedicalEntryStatus`).
 enum MedicalEntryKind {
   VACCINE
   TEST
   TREATMENT
+  SURGERY
+  MICROCHIP
+}
+
+/// Which surgery an entry is. Defined here rather than in the catalog,
+/// because whether an animal is spayed or neutered is worked out from it.
+enum SurgeryProcedure {
+  SPAY
+  NEUTER
+  DENTAL
+  AMPUTATION
+  ENUCLEATION
+  MASS_REMOVAL
+  OTHER
+}
+
+/// What shows that a surgery was done before the animal arrived, when nobody
+/// at the shelter saw it done.
+enum SurgeryEvidence {
+  OWNER_RECORDS
+  VET_RECORDS
+  TATTOO
+  SCAR
+  FOUND_ON_EXAM
+}
+
+/// Why an animal is exempt from being spayed or neutered, for now or for
+/// good. Stored on a declined spay or neuter entry.
+enum SpayNeuterExemptionReason {
+  TOO_YOUNG_OR_UNDERWEIGHT
+  MEDICAL_RISK
+  PARTNER_WILL_ALTER
+  OTHER
 }
 
 /// Where an entry stands. Every writer states it; there is no default.
@@ -990,32 +1029,57 @@ model MedicalItemAnalyte {
   @@map("medical_item_analytes")
 }
 
-/// One vaccine, test or treatment for an animal: scheduled, given, or
-/// declined. The lifecycle every kind shares lives here; what is particular to
-/// a kind lives in its details row. `kind` must match the item's kind, and
-/// neither `kind` nor `animalId` changes after the entry is written: a wrong
-/// one is voided and recorded again. Every change is written to `events`, with
-/// before and after values.
+/// One vaccine, test, treatment, surgery or microchip for an animal:
+/// scheduled, given, or declined. The lifecycle every kind shares lives here;
+/// what is particular to a kind lives in its details row. Neither `kind` nor
+/// `animalId` changes after the entry is written: a wrong one is voided and
+/// recorded again. Every change is written to `events`, with before and after
+/// values.
 ///
-/// What each status holds (the entry service enforces this, since a check
-/// constraint can't be declared here):
+/// What each kind holds, whatever its status (the entry service enforces this
+/// and the status rules below, since a check constraint can't be declared
+/// here):
+/// - VACCINE, TEST, TREATMENT: `itemId`, an item of the same kind; no
+///   `procedure` or `chipNumber`.
+/// - SURGERY: `procedure`; no `itemId` or `chipNumber`.
+/// - MICROCHIP: `chipNumber` once completed, null before; no `itemId` or
+///   `procedure`.
+///
+/// What each status holds:
 /// - SCHEDULED: `dueDate`; no `completedDate`, `source`, `declineReason`,
-///   `administeredById` or details row.
+///   `exemptionReason`, `reviewDate`, `administeredById` or details row.
 /// - COMPLETED: `source` and a details row; `completedDate` as below;
 ///   `dueDate` kept when it was scheduled first, null when recorded directly.
-/// - DECLINED: `dueDate` kept and `declineReason`; no `completedDate`,
-///   `source`, `administeredById` or details row.
+/// - DECLINED: `dueDate` kept when it was scheduled first; no
+///   `completedDate`, `source`, `administeredById` or details row. A declined
+///   spay or neuter is an exemption, with `exemptionReason` and maybe a
+///   `reviewDate`. Any other declined entry has a `declineReason`.
 ///
-/// A details row exists only for care that happened: lot numbers and results
-/// are written when a scheduled entry is recorded as given.
+/// A details row exists only for care that happened: lot numbers, results
+/// and a surgery's findings are written when the care is recorded as given.
 model MedicalEntry {
-  id       String             @id @default(cuid())
-  animalId String             @map(name: "animal_id")
-  animal   Animal             @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  id       String           @id @default(cuid())
+  animalId String           @map(name: "animal_id")
+  animal   Animal           @relation(fields: [animalId], references: [id], onDelete: Cascade)
   kind     MedicalEntryKind
-  itemId   String             @map(name: "item_id")
-  item     MedicalItem        @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  status   MedicalEntryStatus
+
+  /// The catalog item, for a vaccine, test or treatment. Null for a surgery
+  /// or a microchip, which aren't given from the catalog.
+  itemId String?      @map(name: "item_id")
+  item   MedicalItem? @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  /// Which surgery, on a SURGERY entry at every status: scheduled surgery and
+  /// an exemption have no details row, but still say which procedure they
+  /// are. Null for every other kind.
+  procedure SurgeryProcedure?
+
+  /// The microchip's number, on a completed MICROCHIP entry, and null
+  /// otherwise. Stored normalised: no spaces or hyphens, upper case. No two
+  /// entries that aren't voided hold the same number, so a voided entry's
+  /// number can be used again.
+  chipNumber String? @map(name: "chip_number")
+
+  status MedicalEntryStatus
 
   /// The calendar day the care is due, as `yyyy-MM-dd`. Set when it is
   /// scheduled and moved by a reschedule; kept once it is given or declined,
@@ -1034,9 +1098,20 @@ model MedicalEntry {
   /// knows who will give scheduled care, and declined care was never given.
   source MedicalEntrySource?
 
-  /// Why scheduled care was not given. Required on a DECLINED entry and null
-  /// otherwise.
+  /// Why the care won't be given, in words. On a DECLINED entry: required,
+  /// except on a spay/neuter exemption, where it is required only when the
+  /// exemption's reason is OTHER. Null on every other status.
   declineReason String? @map(name: "decline_reason")
+
+  /// Set only on a declined spay or neuter, and required there: the entry is
+  /// then an exemption, and the animal counts as exempt while it holds.
+  exemptionReason SpayNeuterExemptionReason? @map(name: "exemption_reason")
+
+  /// The calendar day an exemption is looked at again, as `yyyy-MM-dd`.
+  /// Optional, and set only beside `exemptionReason`. The exemption holds
+  /// through this day and lapses the day after; with no review day, it holds
+  /// until it is voided.
+  reviewDate String? @map(name: "review_date")
 
   /// The vet clinic that gave the care, or a vet's name when the clinic is
   /// not a partner. Never set for IN_HOUSE care.
@@ -1073,12 +1148,16 @@ model MedicalEntry {
   vaccine   VaccineDetails?
   test      TestDetails?
   treatment TreatmentDetails?
+  surgery   SurgeryDetails?
+  microchip MicrochipDetails?
   events    MedicalEntryEvent[]
 
   createdAt DateTime @default(now()) @map(name: "created_at")
   updatedAt DateTime @updatedAt @map(name: "updated_at")
 
+  @@unique([chipNumber], where: { voidedAt: null })
   @@index([animalId, kind])
+  @@index([animalId, procedure])
   @@index([itemId])
   @@index([status, dueDate])
   @@index([batchId])
@@ -1163,6 +1242,45 @@ model TreatmentDetails {
   updatedAt DateTime @updatedAt @map(name: "updated_at")
 
   @@map("treatment_details")
+}
+
+/// How a surgery went. The procedure is on the entry, since scheduled
+/// surgery has no details row.
+model SurgeryDetails {
+  id      String       @id @default(cuid())
+  entryId String       @unique @map(name: "entry_id")
+  entry   MedicalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  /// Free text: the surgeon is rarely a person in the system.
+  surgeon         String?
+  findings        String?
+  anesthesiaNotes String? @map(name: "anesthesia_notes")
+
+  /// What shows a surgery done before intake was done. Required when the
+  /// entry's source is BEFORE_INTAKE, and null for any other source.
+  evidence SurgeryEvidence?
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@map("surgery_details")
+}
+
+/// A microchip's details. The number is on the entry, so one index keeps
+/// numbers unique among entries that aren't voided. Who implanted it is the
+/// entry's source: in house, the shelter did; an outside vet did during the
+/// stay; before intake, it was found on a scan.
+model MicrochipDetails {
+  id      String       @id @default(cuid())
+  entryId String       @unique @map(name: "entry_id")
+  entry   MedicalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  brand String?
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@map("microchip_details")
 }
 
 /// Append-only audit trail for medical entries. `before` and `after` hold the
@@ -1839,10 +1957,10 @@ enum AnimalActivityType {
   OUTCOME_CORRECTED // An existing outcome's date, notes, partner or owner was edited
   OUTCOME_REVERSED // An outcome was voided as recorded in error
   INTAKE_CORRECTED // An existing intake's date, type, source, found address or notes was edited
-  MEDICAL_ENTRY_RECORDED // A vaccine, test or treatment was recorded as given
+  MEDICAL_ENTRY_RECORDED // Medical care was recorded as given
   MEDICAL_ENTRY_EDITED // A recorded medical entry was corrected
   MEDICAL_ENTRY_VOIDED // A medical entry was voided as recorded in error
-  MEDICAL_ENTRY_SCHEDULED // A vaccine, test or treatment was scheduled for a due day
+  MEDICAL_ENTRY_SCHEDULED // Medical care was scheduled for a due day
   MEDICAL_ENTRY_RESCHEDULED // A scheduled medical entry's due day moved
   MEDICAL_ENTRY_DECLINED // A scheduled medical entry was declined, with a reason
 }

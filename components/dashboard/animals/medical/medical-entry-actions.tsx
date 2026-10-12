@@ -34,7 +34,7 @@ import { MedicalEntryStatus } from "@/prisma/generated/enums";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import { voidMedicalEntry } from "@/app/lib/actions/medical-entry.actions";
 import {
-  MEDICAL_ITEM_KIND_LABELS,
+  MEDICAL_ENTRY_KIND_LABELS,
   MEDICAL_REASON_MAX_LENGTH,
 } from "@/app/lib/constants/medical";
 import {
@@ -82,7 +82,7 @@ export function MedicalEntryActions({ animalId, entry, options }: Props) {
     : reasonError;
   const what = entryLabel(entry);
   const given = entry.status === MedicalEntryStatus.COMPLETED;
-  const noun = MEDICAL_ITEM_KIND_LABELS[entry.kind].toLowerCase();
+  const noun = MEDICAL_ENTRY_KIND_LABELS[entry.kind].toLowerCase();
 
   const handleVoid = () => {
     setReasonError(undefined);

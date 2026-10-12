@@ -10,6 +10,7 @@ import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry.data";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import { medicalEntryName } from "@/app/lib/utils/medical-entry-name";
 import { MedicalEntryList } from "./medical-entry-list";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
 
@@ -30,10 +31,9 @@ const VaccinesAndTests = ({ entries, names, today, controls }: Props) => {
   // One group per vaccine, in the order of each one's latest dose.
   const vaccineGroups = new Map<string, MedicalEntryDisplay[]>();
   for (const entry of vaccines) {
-    vaccineGroups.set(entry.itemId, [
-      ...(vaccineGroups.get(entry.itemId) ?? []),
-      entry,
-    ]);
+    // Every vaccine has its catalog item.
+    const key = entry.itemId ?? entry.id;
+    vaccineGroups.set(key, [...(vaccineGroups.get(key) ?? []), entry]);
   }
 
   return (
@@ -62,11 +62,11 @@ const VaccinesAndTests = ({ entries, names, today, controls }: Props) => {
             [...vaccineGroups.values()].map((doses) => (
               <section
                 key={doses[0].itemId}
-                aria-label={doses[0].item.name}
+                aria-label={medicalEntryName(doses[0])}
                 className="space-y-2"
               >
                 <h4 className="text-sm font-medium text-muted-foreground">
-                  {doses[0].item.name}
+                  {medicalEntryName(doses[0])}
                 </h4>
                 <MedicalEntryList
                   entries={doses}

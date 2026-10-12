@@ -12,7 +12,10 @@ import {
   PreconditionFailedError,
 } from "@/app/lib/utils/errors";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
-import { MAX_BATCH_SIZE } from "@/app/lib/constants/medical";
+import {
+  MAX_BATCH_SIZE,
+  type CatalogEntryKind,
+} from "@/app/lib/constants/medical";
 import {
   MedicalEntryRefusal,
   recordMedicalEntry,
@@ -88,7 +91,7 @@ export type MedicalBatchInput =
       mode: "SCHEDULE";
       animals: { animalId: string }[];
       entry: {
-        kind: MedicalEntryKind;
+        kind: CatalogEntryKind;
         itemId: string;
         dueDate: CalendarDay;
         notes?: string | null;
@@ -352,6 +355,12 @@ export async function recordScheduledMedicalBatch(
     );
   }
   const [itemId] = itemIds;
+  if (!itemId) {
+    throw new MedicalEntryRefusal(
+      "Surgeries and microchips aren't recorded in a batch. Record them one at a time.",
+      "entries",
+    );
+  }
 
   await lockAnimals(
     tx,

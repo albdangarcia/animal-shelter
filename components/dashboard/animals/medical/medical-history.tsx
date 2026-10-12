@@ -11,7 +11,7 @@ import { SimplePagination } from "@/components/simple-pagination";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry.data";
-import { MEDICAL_ITEM_KIND_LABELS } from "@/app/lib/constants/medical";
+import { MEDICAL_ENTRY_KIND_LABELS } from "@/app/lib/constants/medical";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { MedicalEntryList } from "./medical-entry-list";
@@ -19,7 +19,7 @@ import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
 
 const kindOptions = Object.values(MedicalEntryKind).map((kind) => ({
   value: kind,
-  label: MEDICAL_ITEM_KIND_LABELS[kind],
+  label: MEDICAL_ENTRY_KIND_LABELS[kind],
 }));
 
 interface Props {

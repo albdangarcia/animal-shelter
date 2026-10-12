@@ -67,6 +67,10 @@ export const MEDICAL_ENTRY_DISPLAY_SELECT = {
   completedDate: true,
   source: true,
   declineReason: true,
+  procedure: true,
+  chipNumber: true,
+  exemptionReason: true,
+  reviewDate: true,
   vetName: true,
   notes: true,
   createdAt: true,
@@ -104,6 +108,15 @@ export const MEDICAL_ENTRY_DISPLAY_SELECT = {
   treatment: {
     select: { doseAmount: true, doseUnit: true, route: true },
   },
+  surgery: {
+    select: {
+      surgeon: true,
+      findings: true,
+      anesthesiaNotes: true,
+      evidence: true,
+    },
+  },
+  microchip: { select: { brand: true } },
   events: {
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: {
@@ -150,6 +163,14 @@ export const findDueMedicalEntries = (db: Db, animalId: string) =>
     select: MEDICAL_ENTRY_DISPLAY_SELECT,
   });
 
+// Open scheduled care given from the catalog. Surgeries and microchips have
+// no item, so they aren't in these reads.
+const OPEN_SCHEDULED_ITEM_WHERE = {
+  status: MedicalEntryStatus.SCHEDULED,
+  voidedAt: null,
+  itemId: { not: null },
+} as const satisfies Prisma.MedicalEntryWhereInput;
+
 /**
  * The items the animal has open scheduled care for (scheduled, not voided).
  * Recording one of these doesn't offer to schedule the next: it is already
@@ -160,11 +181,11 @@ export const findOpenScheduledItemIds = async (
   animalId: string,
 ): Promise<Set<string>> => {
   const rows = await db.medicalEntry.findMany({
-    where: { animalId, status: MedicalEntryStatus.SCHEDULED, voidedAt: null },
+    where: { animalId, ...OPEN_SCHEDULED_ITEM_WHERE },
     distinct: ["itemId"],
     select: { itemId: true },
   });
-  return new Set(rows.map((row) => row.itemId));
+  return new Set(rows.flatMap((row) => row.itemId ?? []));
 };
 
 /**
@@ -177,13 +198,14 @@ export const findOpenScheduledEntryIdsByItem = async (
   animalId: string,
 ): Promise<Map<string, string[]>> => {
   const rows = await db.medicalEntry.findMany({
-    where: { animalId, status: MedicalEntryStatus.SCHEDULED, voidedAt: null },
+    where: { animalId, ...OPEN_SCHEDULED_ITEM_WHERE },
     orderBy: { id: "asc" },
     select: { id: true, itemId: true },
   });
   const byItem = new Map<string, string[]>();
-  for (const row of rows) {
-    byItem.set(row.itemId, [...(byItem.get(row.itemId) ?? []), row.id]);
+  for (const { id, itemId } of rows) {
+    if (!itemId) continue;
+    byItem.set(itemId, [...(byItem.get(itemId) ?? []), id]);
   }
   return byItem;
 };

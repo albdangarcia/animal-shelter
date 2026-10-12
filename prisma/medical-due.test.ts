@@ -28,6 +28,7 @@ import {
   voidMedicalEntry,
 } from "@/app/lib/services/medical-entry";
 import { createMedicalItem } from "@/app/lib/services/medical-catalog";
+import type { CatalogEntryKind } from "@/app/lib/constants/medical";
 import {
   findMedicalDue,
   findMedicalDueForQueue,
@@ -166,7 +167,7 @@ const makeAnimal = async (
 const schedule = async (
   animalId: string,
   dueDate: CalendarDay,
-  kind: MedicalEntryKind = MedicalEntryKind.VACCINE,
+  kind: CatalogEntryKind = MedicalEntryKind.VACCINE,
 ) =>
   (
     await prisma.$transaction((tx) =>
@@ -250,7 +251,7 @@ test("only open scheduled care is due: not given, declined, voided, or for an an
   assert.equal(row.entry.dueDate, shiftDayKey(TODAY, -2));
   assert.equal(row.entry.kind, MedicalEntryKind.VACCINE);
   assert.equal(row.entry.itemId, vaccineId);
-  assert.equal(row.entry.item.name, name("Due vaccine"));
+  assert.equal(row.entry.item?.name, name("Due vaccine"));
   assert.deepEqual(row.animal, {
     id: animalId,
     name: name("Mixed"),
