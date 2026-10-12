@@ -71,6 +71,7 @@ import {
   type MedicalEntryInput,
 } from "@/app/lib/services/medical-entry";
 import { nextDueDate } from "@/app/lib/utils/medical-days";
+import { recordMedicalBatch } from "@/app/lib/services/medical-batch";
 import { recordOutcome } from "@/app/lib/services/outcome-recording";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
@@ -6731,8 +6732,53 @@ async function seedMedicalScheduling() {
     ),
   );
 
+  // --- A dewormer round for the Cat room's C-1, given as one batch ---------
+  // Whiskers and Misty are always there; anyone else the seed housed in C-1
+  // is dosed too, as staff would dose the whole room. Given ten days ago, or
+  // on the latest arrival's intake if that is later, so it falls in every
+  // animal's stay. The batch also schedules each animal's next dose, on the
+  // day the form suggests.
+  const c1 = await prisma.animal.findMany({
+    where: {
+      listingStatus: { not: AnimalListingStatus.ARCHIVED },
+      currentUnit: { name: "C-1", location: { name: "Cat room" } },
+    },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    select: { id: true, name: true, intake: { select: { intakeDate: true } } },
+  });
+  if (c1.length < 2) {
+    throw new Error("seedMedicalScheduling: the Cat room's C-1 holds fewer than two animals.");
+  }
+  const pyrantel = item("Pyrantel pamoate");
+  const roomGiven = c1
+    .flatMap((animal) => animal.intake.map((intake) => calendarDay(intake.intakeDate)))
+    .reduce((latest, intakeDay) => (intakeDay > latest ? intakeDay : latest), daysFromToday(-10));
+  await prisma.$transaction((tx) =>
+    recordMedicalBatch(
+      tx,
+      {
+        mode: "RECORD",
+        animals: c1.map((animal) => ({ animalId: animal.id })),
+        entry: {
+          kind: MedicalEntryKind.TREATMENT,
+          itemId: pyrantel.id,
+          completedDate: roomGiven,
+          source: MedicalEntrySource.IN_HOUSE,
+          doseAmount: 1,
+          doseUnit: DoseUnit.ML,
+          notes: "Room dewormer round.",
+        },
+        scheduleNext: {
+          dueDate: nextDueDate(roomGiven, pyrantel.repeatIntervalDays!, today),
+        },
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
   console.log(
-    `Seeded scheduled care for Fido, Misty, Whiskers, Juniper, Buddy, Daisy and ${leaving.name} (transferred out).`,
+    `Seeded scheduled care for Fido, Misty, Whiskers, Juniper, Buddy, Daisy and ${leaving.name} (transferred out), and a dewormer batch for ${c1.map((animal) => animal.name).join(", ")}.`,
   );
 }
 

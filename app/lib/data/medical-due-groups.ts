@@ -2,6 +2,7 @@
 // its rows and the shelter's today, with no Prisma import, so unit tests and
 // the page can use them. The rows are read in `medical-due.ts`.
 
+import type { Sex } from "@/prisma/generated/enums";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import type { MedicalDueEntry } from "./medical-due";
 
@@ -14,6 +15,7 @@ export type MedicalDuePlace =
       type: "UNIT";
       locationId: string;
       locationName: string;
+      unitId: string;
       unitName: string;
     }
   | { type: "FOSTER"; fosterPersonId: string; fosterName: string }
@@ -21,7 +23,15 @@ export type MedicalDuePlace =
 
 export interface MedicalDueListRow {
   entry: MedicalDueEntry;
-  animal: { id: string; name: string; species: string };
+  animal: {
+    id: string;
+    name: string;
+    species: string;
+    /** What tells it from another animal of the same name. */
+    sex: Sex;
+    primaryColor: string;
+    birthDate: string;
+  };
   place: MedicalDuePlace;
 }
 

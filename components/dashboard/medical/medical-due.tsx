@@ -26,6 +26,13 @@ import {
 } from "@/app/lib/utils/shelter-day";
 import { ScheduledEntryActions } from "@/components/dashboard/animals/medical/scheduled-entry-actions";
 import { DUE_HEADING_ID } from "@/components/dashboard/animals/medical/use-entry-dialog-focus";
+import { sameNameDetails } from "@/app/lib/utils/medical-batch";
+import {
+  DueRowCheckbox,
+  DueSelection,
+  RecordSelectedButton,
+  type SelectableDue,
+} from "./due-selection";
 
 // Rendered on the server: overdue and due today are worked out against the
 // shelter's today, passed in, not the browser's clock.
@@ -59,6 +66,39 @@ interface Props {
   canAdminister: boolean;
 }
 
+/**
+ * A row that can be picked to record with others: a vaccine or treatment,
+ * for a viewer who may give scheduled care. Tests have results of their own,
+ * so they are recorded one at a time.
+ */
+const selectableOf = (
+  row: MedicalDueListRow,
+  names: DueNames,
+): SelectableDue | null =>
+  row.entry.kind === MedicalEntryKind.TEST
+    ? null
+    : {
+        entryId: row.entry.id,
+        animalId: row.animal.id,
+        animalName: animalNameOf(row, names),
+        itemId: row.entry.itemId,
+        itemName: row.entry.item.name,
+        kind: row.entry.kind,
+        dueDate: row.entry.dueDate,
+      };
+
+/**
+ * What tells each animal on the list from another of the same name, by id,
+ * or null for a name no other animal there has.
+ */
+type DueNames = Map<string, string | null>;
+
+/** "Misty", or "Rex (Dog · male, orange, 1 year)" when the name is shared. */
+const animalNameOf = ({ animal }: MedicalDueListRow, names: DueNames) => {
+  const details = names.get(animal.id);
+  return details ? `${animal.name} (${details})` : animal.name;
+};
+
 export function MedicalDue({
   groups,
   today,
@@ -66,6 +106,40 @@ export function MedicalDue({
   canManage,
   canAdminister,
 }: Props) {
+  const rows = groups.flatMap((group) =>
+    group.sections.flatMap((section) => section.rows),
+  );
+  const names = sameNameDetails(
+    rows.map((row) => row.animal),
+    today,
+  );
+  const selectable = canAdminister
+    ? rows
+        .map((row) => selectableOf(row, names))
+        .filter((entry): entry is SelectableDue => entry !== null)
+    : [];
+  return (
+    <DueSelection entries={selectable}>
+      <DueCard
+        groups={groups}
+        names={names}
+        today={today}
+        filtered={filtered}
+        canManage={canManage}
+        canAdminister={canAdminister}
+      />
+    </DueSelection>
+  );
+}
+
+function DueCard({
+  groups,
+  names,
+  today,
+  filtered,
+  canManage,
+  canAdminister,
+}: Props & { names: DueNames }) {
   return (
     <Card className="@container/main">
       <CardHeader>
@@ -82,6 +156,7 @@ export function MedicalDue({
             paramKey="kind"
             options={kindOptions}
           />
+          {canAdminister && groups.length > 0 && <RecordSelectedButton />}
         </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-4 md:gap-6">
@@ -90,6 +165,7 @@ export function MedicalDue({
             <DueGroup
               key={group.key}
               group={group}
+              names={names}
               today={today}
               canManage={canManage}
               canAdminister={canAdminister}
@@ -114,11 +190,13 @@ export function MedicalDue({
 
 function DueGroup({
   group,
+  names,
   today,
   canManage,
   canAdminister,
 }: {
   group: MedicalDueGroup;
+  names: DueNames;
   today: CalendarDay;
   canManage: boolean;
   canAdminister: boolean;
@@ -154,6 +232,7 @@ function DueGroup({
                 <DueRow
                   key={row.entry.id}
                   row={row}
+                  names={names}
                   today={today}
                   canManage={canManage}
                   canAdminister={canAdminister}
@@ -174,28 +253,39 @@ const overdueText = (dueDate: CalendarDay, today: CalendarDay) => {
 
 function DueRow({
   row,
+  names,
   today,
   canManage,
   canAdminister,
 }: {
   row: MedicalDueListRow;
+  names: DueNames;
   today: CalendarDay;
   canManage: boolean;
   canAdminister: boolean;
 }) {
   const { entry, animal, place } = row;
   const bucket = dueBucket(entry.dueDate, today);
-  const where = [animal.species, place.type === "UNIT" ? place.unitName : null]
+  const selectable = canAdminister ? selectableOf(row, names) : null;
+  // A name another animal on the list shares is told apart by its details,
+  // in the row and in every control that names it.
+  const name = animalNameOf(row, names);
+  const where = [
+    names.get(animal.id) ?? animal.species,
+    place.type === "UNIT" ? place.unitName : null,
+  ]
     .filter(Boolean)
     .join(" · ");
 
   return (
     <li
       className="rounded-lg border p-3"
-      aria-label={`${animal.name}: ${entry.item.name}, due ${formatShelterDay(entry.dueDate)}`}
+      aria-label={`${name}: ${entry.item.name}, due ${formatShelterDay(entry.dueDate)}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-start gap-3">
+          {selectable && <DueRowCheckbox entry={selectable} />}
+          <div className="min-w-0">
           <p className="flex flex-wrap items-baseline gap-x-2">
             <Link
               href={`/dashboard/animals/${animal.id}/medical`}
@@ -209,6 +299,7 @@ function DueRow({
             <span className="font-medium">{entry.item.name}</span>
             <Badge variant="outline">{MEDICAL_ITEM_KIND_LABELS[entry.kind]}</Badge>
           </p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-muted-foreground">
@@ -225,7 +316,7 @@ function DueRow({
       <ScheduledEntryActions
         animalId={animal.id}
         entry={entry}
-        animalName={animal.name}
+        animalName={name}
         today={today}
         canManage={canManage}
         canAdminister={canAdminister}

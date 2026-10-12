@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
 import {
+  MedicalBatchSchema,
   MedicalEntryFormSchema,
+  RecordScheduledBatchSchema,
   ScheduleMedicalEntrySchema,
   VoidMedicalEntrySchema,
   medicalEntryKindsParam,
@@ -182,4 +184,129 @@ test("medicalEntryKindsParam: a comma list or a repeated param, unknown kinds ig
     "TREATMENT",
     "TEST",
   ]);
+});
+
+// Batches. Ids are checked as cuids, so these are shaped like one.
+const animals = [
+  { animalId: "cmbatchanimal0001" },
+  { animalId: "cmbatchanimal0002", rabiesTagNumber: " R-1 " },
+];
+
+const batchRecord = {
+  mode: "RECORD",
+  animals,
+  kind: "VACCINE",
+  itemId: "item",
+  completedDate: "2026-09-01",
+  source: "IN_HOUSE",
+  durationMonths: 12,
+} as const;
+
+const batchErrorsOf = (schema: z.ZodType, values: unknown) => {
+  const result = schema.safeParse(values);
+  assert.equal(result.success, false);
+  if (result.success) throw new Error("unreachable");
+  return medicalEntryFieldErrors(result.error);
+};
+
+test("MedicalBatchSchema: given care parses with each animal's own tag", () => {
+  const result = MedicalBatchSchema.parse(batchRecord);
+  assert.equal(result.mode, "RECORD");
+  if (result.mode !== "RECORD") throw new Error("unreachable");
+  assert.deepEqual(
+    result.animals.map((animal) => animal.rabiesTagNumber),
+    [null, "R-1"],
+  );
+  assert.equal(result.kind === "VACCINE" && result.durationMonths, 12);
+  // The entry form's rules apply: no vet for care given in house.
+  assert.ok(
+    batchErrorsOf(MedicalBatchSchema, { ...batchRecord, vetName: "Dr. Lee" })
+      .vetName,
+  );
+});
+
+test("MedicalBatchSchema: given care has a known day, and isn't before intake", () => {
+  assert.ok(
+    batchErrorsOf(MedicalBatchSchema, { ...batchRecord, completedDate: "" })
+      .completedDate,
+  );
+  assert.ok(
+    batchErrorsOf(MedicalBatchSchema, { ...batchRecord, source: "BEFORE_INTAKE" })
+      .source,
+  );
+});
+
+test("MedicalBatchSchema: tests aren't batched, given or scheduled", () => {
+  assert.equal(
+    MedicalBatchSchema.safeParse({ ...batchRecord, kind: "TEST", results: [] })
+      .success,
+    false,
+  );
+  assert.ok(
+    batchErrorsOf(MedicalBatchSchema, {
+      mode: "SCHEDULE",
+      animals,
+      kind: "TEST",
+      itemId: "item",
+      dueDate: "2026-09-01",
+    }).kind,
+  );
+});
+
+test("MedicalBatchSchema: scheduling takes a due day for every animal", () => {
+  const result = MedicalBatchSchema.parse({
+    mode: "SCHEDULE",
+    animals,
+    kind: "TREATMENT",
+    itemId: "item",
+    dueDate: "2026-09-08",
+  });
+  assert.equal(result.mode === "SCHEDULE" && result.dueDate, "2026-09-08");
+  assert.ok(
+    batchErrorsOf(MedicalBatchSchema, {
+      mode: "SCHEDULE",
+      animals,
+      kind: "TREATMENT",
+      itemId: "item",
+      dueDate: "",
+    }).dueDate,
+  );
+});
+
+test("MedicalBatchSchema: one to 50 animals, errors filed on the list", () => {
+  assert.ok(batchErrorsOf(MedicalBatchSchema, { ...batchRecord, animals: [] }).animals);
+  const many = Array.from({ length: 51 }, (_, i) => ({
+    animalId: `cmbatchanimal${String(i).padStart(4, "0")}`,
+  }));
+  assert.ok(batchErrorsOf(MedicalBatchSchema, { ...batchRecord, animals: many }).animals);
+  assert.ok(
+    batchErrorsOf(MedicalBatchSchema, {
+      ...batchRecord,
+      animals: [{ animalId: "cmbatchanimal0001", rabiesTagNumber: "x".repeat(101) }],
+    }).animals,
+  );
+});
+
+test("RecordScheduledBatchSchema: shared details for entries, notes left empty", () => {
+  const result = RecordScheduledBatchSchema.parse({
+    kind: "TREATMENT",
+    entries: [{ entryId: "cmbatchentry0001" }, { entryId: "cmbatchentry0002" }],
+    completedDate: "2026-09-01",
+    source: "OUTSIDE_VET",
+    vetName: "Lakeside",
+    doseAmount: 2,
+    doseUnit: "ML",
+    notes: "  ",
+  });
+  assert.equal(result.notes, null);
+  assert.equal(result.entries.length, 2);
+  assert.ok(
+    batchErrorsOf(RecordScheduledBatchSchema, {
+      kind: "TREATMENT",
+      entries: [{ entryId: "cmbatchentry0001" }],
+      completedDate: "2026-09-01",
+      source: "IN_HOUSE",
+      doseAmount: 2,
+    }).doseUnit,
+  );
 });

@@ -193,6 +193,11 @@ export const navMainItems: readonly NavItem[] = [
         url: "/dashboard/medical/due",
         permission: AppPermissions.MEDICAL_READ,
       },
+      {
+        title: "Batch entry",
+        url: "/dashboard/medical/batch",
+        permission: AppPermissions.MEDICAL_MANAGE,
+      },
     ],
   },
   {

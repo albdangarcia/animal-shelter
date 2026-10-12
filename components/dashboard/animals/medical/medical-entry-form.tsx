@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useImperativeHandle, useRef, useTransition } from "react";
-import {
-  useFieldArray,
-  useForm,
-  useWatch,
-  type Resolver,
-  type UseFormReturn,
-} from "react-hook-form";
+import { useFieldArray, useForm, useWatch, type Resolver } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { format } from "date-fns";
 import { Loader2 } from "lucide-react";
@@ -59,10 +53,8 @@ import {
   type MedicalEntryFormValues,
 } from "@/app/lib/zod-schemas/medical-entry.schemas";
 import {
-  DOSE_UNIT_LABELS,
   MEDICAL_ENTRY_SOURCE_LABELS,
   MEDICAL_ITEM_KIND_LABELS,
-  MEDICAL_ROUTE_LABELS,
   TEST_RESULT_LABELS,
 } from "@/app/lib/constants/medical";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
@@ -81,14 +73,18 @@ import {
   DirtyFormHandle,
   haveFormValuesChanged,
 } from "@/hooks/use-confirmed-open-change";
+import {
+  DoseUnitField,
+  MedicalRouteField,
+  MedicalTextField,
+  VetClinicField,
+} from "./medical-form-fields";
 
 /** What recording scheduled care needs of the entry: it fills in the rest. */
 export type ScheduledCare = Pick<
   MedicalEntryDisplay,
   "id" | "kind" | "itemId" | "notes"
 >;
-
-const NONE = "none";
 
 /**
  * The form's own state: every kind's fields at once, flat, so one form serves
@@ -612,46 +608,32 @@ export function MedicalEntryForm({
 
           {source !== MedicalEntrySource.IN_HOUSE && (
             <>
-              <FormField
+              <VetClinicField
                 control={form.control}
                 name="vetPartnerId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel htmlFor="vetPartnerId">Vet clinic</FormLabel>
-                    <Select
-                      onValueChange={(value) =>
-                        field.onChange(value === NONE ? null : value)
-                      }
-                      value={field.value ?? NONE}
-                      name={field.name}
-                    >
-                      <FormControl>
-                        <SelectTrigger className="w-full" id="vetPartnerId">
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value={NONE}>Not a partner clinic</SelectItem>
-                        {vetClinics.map((clinic) => (
-                          <SelectItem key={clinic.id} value={clinic.id}>
-                            {clinic.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
+                vetClinics={vetClinics}
               />
-              <TextField form={form} name="vetName" label="Vet or clinic name" />
+              <MedicalTextField
+                control={form.control}
+                name="vetName"
+                label="Vet or clinic name"
+              />
             </>
           )}
 
           {kind === MedicalEntryKind.VACCINE && (
             <>
-              <TextField form={form} name="manufacturer" label="Manufacturer" />
-              <RouteField form={form} />
-              <TextField form={form} name="lotNumber" label="Lot number" />
+              <MedicalTextField
+                control={form.control}
+                name="manufacturer"
+                label="Manufacturer"
+              />
+              <MedicalRouteField control={form.control} name="route" />
+              <MedicalTextField
+                control={form.control}
+                name="lotNumber"
+                label="Lot number"
+              />
               <DayField
                 control={form.control}
                 name="lotExpiryDate"
@@ -659,10 +641,19 @@ export function MedicalEntryForm({
                 clearable
                 triggerClassName="w-full"
               />
-              <TextField form={form} name="site" label="Site" placeholder="e.g. Right shoulder" />
+              <MedicalTextField
+                control={form.control}
+                name="site"
+                label="Site"
+                placeholder="e.g. Right shoulder"
+              />
               {item?.isRabies && (
                 <>
-                  <TextField form={form} name="rabiesTagNumber" label="Rabies tag number" />
+                  <MedicalTextField
+                    control={form.control}
+                    name="rabiesTagNumber"
+                    label="Rabies tag number"
+                  />
                   <NumberField
                     control={form.control}
                     name="durationMonths"
@@ -679,7 +670,11 @@ export function MedicalEntryForm({
 
           {kind === MedicalEntryKind.TEST && (
             <>
-              <TextField form={form} name="lotNumber" label="Kit lot number" />
+              <MedicalTextField
+                control={form.control}
+                name="lotNumber"
+                label="Kit lot number"
+              />
               <DayField
                 control={form.control}
                 name="lotExpiryDate"
@@ -746,39 +741,9 @@ export function MedicalEntryForm({
                   decimal
                   min={0}
                 />
-                <FormField
-                  control={form.control}
-                  name="doseUnit"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel htmlFor="doseUnit">Unit</FormLabel>
-                      <Select
-                        onValueChange={(value) =>
-                          field.onChange(value === NONE ? null : value)
-                        }
-                        value={field.value ?? NONE}
-                        name={field.name}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full" id="doseUnit">
-                            <SelectValue />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value={NONE}>None</SelectItem>
-                          {Object.values(DoseUnit).map((value) => (
-                            <SelectItem key={value} value={value}>
-                              {DOSE_UNIT_LABELS[value]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                <DoseUnitField control={form.control} name="doseUnit" />
               </div>
-              <RouteField form={form} />
+              <MedicalRouteField control={form.control} name="route" />
             </>
           )}
 
@@ -852,76 +817,5 @@ export function MedicalEntryForm({
         </DialogFooter>
       </form>
     </Form>
-  );
-}
-
-type EntryForm = UseFormReturn<EntryFormState>;
-
-type TextFieldName =
-  | "vetName"
-  | "manufacturer"
-  | "lotNumber"
-  | "site"
-  | "rabiesTagNumber";
-
-function TextField({
-  form,
-  name,
-  label,
-  placeholder,
-}: {
-  form: EntryForm;
-  name: TextFieldName;
-  label: string;
-  placeholder?: string;
-}) {
-  return (
-    <FormField
-      control={form.control}
-      name={name}
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel htmlFor={name}>{label}</FormLabel>
-          <FormControl>
-            <Input id={name} placeholder={placeholder} {...field} />
-          </FormControl>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
-  );
-}
-
-function RouteField({ form }: { form: EntryForm }) {
-  return (
-    <FormField
-      control={form.control}
-      name="route"
-      render={({ field }) => (
-        <FormItem>
-          <FormLabel htmlFor="route">Route</FormLabel>
-          <Select
-            onValueChange={(value) => field.onChange(value === NONE ? null : value)}
-            value={field.value ?? NONE}
-            name={field.name}
-          >
-            <FormControl>
-              <SelectTrigger className="w-full" id="route">
-                <SelectValue />
-              </SelectTrigger>
-            </FormControl>
-            <SelectContent>
-              <SelectItem value={NONE}>Not recorded</SelectItem>
-              {Object.values(MedicalRoute).map((value) => (
-                <SelectItem key={value} value={value}>
-                  {MEDICAL_ROUTE_LABELS[value]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <FormMessage />
-        </FormItem>
-      )}
-    />
   );
 }

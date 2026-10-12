@@ -14,6 +14,7 @@ const inUnit = (locationId: string, locationName: string, unitName = "A-1"): Med
   type: "UNIT",
   locationId,
   locationName,
+  unitId: `${locationId}-${unitName}`,
   unitName,
 });
 const fostered = (fosterPersonId: string, fosterName: string): MedicalDuePlace => ({
@@ -39,7 +40,14 @@ const row = (
     notes: null,
     item: { name: options.item ?? "DHPP" },
   },
-  animal: { id: `animal-${options.animal ?? id}`, name: options.animal ?? id, species: "Dog" },
+  animal: {
+    id: `animal-${options.animal ?? id}`,
+    name: options.animal ?? id,
+    species: "Dog",
+    sex: "MALE",
+    primaryColor: "Black",
+    birthDate: "2024-01-01",
+  },
   place,
 });
 

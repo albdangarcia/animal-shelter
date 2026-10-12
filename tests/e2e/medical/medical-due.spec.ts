@@ -19,12 +19,18 @@ const SHELTER_ZONE = process.env.SHELTER_TIMEZONE || "America/New_York";
 test.use({ timezoneId: SHELTER_ZONE });
 
 const staffStatePath = storageStatePathFor("medical-due-staff.state.json");
+const volunteerStatePath = storageStatePathFor("medical-due-volunteer.state.json");
 
 test.beforeAll(async ({ browser }) => {
   await bootstrapStorageState(browser, {
     email: "staff1@example.com",
     password: SEEDED_USER_PASSWORD,
     storageStatePath: staffStatePath,
+  });
+  await bootstrapStorageState(browser, {
+    email: "volunteer1@example.com",
+    password: SEEDED_USER_PASSWORD,
+    storageStatePath: volunteerStatePath,
   });
 });
 
@@ -245,4 +251,133 @@ test("the record form opens at once and holds the list until its options arrive"
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
   await expect(record).toBeFocused();
+});
+
+test("batch entry gives two animals in one unit a treatment, and two due rows are recorded together", async ({
+  page,
+}, testInfo) => {
+  const today = todayIn(SHELTER_ZONE);
+  // Whiskers and Misty share the Cat room's C-1. No other spec counts their
+  // entries, and Praziquantel doesn't repeat, so recording it schedules
+  // nothing else. A retry or a repeat runs against the database an earlier
+  // attempt wrote to, so rows are counted and found by a note naming the
+  // attempt.
+  const note = `Batch round, attempt ${testInfo.retry}-${testInfo.repeatEachIndex}.`;
+  const cats = ["Whiskers", "Misty"];
+
+  await page.goto("/dashboard/medical/due");
+  const dueToday = section(page, "Cat room", "Today");
+  const dueRows = (cat: string) => rowsOf(dueToday, cat, "Praziquantel");
+  const before = await Promise.all(cats.map((cat) => dueRows(cat).count()));
+
+  const openBatch = async () => {
+    await page.goto("/dashboard/medical/batch");
+    await expect(page.getByRole("heading", { level: 1, name: "Batch Entry" })).toBeVisible();
+    const c1 = page
+      .getByRole("region", { name: "Cat room", exact: true })
+      .getByRole("group", { name: "C-1", exact: true });
+    for (const cat of cats) {
+      await c1.getByRole("checkbox", { name: `${cat} (Cat)`, exact: true }).check();
+    }
+    await expect(page.getByText("2 animals picked")).toBeVisible();
+    await chooseOption(page, page.getByRole("combobox", { name: /^Kind/ }), "Treatment");
+    await chooseOption(page, page.getByRole("combobox", { name: /^Item/ }), /^Praziquantel/);
+  };
+
+  // Given to both at once.
+  await openBatch();
+  await page.getByLabel("Notes").fill(note);
+  await page.getByRole("button", { name: "Record for 2 animals" }).click();
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: "Recorded for 2 animals." }),
+  ).toBeVisible();
+  // The selection clears for the next batch.
+  await expect(page.getByText("No animals picked yet.")).toBeVisible();
+
+  for (const cat of cats) {
+    const id = await firstRowIdByQuery(page, "/dashboard/animals", cat);
+    await page.goto(`/dashboard/animals/${id}/medical`);
+    const given = page
+      .getByRole("region", { name: "Recent entries" })
+      .locator("li[aria-label]")
+      .filter({ hasText: "Praziquantel" })
+      .filter({ hasText: note });
+    await expect(given).toHaveCount(1);
+  }
+
+  // Scheduled for both, due today.
+  await openBatch();
+  await page.getByRole("radio", { name: "Scheduled" }).check();
+  await pickDay(page, page.getByRole("button", { name: /^Due date \*:/ }), today);
+  await page.getByRole("button", { name: "Schedule for 2 animals" }).click();
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: "Scheduled for 2 animals." }),
+  ).toBeVisible();
+
+  // On the due list, picked together and recorded with one form.
+  await page.goto("/dashboard/medical/due");
+  for (const [i, cat] of cats.entries()) {
+    await expect(dueRows(cat)).toHaveCount(before[i] + 1);
+    await dueRows(cat)
+      .first()
+      .getByRole("checkbox", { name: new RegExp(`^Select Praziquantel .* for ${cat}$`) })
+      .check();
+  }
+  const recordSelected = page.getByRole("button", { name: "Record selected as given (2)" });
+  const record = page.getByRole("dialog", { name: "Record 2 Praziquantel entries as given" });
+  // Cancelled untouched, it closes without asking, and focus goes back to
+  // the button, which isn't the dialog's own trigger.
+  await recordSelected.click();
+  await record.getByRole("button", { name: "Cancel" }).click();
+  await expect(record).toBeHidden();
+  await expect(recordSelected).toBeFocused();
+  await recordSelected.click();
+  await expect(record.getByRole("checkbox", { name: "Schedule the next one" })).toHaveCount(0);
+  await record.getByRole("button", { name: "Record 2 as given" }).click();
+  await expect(record).toBeHidden();
+  await expect(
+    page.locator("[data-sonner-toast]").filter({ hasText: "Recorded 2 entries as given." }),
+  ).toBeVisible();
+
+  // Both leave the list, so focus goes to the page heading.
+  for (const [i, cat] of cats.entries()) {
+    await expect(dueRows(cat)).toHaveCount(before[i]);
+  }
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Medical Care Due" }),
+  ).toBeFocused();
+});
+
+test("a volunteer reads the due list, but can't record it together or open batch entry", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ storageState: volunteerStatePath });
+  const page = await context.newPage();
+
+  // The sidebar's Medical entry has Due, and no Batch entry.
+  await page.goto("/dashboard");
+  const due = page.getByRole("link", { name: "Due", exact: true });
+  await expect(async () => {
+    if (!(await due.isVisible())) {
+      await page.getByRole("button", { name: "Medical", exact: true }).click();
+    }
+    await expect(due).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: "Batch entry" })).toHaveCount(0);
+
+  // The list reads as it does for staff, with nothing to pick.
+  await due.click();
+  await page.waitForURL("**/dashboard/medical/due");
+  await expect(rowsOf(section(page, "Medical wing", "Overdue"), "Fido", "DHPP")).toHaveCount(1);
+  await expect(page.getByRole("checkbox", { name: /^Select / })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /^Record selected as given/ }),
+  ).toHaveCount(0);
+
+  // Opened by its address, batch entry is refused.
+  await page.goto("/dashboard/medical/batch");
+  await expect(page.getByRole("heading", { name: "Access Denied" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Batch Entry" })).toHaveCount(0);
+
+  await context.close();
 });

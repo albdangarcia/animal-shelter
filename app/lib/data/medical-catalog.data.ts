@@ -2,10 +2,11 @@ import prisma from "@/app/lib/prisma";
 import { RequirePermission } from "../auth/protected-actions";
 import { hasPermission } from "../auth/hasPermission";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { AnimalListingStatus, PartnerType } from "@/prisma/generated/enums";
+import { AnimalListingStatus } from "@/prisma/generated/enums";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { getShelterToday } from "./shelter-settings.data";
 import {
+  findActiveVetClinics,
   findMedicalCatalog,
   findMedicalEntryFormItems,
   type MedicalCatalogItem,
@@ -14,6 +15,7 @@ import {
 import type { CalendarDay } from "../utils/shelter-day";
 
 export type {
+  MedicalBatchItem,
   MedicalCatalogItem,
   MedicalEntryFormItem,
   PickableMedicalItem,
@@ -91,11 +93,7 @@ const _fetchMedicalEntryFormOptions = async (
     });
     const [{ items, scheduledItems }, vetClinics, today] = await Promise.all([
       findMedicalEntryFormItems(prisma, animal),
-      prisma.partner.findMany({
-        where: { type: PartnerType.VET_CLINIC, isActive: true },
-        orderBy: { name: "asc" },
-        select: { id: true, name: true },
-      }),
+      findActiveVetClinics(prisma),
       getShelterToday(),
     ]);
     return {

@@ -1049,6 +1049,12 @@ model MedicalEntry {
 
   notes String?
 
+  /// Shared by the entries one batch wrote together: the same care given to,
+  /// or scheduled for, several animals at once. Provenance only: each entry
+  /// stands on its own and is changed, voided or recorded one at a time. Null
+  /// for an entry written by itself.
+  batchId String? @map(name: "batch_id")
+
   /// Voiding marks an entry that should never have been recorded: it is kept,
   /// but counts for nothing (it is left out of every derived fact, such as
   /// whether rabies is current). Write-once, as `Outcome.reversedAt` is:
@@ -1075,6 +1081,7 @@ model MedicalEntry {
   @@index([animalId, kind])
   @@index([itemId])
   @@index([status, dueDate])
+  @@index([batchId])
   @@map("medical_entries")
 }
 

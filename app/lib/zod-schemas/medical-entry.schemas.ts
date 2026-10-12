@@ -7,7 +7,10 @@ import {
   TestResult,
 } from "@/prisma/generated/enums";
 import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
-import { MEDICAL_REASON_MAX_LENGTH } from "@/app/lib/constants/medical";
+import {
+  MAX_BATCH_SIZE,
+  MEDICAL_REASON_MAX_LENGTH,
+} from "@/app/lib/constants/medical";
 import { cuidSchema } from "./common.schemas";
 
 // The entry forms' view of a medical entry, one shape per kind. The rules that
@@ -40,21 +43,25 @@ const optionalDay = (label: string) =>
       return day;
     });
 
+/** A day that must be given. */
+const requiredDay = (label: string) =>
+  z
+    .string({ error: `${label} is required.` })
+    .min(1, `${label} is required.`)
+    .transform((value, ctx): CalendarDay => {
+      const day = parseCalendarDay(value);
+      if (day === null) {
+        ctx.addIssue({ code: "custom", message: `${label} isn't a valid date.` });
+        return z.NEVER;
+      }
+      return day;
+    });
+
 /**
  * A due day. Whether it is in range needs the shelter's today, so the service
  * checks that.
  */
-const dueDate = z
-  .string({ error: "The due date is required." })
-  .min(1, "The due date is required.")
-  .transform((value, ctx): CalendarDay => {
-    const day = parseCalendarDay(value);
-    if (day === null) {
-      ctx.addIssue({ code: "custom", message: "The due date isn't a valid date." });
-      return z.NEVER;
-    }
-    return day;
-  });
+const dueDate = requiredDay("The due date");
 
 /**
  * The kinds a Medical list is filtered to, from the URL's comma-separated
@@ -142,52 +149,66 @@ const TreatmentEntrySchema = z.object({
   route,
 });
 
+/** The rules for care given that need only the form's own values. */
+const givenCareRules = (
+  entry: {
+    kind: MedicalEntryKind;
+    completedDate: CalendarDay | null;
+    source: MedicalEntrySource;
+    vetPartnerId: string | null;
+    vetName: string | null;
+    doseAmount?: number | null;
+    doseUnit?: DoseUnit | null;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  if (
+    entry.completedDate === null &&
+    entry.source !== MedicalEntrySource.BEFORE_INTAKE
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["completedDate"],
+      message:
+        "The date given is required. Only care given before intake can have an unknown date.",
+    });
+  }
+  if (entry.source === MedicalEntrySource.IN_HOUSE) {
+    if (entry.vetPartnerId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["vetPartnerId"],
+        message: "A vet clinic is only for care given outside the shelter.",
+      });
+    }
+    if (entry.vetName) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["vetName"],
+        message: "A vet's name is only for care given outside the shelter.",
+      });
+    }
+  }
+  if (
+    entry.kind === MedicalEntryKind.TREATMENT &&
+    entry.doseAmount != null &&
+    !entry.doseUnit
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["doseUnit"],
+      message: "A dose needs a unit.",
+    });
+  }
+};
+
 export const MedicalEntryFormSchema = z
   .discriminatedUnion("kind", [
     VaccineEntrySchema,
     TestEntrySchema,
     TreatmentEntrySchema,
   ])
-  .superRefine((entry, ctx) => {
-    if (
-      entry.completedDate === null &&
-      entry.source !== MedicalEntrySource.BEFORE_INTAKE
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["completedDate"],
-        message:
-          "The date given is required. Only care given before intake can have an unknown date.",
-      });
-    }
-    if (entry.source === MedicalEntrySource.IN_HOUSE) {
-      if (entry.vetPartnerId) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["vetPartnerId"],
-          message: "A vet clinic is only for care given outside the shelter.",
-        });
-      }
-      if (entry.vetName) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["vetName"],
-          message: "A vet's name is only for care given outside the shelter.",
-        });
-      }
-    }
-    if (
-      entry.kind === MedicalEntryKind.TREATMENT &&
-      entry.doseAmount !== null &&
-      !entry.doseUnit
-    ) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["doseUnit"],
-        message: "A dose needs a unit.",
-      });
-    }
-  });
+  .superRefine(givenCareRules);
 
 export type MedicalEntryFormInput = z.input<typeof MedicalEntryFormSchema>;
 
@@ -264,3 +285,94 @@ export const DeclineMedicalEntrySchema = z.object({
 });
 
 export type DeclineMedicalEntryInput = z.input<typeof DeclineMedicalEntrySchema>;
+
+// ---------------------------------------------------------------------------
+// Batches
+// ---------------------------------------------------------------------------
+//
+// One vaccine or treatment for several animals. Tests aren't batched, since
+// each animal has its own results. Care given in a batch was given together,
+// in house or by an outside vet, so it has a known day and is never before
+// intake. A rabies vaccine shares its duration, and each animal carries its
+// own optional tag.
+
+const batchKind = z.enum([MedicalEntryKind.VACCINE, MedicalEntryKind.TREATMENT], {
+  error: "Choose a vaccine or a treatment.",
+});
+
+const batchGiven = {
+  completedDate: requiredDay("The date given"),
+  source: z.enum([MedicalEntrySource.IN_HOUSE, MedicalEntrySource.OUTSIDE_VET], {
+    error: "Choose how it was given.",
+  }),
+};
+
+const BatchVaccineSchema = VaccineEntrySchema.omit({
+  rabiesTagNumber: true,
+}).extend(batchGiven);
+
+const BatchTreatmentSchema = TreatmentEntrySchema.extend(batchGiven);
+
+const rabiesTagNumber = optionalText(100);
+
+const batchList = <T extends z.ZodType>(row: T, noun: string) =>
+  z
+    .array(row)
+    .min(1, `Pick at least one ${noun}.`)
+    .max(MAX_BATCH_SIZE, `A batch can cover at most ${MAX_BATCH_SIZE} animals.`);
+
+const batchAnimals = batchList(
+  z.object({ animalId: cuidSchema, rabiesTagNumber }),
+  "animal",
+);
+
+/** Batch entry: one vaccine or treatment given to, or scheduled for, each
+ * animal picked. */
+export const MedicalBatchSchema = z.discriminatedUnion("mode", [
+  z.object({
+    mode: z.literal("SCHEDULE"),
+    animals: batchAnimals,
+    kind: batchKind,
+    itemId: common.itemId,
+    dueDate,
+    notes: common.notes,
+  }),
+  z
+    .discriminatedUnion("kind", [
+      BatchVaccineSchema.extend({
+        mode: z.literal("RECORD"),
+        animals: batchAnimals,
+      }),
+      BatchTreatmentSchema.extend({
+        mode: z.literal("RECORD"),
+        animals: batchAnimals,
+      }),
+    ])
+    .superRefine(givenCareRules),
+]);
+
+export type MedicalBatchFormInput = z.input<typeof MedicalBatchSchema>;
+export type MedicalBatchFormValues = z.output<typeof MedicalBatchSchema>;
+
+const batchEntries = batchList(
+  z.object({ entryId: cuidSchema, rabiesTagNumber }),
+  "entry",
+);
+
+/**
+ * Several scheduled entries for one item, recorded as given with the same
+ * details. The item is the entries' own. Notes left empty keep each entry's.
+ */
+export const RecordScheduledBatchSchema = z
+  .discriminatedUnion("kind", [
+    BatchVaccineSchema.omit({ itemId: true }).extend({ entries: batchEntries }),
+    BatchTreatmentSchema.omit({ itemId: true }).extend({ entries: batchEntries }),
+  ])
+  .superRefine(givenCareRules);
+
+export type RecordScheduledBatchFormInput = z.input<
+  typeof RecordScheduledBatchSchema
+>;
+export type RecordScheduledBatchFormValues = z.output<
+  typeof RecordScheduledBatchSchema
+>;

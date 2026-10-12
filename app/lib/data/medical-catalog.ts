@@ -2,7 +2,7 @@
 // call them. `medical-catalog.data.ts` wraps them behind their permissions.
 
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
-import { MedicalItemKind } from "@/prisma/generated/enums";
+import { MedicalItemKind, PartnerType } from "@/prisma/generated/enums";
 import { findOpenScheduledEntryIdsByItem } from "./animals/medical-entry";
 
 type Db = TransactionClient | typeof prisma;
@@ -99,6 +99,63 @@ export const findMedicalEntryFormItems = async (
     items: items.map(withEntries),
     scheduledItems: scheduledItems.map(withEntries),
   };
+};
+
+/** The vet clinics care given outside can be recorded against: active ones. */
+export const findActiveVetClinics = (db: Db) =>
+  db.partner.findMany({
+    where: { type: PartnerType.VET_CLINIC, isActive: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+
+/**
+ * An item as the batch forms offer it: its defaults, and the species it is
+ * for (none means every species), so the form can say which animals picked
+ * it isn't for. `retired` items are offered only for care already scheduled.
+ */
+export const MEDICAL_BATCH_ITEM_SELECT = {
+  ...PICKABLE_MEDICAL_ITEM_SELECT,
+  retiredAt: true,
+  species: { select: { id: true } },
+} as const;
+
+type BatchItemRow = Awaited<
+  ReturnType<typeof findBatchItemRows>
+>[number];
+
+const findBatchItemRows = (db: Db, where: object) =>
+  db.medicalItem.findMany({
+    where,
+    orderBy: { name: "asc" },
+    select: MEDICAL_BATCH_ITEM_SELECT,
+  });
+
+export type MedicalBatchItem = Omit<BatchItemRow, "species" | "retiredAt"> & {
+  speciesIds: string[];
+  retired: boolean;
+};
+
+const toBatchItem = ({ species, retiredAt, ...item }: BatchItemRow): MedicalBatchItem => ({
+  ...item,
+  speciesIds: species.map((row) => row.id),
+  retired: retiredAt !== null,
+});
+
+/** The vaccines and treatments batch entry offers: not retired, any species. */
+export const findMedicalBatchItems = async (db: Db) =>
+  (
+    await findBatchItemRows(db, {
+      kind: { in: [MedicalItemKind.VACCINE, MedicalItemKind.TREATMENT] },
+      retiredAt: null,
+    })
+  ).map(toBatchItem);
+
+/** One item, retired or not, as the form recording its scheduled care
+ * together needs it. Null when it doesn't exist. */
+export const findMedicalBatchItem = async (db: Db, itemId: string) => {
+  const [row] = await findBatchItemRows(db, { id: itemId });
+  return row ? toBatchItem(row) : null;
 };
 
 /** Every item, retired ones included, for the settings page. */

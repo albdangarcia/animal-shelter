@@ -43,6 +43,29 @@ export {
 
 type Db = TransactionClient | typeof prisma;
 
+/** Where an animal is, as `placeOf` reads it. */
+export const ANIMAL_PLACE_SELECT = {
+  currentUnit: {
+    select: {
+      id: true,
+      name: true,
+      location: { select: { id: true, name: true } },
+    },
+  },
+  // An open placement is one with no end day. One per animal is a rule of
+  // the placement actions, not of the database, so the latest one is taken.
+  fosterPlacements: {
+    where: { endDate: null },
+    orderBy: [{ startDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    take: 1,
+    select: {
+      fosterProfile: {
+        select: { person: { select: { id: true, name: true } } },
+      },
+    },
+  },
+} as const satisfies Prisma.AnimalSelect;
+
 const DUE_ENTRY_SELECT = {
   id: true,
   kind: true,
@@ -94,25 +117,10 @@ export const findMedicalDue = async (
           id: true,
           name: true,
           species: { select: { name: true } },
-          currentUnit: {
-            select: {
-              name: true,
-              location: { select: { id: true, name: true } },
-            },
-          },
-          // An open placement is one with no end day. One per animal is a
-          // rule of the placement actions, not of the database, so the
-          // latest one is taken.
-          fosterPlacements: {
-            where: { endDate: null },
-            orderBy: [{ startDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
-            take: 1,
-            select: {
-              fosterProfile: {
-                select: { person: { select: { id: true, name: true } } },
-              },
-            },
-          },
+          sex: true,
+          primaryColor: { select: { name: true } },
+          birthDate: true,
+          ...ANIMAL_PLACE_SELECT,
         },
       },
     },
@@ -121,7 +129,14 @@ export const findMedicalDue = async (
   return rows.map(({ animal, ...entry }) => ({
     // `lte` matched, so the due day is there.
     entry: { ...entry, dueDate: calendarDay(entry.dueDate!) },
-    animal: { id: animal.id, name: animal.name, species: animal.species.name },
+    animal: {
+      id: animal.id,
+      name: animal.name,
+      species: animal.species.name,
+      sex: animal.sex,
+      primaryColor: animal.primaryColor.name,
+      birthDate: animal.birthDate,
+    },
     place: placeOf(animal),
   }));
 };
@@ -180,8 +195,12 @@ export const findMedicalDueForQueue = async (
  * A unit first, as the housing board has it: an animal in a unit is there,
  * whatever else it has open. Then an open foster placement. Then neither.
  */
-const placeOf = (animal: {
-  currentUnit: { name: string; location: { id: string; name: string } } | null;
+export const placeOf = (animal: {
+  currentUnit: {
+    id: string;
+    name: string;
+    location: { id: string; name: string };
+  } | null;
   fosterPlacements: { fosterProfile: { person: { id: string; name: string } } }[];
 }): MedicalDuePlace => {
   if (animal.currentUnit) {
@@ -189,6 +208,7 @@ const placeOf = (animal: {
       type: "UNIT",
       locationId: animal.currentUnit.location.id,
       locationName: animal.currentUnit.location.name,
+      unitId: animal.currentUnit.id,
       unitName: animal.currentUnit.name,
     };
   }

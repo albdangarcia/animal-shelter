@@ -146,6 +146,21 @@ export interface ScheduleMedicalEntryInput {
   notes?: string | null;
 }
 
+/**
+ * The batch an entry is written in, when one form wrote the same care for
+ * several animals at once.
+ */
+export interface MedicalBatchTag {
+  batchId: string;
+  /** How many animals the batch covers, for the activity text. */
+  size: number;
+}
+
+/** How an entry is written, beyond what it holds. */
+export interface EntryWriteOptions {
+  batch?: MedicalBatchTag | null;
+}
+
 export type MedicalEntryEdit =
   | { status: "edited"; entryId: string; animalId: string; changeSummary: string }
   | { status: "unchanged"; entryId: string; animalId: string };
@@ -744,6 +759,14 @@ const joinList = (items: string[]) =>
 const dayText = (day: string | null | undefined) =>
   day ? formatShelterDay(calendarDay(day)) : "an unknown date";
 
+// Said on each animal's activity row when its entry came from a batch.
+const batchText = (batch: MedicalBatchTag | null | undefined) =>
+  batch ? ` Part of a batch of ${batch.size} animals.` : "";
+
+// What a batch adds to an entry and to the event that writes it.
+const batchData = (batch: MedicalBatchTag | null | undefined) =>
+  batch ? { batchId: batch.batchId } : {};
+
 const describeResults = (results: StoredResult[] | undefined) =>
   results && results.length > 0
     ? results
@@ -892,6 +915,7 @@ export async function scheduleMedicalEntry(
   input: ScheduleMedicalEntryInput,
   actorId: string,
   today: CalendarDay,
+  { batch }: EntryWriteOptions = {},
 ): Promise<{ entryId: string; animalId: string }> {
   const { animalId } = input;
   await lockAnimal(tx, animalId);
@@ -917,6 +941,7 @@ export async function scheduleMedicalEntry(
       status: MedicalEntryStatus.SCHEDULED,
       dueDate: input.dueDate,
       notes,
+      ...batchData(batch),
       createdById: actorId,
     },
     select: { id: true },
@@ -933,6 +958,7 @@ export async function scheduleMedicalEntry(
         itemId: item.id,
         dueDate: input.dueDate,
         notes,
+        ...batchData(batch),
       }),
     },
   });
@@ -942,7 +968,7 @@ export async function scheduleMedicalEntry(
       animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_SCHEDULED,
       changedById: actorId,
-      changeSummary: `${item.name} ${KIND_NOUN[input.kind]} scheduled for ${dayText(input.dueDate)}.`,
+      changeSummary: `${item.name} ${KIND_NOUN[input.kind]} scheduled for ${dayText(input.dueDate)}.${batchText(batch)}`,
     },
   });
 
@@ -1172,13 +1198,14 @@ const recordedSummary = async (
   kind: MedicalEntryKind,
   values: EntryValues,
   dueDate: CalendarDay | null,
+  batch: MedicalBatchTag | null | undefined,
 ) => {
   const partnerName = values.vetPartnerId
     ? (await readNames(tx, [values])).partners.get(values.vetPartnerId)
     : undefined;
   return `${item.name} ${KIND_NOUN[kind]} recorded: ${KIND_VERB[kind]} ${SOURCE_TEXT[values.source]}${partnerName ? ` at ${partnerName}` : ""}, on ${dayText(values.completedDate)}${
     dueDate ? ` (due ${dayText(dueDate)})` : ""
-  }.${values.results ? ` Results: ${describeResults(values.results)}.` : ""}`;
+  }.${values.results ? ` Results: ${describeResults(values.results)}.` : ""}${batchText(batch)}`;
 };
 
 /**
@@ -1198,6 +1225,7 @@ const scheduleNextDose = async (
   next: ScheduleNextInput | null | undefined,
   actorId: string,
   today: CalendarDay,
+  options: EntryWriteOptions,
 ): Promise<string | null> => {
   if (!next) return null;
   if (item.repeatIntervalDays === null) {
@@ -1233,6 +1261,7 @@ const scheduleNextDose = async (
     { animalId, kind, itemId: item.id, dueDate: next.dueDate },
     actorId,
     today,
+    options,
   );
   return entryId;
 };
@@ -1247,6 +1276,7 @@ export async function recordMedicalEntry(
   input: RecordMedicalEntryInput & { animalId: string },
   actorId: string,
   today: CalendarDay,
+  options: EntryWriteOptions = {},
 ): Promise<RecordedMedicalEntry> {
   const { animalId } = input;
   await lockAnimal(tx, animalId);
@@ -1266,6 +1296,7 @@ export async function recordMedicalEntry(
       status: MedicalEntryStatus.COMPLETED,
       createdById: actorId,
       ...entryData(values),
+      ...batchData(options.batch),
       ...detailsCreate(input.kind, values),
     },
     select: { id: true },
@@ -1280,6 +1311,7 @@ export async function recordMedicalEntry(
         kind: input.kind,
         status: MedicalEntryStatus.COMPLETED,
         ...values,
+        ...batchData(options.batch),
       }),
     },
   });
@@ -1289,7 +1321,14 @@ export async function recordMedicalEntry(
       animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_RECORDED,
       changedById: actorId,
-      changeSummary: await recordedSummary(tx, item, input.kind, values, null),
+      changeSummary: await recordedSummary(
+        tx,
+        item,
+        input.kind,
+        values,
+        null,
+        options.batch,
+      ),
     },
   });
 
@@ -1302,6 +1341,7 @@ export async function recordMedicalEntry(
     input.scheduleNext,
     actorId,
     today,
+    options,
   );
   return { entryId: entry.id, animalId, nextEntryId };
 }
@@ -1327,6 +1367,7 @@ export async function recordScheduledMedicalEntry(
   input: RecordMedicalEntryInput,
   actorId: string,
   today: CalendarDay,
+  options: EntryWriteOptions = {},
 ): Promise<RecordedMedicalEntry> {
   const entry = await lockScheduledEntry(tx, entryId, "recorded as given");
   const { animalId } = entry;
@@ -1355,6 +1396,9 @@ export async function recordScheduledMedicalEntry(
     data: {
       status: MedicalEntryStatus.COMPLETED,
       ...entryData(values),
+      // The batch that gave it. One that scheduled it is kept in its CREATED
+      // event.
+      ...batchData(options.batch),
       ...detailsCreate(entry.kind, values),
     },
   });
@@ -1365,7 +1409,11 @@ export async function recordScheduledMedicalEntry(
       action: MedicalEntryEventAction.COMPLETED,
       actorId,
       before: { status: MedicalEntryStatus.SCHEDULED },
-      after: asJson({ status: MedicalEntryStatus.COMPLETED, ...values }),
+      after: asJson({
+        status: MedicalEntryStatus.COMPLETED,
+        ...values,
+        ...batchData(options.batch),
+      }),
     },
   });
 
@@ -1380,6 +1428,7 @@ export async function recordScheduledMedicalEntry(
         entry.kind,
         values,
         entry.dueDate,
+        options.batch,
       ),
     },
   });
@@ -1393,6 +1442,7 @@ export async function recordScheduledMedicalEntry(
     input.scheduleNext,
     actorId,
     today,
+    options,
   );
   return { entryId, animalId, nextEntryId };
 }

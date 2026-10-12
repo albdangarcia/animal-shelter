@@ -255,6 +255,10 @@ test("only open scheduled care is due: not given, declined, voided, or for an an
     id: animalId,
     name: name("Mixed"),
     species: name("Due species"),
+    // What tells it from another animal of the same name.
+    sex: "FEMALE",
+    primaryColor: name("Due color"),
+    birthDate: "2024-01-01",
   });
 });
 
@@ -305,6 +309,7 @@ test("each animal is placed where it is: its unit, its open foster placement, or
     type: "UNIT",
     locationId,
     locationName: name("Due kennels"),
+    unitId,
     unitName: "D1",
   });
   assert.deepEqual(places.get(inFoster), {

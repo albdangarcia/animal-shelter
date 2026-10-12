@@ -80,3 +80,9 @@ export const formatDose = (amount: number, unit: DoseUnit): string => {
 
 /** The longest reason a void or a decline can carry. */
 export const MEDICAL_REASON_MAX_LENGTH = 1000;
+
+/**
+ * The most animals one batch covers. A room or a litter fits well inside it;
+ * past it, a mistake in the shared values reaches too many records at once.
+ */
+export const MAX_BATCH_SIZE = 50;
