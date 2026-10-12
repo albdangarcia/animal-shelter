@@ -36,6 +36,9 @@ import {
   MedicalEntrySource,
   MedicalItemKind,
   MedicalRoute,
+  SpayNeuterExemptionReason,
+  SurgeryEvidence,
+  SurgeryProcedure,
   TestResult,
 } from "@/prisma/generated/enums";
 import {
@@ -65,6 +68,7 @@ import {
   editMedicalEntry,
   recordMedicalEntry,
   recordScheduledMedicalEntry,
+  recordSpayNeuterExemption,
   rescheduleMedicalEntry,
   scheduleMedicalEntry,
   voidMedicalEntry,
@@ -73,6 +77,7 @@ import {
 import { nextDueDate } from "@/app/lib/utils/medical-days";
 import type { CatalogEntryKind } from "@/app/lib/constants/medical";
 import { recordMedicalBatch } from "@/app/lib/services/medical-batch";
+import { ALTERED_ENTRY_WHERE } from "@/app/lib/data/animals/medical-status";
 import { recordOutcome } from "@/app/lib/services/outcome-recording";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
@@ -648,6 +653,19 @@ let pendingCharacteristicAssignments: {
   animalId: string;
   assignedAt: Date;
   characteristicIds: string[];
+}[] = [];
+
+// Each animal's spay/neuter flag and microchip number, collected while
+// animals are created, then written as medical records by seedMedicalFacts()
+// at the tail of seedAll(). Deferred for the same reason as
+// pendingCharacteristicAssignments: a medical entry written here would draw
+// cuid()s from the shared mulberry32 stream and shift every draw after it.
+let pendingMedicalFacts: {
+  animalId: string;
+  altered: boolean;
+  chipNumber: string | null;
+  sex: Sex;
+  intakeType: IntakeType;
 }[] = [];
 
 function dealIndividual(speciesKey: keyof typeof allSpecies): SpeciesIndividual {
@@ -2256,6 +2274,15 @@ async function seedReturnAndReadoptAnimal(opts: {
     },
   });
 
+  // Written as medical records in the tail (see pendingMedicalFacts).
+  pendingMedicalFacts.push({
+    animalId: animal.id,
+    altered: blueprint.isSpayedNeutered ?? false,
+    chipNumber: blueprint.microchipNumber ?? null,
+    sex: blueprint.sex,
+    intakeType: blueprint.intakeType,
+  });
+
   // Characteristic assignments are written in the tail (see the module-level
   // note on pendingCharacteristicAssignments) so their cuid()s don't shift the
   // RNG stream. assignedAt is anchored to intake — "recorded when we took her in".
@@ -2782,6 +2809,15 @@ async function seedAnimalsAndRelations() {
             ? { currentUnit: { connect: { id: currentUnit.id } } }
             : {}),
         },
+      });
+
+      // Written as medical records in the tail (see pendingMedicalFacts).
+      pendingMedicalFacts.push({
+        animalId: animal.id,
+        altered: blueprint.isSpayedNeutered ?? false,
+        chipNumber: blueprint.microchipNumber ?? null,
+        sex: blueprint.sex,
+        intakeType: blueprint.intakeType,
       });
 
       // Deferred to the tail so AnimalCharacteristic cuid()s don't shift the
@@ -3456,6 +3492,15 @@ async function seedFostering() {
         },
         currentUnit: { connect: { id: startUnit.id } },
       },
+    });
+
+    // His flags as medical records, in the tail (see pendingMedicalFacts).
+    pendingMedicalFacts.push({
+      animalId: animal.id,
+      altered: true,
+      chipNumber: "985141000109999",
+      sex: Sex.MALE,
+      intakeType: IntakeType.OWNER_SURRENDER,
     });
 
     const surrenderer = getRandomItem(walkInPersons);
@@ -6785,6 +6830,337 @@ async function seedMedicalScheduling() {
   );
 }
 
+// The animals seedSurgeryAndMicrochipFixtures() scripts, and which of their
+// old flags it writes itself instead of seedMedicalFacts(). Hand-authored
+// animals are the first created under their name.
+const SCRIPTED_MEDICAL_FACTS: Record<string, { altered?: true; chip?: true }> = {
+  // An in-house spay with its day.
+  Whiskers: { altered: true },
+  // Exempt for good: an iguana isn't routinely neutered.
+  Godzilla: { altered: true },
+  // A spay scheduled, not done.
+  Nutmeg: { altered: true },
+  // Born in care, so chipped here.
+  Leo: { chip: true },
+  // A mistyped chip number, voided, then the right one.
+  Marigold: { chip: true },
+};
+
+const scriptedAnimalIds = async (fact: "altered" | "chip") => {
+  const ids = new Set<string>();
+  for (const [name, scripted] of Object.entries(SCRIPTED_MEDICAL_FACTS)) {
+    if (!scripted[fact]) continue;
+    const animal = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    if (!animal) {
+      throw new Error(`seedMedicalFacts: ${name} was not seeded.`);
+    }
+    ids.add(animal.id);
+  }
+  return ids;
+};
+
+// What shows a spay or neuter was done before the animal arrived: an owner
+// hands over their records, a transferring shelter its vet's, and a stray
+// shows a scar.
+const evidenceForIntake = (intakeType: IntakeType): SurgeryEvidence =>
+  intakeType === IntakeType.OWNER_SURRENDER
+    ? SurgeryEvidence.OWNER_RECORDS
+    : intakeType === IntakeType.TRANSFER_IN
+      ? SurgeryEvidence.VET_RECORDS
+      : SurgeryEvidence.SCAR;
+
+// Every animal's spay/neuter flag and microchip number, written as the
+// medical records they stand for: a chip found on a scan before intake, and
+// a spay (female) or neuter (male, or sex unknown) done before intake, both
+// on a day nobody knows. Through the entry service, one transaction per
+// animal, recorded by Olivia. The animals the fixtures below script are left
+// out for the fact they script.
+async function seedMedicalFacts() {
+  console.log("Seeding spay/neuter and microchip records from each animal's flags...");
+
+  const today = shelterToday(seedTimezone);
+  const olivia = await prisma.person.findFirst({
+    where: { user: { email: "staff1@example.com" } },
+  });
+  if (!olivia) {
+    throw new Error("seedMedicalFacts: staff fixtures not found.");
+  }
+  const scriptedAltered = await scriptedAnimalIds("altered");
+  const scriptedChip = await scriptedAnimalIds("chip");
+
+  let chips = 0;
+  let altered = 0;
+  for (const fact of pendingMedicalFacts) {
+    const chipNumber = scriptedChip.has(fact.animalId) ? null : fact.chipNumber;
+    const isAltered = fact.altered && !scriptedAltered.has(fact.animalId);
+    if (!chipNumber && !isAltered) continue;
+    await prisma.$transaction(async (tx) => {
+      if (chipNumber) {
+        await recordMedicalEntry(
+          tx,
+          {
+            animalId: fact.animalId,
+            kind: MedicalEntryKind.MICROCHIP,
+            chipNumber,
+            completedDate: null,
+            source: MedicalEntrySource.BEFORE_INTAKE,
+          },
+          olivia.id,
+          today,
+        );
+        chips += 1;
+      }
+      if (isAltered) {
+        await recordMedicalEntry(
+          tx,
+          {
+            animalId: fact.animalId,
+            kind: MedicalEntryKind.SURGERY,
+            procedure:
+              fact.sex === Sex.FEMALE ? SurgeryProcedure.SPAY : SurgeryProcedure.NEUTER,
+            completedDate: null,
+            source: MedicalEntrySource.BEFORE_INTAKE,
+            evidence: evidenceForIntake(fact.intakeType),
+          },
+          olivia.id,
+          today,
+        );
+        altered += 1;
+      }
+    });
+  }
+
+  console.log(
+    `Seeded ${chips} microchips and ${altered} spays or neuters found before intake.`,
+  );
+}
+
+// Surgeries, chips and spay/neuter exemptions in each state the record can
+// show, through the services, at fixed offsets from the seed's today or the
+// animal's intake, with no random draws:
+// - Whiskers: spayed in house, with its day.
+// - Daisy: a dental by Downtown Veterinary Clinic, on top of her spay.
+// - Leo: chipped in house (born in care), with his own number.
+// - Rocket: a second chip implanted in house.
+// - Marigold: her intake scan typed wrong, voided, then the right number.
+// - Nutmeg: a spay scheduled four days out, and nothing done yet.
+// - Godzilla: exempt for good, with no review day.
+// - A young generated animal: an exemption whose review day passed two days
+//   ago, so it is open for review and overdue.
+async function seedSurgeryAndMicrochipFixtures() {
+  console.log("Seeding surgery, microchip and exemption fixtures...");
+
+  const today = shelterToday(seedTimezone);
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  const downtownVet = await prisma.partner.findFirst({
+    where: { name: "Downtown Veterinary Clinic" },
+  });
+  if (!olivia || !benjamin || !downtownVet) {
+    throw new Error(
+      "seedSurgeryAndMicrochipFixtures: staff or Downtown Veterinary Clinic fixtures not found.",
+    );
+  }
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, intake: { select: { intakeDate: true } } },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(
+        `seedSurgeryAndMicrochipFixtures: ${name} was not seeded with an intake.`,
+      );
+    }
+    const days = row.intake.map((intake) => calendarDay(intake.intakeDate)).sort();
+    return { id: row.id, name, latestIntake: days[days.length - 1] };
+  };
+  // A day in the current stay, `offset` days after it began, never after today.
+  const inStay = (subject: { latestIntake: CalendarDay }, offset: number) => {
+    const day = shiftDayKey(subject.latestIntake, offset);
+    return day > today ? today : day;
+  };
+  // The number the animal's blueprint gives it.
+  const blueprintChip = (subject: { id: string; name: string }) => {
+    const chipNumber = pendingMedicalFacts.find(
+      (fact) => fact.animalId === subject.id,
+    )?.chipNumber;
+    if (!chipNumber) {
+      throw new Error(
+        `seedSurgeryAndMicrochipFixtures: ${subject.name} has no blueprint chip number.`,
+      );
+    }
+    return chipNumber;
+  };
+  const record = (
+    animalId: string,
+    input: MedicalEntryInput,
+    actorId = olivia.id,
+  ) =>
+    prisma.$transaction((tx) =>
+      recordMedicalEntry(tx, { ...input, animalId }, actorId, today),
+    );
+
+  // --- Whiskers: spayed in house three days into her stay ------------------
+  const whiskers = await animal("Whiskers");
+  await record(whiskers.id, {
+    kind: MedicalEntryKind.SURGERY,
+    procedure: SurgeryProcedure.SPAY,
+    completedDate: inStay(whiskers, 3),
+    source: MedicalEntrySource.IN_HOUSE,
+    surgeon: "Dr. Amara Okafor",
+    findings: "Routine ovariohysterectomy. No complications.",
+    anesthesiaNotes: "Isoflurane. Smooth recovery, eating the same evening.",
+  });
+
+  // --- Daisy: a dental at Downtown Veterinary Clinic -----------------------
+  const daisy = await animal("Daisy");
+  await record(daisy.id, {
+    kind: MedicalEntryKind.SURGERY,
+    procedure: SurgeryProcedure.DENTAL,
+    completedDate: inStay(daisy, 12),
+    source: MedicalEntrySource.OUTSIDE_VET,
+    vetPartnerId: downtownVet.id,
+    surgeon: "Dr. Priya Raman",
+    findings: "Scaled and polished. Two fractured premolars extracted.",
+  });
+
+  // --- Leo: born in care, so chipped here, two days into his stay ----------
+  const leo = await animal("Leo");
+  await record(leo.id, {
+    kind: MedicalEntryKind.MICROCHIP,
+    chipNumber: blueprintChip(leo),
+    completedDate: inStay(leo, 2),
+    source: MedicalEntrySource.IN_HOUSE,
+    brand: "HomeAgain",
+  });
+
+  // --- Rocket: a second chip, since his first reads only now and then ------
+  // A number outside the seeded sequences (985141000100001 upward, and
+  // Winston's 985141000109999).
+  const rocket = await animal("Rocket");
+  await record(rocket.id, {
+    kind: MedicalEntryKind.MICROCHIP,
+    chipNumber: "977200009012345",
+    completedDate: inStay(rocket, 5),
+    source: MedicalEntrySource.IN_HOUSE,
+    brand: "Datamars",
+    notes: "His first chip reads only now and then, so a second was implanted.",
+  });
+
+  // --- Marigold: the intake scan typed wrong, voided, then the right one ---
+  const marigold = await animal("Marigold");
+  const mistyped = await record(marigold.id, {
+    kind: MedicalEntryKind.MICROCHIP,
+    // Two groups of digits swapped; outside the seeded sequences too.
+    chipNumber: "985141001000010",
+    completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE,
+  });
+  await prisma.$transaction((tx) =>
+    voidMedicalEntry(
+      tx,
+      mistyped.entryId,
+      "Digits typed in the wrong order. The scanner reads her chip correctly.",
+      benjamin.id,
+    ),
+  );
+  await record(
+    marigold.id,
+    {
+      kind: MedicalEntryKind.MICROCHIP,
+      chipNumber: blueprintChip(marigold),
+      completedDate: null,
+      source: MedicalEntrySource.BEFORE_INTAKE,
+    },
+    benjamin.id,
+  );
+
+  // --- Nutmeg: a spay planned four days out --------------------------------
+  const nutmeg = await animal("Nutmeg");
+  await prisma.$transaction((tx) =>
+    scheduleMedicalEntry(
+      tx,
+      {
+        animalId: nutmeg.id,
+        kind: MedicalEntryKind.SURGERY,
+        procedure: SurgeryProcedure.SPAY,
+        dueDate: shiftDayKey(today, 4),
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- Godzilla: exempt for good ------------------------------------------
+  const godzilla = await animal("Godzilla");
+  await prisma.$transaction((tx) =>
+    recordSpayNeuterExemption(
+      tx,
+      {
+        animalId: godzilla.id,
+        procedure: SurgeryProcedure.NEUTER,
+        exemptionReason: SpayNeuterExemptionReason.OTHER,
+        declineReason: "Not routinely done for this species.",
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- A young animal whose exemption came up for review two days ago ------
+  // Claimed as the transferred-out dog is, never a hand-authored animal: the
+  // youngest published animal in care, under six months old, not altered, in
+  // care for at least five days. Recorded three weeks ago, or at intake if
+  // that is later, as staff would have then.
+  const young = await prisma.animal.findFirst({
+    where: {
+      name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+      listingStatus: AnimalListingStatus.PUBLISHED,
+      birthDate: { gt: shiftDayKey(today, -183) },
+      intake: { some: {}, every: { intakeDate: { lte: shiftDayKey(today, -5) } } },
+      medicalEntries: { none: ALTERED_ENTRY_WHERE },
+    },
+    orderBy: [{ birthDate: "desc" }, { id: "asc" }],
+    select: { id: true, name: true, sex: true, intake: { select: { intakeDate: true } } },
+  });
+  if (!young) {
+    throw new Error(
+      "seedSurgeryAndMicrochipFixtures: no young unaltered animal has been in care five days.",
+    );
+  }
+  const youngIntake = young.intake
+    .map((intake) => calendarDay(intake.intakeDate))
+    .sort()
+    .at(-1)!;
+  const threeWeeksAgo = shiftDayKey(today, -21);
+  await prisma.$transaction((tx) =>
+    recordSpayNeuterExemption(
+      tx,
+      {
+        animalId: young.id,
+        procedure:
+          young.sex === Sex.FEMALE ? SurgeryProcedure.SPAY : SurgeryProcedure.NEUTER,
+        exemptionReason: SpayNeuterExemptionReason.TOO_YOUNG_OR_UNDERWEIGHT,
+        reviewDate: shiftDayKey(today, -2),
+      },
+      benjamin.id,
+      youngIntake > threeWeeksAgo ? youngIntake : threeWeeksAgo,
+    ),
+  );
+
+  console.log(
+    `Seeded surgeries for Whiskers and Daisy, chips for Leo, Rocket and Marigold, Nutmeg's spay, Godzilla's exemption, and a lapsed exemption for ${young.name}.`,
+  );
+}
+
 let seedTimezone = fallbackShelterSettings().timezone;
 
 export async function main() {
@@ -6794,6 +7170,7 @@ export async function main() {
   // images identically to a fresh run.
   individualDealQueues = {};
   pendingCharacteristicAssignments = [];
+  pendingMedicalFacts = [];
 
   try {
     await seedAll();
@@ -6848,6 +7225,8 @@ async function seedAll() {
   await seedMedicalCatalog();
   await seedMedicalEntries();
   await seedMedicalScheduling();
+  await seedMedicalFacts();
+  await seedSurgeryAndMicrochipFixtures();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

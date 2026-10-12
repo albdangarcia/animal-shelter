@@ -4,6 +4,7 @@ import {
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalRoute,
+  SpayNeuterExemptionReason,
   SurgeryEvidence,
   SurgeryProcedure,
   TestResult,
@@ -15,6 +16,7 @@ import {
   MEDICAL_REASON_MAX_LENGTH,
   type CatalogEntryKind,
 } from "@/app/lib/constants/medical";
+import { chipNumberIssue, normaliseChipNumber } from "@/app/lib/utils/microchip";
 import { cuidSchema } from "./common.schemas";
 
 // The entry forms' view of a medical entry, one shape per kind. The rules that
@@ -174,6 +176,29 @@ const SurgeryEntrySchema = z.object({
   evidence: z.enum(SurgeryEvidence).nullish().transform((v) => v ?? null),
 });
 
+/** A chip number as typed, checked and passed on in its stored form. */
+const chipNumber = z
+  .string({ error: "The chip number is required." })
+  .transform((value, ctx) => {
+    const normalised = normaliseChipNumber(value);
+    const issue = chipNumberIssue(normalised);
+    if (issue) {
+      ctx.addIssue({ code: "custom", message: issue });
+      return z.NEVER;
+    }
+    return normalised;
+  });
+
+// A microchip has no catalog item: its number says which chip it is. Whether
+// another entry holds the number needs the database, so the service checks
+// that.
+const MicrochipEntrySchema = z.object({
+  kind: z.literal(MedicalEntryKind.MICROCHIP),
+  ...given,
+  chipNumber,
+  brand: optionalText(100),
+});
+
 /** The rules for care given that need only the form's own values. */
 const givenCareRules = (
   entry: {
@@ -251,6 +276,7 @@ export const MedicalEntryFormSchema = z
     TestEntrySchema,
     TreatmentEntrySchema,
     SurgeryEntrySchema,
+    MicrochipEntrySchema,
   ])
   .superRefine(givenCareRules);
 
@@ -290,11 +316,16 @@ export const rabiesDurationIssue = (
     ? "A rabies vaccine needs its duration."
     : null;
 
-const SCHEDULED_KINDS = [...CATALOG_ENTRY_KINDS, MedicalEntryKind.SURGERY] as const;
+const SCHEDULED_KINDS = [
+  ...CATALOG_ENTRY_KINDS,
+  MedicalEntryKind.SURGERY,
+  MedicalEntryKind.MICROCHIP,
+] as const;
 
 /**
- * Care to schedule: an item for care given from the catalog, or a procedure
- * for a surgery. One object rather than a union, so a blank form shows each
+ * Care to schedule: an item for care given from the catalog, a procedure for
+ * a surgery, and neither for a microchip, whose number is known once it is
+ * implanted. One object rather than a union, so a blank form shows each
  * field's own message.
  */
 export const ScheduleMedicalEntrySchema = z
@@ -306,6 +337,7 @@ export const ScheduleMedicalEntrySchema = z
     notes: common.notes,
   })
   .superRefine((value, ctx) => {
+    if (value.kind === MedicalEntryKind.MICROCHIP) return;
     if (value.kind === MedicalEntryKind.SURGERY) {
       if (!value.procedure) {
         ctx.addIssue({
@@ -330,11 +362,18 @@ export const ScheduleMedicalEntrySchema = z
           procedure: SurgeryProcedure;
           dueDate: CalendarDay;
           notes: string | null;
+        }
+      | {
+          kind: typeof MedicalEntryKind.MICROCHIP;
+          dueDate: CalendarDay;
+          notes: string | null;
         } =>
       // The refinement has checked that the kind's own field is there.
-      kind === MedicalEntryKind.SURGERY
-        ? { kind, procedure: procedure!, dueDate, notes }
-        : { kind, itemId: itemId!, dueDate, notes },
+      kind === MedicalEntryKind.MICROCHIP
+        ? { kind, dueDate, notes }
+        : kind === MedicalEntryKind.SURGERY
+          ? { kind, procedure: procedure!, dueDate, notes }
+          : { kind, itemId: itemId!, dueDate, notes },
   );
 
 export type ScheduleMedicalEntryFormInput = z.input<
@@ -363,11 +402,82 @@ export const VoidMedicalEntrySchema = z.object({
 
 export type VoidMedicalEntryInput = z.input<typeof VoidMedicalEntrySchema>;
 
-export const DeclineMedicalEntrySchema = z.object({
-  reason: reason("A reason for declining this entry is required."),
+/**
+ * An exemption from a spay or neuter: a reason from the list, and maybe a
+ * day to review it. Whether the review day is in range needs the shelter's
+ * today, so the service checks that. Shared by recording an exemption and by
+ * declining a scheduled spay or neuter.
+ */
+export const SpayNeuterExemptionSchema = z.object({
+  exemptionReason: z.enum(SpayNeuterExemptionReason, {
+    error: "Pick the reason for the exemption.",
+  }),
+  reviewDate: optionalDay("The review date"),
 });
 
+const OTHER_NEEDS_NOTE = "Say why the animal is exempt.";
+
+const optionalReason = z
+  .string()
+  .trim()
+  .max(MEDICAL_REASON_MAX_LENGTH, {
+    error: `The reason cannot exceed ${MEDICAL_REASON_MAX_LENGTH} characters.`,
+  })
+  .nullish()
+  .transform((value) => value || null);
+
+/**
+ * Declining scheduled care. Most care needs the reason in words. A spay or
+ * neuter is declined as an exemption, with a reason from the list and maybe
+ * a review day, and needs words only for Other. Whether the entry is a spay
+ * or neuter needs the entry, so the service checks which applies. Flat, so
+ * each message is keyed by the field the form shows it under.
+ */
+export const DeclineMedicalEntrySchema = z
+  .object({
+    reason: optionalReason,
+    exemptionReason: SpayNeuterExemptionSchema.shape.exemptionReason
+      .nullish()
+      .transform((value) => value ?? null),
+    reviewDate: SpayNeuterExemptionSchema.shape.reviewDate,
+  })
+  .superRefine(({ reason, exemptionReason, reviewDate }, ctx) => {
+    if (!exemptionReason) {
+      if (reviewDate) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["exemptionReason"],
+          message: "Pick the reason for the exemption.",
+        });
+      } else if (!reason) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["reason"],
+          message: "A reason for declining this entry is required.",
+        });
+      }
+    } else if (exemptionReason === SpayNeuterExemptionReason.OTHER && !reason) {
+      ctx.addIssue({ code: "custom", path: ["reason"], message: OTHER_NEEDS_NOTE });
+    }
+  });
+
 export type DeclineMedicalEntryInput = z.input<typeof DeclineMedicalEntrySchema>;
+
+/** An exemption recorded on its own, with no spay or neuter scheduled first. */
+export const RecordSpayNeuterExemptionSchema = SpayNeuterExemptionSchema.extend({
+  procedure: z.enum([SurgeryProcedure.SPAY, SurgeryProcedure.NEUTER], {
+    error: "Pick spay or neuter.",
+  }),
+  declineReason: optionalReason,
+}).superRefine(({ exemptionReason, declineReason }, ctx) => {
+  if (exemptionReason === SpayNeuterExemptionReason.OTHER && !declineReason) {
+    ctx.addIssue({ code: "custom", path: ["declineReason"], message: OTHER_NEEDS_NOTE });
+  }
+});
+
+export type RecordSpayNeuterExemptionFormInput = z.input<
+  typeof RecordSpayNeuterExemptionSchema
+>;
 
 // ---------------------------------------------------------------------------
 // Batches

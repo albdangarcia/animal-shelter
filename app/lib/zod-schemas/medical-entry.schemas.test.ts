@@ -2,9 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
 import {
+  DeclineMedicalEntrySchema,
   MedicalBatchSchema,
   MedicalEntryFormSchema,
   RecordScheduledBatchSchema,
+  RecordSpayNeuterExemptionSchema,
   ScheduleMedicalEntrySchema,
   VoidMedicalEntrySchema,
   medicalEntryKindsParam,
@@ -160,6 +162,78 @@ test("VoidMedicalEntrySchema: the reason is required and kept trimmed", () => {
   });
 });
 
+const flatErrorsOf = (schema: z.ZodType, values: object) => {
+  const result = schema.safeParse(values);
+  assert.equal(result.success, false);
+  return z.flattenError(result.error!).fieldErrors as Record<string, string[]>;
+};
+
+test("DeclineMedicalEntrySchema: words, or an exemption that needs words only for Other", () => {
+  assert.deepEqual(DeclineMedicalEntrySchema.parse({ reason: " Not needed. " }), {
+    reason: "Not needed.",
+    exemptionReason: null,
+    reviewDate: null,
+  });
+  assert.deepEqual(flatErrorsOf(DeclineMedicalEntrySchema, { reason: " " }).reason, [
+    "A reason for declining this entry is required.",
+  ]);
+  assert.deepEqual(
+    DeclineMedicalEntrySchema.parse({
+      reason: "",
+      exemptionReason: "TOO_YOUNG_OR_UNDERWEIGHT",
+      reviewDate: "2026-11-03",
+    }),
+    {
+      reason: null,
+      exemptionReason: "TOO_YOUNG_OR_UNDERWEIGHT",
+      reviewDate: "2026-11-03",
+    },
+  );
+  assert.deepEqual(
+    flatErrorsOf(DeclineMedicalEntrySchema, { exemptionReason: "OTHER" }).reason,
+    ["Say why the animal is exempt."],
+  );
+  // A review day belongs to an exemption.
+  assert.deepEqual(
+    flatErrorsOf(DeclineMedicalEntrySchema, { reason: "x", reviewDate: "2026-11-03" })
+      .exemptionReason,
+    ["Pick the reason for the exemption."],
+  );
+  assert.deepEqual(
+    flatErrorsOf(DeclineMedicalEntrySchema, {
+      exemptionReason: "MEDICAL_RISK",
+      reviewDate: "2026-02-30",
+    }).reviewDate,
+    ["The review date isn't a valid date."],
+  );
+});
+
+test("RecordSpayNeuterExemptionSchema: spay or neuter, a reason, and words for Other", () => {
+  assert.deepEqual(
+    RecordSpayNeuterExemptionSchema.parse({
+      procedure: "NEUTER",
+      exemptionReason: "PARTNER_WILL_ALTER",
+    }),
+    {
+      procedure: "NEUTER",
+      exemptionReason: "PARTNER_WILL_ALTER",
+      reviewDate: null,
+      declineReason: null,
+    },
+  );
+  const errors = flatErrorsOf(RecordSpayNeuterExemptionSchema, { procedure: "DENTAL" });
+  assert.deepEqual(errors.procedure, ["Pick spay or neuter."]);
+  assert.deepEqual(errors.exemptionReason, ["Pick the reason for the exemption."]);
+  assert.deepEqual(
+    flatErrorsOf(RecordSpayNeuterExemptionSchema, {
+      procedure: "SPAY",
+      exemptionReason: "OTHER",
+      declineReason: "  ",
+    }).declineReason,
+    ["Say why the animal is exempt."],
+  );
+});
+
 test("ScheduleMedicalEntrySchema: the due date is required and a real day", () => {
   const base = { kind: "VACCINE", itemId: "item", notes: "  " } as const;
   const parsed = ScheduleMedicalEntrySchema.parse({ ...base, dueDate: "2026-10-14" });
@@ -220,6 +294,36 @@ test("MedicalEntryFormSchema: a surgery's evidence is for before intake, and req
   assert.equal(parsed.completedDate, null);
 });
 
+test("MedicalEntryFormSchema: a microchip's number is checked, and passed on in its stored form", () => {
+  const microchip: MedicalEntryFormInput = {
+    kind: "MICROCHIP",
+    chipNumber: "985 141-000 100 003",
+    completedDate: "2026-09-01",
+    source: "IN_HOUSE",
+    brand: " HomeAgain ",
+  };
+  const parsed = MedicalEntryFormSchema.parse(microchip);
+  assert.equal(parsed.kind === "MICROCHIP" && parsed.chipNumber, "985141000100003");
+  assert.equal(parsed.kind === "MICROCHIP" && parsed.brand, "HomeAgain");
+  assert.equal("itemId" in parsed, false);
+  assert.deepEqual(fieldErrorsOf({ ...microchip, chipNumber: "12345" }).chipNumber, [
+    "A chip number is 9 to 15 letters or digits.",
+  ]);
+  assert.deepEqual(fieldErrorsOf({ ...microchip, chipNumber: "985141.00010003" }).chipNumber, [
+    "A chip number has only letters and digits.",
+  ]);
+  assert.deepEqual(fieldErrorsOf({ ...microchip, chipNumber: " " }).chipNumber, [
+    "The chip number is required.",
+  ]);
+  // Found on a scan before intake, on a day nobody knows.
+  const found = MedicalEntryFormSchema.parse({
+    ...microchip,
+    source: "BEFORE_INTAKE",
+    completedDate: null,
+  });
+  assert.equal(found.completedDate, null);
+});
+
 test("ScheduleMedicalEntrySchema: a surgery takes a procedure, other care an item", () => {
   const dueDate = "2026-10-14";
   assert.deepEqual(
@@ -241,10 +345,11 @@ test("ScheduleMedicalEntrySchema: a surgery takes a procedure, other care an ite
   assert.deepEqual(errorsOf({ kind: "VACCINE", procedure: "SPAY", dueDate }).itemId, [
     "Pick an item.",
   ]);
-  // A microchip can't be scheduled through this schema.
-  assert.deepEqual(errorsOf({ kind: "MICROCHIP", dueDate }).kind, [
-    "Choose what to schedule.",
-  ]);
+  // A microchip needs neither: its number is known once it is implanted.
+  assert.deepEqual(
+    ScheduleMedicalEntrySchema.parse({ kind: "MICROCHIP", itemId: "", dueDate }),
+    { kind: "MICROCHIP", dueDate, notes: null },
+  );
   // A blank form shows every field's message at once.
   assert.deepEqual(Object.keys(errorsOf({ kind: "", itemId: "", dueDate: "" })).sort(), [
     "dueDate",

@@ -9,12 +9,15 @@ import {
   withAuthenticatedUser,
 } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
+import { can } from "../auth/can";
+import { SurgeryProcedure } from "@/prisma/generated/enums";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   DeclineMedicalEntrySchema,
   MedicalBatchSchema,
   MedicalEntryFormSchema,
   RecordScheduledBatchSchema,
+  RecordSpayNeuterExemptionSchema,
   RescheduleMedicalEntrySchema,
   ScheduleMedicalEntrySchema,
   VoidMedicalEntrySchema,
@@ -23,16 +26,19 @@ import {
   type MedicalBatchFormInput,
   type MedicalEntryFormInput,
   type RecordScheduledBatchFormInput,
+  type RecordSpayNeuterExemptionFormInput,
   type RescheduleMedicalEntryInput,
   type ScheduleMedicalEntryFormInput,
   type VoidMedicalEntryInput,
 } from "../zod-schemas/medical-entry.schemas";
 import {
   MedicalEntryRefusal,
+  nameChipNumberHolder,
   declineMedicalEntry as declineEntry,
   editMedicalEntry as editEntry,
   recordMedicalEntry as recordEntry,
   recordScheduledMedicalEntry as recordScheduledEntry,
+  recordSpayNeuterExemption as recordExemption,
   rescheduleMedicalEntry as rescheduleEntry,
   scheduleMedicalEntry as scheduleEntry,
   voidMedicalEntry as voidEntry,
@@ -134,7 +140,11 @@ const _recordMedicalEntry = async (
       ),
     );
   } catch (error) {
-    const refusal = refused<MedicalEntryFormInput>(error);
+    // A chip number another animal took at the same moment reads as the
+    // service's refusal, naming that animal when it still holds it.
+    const refusal = refused<MedicalEntryFormInput>(
+      await nameChipNumberHolder(prisma, error),
+    );
     if (refusal) return refusal;
     console.error("Database error recording medical entry:", error);
     return { ok: false, message: "Database Error: Failed to record entry." };
@@ -171,7 +181,11 @@ const _recordScheduledMedicalEntry = async (
       ),
     ));
   } catch (error) {
-    const refusal = refused<MedicalEntryFormInput>(error);
+    // A chip number another animal took at the same moment reads as the
+    // service's refusal, naming that animal when it still holds it.
+    const refusal = refused<MedicalEntryFormInput>(
+      await nameChipNumberHolder(prisma, error),
+    );
     if (refusal) return refusal;
     console.error("Database error recording scheduled medical entry:", error);
     return { ok: false, message: "Database Error: Failed to record entry." };
@@ -246,7 +260,11 @@ const _editMedicalEntry = async (
     }
     animalId = edit.animalId;
   } catch (error) {
-    const refusal = refused<MedicalEntryFormInput>(error);
+    // A chip number another animal took at the same moment reads as the
+    // service's refusal, naming that animal when it still holds it.
+    const refusal = refused<MedicalEntryFormInput>(
+      await nameChipNumberHolder(prisma, error),
+    );
     if (refusal) return refusal;
     console.error("Database error editing medical entry:", error);
     return { ok: false, message: "Database Error: Failed to update entry." };
@@ -352,10 +370,39 @@ const _declineMedicalEntry = async (
     };
   }
 
+
+  const { reason, exemptionReason, reviewDate } = validated.data;
+  const entry = await prisma.medicalEntry.findUnique({
+    where: { id: parsedId.data },
+    select: { procedure: true },
+  });
+  if (!entry) {
+    return { ok: false, message: "Medical entry not found." };
+  }
+  // Declining a spay or neuter sets an exemption, which is planning the
+  // animal's care rather than giving it.
+  if (
+    (entry.procedure === SurgeryProcedure.SPAY ||
+      entry.procedure === SurgeryProcedure.NEUTER) &&
+    !can(user.role, AppPermissions.MEDICAL_MANAGE)
+  ) {
+    return {
+      ok: false,
+      message: "You don't have permission to record a spay/neuter exemption.",
+    };
+  }
+
+  const today = await getShelterToday();
   let animalId: string;
   try {
     ({ animalId } = await prisma.$transaction((tx) =>
-      declineEntry(tx, parsedId.data, validated.data.reason, user.personId),
+      declineEntry(
+        tx,
+        parsedId.data,
+        reason,
+        user.personId,
+        exemptionReason ? { exemptionReason, reviewDate, today } : null,
+      ),
     ));
   } catch (error) {
     const refusal = refused<DeclineMedicalEntryInput>(error);
@@ -366,6 +413,46 @@ const _declineMedicalEntry = async (
 
   revalidateMedical(animalId);
   return { ok: true, message: "Entry declined." };
+};
+
+const _recordSpayNeuterExemption = async (
+  user: SessionUser,
+  animalId: string,
+  values: RecordSpayNeuterExemptionFormInput,
+): Promise<FormResult<RecordSpayNeuterExemptionFormInput>> => {
+  const parsedAnimalId = cuidSchema.safeParse(animalId);
+  if (!parsedAnimalId.success) {
+    return { ok: false, message: "Invalid animal ID format." };
+  }
+  const validated = RecordSpayNeuterExemptionSchema.safeParse(values);
+  if (!validated.success) {
+    return {
+      ok: false,
+      message: "Missing or invalid fields. The exemption was not recorded.",
+      fieldErrors: z.flattenError(validated.error)
+        .fieldErrors as FieldErrors<RecordSpayNeuterExemptionFormInput>,
+    };
+  }
+
+  const today = await getShelterToday();
+  try {
+    await prisma.$transaction((tx) =>
+      recordExemption(
+        tx,
+        { ...validated.data, animalId: parsedAnimalId.data },
+        user.personId,
+        today,
+      ),
+    );
+  } catch (error) {
+    const refusal = refused<RecordSpayNeuterExemptionFormInput>(error);
+    if (refusal) return refusal;
+    console.error("Database error recording a spay/neuter exemption:", error);
+    return { ok: false, message: "Database Error: Failed to record the exemption." };
+  }
+
+  revalidateMedical(parsedAnimalId.data);
+  return { ok: true, message: "Exemption recorded." };
 };
 
 /**
@@ -586,9 +673,16 @@ export const rescheduleMedicalEntry = withAuthenticatedUser(
   RequirePermission(AppPermissions.MEDICAL_MANAGE)(_rescheduleMedicalEntry),
 );
 
-// Declining care already scheduled is part of giving it, not of planning it.
+// Declining care already scheduled is part of giving it, not of planning it,
+// except a spay or neuter: that sets an exemption, and also needs
+// MEDICAL_MANAGE (checked inside, once the entry is read).
 export const declineMedicalEntry = withAuthenticatedUser(
   RequirePermission(AppPermissions.MEDICAL_ADMINISTER)(_declineMedicalEntry),
+);
+
+// An exemption sets what the animal's care will be, so it is planning.
+export const recordSpayNeuterExemption = withAuthenticatedUser(
+  RequirePermission(AppPermissions.MEDICAL_MANAGE)(_recordSpayNeuterExemption),
 );
 
 // The same care for several animals at once, given or scheduled: planning

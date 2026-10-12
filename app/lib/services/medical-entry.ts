@@ -1,34 +1,29 @@
 import type { TransactionClient } from "@/app/lib/prisma";
-import type { Prisma } from "@/prisma/generated/client";
+import { Prisma } from "@/prisma/generated/client";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import {
   AnimalActivityType,
   AnimalListingStatus,
-  DoseUnit,
   MedicalEntryEventAction,
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalEntryStatus,
-  MedicalRoute,
   PartnerType,
   Sex,
-  SurgeryEvidence,
+  SpayNeuterExemptionReason,
   SurgeryProcedure,
-  TestResult,
 } from "@/prisma/generated/enums";
-import {
-  ConflictError,
-  NotFoundError,
-  PreconditionFailedError,
-} from "@/app/lib/utils/errors";
+import { ConflictError, NotFoundError } from "@/app/lib/utils/errors";
 import {
   calendarDay,
   formatShelterDay,
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
-import { addCalendarMonths, dueDateIssue } from "@/app/lib/utils/medical-days";
+import { dueDateIssue } from "@/app/lib/utils/medical-days";
 import { lockMedicalItemForUse } from "@/app/lib/services/medical-catalog";
 import { findOpenScheduledItemIds } from "@/app/lib/data/animals/medical-entry";
+import { findSpayNeuterEntries } from "@/app/lib/data/animals/medical-status";
+import { spayNeuterStatus } from "@/app/lib/utils/spay-neuter";
 import {
   medicalEntryName,
   type NameableMedicalEntry,
@@ -37,6 +32,7 @@ import {
   DOSE_UNIT_LABELS,
   MEDICAL_REASON_MAX_LENGTH,
   MEDICAL_ROUTE_LABELS,
+  SPAY_NEUTER_EXEMPTION_REASON_LABELS,
   SURGERY_EVIDENCE_LABELS,
   SURGERY_PROCEDURE_LABELS,
   TEST_RESULT_LABELS,
@@ -44,22 +40,57 @@ import {
   isCatalogEntryKind,
   type CatalogEntryKind,
 } from "@/app/lib/constants/medical";
+import {
+  KIND_NOUN,
+  MedicalEntryRefusal,
+  catalogTerms,
+  detailsCreate,
+  entryData,
+  microchipData,
+  surgeryData,
+  testData,
+  tidy,
+  treatmentData,
+  vaccineData,
+  valuesFor,
+  withStoredValues,
+  type CatalogItem,
+  type EntryField,
+  type EntryValues,
+  type MedicalEntryInput,
+  type StoredResult,
+} from "@/app/lib/services/medical-entry-values";
+
+export {
+  MedicalEntryRefusal,
+  type MedicalEntryInput,
+  type MicrochipEntryInput,
+  type SurgeryEntryInput,
+  type TestEntryInput,
+  type TreatmentEntryInput,
+  type VaccineEntryInput,
+} from "@/app/lib/services/medical-entry-values";
 
 /**
- * Scheduling, recording, correcting and voiding a vaccine, test, treatment or
- * surgery for an animal.
+ * Scheduling, recording, correcting and voiding a vaccine, test, treatment,
+ * surgery or microchip for an animal. What each kind holds, and the rules
+ * that need only the entry's own values, are in `medical-entry-values`.
  *
  * Vaccines, tests and treatments are given from the catalog, and the steps
  * that read the item (its lock, whether it can be picked, its defaults) run
  * for them alone. A surgery has no item: its procedure says what it is, and a
- * spay or neuter must suit the animal's sex.
+ * spay or neuter must suit the animal's sex. A microchip has no item either:
+ * its number says which chip it is, and no two entries that aren't voided
+ * hold the same number.
  *
  * Scheduled care is an entry with a due day and nothing else: no source, no
  * details row. Lot numbers and results are written only when it is given, so
  * they exist only for care that happened. Every read that derives a fact
  * counts only completed entries. Scheduled care is then recorded as given,
  * rescheduled to another day, or declined with a reason; a declined entry is
- * final.
+ * final. A spay or neuter that won't be done is an exemption: declined with a
+ * reason from a list and maybe a day to review it, whether it was scheduled
+ * first or recorded on its own.
  *
  * A correction edits the entry in place and writes an EDITED event holding the
  * before and after values of only what changed, plus a MEDICAL_ENTRY_EDITED
@@ -80,83 +111,6 @@ import {
  * can pin it.
  */
 
-/** A refusal that belongs to one field of the entry form. */
-export class MedicalEntryRefusal extends PreconditionFailedError {
-  readonly field: string | undefined;
-
-  constructor(message: string, field?: string) {
-    super(message);
-    this.name = "MedicalEntryRefusal";
-    this.field = field;
-  }
-}
-
-interface MedicalEntryCommonInput {
-  /** Null only for care given before intake on a day nobody knows. */
-  completedDate: CalendarDay | null;
-  source: MedicalEntrySource;
-  vetPartnerId?: string | null;
-  vetName?: string | null;
-  /**
-   * Who gave it. On a new in-house entry, left out means the person recording
-   * it; on an edit, left out keeps what is stored.
-   */
-  administeredById?: string | null;
-  notes?: string | null;
-}
-
-/** Care given from the catalog names its item. */
-interface CatalogEntryCommonInput extends MedicalEntryCommonInput {
-  itemId: string;
-}
-
-export interface VaccineEntryInput extends CatalogEntryCommonInput {
-  kind: typeof MedicalEntryKind.VACCINE;
-  manufacturer?: string | null;
-  lotNumber?: string | null;
-  lotExpiryDate?: CalendarDay | null;
-  route?: MedicalRoute | null;
-  site?: string | null;
-  rabiesTagNumber?: string | null;
-  durationMonths?: number | null;
-}
-
-export interface TestEntryInput extends CatalogEntryCommonInput {
-  kind: typeof MedicalEntryKind.TEST;
-  lotNumber?: string | null;
-  lotExpiryDate?: CalendarDay | null;
-  results: { analyteId: string; result: TestResult }[];
-}
-
-export interface TreatmentEntryInput extends CatalogEntryCommonInput {
-  kind: typeof MedicalEntryKind.TREATMENT;
-  doseAmount?: number | null;
-  doseUnit?: DoseUnit | null;
-  route?: MedicalRoute | null;
-}
-
-/**
- * A surgery. It has no catalog item: its procedure says what it was. The
- * surgeon is free text, since the surgeon is rarely a person in the system,
- * so nobody is stored as having given it (`administeredById` is ignored).
- */
-export interface SurgeryEntryInput extends MedicalEntryCommonInput {
-  kind: typeof MedicalEntryKind.SURGERY;
-  procedure: SurgeryProcedure;
-  surgeon?: string | null;
-  findings?: string | null;
-  anesthesiaNotes?: string | null;
-  /** What shows it was done, for a surgery done before intake, and only
-   * then. */
-  evidence?: SurgeryEvidence | null;
-}
-
-export type MedicalEntryInput =
-  | VaccineEntryInput
-  | TestEntryInput
-  | TreatmentEntryInput
-  | SurgeryEntryInput;
-
 /** Recording care can also schedule the next dose of a repeating item. */
 export interface ScheduleNextInput {
   dueDate: CalendarDay;
@@ -176,7 +130,8 @@ export interface RecordedMedicalEntry {
 
 /**
  * Care to schedule: what, for whom, and the day it is due. Care from the
- * catalog names its item, and a surgery its procedure.
+ * catalog names its item, and a surgery its procedure. A microchip needs
+ * neither: its number is known once it is implanted.
  */
 export type ScheduleMedicalEntryInput = {
   animalId: string;
@@ -185,6 +140,7 @@ export type ScheduleMedicalEntryInput = {
 } & (
   | { kind: CatalogEntryKind; itemId: string }
   | { kind: typeof MedicalEntryKind.SURGERY; procedure: SurgeryProcedure }
+  | { kind: typeof MedicalEntryKind.MICROCHIP }
 );
 
 /**
@@ -209,57 +165,6 @@ export type MedicalEntryEdit =
 // ---------------------------------------------------------------------------
 // Stored values
 // ---------------------------------------------------------------------------
-
-interface StoredResult {
-  analyteId: string;
-  analyteName: string;
-  result: TestResult;
-}
-
-/**
- * Every value an entry stores, flat and keyed by field name. Detail fields
- * keep their own names (`lotNumber`), and test results are `results`. This is
- * what an event's `before` and `after` hold, and what an edit compares.
- */
-interface EntryValues {
-  /** Null for the kinds that aren't given from the catalog. */
-  itemId: string | null;
-  completedDate: string | null;
-  source: MedicalEntrySource;
-  vetPartnerId: string | null;
-  vetName: string | null;
-  administeredById: string | null;
-  notes: string | null;
-  // Vaccine
-  manufacturer?: string | null;
-  site?: string | null;
-  rabiesTagNumber?: string | null;
-  durationMonths?: number | null;
-  validUntilDate?: string | null;
-  // Vaccine and test
-  lotNumber?: string | null;
-  lotExpiryDate?: string | null;
-  // Vaccine and treatment
-  route?: MedicalRoute | null;
-  // Test
-  results?: StoredResult[];
-  // Treatment
-  doseAmount?: number | null;
-  doseUnit?: DoseUnit | null;
-  // Surgery. The procedure is on the entry; the rest are its details.
-  procedure?: SurgeryProcedure;
-  surgeon?: string | null;
-  findings?: string | null;
-  anesthesiaNotes?: string | null;
-  evidence?: SurgeryEvidence | null;
-}
-
-type EntryField = keyof EntryValues;
-
-const tidy = (value: string | null | undefined): string | null => {
-  const trimmed = value?.trim() ?? "";
-  return trimmed === "" ? null : trimmed;
-};
 
 // Prisma reads sibling relations of one row at the same time, which a
 // transaction (one connection) can't do, so an entry and its details, and an
@@ -297,6 +202,7 @@ const readStoredEntry = async (
       dueDate: true,
       itemId: true,
       procedure: true,
+      chipNumber: true,
       completedDate: true,
       source: true,
       vetPartnerId: true,
@@ -307,7 +213,8 @@ const readStoredEntry = async (
     },
   });
   if (!entry) return null;
-  const { kind, status, dueDate, voidedAt, source, procedure, ...rest } = entry;
+  const { kind, status, dueDate, voidedAt, source, procedure, chipNumber, ...rest } =
+    entry;
   if (status !== MedicalEntryStatus.COMPLETED) {
     return { kind, status, dueDate, voidedAt, values: null };
   }
@@ -381,8 +288,16 @@ const readStoredEntry = async (
       };
       return { ...stored, values };
     }
-    case MedicalEntryKind.MICROCHIP:
-      throw new Error(`Reading a recorded ${kind.toLowerCase()} isn't supported.`);
+    case MedicalEntryKind.MICROCHIP: {
+      if (!chipNumber) {
+        throw new Error(`Microchip entry ${entryId} has no chip number.`);
+      }
+      const microchip = await tx.microchipDetails.findUniqueOrThrow({
+        where: { entryId },
+      });
+      const values: EntryValues = { ...common, chipNumber, brand: microchip.brand };
+      return { ...stored, values };
+    }
   }
 };
 
@@ -390,38 +305,18 @@ const readStoredEntry = async (
 // The rules
 // ---------------------------------------------------------------------------
 
-interface CatalogItem {
-  id: string;
-  kind: MedicalEntryKind;
-  name: string;
-  manufacturer: string | null;
-  defaultRoute: MedicalRoute | null;
-  defaultDoseAmount: number | null;
-  defaultDoseUnit: DoseUnit | null;
-  isRabies: boolean;
-  repeatIntervalDays: number | null;
-  retiredAt: Date | null;
-  species: { id: string }[];
-  analytes: { id: string; name: string; retiredAt: Date | null }[];
-}
-
-const KIND_NOUN: Record<MedicalEntryKind, string> = {
-  VACCINE: "vaccine",
-  TEST: "test",
-  TREATMENT: "treatment",
-  SURGERY: "surgery",
-  MICROCHIP: "microchip",
-};
-
 // What the activity text calls the entry: "DHPP vaccine", "Spay surgery",
-// "Other surgery".
-const subjectText = (entry: NameableMedicalEntry) => {
+// "Other surgery", "Microchip 985141000100003" (plain "Microchip" until its
+// number is known).
+const subjectText = (
+  entry: NameableMedicalEntry & { chipNumber?: string | null },
+) => {
   const name = medicalEntryName(entry);
   switch (entry.kind) {
     case MedicalEntryKind.SURGERY:
       return entry.procedure === SurgeryProcedure.OTHER ? name : `${name} surgery`;
     case MedicalEntryKind.MICROCHIP:
-      return name;
+      return entry.chipNumber ? `${name} ${entry.chipNumber}` : name;
     default:
       return `${name} ${KIND_NOUN[entry.kind]}`;
   }
@@ -436,7 +331,11 @@ const KIND_VERB: Record<MedicalEntryKind, string> = {
   MICROCHIP: "implanted",
 };
 
-const RABIES_MAX_MONTHS = 36;
+// A chip on the animal when it arrived was found on a scan, not implanted.
+const verbFor = (kind: MedicalEntryKind, source: MedicalEntrySource | null) =>
+  kind === MedicalEntryKind.MICROCHIP && source === MedicalEntrySource.BEFORE_INTAKE
+    ? "found"
+    : KIND_VERB[kind];
 
 interface AnimalFacts {
   speciesId: string;
@@ -508,20 +407,6 @@ const readItem = async (
   return { ...item, kind: item.kind as MedicalEntryKind, species, analytes };
 };
 
-/**
- * What a new entry on `item` is held to: the catalog as it is now. Care with
- * no item (a surgery) is held to nothing from it.
- */
-const catalogTerms = (item: CatalogItem | null) =>
-  item
-    ? {
-        isRabies: item.isRabies,
-        analytes: item.analytes
-          .filter((analyte) => !analyte.retiredAt)
-          .map(({ id, name }) => ({ id, name })),
-      }
-    : { isRabies: false, analytes: [] };
-
 /** That the item can be picked for this animal and kind, as when recorded. */
 const checkItemPickable = (
   item: CatalogItem,
@@ -577,6 +462,56 @@ const checkProcedure = (
     );
   }
 };
+
+/** What care is, by kind: its catalog item, its procedure, or neither. */
+type CareKind =
+  | { kind: CatalogEntryKind; itemId: string }
+  | { kind: typeof MedicalEntryKind.SURGERY; procedure: SurgeryProcedure }
+  | { kind: typeof MedicalEntryKind.MICROCHIP };
+
+/**
+ * Checks what the care is against the animal, and returns its catalog item,
+ * or null for care with none. A catalog item is locked until commit, so it
+ * can't change kind or retire before the entry is written, and must be one
+ * that can be picked for the animal. A surgery's procedure must suit the
+ * animal's sex. A microchip names neither.
+ *
+ * With `stored` (what the entry already holds), the checks run only for what
+ * changes: care already planned or given isn't refused because the catalog
+ * or the animal's sex changed since.
+ */
+const checkCare = async (
+  tx: TransactionClient,
+  care: CareKind,
+  animal: AnimalFacts,
+  stored?: { itemId: string | null; procedure?: SurgeryProcedure | null },
+): Promise<CatalogItem | null> => {
+  switch (care.kind) {
+    case MedicalEntryKind.SURGERY:
+      if (!stored || care.procedure !== stored.procedure) {
+        checkProcedure(care.procedure, animal);
+      }
+      return null;
+    case MedicalEntryKind.MICROCHIP:
+      return null;
+    default: {
+      await lockMedicalItemForUse(tx, care.itemId);
+      const item = await readItem(tx, care.itemId);
+      if (!stored || care.itemId !== stored.itemId) {
+        checkItemPickable(item, care.kind, animal);
+      }
+      return item;
+    }
+  }
+};
+
+/** What a scheduled entry stores about what is planned. */
+const plannedData = (care: CareKind) =>
+  care.kind === MedicalEntryKind.SURGERY
+    ? { procedure: care.procedure }
+    : care.kind === MedicalEntryKind.MICROCHIP
+      ? {}
+      : { itemId: care.itemId };
 
 const checkDay = (
   completedDate: CalendarDay | null,
@@ -636,6 +571,124 @@ export const checkDueDate = (
   }
 };
 
+// The refusal for a chip number another live entry holds, naming the animal
+// that has it.
+const chipNumberTaken = (holder: { animalId: string; animalName: string }, animalId: string | null) =>
+  new MedicalEntryRefusal(
+    holder.animalId === animalId
+      ? "That chip number is already on this animal's record."
+      : `That chip number is already on ${holder.animalName}'s record.`,
+    "chipNumber",
+  );
+
+// Who holds a chip number on an entry that isn't voided, other than
+// `exceptEntryId`. Null when nobody does.
+const findChipNumberHolder = async (
+  db: Pick<TransactionClient, "medicalEntry">,
+  chipNumber: string,
+  exceptEntryId: string | null,
+) => {
+  const holder = await db.medicalEntry.findFirst({
+    where: {
+      chipNumber,
+      voidedAt: null,
+      ...(exceptEntryId && { id: { not: exceptEntryId } }),
+    },
+    select: { animalId: true, animal: { select: { name: true } } },
+  });
+  return holder ? { animalId: holder.animalId, animalName: holder.animal.name } : null;
+};
+
+/**
+ * Refuses a chip number another entry that isn't voided already holds. A
+ * voided entry's number is free again. Read behind the animal's lock, so two
+ * people recording one number for one animal are refused in turn; two
+ * animals recording it at once are refused by the database's unique index
+ * instead (see `writingChipNumber`).
+ */
+const checkChipNumberFree = async (
+  tx: TransactionClient,
+  chipNumber: string | undefined,
+  animalId: string,
+  entryId: string | null,
+) => {
+  if (!chipNumber) return;
+  const holder = await findChipNumberHolder(tx, chipNumber, entryId);
+  if (holder) {
+    throw chipNumberTaken(holder, animalId);
+  }
+};
+
+/**
+ * A chip number the database's unique index refused: another animal's entry
+ * took it at the same moment, in a transaction this write's own check
+ * couldn't see. A refusal on the chip number field whatever happens to that
+ * entry afterwards; `nameChipNumberHolder` names the animal when it can.
+ */
+export class ChipNumberClash extends MedicalEntryRefusal {
+  readonly chipNumber: string;
+
+  constructor(chipNumber: string) {
+    super(
+      "That chip number was just recorded for another animal. Check the number and save again.",
+      "chipNumber",
+    );
+    this.name = "ChipNumberClash";
+    this.chipNumber = chipNumber;
+  }
+}
+
+/**
+ * Runs the statement that writes `chipNumber`, turning the unique index's
+ * refusal into a `ChipNumberClash`. The check behind the animal's lock reads
+ * only what is committed, so when two animals are given one number at once,
+ * neither sees the other, and the index refuses the second write when the
+ * first commits. Nothing else the statement writes can collide (the entry's
+ * and its details' keys are new), so a P2002 here is the chip index; Prisma
+ * doesn't reliably name the index through the pg adapter.
+ */
+const writingChipNumber = async <T>(
+  chipNumber: string | null | undefined,
+  write: () => Promise<T>,
+): Promise<T> => {
+  try {
+    return await write();
+  } catch (error) {
+    if (
+      chipNumber &&
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      throw new ChipNumberClash(chipNumber);
+    }
+    throw error;
+  }
+};
+
+/**
+ * For a `ChipNumberClash`, once its transaction has rolled back: the refusal
+ * naming the animal that now holds the number, as the service's own check
+ * would, or the clash as it is when nobody holds the number any more (that
+ * entry was voided or corrected in the meantime). Any other error is
+ * returned unchanged.
+ *
+ * Naming is a nicety. When the lookup itself fails, it is logged and the
+ * clash returned, so the refusal still reaches the chip number field.
+ */
+export const nameChipNumberHolder = async (
+  db: Pick<TransactionClient, "medicalEntry">,
+  error: unknown,
+): Promise<unknown> => {
+  if (!(error instanceof ChipNumberClash)) return error;
+  try {
+    const holder = await findChipNumberHolder(db, error.chipNumber, null);
+    return holder ? chipNumberTaken(holder, null) : error;
+  } catch (lookupError) {
+    console.error("Error finding who holds a clashed chip number:", lookupError);
+    return error;
+  }
+};
+
 const checkVet = async (
   tx: TransactionClient,
   source: MedicalEntrySource,
@@ -670,254 +723,6 @@ const checkVet = async (
     );
   }
 };
-
-/**
- * The values the input stores, after the per-kind rules. `itemDefaults` is
- * true for a new entry: blank defaults are filled in from the item then, and
- * never on an edit, so a field cleared on purpose stays clear.
- *
- * `isRabies` and `analytes` say what the entry is held to: the item's current
- * catalog values when it is recorded or its item changes, and what it was
- * recorded with otherwise, so changing the catalog later (renaming an
- * analyte, turning the rabies flag on or off) neither rewrites the entry nor
- * blocks a correction to it.
- */
-const valuesFor = (
-  input: MedicalEntryInput,
-  item: CatalogItem | null,
-  common: Omit<EntryValues, "itemId">,
-  options: {
-    itemDefaults: boolean;
-    isRabies: boolean;
-    analytes: { id: string; name: string }[];
-  },
-): EntryValues => {
-  if (input.kind === MedicalEntryKind.SURGERY) {
-    return surgeryValues(input, common);
-  }
-  if (!item) {
-    throw new Error(`A ${KIND_NOUN[input.kind]} entry needs its catalog item.`);
-  }
-  const base: EntryValues = { itemId: item.id, ...common };
-
-  if (input.kind === MedicalEntryKind.VACCINE) {
-    const rabiesTagNumber = tidy(input.rabiesTagNumber);
-    const durationMonths = input.durationMonths ?? null;
-    if (options.isRabies) {
-      if (durationMonths === null) {
-        throw new MedicalEntryRefusal(
-          "A rabies vaccine needs its duration.",
-          "durationMonths",
-        );
-      }
-      if (
-        !Number.isInteger(durationMonths) ||
-        durationMonths < 1 ||
-        durationMonths > RABIES_MAX_MONTHS
-      ) {
-        throw new MedicalEntryRefusal(
-          `The duration must be a whole number of months, from 1 to ${RABIES_MAX_MONTHS}.`,
-          "durationMonths",
-        );
-      }
-    } else if (rabiesTagNumber || durationMonths !== null) {
-      throw new MedicalEntryRefusal(
-        "Only a rabies vaccine has a tag number and duration.",
-        rabiesTagNumber ? "rabiesTagNumber" : "durationMonths",
-      );
-    }
-    const completedDate = common.completedDate
-      ? calendarDay(common.completedDate)
-      : null;
-    return {
-      ...base,
-      manufacturer:
-        tidy(input.manufacturer) ??
-        (options.itemDefaults ? item.manufacturer : null),
-      lotNumber: tidy(input.lotNumber),
-      lotExpiryDate: input.lotExpiryDate ?? null,
-      route:
-        input.route ?? (options.itemDefaults ? item.defaultRoute : null),
-      site: tidy(input.site),
-      rabiesTagNumber: options.isRabies ? rabiesTagNumber : null,
-      durationMonths: options.isRabies ? durationMonths : null,
-      validUntilDate:
-        options.isRabies && completedDate && durationMonths
-          ? addCalendarMonths(completedDate, durationMonths)
-          : null,
-    };
-  }
-
-  if (input.kind === MedicalEntryKind.TEST) {
-    const expected = options.analytes.map((analyte) => analyte.id);
-    const names = new Map(
-      options.analytes.map((analyte) => [analyte.id, analyte.name]),
-    );
-    const given = new Map<string, TestResult>();
-    for (const row of input.results) {
-      if (!expected.includes(row.analyteId)) {
-        throw new MedicalEntryRefusal(
-          `A result was given for something ${item.name} doesn't report.`,
-          "results",
-        );
-      }
-      if (given.has(row.analyteId)) {
-        throw new MedicalEntryRefusal(
-          `${names.get(row.analyteId)} has more than one result.`,
-          "results",
-        );
-      }
-      given.set(row.analyteId, row.result);
-    }
-    const missing = expected.filter((id) => !given.has(id));
-    if (missing.length > 0) {
-      throw new MedicalEntryRefusal(
-        `A result is needed for ${missing.map((id) => names.get(id)).join(" and ")}.`,
-        "results",
-      );
-    }
-    return {
-      ...base,
-      lotNumber: tidy(input.lotNumber),
-      lotExpiryDate: input.lotExpiryDate ?? null,
-      results: expected.map((analyteId) => ({
-        analyteId,
-        analyteName: names.get(analyteId)!,
-        result: given.get(analyteId)!,
-      })),
-    };
-  }
-
-  const doseAmount =
-    input.doseAmount ?? (options.itemDefaults ? item.defaultDoseAmount : null);
-  const doseUnit =
-    input.doseUnit ?? (options.itemDefaults ? item.defaultDoseUnit : null);
-  if (doseAmount !== null && !(doseAmount > 0)) {
-    throw new MedicalEntryRefusal("The dose must be more than zero.", "doseAmount");
-  }
-  if (doseAmount !== null && !doseUnit) {
-    throw new MedicalEntryRefusal("A dose needs a unit.", "doseUnit");
-  }
-  return {
-    ...base,
-    doseAmount,
-    doseUnit,
-    route: input.route ?? (options.itemDefaults ? item.defaultRoute : null),
-  };
-};
-
-/**
- * A surgery's values. Its evidence is what shows a surgery done before intake
- * was done, so it is required then and refused otherwise. Nobody is stored
- * as having given it: the surgeon is free text.
- */
-const surgeryValues = (
-  input: SurgeryEntryInput,
-  common: Omit<EntryValues, "itemId">,
-): EntryValues => {
-  const evidence = input.evidence ?? null;
-  const beforeIntake = common.source === MedicalEntrySource.BEFORE_INTAKE;
-  if (beforeIntake && !evidence) {
-    throw new MedicalEntryRefusal(
-      "Say what shows the surgery was done before intake.",
-      "evidence",
-    );
-  }
-  if (!beforeIntake && evidence) {
-    throw new MedicalEntryRefusal(
-      "Evidence is only for a surgery done before intake.",
-      "evidence",
-    );
-  }
-  return {
-    itemId: null,
-    ...common,
-    administeredById: null,
-    procedure: input.procedure,
-    surgeon: tidy(input.surgeon),
-    findings: tidy(input.findings),
-    anesthesiaNotes: tidy(input.anesthesiaNotes),
-    evidence,
-  };
-};
-
-// The optional fields an edit may leave out. Left out (undefined) keeps what
-// is stored; null clears it.
-const KEPT_WHEN_LEFT_OUT = [
-  "vetPartnerId",
-  "vetName",
-  "notes",
-  "manufacturer",
-  "lotNumber",
-  "lotExpiryDate",
-  "route",
-  "site",
-  "rabiesTagNumber",
-  "durationMonths",
-  "doseAmount",
-  "doseUnit",
-  "surgeon",
-  "findings",
-  "anesthesiaNotes",
-  "evidence",
-] as const;
-
-const withStoredValues = (
-  input: MedicalEntryInput,
-  before: EntryValues,
-): MedicalEntryInput => {
-  const filled: Record<string, unknown> = { ...input };
-  for (const field of KEPT_WHEN_LEFT_OUT) {
-    if (filled[field] === undefined && before[field] !== undefined) {
-      filled[field] = before[field];
-    }
-  }
-  return filled as unknown as MedicalEntryInput;
-};
-
-// ---------------------------------------------------------------------------
-// Writing the details
-// ---------------------------------------------------------------------------
-
-const vaccineData = (values: EntryValues) => ({
-  manufacturer: values.manufacturer ?? null,
-  lotNumber: values.lotNumber ?? null,
-  lotExpiryDate: values.lotExpiryDate ?? null,
-  route: values.route ?? null,
-  site: values.site ?? null,
-  rabiesTagNumber: values.rabiesTagNumber ?? null,
-  durationMonths: values.durationMonths ?? null,
-  validUntilDate: values.validUntilDate ?? null,
-});
-
-const testData = (values: EntryValues) => ({
-  lotNumber: values.lotNumber ?? null,
-  lotExpiryDate: values.lotExpiryDate ?? null,
-});
-
-const treatmentData = (values: EntryValues) => ({
-  doseAmount: values.doseAmount ?? null,
-  doseUnit: values.doseUnit ?? null,
-  route: values.route ?? null,
-});
-
-const surgeryData = (values: EntryValues) => ({
-  surgeon: values.surgeon ?? null,
-  findings: values.findings ?? null,
-  anesthesiaNotes: values.anesthesiaNotes ?? null,
-  evidence: values.evidence ?? null,
-});
-
-const entryData = (values: EntryValues) => ({
-  itemId: values.itemId,
-  procedure: values.procedure ?? null,
-  completedDate: values.completedDate,
-  source: values.source,
-  vetPartnerId: values.vetPartnerId,
-  vetName: values.vetName,
-  administeredById: values.administeredById,
-  notes: values.notes,
-});
 
 const asJson = (value: object) => value as Prisma.InputJsonObject;
 
@@ -983,6 +788,8 @@ const FIELD_LABELS: Record<Exclude<EntryField, ProseField>, string> = {
   procedure: "procedure",
   surgeon: "surgeon",
   evidence: "evidence",
+  chipNumber: "chip number",
+  brand: "brand",
 };
 
 const SOURCE_TEXT: Record<MedicalEntrySource, string> = {
@@ -1126,22 +933,11 @@ export async function scheduleMedicalEntry(
       "This animal has left the shelter's care, so nothing can be scheduled for it.",
     );
   }
-  let item: CatalogItem | null = null;
-  if (input.kind === MedicalEntryKind.SURGERY) {
-    checkProcedure(input.procedure, animal);
-  } else {
-    // Held until commit, as when recording.
-    await lockMedicalItemForUse(tx, input.itemId);
-    item = await readItem(tx, input.itemId);
-    checkItemPickable(item, input.kind, animal);
-  }
+  const item = await checkCare(tx, input, animal);
   checkDueDate(input.dueDate, today);
 
-  // What is planned: the item, or the surgery's procedure.
-  const planned =
-    input.kind === MedicalEntryKind.SURGERY
-      ? { procedure: input.procedure }
-      : { itemId: input.itemId };
+  // What is planned: the item, the surgery's procedure, or a microchip.
+  const planned = plannedData(input);
   const notes = tidy(input.notes);
   const entry = await tx.medicalEntry.create({
     data: {
@@ -1178,7 +974,7 @@ export async function scheduleMedicalEntry(
       animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_SCHEDULED,
       changedById: actorId,
-      changeSummary: `${subjectText({ kind: input.kind, item, procedure: input.kind === MedicalEntryKind.SURGERY ? input.procedure : null })} scheduled for ${dayText(input.dueDate)}.${batchText(batch)}`,
+      changeSummary: `${subjectText({ kind: input.kind, item, ...planned })} scheduled for ${dayText(input.dueDate)}.${batchText(batch)}`,
     },
   });
 
@@ -1284,43 +1080,129 @@ export async function rescheduleMedicalEntry(
   return { entryId, animalId: entry.animalId };
 }
 
+/** An exemption from a spay or neuter: why, and when to look at it again. */
+export interface SpayNeuterExemptionTerms {
+  exemptionReason: SpayNeuterExemptionReason;
+  /** Left out or null, the exemption holds until it is voided. */
+  reviewDate?: CalendarDay | null;
+}
+
+/** Declining a scheduled spay or neuter, which records an exemption. */
+export interface DeclineAsExemption extends SpayNeuterExemptionTerms {
+  /** The shelter's today, which the review day can't be before. */
+  today: CalendarDay;
+}
+
+const isSpayOrNeuter = (procedure: SurgeryProcedure | null | undefined) =>
+  procedure === SurgeryProcedure.SPAY || procedure === SurgeryProcedure.NEUTER;
+
+/**
+ * The values an exemption stores, after its rules: a reason from the list,
+ * a note in words that is required only when the reason is Other, and a
+ * review day that follows the scheduling rules, if there is one. `noteField`
+ * is the form field the note was typed in.
+ */
+const exemptionValues = (
+  terms: Partial<SpayNeuterExemptionTerms>,
+  note: string | null | undefined,
+  today: CalendarDay,
+  noteField: string,
+) => {
+  if (!terms.exemptionReason) {
+    throw new MedicalEntryRefusal(
+      "Pick the reason for the exemption.",
+      "exemptionReason",
+    );
+  }
+  const declineReason = tidy(note);
+  if (terms.exemptionReason === SpayNeuterExemptionReason.OTHER && !declineReason) {
+    throw new MedicalEntryRefusal("Say why the animal is exempt.", noteField);
+  }
+  if (declineReason && declineReason.length > MEDICAL_REASON_MAX_LENGTH) {
+    throw new MedicalEntryRefusal(
+      `The reason cannot exceed ${MEDICAL_REASON_MAX_LENGTH} characters.`,
+      noteField,
+    );
+  }
+  const reviewDate = terms.reviewDate ?? null;
+  if (reviewDate) {
+    checkDueDate(reviewDate, today, "reviewDate");
+  }
+  return { exemptionReason: terms.exemptionReason, declineReason, reviewDate };
+};
+
+// "too young or underweight. Review on Nov 3, 2026. Note: …"
+const exemptionText = ({
+  exemptionReason,
+  declineReason,
+  reviewDate,
+}: ReturnType<typeof exemptionValues>) =>
+  `${SPAY_NEUTER_EXEMPTION_REASON_LABELS[exemptionReason].toLowerCase()}.${
+    reviewDate ? ` Review on ${dayText(reviewDate)}.` : ""
+  }${declineReason ? ` Note: ${declineReason}` : ""}`;
+
 /**
  * Declines scheduled care, with the reason it won't be given. The entry stays
  * on the record as declined, and is final: one declined in error is voided
  * and scheduled again.
+ *
+ * Declining a spay or neuter records an exemption, so the animal's status
+ * says why it isn't altered: `exemption` is required then, with its reason
+ * and maybe a review day, and the reason in words is needed only for Other.
+ * Any other care can't be declined as an exemption, and needs `reason`.
  */
 export async function declineMedicalEntry(
   tx: TransactionClient,
   entryId: string,
-  reason: string,
+  reason: string | null | undefined,
   actorId: string,
+  exemption?: DeclineAsExemption | null,
 ): Promise<{ entryId: string; animalId: string }> {
-  const declineReason = reason.trim();
-  if (!declineReason) {
-    throw new MedicalEntryRefusal(
-      "A reason for declining this entry is required.",
-      "reason",
-    );
-  }
-  if (declineReason.length > MEDICAL_REASON_MAX_LENGTH) {
-    throw new MedicalEntryRefusal(
-      `The reason cannot exceed ${MEDICAL_REASON_MAX_LENGTH} characters.`,
-      "reason",
-    );
-  }
   const entry = await lockScheduledEntry(tx, entryId, "declined");
-  if (
-    entry.procedure === SurgeryProcedure.SPAY ||
-    entry.procedure === SurgeryProcedure.NEUTER
-  ) {
-    // A spay or neuter that won't be done is an exemption, which needs its
-    // reason; a plain decline would leave the animal's status unexplained.
-    throw new MedicalEntryRefusal("Record a spay/neuter exemption instead.");
+
+  let declined: {
+    declineReason: string | null;
+    exemptionReason?: SpayNeuterExemptionReason;
+    reviewDate?: CalendarDay | null;
+  };
+  let summary: string;
+  if (isSpayOrNeuter(entry.procedure)) {
+    if (!exemption) {
+      throw new MedicalEntryRefusal(
+        "Declining a spay or neuter records an exemption. Pick its reason.",
+        "exemptionReason",
+      );
+    }
+    const values = exemptionValues(exemption, reason, exemption.today, "reason");
+    declined = values;
+    summary = `${entry.subject} due ${dayText(entry.dueDate)} was declined as an exemption: ${exemptionText(values)}`;
+  } else {
+    if (exemption) {
+      throw new MedicalEntryRefusal(
+        "Only a spay or neuter can be declined as an exemption.",
+        "exemptionReason",
+      );
+    }
+    const declineReason = tidy(reason);
+    if (!declineReason) {
+      throw new MedicalEntryRefusal(
+        "A reason for declining this entry is required.",
+        "reason",
+      );
+    }
+    if (declineReason.length > MEDICAL_REASON_MAX_LENGTH) {
+      throw new MedicalEntryRefusal(
+        `The reason cannot exceed ${MEDICAL_REASON_MAX_LENGTH} characters.`,
+        "reason",
+      );
+    }
+    declined = { declineReason };
+    summary = `${entry.subject} due ${dayText(entry.dueDate)} was declined. Reason: ${declineReason}`;
   }
 
   await tx.medicalEntry.update({
     where: { id: entryId },
-    data: { status: MedicalEntryStatus.DECLINED, declineReason },
+    data: { status: MedicalEntryStatus.DECLINED, ...declined },
   });
   await tx.medicalEntryEvent.create({
     data: {
@@ -1328,7 +1210,7 @@ export async function declineMedicalEntry(
       action: MedicalEntryEventAction.DECLINED,
       actorId,
       before: { status: MedicalEntryStatus.SCHEDULED },
-      after: { status: MedicalEntryStatus.DECLINED, declineReason },
+      after: asJson({ status: MedicalEntryStatus.DECLINED, ...declined }),
     },
   });
   await tx.animalActivityLog.create({
@@ -1336,11 +1218,96 @@ export async function declineMedicalEntry(
       animalId: entry.animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_DECLINED,
       changedById: actorId,
-      changeSummary: `${entry.subject} due ${dayText(entry.dueDate)} was declined. Reason: ${declineReason}`,
+      changeSummary: summary,
     },
   });
 
   return { entryId, animalId: entry.animalId };
+}
+
+/** An exemption recorded on its own, with no spay or neuter scheduled first. */
+export interface RecordSpayNeuterExemptionInput extends SpayNeuterExemptionTerms {
+  animalId: string;
+  procedure: SurgeryProcedure;
+  /** Why, in words: required when the reason is Other. */
+  declineReason?: string | null;
+}
+
+/**
+ * Records that an animal is exempt from a spay or neuter, without one being
+ * scheduled first: a declined surgery entry with its procedure, its reason
+ * and maybe a review day, and no due day. The procedure must suit the
+ * animal's sex. Refused for an animal that has left the shelter's care, as
+ * scheduling is, and for one already spayed or neutered on its record.
+ *
+ * Like any decline, it is final. An exemption is extended by recording a new
+ * one, and ended by scheduling or recording the spay or neuter.
+ */
+export async function recordSpayNeuterExemption(
+  tx: TransactionClient,
+  input: RecordSpayNeuterExemptionInput,
+  actorId: string,
+  today: CalendarDay,
+): Promise<{ entryId: string; animalId: string }> {
+  const { animalId, procedure } = input;
+  await lockAnimal(tx, animalId);
+
+  const animal = await readAnimal(tx, animalId);
+  if (animal.archived) {
+    throw new MedicalEntryRefusal(
+      "This animal has left the shelter's care, so no exemption can be recorded for it.",
+    );
+  }
+  if (!isSpayOrNeuter(procedure)) {
+    throw new MedicalEntryRefusal(
+      "An exemption is from a spay or a neuter.",
+      "procedure",
+    );
+  }
+  checkProcedure(procedure, animal);
+  const values = exemptionValues(input, input.declineReason, today, "declineReason");
+
+  const entries = (await findSpayNeuterEntries(tx, [animalId])).get(animalId) ?? [];
+  if (spayNeuterStatus(entries, today).status === "ALTERED") {
+    throw new MedicalEntryRefusal(
+      "This animal is already spayed or neutered on its record, so it can't be exempt.",
+    );
+  }
+
+  const entry = await tx.medicalEntry.create({
+    data: {
+      animalId,
+      kind: MedicalEntryKind.SURGERY,
+      procedure,
+      status: MedicalEntryStatus.DECLINED,
+      ...values,
+      createdById: actorId,
+    },
+    select: { id: true },
+  });
+  await tx.medicalEntryEvent.create({
+    data: {
+      entryId: entry.id,
+      action: MedicalEntryEventAction.CREATED,
+      actorId,
+      after: asJson({
+        kind: MedicalEntryKind.SURGERY,
+        status: MedicalEntryStatus.DECLINED,
+        procedure,
+        ...values,
+      }),
+    },
+  });
+  await tx.animalActivityLog.create({
+    data: {
+      animalId,
+      activityType: AnimalActivityType.MEDICAL_ENTRY_DECLINED,
+      changedById: actorId,
+      changeSummary: `${SURGERY_PROCEDURE_LABELS[procedure]} exemption recorded: ${exemptionText(values)}`,
+    },
+  });
+
+  return { entryId: entry.id, animalId };
 }
 
 // ---------------------------------------------------------------------------
@@ -1394,27 +1361,6 @@ const givenValues = async (
   );
 };
 
-/** The nested create for the kind's details row. */
-const detailsCreate = (kind: MedicalEntryKind, values: EntryValues) => ({
-  ...(kind === MedicalEntryKind.VACCINE && {
-    vaccine: { create: vaccineData(values) },
-  }),
-  ...(kind === MedicalEntryKind.TEST && {
-    test: {
-      create: {
-        ...testData(values),
-        results: { createMany: { data: values.results! } },
-      },
-    },
-  }),
-  ...(kind === MedicalEntryKind.TREATMENT && {
-    treatment: { create: treatmentData(values) },
-  }),
-  ...(kind === MedicalEntryKind.SURGERY && {
-    surgery: { create: surgeryData(values) },
-  }),
-});
-
 /**
  * "DHPP vaccine recorded: given in house, on Oct 15, 2026 (due Oct 14,
  * 2026)." or "Neuter surgery recorded: done before intake, on an unknown
@@ -1431,8 +1377,13 @@ const recordedSummary = async (
   const partnerName = values.vetPartnerId
     ? (await readNames(tx, [values])).partners.get(values.vetPartnerId)
     : undefined;
-  const subject = subjectText({ kind, item, procedure: values.procedure });
-  return `${subject} recorded: ${KIND_VERB[kind]} ${SOURCE_TEXT[values.source]}${partnerName ? ` at ${partnerName}` : ""}, on ${dayText(values.completedDate)}${
+  const subject = subjectText({
+    kind,
+    item,
+    procedure: values.procedure,
+    chipNumber: values.chipNumber,
+  });
+  return `${subject} recorded: ${verbFor(kind, values.source)} ${SOURCE_TEXT[values.source]}${partnerName ? ` at ${partnerName}` : ""}, on ${dayText(values.completedDate)}${
     dueDate ? ` (due ${dayText(dueDate)})` : ""
   }.${values.results ? ` Results: ${describeResults(values.results)}.` : ""}${
     values.evidence
@@ -1518,30 +1469,24 @@ export async function recordMedicalEntry(
   await lockAnimal(tx, animalId);
 
   const animal = await readAnimal(tx, animalId);
-  let item: CatalogItem | null = null;
-  if (input.kind === MedicalEntryKind.SURGERY) {
-    checkProcedure(input.procedure, animal);
-  } else {
-    // Held until commit, so the item can't change kind or retire between
-    // this check and the entry being written.
-    await lockMedicalItemForUse(tx, input.itemId);
-    item = await readItem(tx, input.itemId);
-    checkItemPickable(item, input.kind, animal);
-  }
+  const item = await checkCare(tx, input, animal);
   const values = await givenValues(tx, input, item, animal, actorId, today);
+  await checkChipNumberFree(tx, values.chipNumber, animalId, null);
 
-  const entry = await tx.medicalEntry.create({
-    data: {
-      animalId,
-      kind: input.kind,
-      status: MedicalEntryStatus.COMPLETED,
-      createdById: actorId,
-      ...entryData(values),
-      ...batchData(options.batch),
-      ...detailsCreate(input.kind, values),
-    },
-    select: { id: true },
-  });
+  const entry = await writingChipNumber(values.chipNumber, () =>
+    tx.medicalEntry.create({
+      data: {
+        animalId,
+        kind: input.kind,
+        status: MedicalEntryStatus.COMPLETED,
+        createdById: actorId,
+        ...entryData(values),
+        ...batchData(options.batch),
+        ...detailsCreate(input.kind, values),
+      },
+      select: { id: true },
+    }),
+  );
 
   await tx.medicalEntryEvent.create({
     data: {
@@ -1627,31 +1572,23 @@ export async function recordScheduledMedicalEntry(
   }
 
   const animal = await readAnimal(tx, animalId);
-  let item: CatalogItem | null = null;
-  if (input.kind === MedicalEntryKind.SURGERY) {
-    if (input.procedure !== entry.procedure) {
-      checkProcedure(input.procedure, animal);
-    }
-  } else {
-    await lockMedicalItemForUse(tx, input.itemId);
-    item = await readItem(tx, input.itemId);
-    if (input.itemId !== entry.itemId) {
-      checkItemPickable(item, input.kind, animal);
-    }
-  }
+  const item = await checkCare(tx, input, animal, entry);
   const values = await givenValues(tx, input, item, animal, actorId, today);
+  await checkChipNumberFree(tx, values.chipNumber, animalId, entryId);
 
-  await tx.medicalEntry.update({
-    where: { id: entryId },
-    data: {
-      status: MedicalEntryStatus.COMPLETED,
-      ...entryData(values),
-      // The batch that gave it. One that scheduled it is kept in its CREATED
-      // event.
-      ...batchData(options.batch),
-      ...detailsCreate(entry.kind, values),
-    },
-  });
+  await writingChipNumber(values.chipNumber, () =>
+    tx.medicalEntry.update({
+      where: { id: entryId },
+      data: {
+        status: MedicalEntryStatus.COMPLETED,
+        ...entryData(values),
+        // The batch that gave it. One that scheduled it is kept in its
+        // CREATED event.
+        ...batchData(options.batch),
+        ...detailsCreate(entry.kind, values),
+      },
+    }),
+  );
 
   await tx.medicalEntryEvent.create({
     data: {
@@ -1758,21 +1695,10 @@ export async function editMedicalEntry(
   const before = entry.values;
   input = withStoredValues(input, before);
   const animal = await readAnimal(tx, animalId);
-  let item: CatalogItem | null = null;
+  const item = await checkCare(tx, input, animal, before);
   // What the entry is held to: see `valuesFor`.
-  let terms = catalogTerms(null);
-  if (input.kind === MedicalEntryKind.SURGERY) {
-    if (input.procedure !== before.procedure) {
-      checkProcedure(input.procedure, animal);
-    }
-  } else {
-    const itemChanged = input.itemId !== before.itemId;
-    await lockMedicalItemForUse(tx, input.itemId);
-    item = await readItem(tx, input.itemId);
-    if (itemChanged) {
-      checkItemPickable(item, input.kind, animal);
-    }
-    terms = itemChanged
+  const terms =
+    !item || item.id !== before.itemId
       ? catalogTerms(item)
       : {
           // Every rabies entry stores its duration.
@@ -1782,7 +1708,6 @@ export async function editMedicalEntry(
             name: row.analyteName,
           })),
         };
-  }
   checkDay(input.completedDate, input.source, animal, today);
 
   const vetPartnerId = input.vetPartnerId || null;
@@ -1825,11 +1750,15 @@ export async function editMedicalEntry(
   if (changed.length === 0) {
     return { status: "unchanged", entryId, animalId };
   }
+  const newChipNumber = changed.includes("chipNumber") ? after.chipNumber : null;
+  await checkChipNumberFree(tx, newChipNumber ?? undefined, animalId, entryId);
 
-  await tx.medicalEntry.update({
-    where: { id: entryId },
-    data: entryData(after),
-  });
+  await writingChipNumber(newChipNumber, () =>
+    tx.medicalEntry.update({
+      where: { id: entryId },
+      data: entryData(after),
+    }),
+  );
   switch (entry.kind) {
     case MedicalEntryKind.VACCINE:
       await tx.vaccineDetails.update({
@@ -1865,6 +1794,12 @@ export async function editMedicalEntry(
         data: surgeryData(after),
       });
       break;
+    case MedicalEntryKind.MICROCHIP:
+      await tx.microchipDetails.update({
+        where: { entryId },
+        data: microchipData(after),
+      });
+      break;
   }
 
   const pick = (values: EntryValues) =>
@@ -1884,6 +1819,7 @@ export async function editMedicalEntry(
     kind: entry.kind,
     item,
     procedure: after.procedure,
+    chipNumber: after.chipNumber,
   });
   const changeSummary = `${subject} was corrected: ${joinList(
     changed.map((field) => describeChange(field, before, after, names)),
@@ -1938,7 +1874,10 @@ export async function voidMedicalEntry(
       dueDate: true,
       completedDate: true,
       voidedAt: true,
+      source: true,
       procedure: true,
+      chipNumber: true,
+      exemptionReason: true,
       item: { select: { name: true } },
     },
   });
@@ -1969,12 +1908,16 @@ export async function voidMedicalEntry(
       animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_VOIDED,
       changedById: actorId,
-      // Care that was never given is named by the day it was due.
-      changeSummary: `${subjectText(entry)} ${
-        entry.status === MedicalEntryStatus.COMPLETED
-          ? `${KIND_VERB[entry.kind]} on ${dayText(entry.completedDate)}`
-          : `due ${dayText(entry.dueDate)}`
-      } was voided. Reason: ${trimmedReason}`,
+      // Care that was never given is named by the day it was due, and an
+      // exemption as one.
+      changeSummary:
+        entry.exemptionReason && entry.procedure
+          ? `${SURGERY_PROCEDURE_LABELS[entry.procedure]} exemption was voided. Reason: ${trimmedReason}`
+          : `${subjectText(entry)} ${
+              entry.status === MedicalEntryStatus.COMPLETED
+                ? `${verbFor(entry.kind, entry.source)} on ${dayText(entry.completedDate)}`
+                : `due ${dayText(entry.dueDate)}`
+            } was voided. Reason: ${trimmedReason}`,
     },
   });
 

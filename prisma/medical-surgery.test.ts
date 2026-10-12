@@ -550,7 +550,7 @@ test("a surgery never schedules a next one", async () => {
   assert.equal(await prisma.medicalEntry.count({ where: { animalId } }), 1);
 });
 
-test("a scheduled dental can be declined; a scheduled spay or neuter can't be declined that way", async () => {
+test("a scheduled dental can be declined; a scheduled spay or neuter can't be declined without an exemption", async () => {
   const animalId = await makeAnimal("Declined");
   const dental = await schedule(animalId, SurgeryProcedure.DENTAL);
   await prisma.$transaction((tx) =>
@@ -578,8 +578,8 @@ test("a scheduled dental can be declined; a scheduled spay or neuter can't be de
       prisma.$transaction((tx) =>
         declineMedicalEntry(tx, entryId, "Too young.", editorId),
       ),
-      undefined,
-      /Record a spay\/neuter exemption instead/,
+      "exemptionReason",
+      /records an exemption/,
     );
     const entry = await entryOf(entryId);
     assert.equal(entry.status, MedicalEntryStatus.SCHEDULED, procedure);
