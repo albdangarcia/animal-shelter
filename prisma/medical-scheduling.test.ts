@@ -48,6 +48,7 @@ import {
   findRecentMedicalEntries,
   findVaccinesAndTests,
 } from "@/app/lib/data/animals/medical-entry";
+import { findMedicalEntryFormItems } from "@/app/lib/data/medical-catalog";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import { ConflictError } from "@/app/lib/utils/errors";
@@ -1216,6 +1217,57 @@ test("the reads that derive facts leave scheduled care out; the due list has it"
   assert.equal(due[0].id, dewormer.entryId);
   assert.equal(due[1].id, firstRabies.entryId);
   assert.equal(due[0].treatment, null);
+});
+
+test("the entry forms' items carry the animal's open scheduled care, and keep an item retired since", async () => {
+  const animalId = await makeAnimal("Form items");
+  const open = await schedule(animalId);
+  const voided = await schedule(animalId, { dueDate: day("2026-10-20") });
+  await voidEntry(voided.entryId, "Duplicate.");
+  const declined = await schedule(animalId, {
+    kind: MedicalEntryKind.TREATMENT,
+    itemId: dewormerId,
+  });
+  await decline(declined.entryId, "Not needed.");
+  const given = await schedule(animalId, {
+    kind: MedicalEntryKind.TREATMENT,
+    itemId: selamectinId,
+  });
+  await recordScheduled(given.entryId, {
+    kind: MedicalEntryKind.TREATMENT,
+    itemId: selamectinId,
+    completedDate: TODAY,
+    source: MedicalEntrySource.IN_HOUSE,
+  });
+  // Scheduled, then retired: it can't be picked, but its care is still
+  // recorded with it.
+  const lastStockId = await createItem({
+    kind: MedicalItemKind.VACCINE,
+    name: name("Last stock"),
+    speciesIds: [],
+    analytes: [],
+  });
+  const lastStock = await schedule(animalId, { itemId: lastStockId });
+  await prisma.$transaction((tx) => retireMedicalItem(tx, lastStockId));
+
+  const { items, scheduledItems } = await findMedicalEntryFormItems(prisma, {
+    id: animalId,
+    speciesId: dogId,
+  });
+  const entriesOf = (itemId: string) =>
+    items.find((item) => item.id === itemId)?.scheduledEntryIds;
+  // Only open care counts: not voided, declined or given.
+  assert.deepEqual(entriesOf(dhppId), [open.entryId]);
+  assert.deepEqual(entriesOf(dewormerId), []);
+  assert.deepEqual(entriesOf(selamectinId), []);
+  // Not pickable: retired, or for another species.
+  for (const itemId of [lastStockId, retiredVaccineId, catVaccineId]) {
+    assert.equal(entriesOf(itemId), undefined);
+  }
+  assert.deepEqual(
+    scheduledItems.map((item) => [item.id, item.scheduledEntryIds]),
+    [[lastStockId, [lastStock.entryId]]],
+  );
 });
 
 test("the latest rabies vaccine counts only completed entries, whatever rows exist", async () => {

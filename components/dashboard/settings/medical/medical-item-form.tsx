@@ -48,6 +48,7 @@ import {
   MEDICAL_ROUTE_LABELS,
 } from "@/app/lib/constants/medical";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
+import { MAX_REPEAT_INTERVAL_DAYS } from "@/app/lib/utils/medical-days";
 
 const KINDS = Object.values(MedicalItemKind);
 const ROUTES = Object.values(MedicalRoute);
@@ -227,6 +228,7 @@ export function MedicalItemForm({ onFormSubmit, species, item }: Props) {
             name="repeatIntervalDays"
             label="Repeat every (days)"
             min={1}
+            max={MAX_REPEAT_INTERVAL_DAYS}
             placeholder="e.g. 14"
           />
 

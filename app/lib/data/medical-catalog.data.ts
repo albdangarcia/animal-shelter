@@ -2,19 +2,22 @@ import prisma from "@/app/lib/prisma";
 import { RequirePermission } from "../auth/protected-actions";
 import { hasPermission } from "../auth/hasPermission";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { MedicalItemKind, PartnerType } from "@/prisma/generated/enums";
+import { AnimalListingStatus, PartnerType } from "@/prisma/generated/enums";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { getShelterToday } from "./shelter-settings.data";
 import {
   findMedicalCatalog,
-  findPickableMedicalItems,
+  findMedicalEntryFormItems,
   type MedicalCatalogItem,
-  type PickableMedicalItem,
+  type MedicalEntryFormItem,
 } from "./medical-catalog";
-import { findOpenScheduledItemIds } from "./animals/medical-entry";
 import type { CalendarDay } from "../utils/shelter-day";
 
-export type { MedicalCatalogItem, PickableMedicalItem } from "./medical-catalog";
+export type {
+  MedicalCatalogItem,
+  MedicalEntryFormItem,
+  PickableMedicalItem,
+} from "./medical-catalog";
 
 const _fetchMedicalCatalog = async (): Promise<MedicalCatalogItem[]> => {
   try {
@@ -50,12 +53,20 @@ export const fetchMedicalCatalogSpecies = RequirePermission(
 )(_fetchMedicalCatalogSpecies);
 
 export interface MedicalEntryFormOptions {
+  /** The items staff can pick for this animal, every kind. */
+  items: MedicalEntryFormItem[];
   /**
-   * The items staff can pick for this animal, every kind. `alreadyScheduled`
-   * says the animal has open scheduled care for the item, so recording it
-   * doesn't offer to schedule the next one.
+   * Items of the animal's open scheduled care that can't be picked for new
+   * entries any more (retired, or narrowed to other species). That care is
+   * still recorded with its own item.
    */
-  items: (PickableMedicalItem & { alreadyScheduled: boolean })[];
+  scheduledItems: MedicalEntryFormItem[];
+  /**
+   * Whether the animal is in the shelter's care. Care already scheduled can
+   * still be recorded after it leaves, but nothing new is scheduled for it,
+   * so recording doesn't offer the next dose.
+   */
+  inCare: boolean;
   /** Active vet clinics. */
   vetClinics: { id: string; name: string }[];
   /** The shelter's today: the date given starts there, and can't pass it. */
@@ -76,15 +87,10 @@ const _fetchMedicalEntryFormOptions = async (
   try {
     const animal = await prisma.animal.findUniqueOrThrow({
       where: { id: id.data },
-      select: { speciesId: true },
+      select: { id: true, speciesId: true, listingStatus: true },
     });
-    const [items, scheduled, vetClinics, today] = await Promise.all([
-      Promise.all(
-        Object.values(MedicalItemKind).map((kind) =>
-          findPickableMedicalItems(prisma, animal.speciesId, kind),
-        ),
-      ),
-      findOpenScheduledItemIds(prisma, id.data),
+    const [{ items, scheduledItems }, vetClinics, today] = await Promise.all([
+      findMedicalEntryFormItems(prisma, animal),
       prisma.partner.findMany({
         where: { type: PartnerType.VET_CLINIC, isActive: true },
         orderBy: { name: "asc" },
@@ -93,9 +99,9 @@ const _fetchMedicalEntryFormOptions = async (
       getShelterToday(),
     ]);
     return {
-      items: items
-        .flat()
-        .map((item) => ({ ...item, alreadyScheduled: scheduled.has(item.id) })),
+      items,
+      scheduledItems,
+      inCare: animal.listingStatus !== AnimalListingStatus.ARCHIVED,
       vetClinics,
       today,
     };

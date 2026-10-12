@@ -168,6 +168,27 @@ export const findOpenScheduledItemIds = async (
 };
 
 /**
+ * The animal's open scheduled entries (scheduled, not voided), by item. A
+ * form recording one of them as given asks whether any other is open for
+ * its item.
+ */
+export const findOpenScheduledEntryIdsByItem = async (
+  db: Db,
+  animalId: string,
+): Promise<Map<string, string[]>> => {
+  const rows = await db.medicalEntry.findMany({
+    where: { animalId, status: MedicalEntryStatus.SCHEDULED, voidedAt: null },
+    orderBy: { id: "asc" },
+    select: { id: true, itemId: true },
+  });
+  const byItem = new Map<string, string[]>();
+  for (const row of rows) {
+    byItem.set(row.itemId, [...(byItem.get(row.itemId) ?? []), row.id]);
+  }
+  return byItem;
+};
+
+/**
  * One page of the animal's entries, whatever their status, voided ones
  * included: the history is the only read that shows them all. `kinds` empty
  * means every kind.

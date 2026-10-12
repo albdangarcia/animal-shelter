@@ -372,6 +372,21 @@ test("dose defaults are for treatments; a vaccine has a route only, a test neith
   await create(vaccine({ defaultRoute: MedicalRoute.SUBCUTANEOUS }));
 });
 
+test("a repeat interval is at most five years of days, so its next dose can be scheduled", async () => {
+  const { id } = await create(vaccine({ repeatIntervalDays: 1825 }));
+  assert.equal(
+    (await prisma.medicalItem.findUniqueOrThrow({ where: { id } }))
+      .repeatIntervalDays,
+    1825,
+  );
+  await assert.rejects(
+    create(vaccine({ repeatIntervalDays: 1826 })),
+    (error: Error) =>
+      error instanceof PreconditionFailedError &&
+      /at most 1825 days/.test(error.message),
+  );
+});
+
 test("an unused item can change kind; one in use can't", async () => {
   // Unused: a test becomes a vaccine, and its analytes go with the change.
   const unused = await create(testItem(["Antigen"]));

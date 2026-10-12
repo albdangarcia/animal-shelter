@@ -4,6 +4,7 @@ import {
   MedicalItemKind,
   MedicalRoute,
 } from "@/prisma/generated/enums";
+import { MAX_REPEAT_INTERVAL_DAYS } from "@/app/lib/utils/medical-days";
 import { cuidSchema } from "./common.schemas";
 
 const tidyName = z
@@ -39,7 +40,10 @@ export const MedicalItemFormSchema = z
       .number()
       .int("Use a whole number of days.")
       .min(1, "At least one day.")
-      .max(3650, "At most ten years.")
+      .max(
+        MAX_REPEAT_INTERVAL_DAYS,
+        `At most ${MAX_REPEAT_INTERVAL_DAYS} days (five years).`,
+      )
       .nullable(),
     isRabies: z.boolean(),
     analytes: z.array(

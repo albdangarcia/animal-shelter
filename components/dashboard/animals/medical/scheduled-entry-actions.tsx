@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, type Resolver } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { format } from "date-fns";
-import { CalendarClock, CircleSlash, Loader2 } from "lucide-react";
+import { CalendarClock, CircleSlash, Loader2, Syringe } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { DayField } from "@/components/forms/day-field";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
+import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import {
   declineMedicalEntry,
   rescheduleMedicalEntry,
@@ -44,11 +45,20 @@ import {
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
 import type { FieldErrors } from "@/app/lib/action-result";
+import {
+  DirtyFormHandle,
+  useConfirmedOpenChange,
+} from "@/hooks/use-confirmed-open-change";
 import { entryLabel } from "./medical-entry-item";
+import { MedicalEntryForm } from "./medical-entry-form";
+import { DiscardChangesDialog } from "./discard-changes-dialog";
 import { useEntryDialogFocus } from "./use-entry-dialog-focus";
 
 interface Props {
+  animalId: string;
   entry: MedicalEntryDisplay;
+  /** What the record form offers for this animal. */
+  options: MedicalEntryFormOptions;
   /** The shelter's today: a due day can't be before it. */
   today: CalendarDay;
   canManage: boolean;
@@ -56,11 +66,13 @@ interface Props {
 }
 
 /**
- * The buttons on a row of the due list: Reschedule to plan care for another
- * day, and Decline when it won't be given.
+ * The buttons on a row of the due list: Record when the care was given,
+ * Reschedule to plan it for another day, and Decline when it won't be given.
  */
 export function ScheduledEntryActions({
+  animalId,
   entry,
+  options,
   today,
   canManage,
   canAdminister,
@@ -68,9 +80,72 @@ export function ScheduledEntryActions({
   if (!canManage && !canAdminister) return null;
   return (
     <div className="mt-3 flex flex-wrap gap-2">
+      {canAdminister && (
+        <RecordButton animalId={animalId} entry={entry} options={options} />
+      )}
       {canManage && <RescheduleButton entry={entry} today={today} />}
       {canAdminister && <DeclineButton entry={entry} />}
     </div>
+  );
+}
+
+function RecordButton({
+  animalId,
+  entry,
+  options,
+}: {
+  animalId: string;
+  entry: MedicalEntryDisplay;
+  options: MedicalEntryFormOptions;
+}) {
+  const [open, setOpen] = useState(false);
+  const formRef = useRef<DirtyFormHandle>(null);
+  const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
+    useConfirmedOpenChange(() => formRef.current?.isDirty() ?? false, setOpen);
+  // Recording takes the row off the due list, button and all.
+  const { triggerRef, returnFocus } = useEntryDialogFocus();
+
+  return (
+    <>
+      <Button
+        ref={triggerRef}
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-label={`Record ${entryLabel(entry)} as given`}
+        onClick={() => setOpen(true)}
+      >
+        <Syringe className="mr-2 size-4" />
+        Record
+      </Button>
+      <Dialog open={open} onOpenChange={guardedOnOpenChange}>
+        <DialogContent
+          className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto"
+          onCloseAutoFocus={returnFocus}
+        >
+          <DialogHeader>
+            <DialogTitle>Record {entry.item.name} as given</DialogTitle>
+            <DialogDescription>
+              It was due {formatShelterDayOrNA(entry.dueDate)}. Record how it
+              was given: the item&apos;s defaults are filled in.
+            </DialogDescription>
+          </DialogHeader>
+          <MedicalEntryForm
+            animalId={animalId}
+            kind={entry.kind}
+            options={options}
+            scheduled={entry}
+            onFormSubmit={() => setOpen(false)}
+            ref={formRef}
+          />
+        </DialogContent>
+      </Dialog>
+      <DiscardChangesDialog
+        open={isConfirmOpen}
+        onConfirm={confirmDiscard}
+        onCancel={cancelDiscard}
+      />
+    </>
   );
 }
 

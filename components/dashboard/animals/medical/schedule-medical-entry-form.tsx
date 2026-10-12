@@ -180,7 +180,7 @@ export function ScheduleMedicalEntryForm({
                     {items.map((option) => (
                       <SelectItem key={option.id} value={option.id}>
                         {option.name}
-                        {option.alreadyScheduled && (
+                        {option.scheduledEntryIds.length > 0 && (
                           <span className="text-muted-foreground">
                             {" "}
                             (already scheduled)

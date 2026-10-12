@@ -61,6 +61,14 @@ export const rabiesStatus = (
  */
 export const MAX_SCHEDULE_AHEAD_YEARS = 5;
 
+/**
+ * The longest repeat interval a catalog item can have: five years of 365
+ * days, which never passes the scheduling ceiling, so the next dose suggested
+ * from care given today can always be scheduled. An item that repeats less
+ * often than that can't have its next dose planned anyway.
+ */
+export const MAX_REPEAT_INTERVAL_DAYS = MAX_SCHEDULE_AHEAD_YEARS * 365;
+
 /** The last day care can be scheduled for when today is `today`. */
 export const latestDueDate = (today: CalendarDay): CalendarDay =>
   addCalendarMonths(today, MAX_SCHEDULE_AHEAD_YEARS * 12);

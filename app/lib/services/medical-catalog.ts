@@ -10,6 +10,7 @@ import {
   NotFoundError,
   PreconditionFailedError,
 } from "@/app/lib/utils/errors";
+import { MAX_REPEAT_INTERVAL_DAYS } from "@/app/lib/utils/medical-days";
 
 /**
  * The catalog of vaccines, tests and treatments staff pick from when they
@@ -121,6 +122,13 @@ const normalise = (input: MedicalItemInput): NormalisedItem => {
   ) {
     throw new PreconditionFailedError(
       "The repeat interval must be a whole number of days, at least one.",
+    );
+  }
+  // Recording offers to schedule the next dose this many days on, and care
+  // can't be scheduled further ahead than this.
+  if (repeatIntervalDays !== null && repeatIntervalDays > MAX_REPEAT_INTERVAL_DAYS) {
+    throw new PreconditionFailedError(
+      `The repeat interval can be at most ${MAX_REPEAT_INTERVAL_DAYS} days (five years), since care can't be scheduled further ahead.`,
     );
   }
 

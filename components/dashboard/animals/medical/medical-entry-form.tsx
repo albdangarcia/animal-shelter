@@ -1,6 +1,6 @@
 "use client";
 
-import { useImperativeHandle, useRef, useTransition } from "react";
+import { useEffect, useImperativeHandle, useRef, useTransition } from "react";
 import {
   useFieldArray,
   useForm,
@@ -43,13 +43,14 @@ import {
   TestResult,
 } from "@/prisma/generated/enums";
 import type {
+  MedicalEntryFormItem,
   MedicalEntryFormOptions,
-  PickableMedicalItem,
 } from "@/app/lib/data/medical-catalog.data";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
 import {
   editMedicalEntry,
   recordMedicalEntry,
+  recordScheduledMedicalEntry,
 } from "@/app/lib/actions/medical-entry.actions";
 import {
   MedicalEntryFormSchema,
@@ -66,6 +67,15 @@ import {
 } from "@/app/lib/constants/medical";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { switchItem } from "@/app/lib/utils/medical-item-fills";
+import { latestDueDate, nextDueDate } from "@/app/lib/utils/medical-days";
+import {
+  nextDoseItem,
+  withoutInactiveNextDose,
+} from "@/app/lib/utils/medical-next-dose";
+import {
+  formatShelterDayOrNA,
+  type CalendarDay,
+} from "@/app/lib/utils/shelter-day";
 import type { FieldErrors } from "@/app/lib/action-result";
 import {
   DirtyFormHandle,
@@ -77,7 +87,8 @@ const NONE = "none";
 /**
  * The form's own state: every kind's fields at once, flat, so one form serves
  * all three kinds. The schema validates the kind's fields and drops the rest.
- * `dateUnknown` is the form's alone.
+ * `dateUnknown` and `scheduleNextOn` are the form's alone: the next dose is
+ * sent only when the form offers it and the box is ticked.
  */
 type EntryFormState = {
   kind: MedicalEntryKind;
@@ -98,6 +109,8 @@ type EntryFormState = {
   results: { analyteId: string; analyteName: string; result: TestResult | "" }[];
   doseAmount: number | null;
   doseUnit: DoseUnit | null;
+  scheduleNextOn: boolean;
+  scheduleNext: { dueDate: string | null };
 };
 
 const fromEntry = (entry: MedicalEntryDisplay): EntryFormState => ({
@@ -122,6 +135,8 @@ const fromEntry = (entry: MedicalEntryDisplay): EntryFormState => ({
   results: (entry.test?.results ?? []).map((row) => ({ ...row })),
   doseAmount: entry.treatment?.doseAmount ?? null,
   doseUnit: entry.treatment?.doseUnit ?? null,
+  scheduleNextOn: false,
+  scheduleNext: { dueDate: null },
 });
 
 const blank = (kind: MedicalEntryKind, today: string): EntryFormState => ({
@@ -143,21 +158,50 @@ const blank = (kind: MedicalEntryKind, today: string): EntryFormState => ({
   results: [],
   doseAmount: null,
   doseUnit: null,
+  scheduleNextOn: true,
+  scheduleNext: { dueDate: null },
 });
 
 /**
- * The items this entry can pick. An entry being edited keeps its own item
- * even when that item has since been retired or narrowed to other species,
- * held to what it was recorded with: the results it was recorded with, and
- * the rabies fields only if it was recorded as a rabies vaccine, whatever the
- * catalog says now.
+ * Scheduled care being recorded: its item, with what picking that item fills
+ * in, and its notes.
+ */
+const fromScheduled = (
+  scheduled: MedicalEntryDisplay,
+  item: MedicalEntryFormItem | undefined,
+  today: CalendarDay,
+): EntryFormState => ({
+  ...blank(scheduled.kind, today),
+  ...(item && fillsFor(item)),
+  itemId: scheduled.itemId,
+  notes: scheduled.notes ?? "",
+});
+
+const byName = (a: { name: string }, b: { name: string }) =>
+  a.name.localeCompare(b.name);
+
+/**
+ * The items this entry can pick. Scheduled care being recorded keeps its own
+ * item even when that item has since been retired or narrowed to other
+ * species, as the catalog has it now: its details are written for the first
+ * time. An entry being edited keeps its own item too, held to what it was
+ * recorded with: the results it was recorded with, and the rabies fields only
+ * if it was recorded as a rabies vaccine, whatever the catalog says now.
  */
 const itemChoices = (
   kind: MedicalEntryKind,
   options: MedicalEntryFormOptions,
   entry?: MedicalEntryDisplay,
-): PickableMedicalItem[] => {
+  scheduled?: MedicalEntryDisplay,
+): MedicalEntryFormItem[] => {
   const ofKind = options.items.filter((item) => item.kind === kind);
+  if (scheduled) {
+    if (ofKind.some((item) => item.id === scheduled.itemId)) return ofKind;
+    const own = options.scheduledItems.find(
+      (item) => item.id === scheduled.itemId,
+    );
+    return own ? [...ofKind, own].sort(byName) : ofKind;
+  }
   if (!entry) return ofKind;
   const recordedAnalytes = (entry.test?.results ?? []).map((row) => ({
     id: row.analyteId,
@@ -178,9 +222,10 @@ const itemChoices = (
       defaultDoseUnit: own?.defaultDoseUnit ?? null,
       repeatIntervalDays: own?.repeatIntervalDays ?? null,
       analytes: recordedAnalytes,
+      scheduledEntryIds: own?.scheduledEntryIds ?? [],
     },
     ...others,
-  ].sort((a, b) => a.name.localeCompare(b.name));
+  ].sort(byName);
 };
 
 /** The fields picking an item fills in, for each kind. */
@@ -210,7 +255,7 @@ const pickFills = (state: EntryFormState): Fills => ({
 });
 
 /** What picking `item` fills in: the catalog's defaults. */
-const fillsFor = (item: PickableMedicalItem): Fills => ({
+const fillsFor = (item: MedicalEntryFormItem): Fills => ({
   manufacturer: item.manufacturer ?? "",
   route: item.defaultRoute,
   rabiesTagNumber: "",
@@ -230,6 +275,8 @@ interface Props {
   options: MedicalEntryFormOptions;
   /** Present when editing. */
   entry?: MedicalEntryDisplay;
+  /** Present when recording scheduled care as given. */
+  scheduled?: MedicalEntryDisplay;
   onFormSubmit: () => void;
   ref?: React.Ref<DirtyFormHandle>;
 }
@@ -239,11 +286,12 @@ export function MedicalEntryForm({
   kind,
   options,
   entry,
+  scheduled,
   onFormSubmit,
   ref,
 }: Props) {
   const [isPending, startSubmitTransition] = useTransition();
-  const items = itemChoices(kind, options, entry);
+  const items = itemChoices(kind, options, entry, scheduled);
   const vetClinics =
     entry?.vetPartnerId &&
     entry.vetPartner &&
@@ -251,35 +299,107 @@ export function MedicalEntryForm({
       ? [...options.vetClinics, { id: entry.vetPartnerId, name: entry.vetPartner.name }]
       : options.vetClinics;
 
+  // Editing never schedules the next dose: the service ignores it there.
+  const offeredNextDose = (state: EntryFormState) =>
+    entry ? null : nextDoseItem(state, options, scheduled?.id);
+  const suggestedNextDay = (state: EntryFormState): string | null => {
+    const nextItem = offeredNextDose(state);
+    return nextItem?.repeatIntervalDays && state.completedDate
+      ? nextDueDate(
+          state.completedDate as CalendarDay,
+          nextItem.repeatIntervalDays,
+          options.today,
+        )
+      : null;
+  };
+
+  const defaultValues = (): EntryFormState => {
+    if (entry) return fromEntry(entry);
+    const state = scheduled
+      ? fromScheduled(
+          scheduled,
+          items.find((candidate) => candidate.id === scheduled.itemId),
+          options.today,
+        )
+      : blank(kind, options.today);
+    return { ...state, scheduleNext: { dueDate: suggestedNextDay(state) } };
+  };
+
+  // The schema reads the flat state as the kind's shape and drops the fields
+  // that kind doesn't have, so what reaches onSubmit is the schema's output,
+  // not this state.
+  const schemaResolver = standardSchemaResolver(
+    MedicalEntryFormSchema,
+  ) as unknown as Resolver<EntryFormState>;
   const form = useForm<EntryFormState>({
-    // The schema reads the flat state as the kind's shape and drops the
-    // fields that kind doesn't have, so what reaches onSubmit is the
-    // schema's output, not this state.
-    resolver: standardSchemaResolver(
-      MedicalEntryFormSchema,
-    ) as unknown as Resolver<EntryFormState>,
-    defaultValues: entry ? fromEntry(entry) : blank(kind, options.today),
+    // The next dose goes to the schema only when the form offers it and the
+    // box is ticked; otherwise there is none.
+    resolver: (state, context, resolverOptions) =>
+      schemaResolver(
+        {
+          ...state,
+          scheduleNext:
+            state.scheduleNextOn && offeredNextDose(state)
+              ? state.scheduleNext
+              : (null as unknown as EntryFormState["scheduleNext"]),
+        },
+        context,
+        resolverOptions,
+      ),
+    defaultValues: defaultValues(),
   });
   const results = useFieldArray({
     control: form.control,
     name: "results",
     keyName: "key",
   });
-  const [itemId, source, dateUnknown] = useWatch({
+  const [itemId, source, dateUnknown, completedDate, scheduleNextOn] = useWatch({
     control: form.control,
-    name: ["itemId", "source", "dateUnknown"],
+    name: ["itemId", "source", "dateUnknown", "completedDate", "scheduleNextOn"],
   });
   const item = items.find((candidate) => candidate.id === itemId);
+  const nextItem = entry
+    ? null
+    : nextDoseItem(
+        { itemId, source, completedDate, dateUnknown },
+        options,
+        scheduled?.id,
+      );
 
+  const comparable = (state: EntryFormState) =>
+    withoutInactiveNextDose(state, !!offeredNextDose(state));
   const initialValuesRef = useRef(form.getValues());
   useImperativeHandle(
     ref,
     () => ({
       isDirty: () =>
-        haveFormValuesChanged(form.getValues(), initialValuesRef.current),
+        haveFormValuesChanged(
+          comparable(form.getValues()),
+          comparable(initialValuesRef.current),
+        ),
     }),
-    [form],
+    // Rebuilt each render: what the form offers depends on its options.
   );
+
+  // The next dose's day follows the day given and the item's interval until
+  // someone picks a day of their own.
+  const lastSuggestedDay = useRef(form.getValues("scheduleNext.dueDate"));
+  const nextDayPicked = useRef(false);
+  const nextInterval = nextItem?.repeatIntervalDays ?? null;
+  useEffect(() => {
+    if (nextInterval === null || !completedDate) return;
+    if (form.getValues("scheduleNext.dueDate") !== lastSuggestedDay.current) {
+      nextDayPicked.current = true;
+    }
+    if (nextDayPicked.current) return;
+    const suggested = nextDueDate(
+      completedDate as CalendarDay,
+      nextInterval,
+      options.today,
+    );
+    lastSuggestedDay.current = suggested;
+    form.setValue("scheduleNext.dueDate", suggested);
+  }, [completedDate, nextInterval, form, options.today]);
 
   // What each item held when the form left it, so coming back restores it.
   // The entry's own item is never new to the form, so it comes back to what
@@ -342,10 +462,16 @@ export function MedicalEntryForm({
       const payload = values as MedicalEntryFormInput;
       const result = entry
         ? await editMedicalEntry(entry.id, payload)
-        : await recordMedicalEntry(animalId, payload);
+        : scheduled
+          ? await recordScheduledMedicalEntry(scheduled.id, payload)
+          : await recordMedicalEntry(animalId, payload);
 
       if (result.ok) {
-        toast.success(result.message);
+        toast.success(
+          !entry && values.scheduleNext && item
+            ? `Recorded. Next ${item.name} due ${formatShelterDayOrNA(values.scheduleNext.dueDate)}.`
+            : result.message,
+        );
         onFormSubmit();
         return;
       }
@@ -359,7 +485,15 @@ export function MedicalEntryForm({
   const resultsError = form.formState.errors.results;
   const resultsErrorMessage =
     resultsError?.root?.message ?? resultsError?.message;
+  // The service files a refusal of the next dose itself (already scheduled,
+  // retired) on `scheduleNext`, and one of its day on the day.
+  const scheduleNextErrorMessage = form.formState.errors.scheduleNext?.message;
   const noun = MEDICAL_ITEM_KIND_LABELS[kind].toLowerCase();
+  // Care scheduled during the stay was given then, never before intake.
+  const sources = Object.values(MedicalEntrySource).filter(
+    (value) => !scheduled || value !== MedicalEntrySource.BEFORE_INTAKE,
+  );
+  const latestNextDay = latestDueDate(options.today);
 
   return (
     <Form {...form}>
@@ -418,7 +552,7 @@ export function MedicalEntryForm({
                     }
                     className="flex flex-wrap gap-4"
                   >
-                    {Object.values(MedicalEntrySource).map((value) => (
+                    {sources.map((value) => (
                       <label key={value} className="flex items-center gap-2 text-sm">
                         <RadioGroupItem value={value} />
                         {MEDICAL_ENTRY_SOURCE_LABELS[value]}
@@ -640,6 +774,48 @@ export function MedicalEntryForm({
               </div>
               <RouteField form={form} />
             </>
+          )}
+
+          {nextItem && (
+            <fieldset className="space-y-3 rounded-lg border p-4 md:col-span-2">
+              <legend className="sr-only">Next dose</legend>
+              <FormField
+                control={form.control}
+                name="scheduleNextOn"
+                render={({ field }) => (
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={(checked) => field.onChange(!!checked)}
+                    />
+                    Schedule the next one
+                  </label>
+                )}
+              />
+              <p className="text-sm text-muted-foreground">
+                {nextItem.name} repeats every {nextItem.repeatIntervalDays}{" "}
+                {nextItem.repeatIntervalDays === 1 ? "day" : "days"}.
+              </p>
+              {scheduleNextOn && (
+                <DayField
+                  control={form.control}
+                  name="scheduleNext.dueDate"
+                  label="Next due date"
+                  required
+                  className="md:max-w-xs"
+                  triggerClassName="w-full"
+                  disabledDates={(date) => {
+                    const day = format(date, "yyyy-MM-dd");
+                    return day < options.today || day > latestNextDay;
+                  }}
+                />
+              )}
+              {scheduleNextErrorMessage && (
+                <p className="text-sm text-destructive">
+                  {scheduleNextErrorMessage}
+                </p>
+              )}
+            </fieldset>
           )}
 
           <FormField

@@ -25,7 +25,7 @@ interface Props {
  * Entries with their change history, and the row actions menu on each one
  * that isn't voided when the viewer may manage them: Void on every entry,
  * and Edit on given care only. On the due list, each row also gets
- * Reschedule and Decline.
+ * Record, Reschedule and Decline.
  */
 export function MedicalEntryList({
   entries,
@@ -55,7 +55,9 @@ export function MedicalEntryList({
             <>
               {due && controls && (
                 <ScheduledEntryActions
+                  animalId={controls.animalId}
                   entry={entry}
+                  options={controls.options}
                   today={today}
                   canManage={controls.canManage}
                   canAdminister={controls.canAdminister}

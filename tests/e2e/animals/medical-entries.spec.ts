@@ -109,6 +109,9 @@ test.describe("as staff", () => {
     await fillStable(dialog.getByLabel("Lot number"), lot);
     await dialog.getByLabel("Rabies tag number").fill("T-E2E");
     await dialog.getByLabel(/Duration \(months\)/).fill("12");
+    // Rabies 1-year repeats, so recording offers to schedule the next one.
+    // This journey is about the record itself; scheduling has its own spec.
+    await dialog.getByRole("checkbox", { name: "Schedule the next one" }).uncheck();
     await dialog.getByRole("button", { name: "Record Vaccine" }).click();
     await expect(dialog).toBeHidden();
     // Focus goes back to the menu's button, not to the page.

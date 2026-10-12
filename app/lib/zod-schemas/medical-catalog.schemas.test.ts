@@ -80,3 +80,13 @@ test("MedicalItemFormSchema: only a treatment has a dose, and a dose needs a uni
     true,
   );
 });
+
+test("MedicalItemFormSchema: a repeat interval is a whole number of days up to five years", () => {
+  assert.equal(
+    MedicalItemFormSchema.parse({ ...base, repeatIntervalDays: 1825 })
+      .repeatIntervalDays,
+    1825,
+  );
+  assert.ok(fieldErrorsOf({ ...base, repeatIntervalDays: 1826 }).repeatIntervalDays);
+  assert.ok(fieldErrorsOf({ ...base, repeatIntervalDays: 0 }).repeatIntervalDays);
+});
