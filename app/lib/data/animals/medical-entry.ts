@@ -217,13 +217,20 @@ export const findOpenScheduledEntryIdsByItem = async (
  *
  * Newest first by the day given or, for care not given, the day due, so
  * upcoming care comes first and care given on an unknown day before intake
- * comes last. Prisma can't order by that, so the page's ids are picked in SQL
- * and the entries read by id.
+ * comes last. A spay/neuter exemption recorded on its own was never due, so
+ * it goes by the day it was recorded, on the shelter's calendar
+ * (`timeZone`). Prisma can't order by that, so the page's ids are picked in
+ * SQL and the entries read by id.
  */
 export const findMedicalHistoryPage = async (
   db: Db,
   animalId: string,
-  options: { kinds: MedicalEntryKind[]; page: number; perPage: number },
+  options: {
+    kinds: MedicalEntryKind[];
+    page: number;
+    perPage: number;
+    timeZone: string;
+  },
 ) => {
   const where: Prisma.MedicalEntryWhereInput = {
     animalId,
@@ -233,12 +240,18 @@ export const findMedicalHistoryPage = async (
     options.kinds.length > 0
       ? Prisma.sql`AND kind::text IN (${Prisma.join(options.kinds)})`
       : Prisma.empty;
+  // The shelter day a declined entry with no due day was recorded on.
+  // `created_at` is stored as UTC with no zone, so it is read as UTC first,
+  // then as the shelter's wall clock.
+  const declinedUndueDay = Prisma.sql`CASE WHEN status::text = ${MedicalEntryStatus.DECLINED}
+    THEN to_char((created_at AT TIME ZONE 'UTC') AT TIME ZONE ${options.timeZone}, 'YYYY-MM-DD')
+    END`;
   const [total, page] = await Promise.all([
     db.medicalEntry.count({ where }),
     db.$queryRaw<{ id: string }[]>`
       SELECT id FROM medical_entries
       WHERE animal_id = ${animalId} ${kindFilter}
-      ORDER BY coalesce(completed_date, due_date) DESC NULLS LAST,
+      ORDER BY coalesce(completed_date, due_date, ${declinedUndueDay}) DESC NULLS LAST,
         created_at DESC, id DESC
       LIMIT ${options.perPage} OFFSET ${(options.page - 1) * options.perPage}`,
   ]);

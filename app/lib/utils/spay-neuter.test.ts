@@ -2,12 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   MedicalEntryStatus,
+  Sex,
   SpayNeuterExemptionReason,
   SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import { calendarDay } from "./shelter-day";
 import {
   openExemptionReview,
+  procedureSexIssue,
+  proceduresFor,
   spayNeuterStatus,
   type SpayNeuterEntry,
 } from "./spay-neuter";
@@ -139,4 +142,25 @@ test("an exemption declined from a spay scheduled earlier counts from when it wa
 test("an exemption with no review day is never open for review", () => {
   assert.equal(openExemptionReview([exemption(null)]), null);
   assert.equal(openExemptionReview([]), null);
+});
+
+test("a spay is for a female and a neuter for a male; unknown sex can have either", () => {
+  assert.match(procedureSexIssue(SurgeryProcedure.SPAY, Sex.MALE) ?? "", /male/);
+  assert.match(procedureSexIssue(SurgeryProcedure.NEUTER, Sex.FEMALE) ?? "", /female/);
+  assert.equal(procedureSexIssue(SurgeryProcedure.SPAY, Sex.FEMALE), null);
+  assert.equal(procedureSexIssue(SurgeryProcedure.NEUTER, Sex.MALE), null);
+  assert.equal(procedureSexIssue(SurgeryProcedure.SPAY, Sex.UNKNOWN), null);
+  assert.equal(procedureSexIssue(SurgeryProcedure.NEUTER, Sex.UNKNOWN), null);
+  assert.equal(procedureSexIssue(SurgeryProcedure.DENTAL, Sex.MALE), null);
+
+  const others = [
+    SurgeryProcedure.DENTAL,
+    SurgeryProcedure.AMPUTATION,
+    SurgeryProcedure.ENUCLEATION,
+    SurgeryProcedure.MASS_REMOVAL,
+    SurgeryProcedure.OTHER,
+  ];
+  assert.deepEqual(proceduresFor(Sex.FEMALE), [SurgeryProcedure.SPAY, ...others]);
+  assert.deepEqual(proceduresFor(Sex.MALE), [SurgeryProcedure.NEUTER, ...others]);
+  assert.deepEqual(proceduresFor(Sex.UNKNOWN), Object.values(SurgeryProcedure));
 });

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  declineText,
   describeEntryChanges,
   formatEntryFieldValue,
 } from "./medical-entry-changes";
@@ -73,4 +74,69 @@ test("describeEntryChanges: a reschedule reads as the due date before and after"
     describeEntryChanges({ dueDate: "2026-10-14" }, { dueDate: "2026-10-20" }, names),
     [{ field: "dueDate", label: "Due date", from: "Oct 14, 2026", to: "Oct 20, 2026" }],
   );
+});
+
+test("formatEntryFieldValue: surgery, chip and exemption fields read as words", () => {
+  assert.equal(formatEntryFieldValue("procedure", "MASS_REMOVAL", names), "Mass removal");
+  assert.equal(formatEntryFieldValue("evidence", "VET_RECORDS", names), "Vet records");
+  assert.equal(
+    formatEntryFieldValue("exemptionReason", "PARTNER_WILL_ALTER", names),
+    "Partner will alter",
+  );
+  assert.equal(formatEntryFieldValue("reviewDate", "2026-11-03", names), "Nov 3, 2026");
+  assert.equal(formatEntryFieldValue("reviewDate", null, names), "none");
+  assert.equal(
+    formatEntryFieldValue("chipNumber", "985141000100003", names),
+    "985141000100003",
+  );
+  assert.equal(formatEntryFieldValue("brand", null, names), "none");
+});
+
+test("describeEntryChanges: a corrected surgery and chip read in form order", () => {
+  assert.deepEqual(
+    describeEntryChanges(
+      { findings: null, procedure: "NEUTER", surgeon: "Dr. Lee" },
+      { findings: "Small hernia.", procedure: "SPAY", surgeon: "Dr. Park" },
+      names,
+    ),
+    [
+      { field: "procedure", label: "Procedure", from: "Neuter", to: "Spay" },
+      { field: "surgeon", label: "Surgeon", from: "Dr. Lee", to: "Dr. Park" },
+      { field: "findings", label: "Findings", from: "none", to: "Small hernia." },
+    ],
+  );
+  assert.deepEqual(
+    describeEntryChanges(
+      { brand: "HomeAgain", chipNumber: "985141000100001" },
+      { brand: "Datamars", chipNumber: "985141000100002" },
+      names,
+    ).map((change) => change.label),
+    ["Chip number", "Brand"],
+  );
+});
+
+test("declineText: the words given, or an exemption's reason, review day and words", () => {
+  assert.equal(
+    declineText({ status: "DECLINED", declineReason: "Reaction noted last time." }),
+    "Reaction noted last time.",
+  );
+  assert.equal(
+    declineText({
+      status: "DECLINED",
+      exemptionReason: "TOO_YOUNG_OR_UNDERWEIGHT",
+      reviewDate: "2026-11-03",
+      declineReason: null,
+    }),
+    "Too young or underweight, review on Nov 3, 2026.",
+  );
+  assert.equal(
+    declineText({
+      status: "DECLINED",
+      exemptionReason: "OTHER",
+      reviewDate: null,
+      declineReason: "Not routinely done for this species.",
+    }),
+    "Other, no review date. Not routinely done for this species.",
+  );
+  assert.equal(declineText(null), "");
 });

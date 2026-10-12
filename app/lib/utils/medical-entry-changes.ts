@@ -8,6 +8,9 @@ import type {
   MedicalEntrySource,
   MedicalEntryStatus,
   MedicalRoute,
+  SpayNeuterExemptionReason,
+  SurgeryEvidence,
+  SurgeryProcedure,
   TestResult,
 } from "@/prisma/generated/enums";
 import {
@@ -15,12 +18,18 @@ import {
   MEDICAL_ENTRY_SOURCE_LABELS,
   MEDICAL_ENTRY_STATUS_LABELS,
   MEDICAL_ROUTE_LABELS,
+  SPAY_NEUTER_EXEMPTION_REASON_LABELS,
+  SURGERY_EVIDENCE_LABELS,
+  SURGERY_PROCEDURE_LABELS,
   TEST_RESULT_LABELS,
 } from "@/app/lib/constants/medical";
 import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 
 export const MEDICAL_ENTRY_FIELD_LABELS: Record<string, string> = {
   itemId: "Item",
+  procedure: "Procedure",
+  chipNumber: "Chip number",
+  brand: "Brand",
   status: "Status",
   dueDate: "Due date",
   completedDate: "Date given",
@@ -28,8 +37,14 @@ export const MEDICAL_ENTRY_FIELD_LABELS: Record<string, string> = {
   vetPartnerId: "Vet clinic",
   vetName: "Vet",
   administeredById: "Given by",
+  evidence: "Evidence",
+  surgeon: "Surgeon",
+  findings: "Findings",
+  anesthesiaNotes: "Anesthesia notes",
   notes: "Notes",
   declineReason: "Reason declined",
+  exemptionReason: "Reason for the exemption",
+  reviewDate: "Review date",
   manufacturer: "Manufacturer",
   lotNumber: "Lot number",
   lotExpiryDate: "Lot expiry",
@@ -67,7 +82,17 @@ export const formatEntryFieldValue = (
     case "completedDate":
     case "lotExpiryDate":
     case "validUntilDate":
+    case "reviewDate":
       return formatShelterDayOrNA(value as string);
+    case "procedure":
+      return SURGERY_PROCEDURE_LABELS[value as SurgeryProcedure] ?? String(value);
+    case "evidence":
+      return SURGERY_EVIDENCE_LABELS[value as SurgeryEvidence] ?? String(value);
+    case "exemptionReason":
+      return (
+        SPAY_NEUTER_EXEMPTION_REASON_LABELS[value as SpayNeuterExemptionReason] ??
+        String(value)
+      );
     case "status":
       return MEDICAL_ENTRY_STATUS_LABELS[value as MedicalEntryStatus] ?? String(value);
     case "source":
@@ -119,4 +144,25 @@ export const describeEntryChanges = (
     from: formatEntryFieldValue(field, was[field], names),
     to: formatEntryFieldValue(field, now[field], names),
   }));
+};
+
+/**
+ * Why care was declined, from its `DECLINED` event's `after`: the words given
+ * or, for a spay/neuter exemption, its reason, its review day and any words
+ * given with it. "Too young or underweight, review on Nov 3, 2026."
+ */
+export const declineText = (after: unknown): string => {
+  const { declineReason, exemptionReason, reviewDate } = (after ?? {}) as {
+    declineReason?: string | null;
+    exemptionReason?: string | null;
+    reviewDate?: string | null;
+  };
+  if (!exemptionReason) return declineReason ?? "";
+  const terms = [
+    formatEntryFieldValue("exemptionReason", exemptionReason, {}),
+    reviewDate
+      ? `review on ${formatShelterDayOrNA(reviewDate)}`
+      : "no review date",
+  ].join(", ");
+  return declineReason ? `${terms}. ${declineReason}` : `${terms}.`;
 };

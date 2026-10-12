@@ -32,6 +32,7 @@ import {
   findMedicalStatus,
   findSpayNeuterEntries,
 } from "@/app/lib/data/animals/medical-status";
+import { findMedicalHistoryPage } from "@/app/lib/data/animals/medical-entry";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
 // Random, not the time: the files run in parallel.
@@ -543,5 +544,59 @@ test("the medical status reads Altered, Exempt or Unknown, with the chips the an
       completedDate: "2026-09-01",
     },
     { entryId: older, chipNumber: `${base}000001`, brand: null, completedDate: null },
+  ]);
+});
+
+test("History places an exemption recorded on its own by the shelter day it was recorded", async () => {
+  const animalId = await makeAnimal("History");
+  const { entryId: chipId } = await chip(
+    animalId,
+    `${runId.toUpperCase()}000009`,
+    null,
+  );
+  const { entryId: dentalId } = await prisma.$transaction((tx) =>
+    recordMedicalEntry(
+      tx,
+      {
+        animalId,
+        kind: MedicalEntryKind.SURGERY,
+        procedure: SurgeryProcedure.DENTAL,
+        completedDate: day("2026-10-09"),
+        source: MedicalEntrySource.IN_HOUSE,
+      },
+      staffId,
+      TODAY,
+    ),
+  );
+  const { entryId: exemptionId } = await exemption(animalId);
+  // The exemption was recorded at 03:00 UTC on Oct 10, which is the evening
+  // of Oct 9 in Los Angeles; the dental was written two hours later.
+  await prisma.medicalEntry.update({
+    where: { id: exemptionId },
+    data: { createdAt: new Date("2026-10-10T03:00:00Z") },
+  });
+  await prisma.medicalEntry.update({
+    where: { id: dentalId },
+    data: { createdAt: new Date("2026-10-10T05:00:00Z") },
+  });
+
+  const order = async (timeZone: string) =>
+    (
+      await findMedicalHistoryPage(prisma, animalId, {
+        kinds: [],
+        page: 1,
+        perPage: 10,
+        timeZone,
+      })
+    ).entries.map((entry) => entry.id);
+
+  // On Oct 10, after the dental given the day before. The chip found before
+  // intake on an unknown day stays last.
+  assert.deepEqual(await order("UTC"), [exemptionId, dentalId, chipId]);
+  // On Oct 9, the dental's day: the later write comes first.
+  assert.deepEqual(await order("America/Los_Angeles"), [
+    dentalId,
+    exemptionId,
+    chipId,
   ]);
 });

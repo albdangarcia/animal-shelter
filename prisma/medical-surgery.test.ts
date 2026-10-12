@@ -610,6 +610,7 @@ test("history lists surgeries and filters to them; the vaccine reads leave them 
     kinds: [],
     page: 1,
     perPage: 10,
+    timeZone: "UTC",
   });
   assert.deepEqual(
     all.entries.map((entry) => entry.id),
@@ -619,6 +620,7 @@ test("history lists surgeries and filters to them; the vaccine reads leave them 
     kinds: [MedicalEntryKind.SURGERY],
     page: 1,
     perPage: 10,
+    timeZone: "UTC",
   });
   assert.deepEqual(
     surgeries.entries.map((entry) => [entry.id, entry.procedure, entry.item]),

@@ -4,10 +4,11 @@ import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { cuidSchema, currentPageSchema } from "../../zod-schemas/common.schemas";
 import { medicalEntryKindsParam } from "../../zod-schemas/medical-entry.schemas";
-import { getShelterToday } from "../shelter-settings.data";
+import { getShelterSettings, getShelterToday } from "../shelter-settings.data";
 import { rabiesStatus, type RabiesStatus } from "../../utils/medical-days";
 import type { CalendarDay } from "../../utils/shelter-day";
 import {
+  MEDICAL_ENTRY_DISPLAY_SELECT,
   findDueMedicalEntries,
   findEventNames,
   findLatestRabiesVaccine,
@@ -16,6 +17,11 @@ import {
   findVaccinesAndTests,
   type MedicalEntryDisplay,
 } from "./medical-entry";
+import {
+  findMedicalStatus,
+  type CurrentChip,
+} from "./medical-status";
+import type { SpayNeuterStatus } from "../../utils/spay-neuter";
 
 export type { MedicalEntryDisplay } from "./medical-entry";
 
@@ -35,9 +41,17 @@ export type EventNames = Record<string, string>;
 
 export interface MedicalOverview {
   rabies: RabiesStatus;
+  spayNeuter: SpayNeuterStatus;
+  /** The chips the animal carries, newest first. */
+  chips: CurrentChip[];
   currentWeightGrams: number | null;
   /** Scheduled care not given yet, soonest due first, overdue included. */
   dueEntries: MedicalEntryDisplay[];
+  /**
+   * The spay/neuter exemption open for review, if any. It is listed with the
+   * due care, due on its review day.
+   */
+  reviewEntry: MedicalEntryDisplay | null;
   recentEntries: MedicalEntryDisplay[];
   names: EventNames;
   /** The shelter's today, which overdue and due today are counted against. */
@@ -49,23 +63,37 @@ const _fetchMedicalOverview = async (
 ): Promise<MedicalOverview> => {
   const id = parseAnimalId(animalId);
   try {
-    const [latestRabies, animal, dueEntries, recentEntries, today] =
+    const today = await getShelterToday();
+    const [latestRabies, status, animal, dueEntries, recentEntries] =
       await Promise.all([
         findLatestRabiesVaccine(prisma, id),
+        findMedicalStatus(prisma, id, today),
         prisma.animal.findUnique({
           where: { id },
           select: { currentWeightGrams: true },
         }),
         findDueMedicalEntries(prisma, id),
         findRecentMedicalEntries(prisma, id, RECENT_ENTRIES),
-        getShelterToday(),
       ]);
+    const reviewEntry = status.exemptionReview
+      ? await prisma.medicalEntry.findUnique({
+          where: { id: status.exemptionReview.id },
+          select: MEDICAL_ENTRY_DISPLAY_SELECT,
+        })
+      : null;
     return {
       rabies: rabiesStatus(latestRabies, today),
+      spayNeuter: status.spayNeuter,
+      chips: status.chips,
       currentWeightGrams: animal?.currentWeightGrams ?? null,
       dueEntries,
+      reviewEntry,
       recentEntries,
-      names: await findEventNames(prisma, [...dueEntries, ...recentEntries]),
+      names: await findEventNames(prisma, [
+        ...dueEntries,
+        ...(reviewEntry ? [reviewEntry] : []),
+        ...recentEntries,
+      ]),
       today,
     };
   } catch (error) {
@@ -103,14 +131,16 @@ const _fetchMedicalHistory = async (
     throw new Error("Invalid arguments for fetching medical history.");
   }
   try {
-    const [page, today] = await Promise.all([
-      findMedicalHistoryPage(prisma, id, {
-        kinds: args.data.kinds,
-        page: args.data.currentPage,
-        perPage: HISTORY_PER_PAGE,
-      }),
+    const [{ timezone }, today] = await Promise.all([
+      getShelterSettings(),
       getShelterToday(),
     ]);
+    const page = await findMedicalHistoryPage(prisma, id, {
+      kinds: args.data.kinds,
+      page: args.data.currentPage,
+      perPage: HISTORY_PER_PAGE,
+      timeZone: timezone,
+    });
     return { ...page, names: await findEventNames(prisma, page.entries), today };
   } catch (error) {
     console.error("Failed to fetch medical history:", error);

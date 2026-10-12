@@ -9,6 +9,11 @@ import {
 } from "@/components/ui/card";
 import type { MedicalOverview as MedicalOverviewData } from "@/app/lib/data/animals/medical-entry.data";
 import type { RabiesStatus } from "@/app/lib/utils/medical-days";
+import type { SpayNeuterStatus } from "@/app/lib/utils/spay-neuter";
+import {
+  SPAY_NEUTER_EXEMPTION_REASON_LABELS,
+  SURGERY_PROCEDURE_LABELS,
+} from "@/app/lib/constants/medical";
 import { formatShelterDay } from "@/app/lib/utils/shelter-day";
 import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { formatWeight } from "@/app/lib/utils/weight-format";
@@ -30,6 +35,39 @@ const rabiesText = (rabies: RabiesStatus) => {
   }
 };
 
+// "Altered (spay, Oct 3, 2026)", "Exempt until Nov 3, 2026: too young or
+// underweight", "Not on record".
+const spayNeuterText = (status: SpayNeuterStatus) => {
+  switch (status.status) {
+    case "ALTERED":
+      return `Altered (${SURGERY_PROCEDURE_LABELS[status.procedure].toLowerCase()}, ${
+        status.completedDate ? formatShelterDay(status.completedDate) : "date unknown"
+      })`;
+    case "EXEMPT": {
+      const reason = SPAY_NEUTER_EXEMPTION_REASON_LABELS[status.reason].toLowerCase();
+      return status.reviewDate
+        ? `Exempt until ${formatShelterDay(status.reviewDate)}: ${reason}`
+        : `Exempt: ${reason}`;
+    }
+    case "UNKNOWN":
+      return "Not on record";
+  }
+};
+
+/**
+ * The due rows in the order they fall due: scheduled care by its due day, and
+ * the exemption open for review by its review day.
+ */
+const dueRows = (overview: MedicalOverviewData) => {
+  const { dueEntries, reviewEntry } = overview;
+  if (!reviewEntry) return dueEntries;
+  const reviewDay = reviewEntry.reviewDate ?? "";
+  const at = dueEntries.findIndex((entry) => (entry.dueDate ?? "") > reviewDay);
+  return at === -1
+    ? [...dueEntries, reviewEntry]
+    : [...dueEntries.slice(0, at), reviewEntry, ...dueEntries.slice(at)];
+};
+
 interface Props {
   animalId: string;
   overview: MedicalOverviewData;
@@ -39,16 +77,25 @@ interface Props {
 
 const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) => {
   const base = `/dashboard/animals/${animalId}/medical`;
-  const { rabies, currentWeightGrams, dueEntries, recentEntries, names, today } =
-    overview;
+  const {
+    rabies,
+    spayNeuter,
+    chips,
+    currentWeightGrams,
+    reviewEntry,
+    recentEntries,
+    names,
+    today,
+  } = overview;
+  const due = dueRows(overview);
 
   return (
     <Card className="@container/card">
       <CardHeader>
         <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
         <CardDescription>
-          Vaccines, tests and treatments: what is due, and what this animal
-          has been given.
+          Vaccines, tests, treatments, surgeries and microchips: what is due,
+          and what this animal has been given.
         </CardDescription>
         {controls?.canManage && (
           <CardAction>
@@ -77,6 +124,34 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
             </dd>
           </div>
           <div>
+            <dt className="text-xs text-muted-foreground">Spay/neuter</dt>
+            <dd
+              className={
+                spayNeuter.status === "UNKNOWN"
+                  ? "text-sm font-medium text-destructive"
+                  : "text-sm font-medium"
+              }
+            >
+              {spayNeuterText(spayNeuter)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Microchip</dt>
+            <dd className="text-sm font-medium">
+              {chips.length > 0 ? (
+                <ul>
+                  {chips.map((chip) => (
+                    <li key={chip.entryId} className="font-mono">
+                      {chip.chipNumber}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                "None on record"
+              )}
+            </dd>
+          </div>
+          <div>
             <dt className="text-xs text-muted-foreground">Current weight</dt>
             <dd className="text-sm font-medium">
               {currentWeightGrams !== null
@@ -98,13 +173,14 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
           <h3 id={DUE_HEADING_ID} tabIndex={-1} className="font-medium">
             Due
           </h3>
-          {dueEntries.length > 0 ? (
+          {due.length > 0 ? (
             <MedicalEntryList
-              entries={dueEntries}
+              entries={due}
               names={names}
               today={today}
               controls={controls}
               due
+              reviewId={reviewEntry?.id}
             />
           ) : (
             <p className="rounded-lg border-2 border-dashed px-6 py-8 text-center text-sm text-muted-foreground">
@@ -134,7 +210,7 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
             />
           ) : (
             <p className="rounded-lg border-2 border-dashed px-6 py-8 text-center text-sm text-muted-foreground">
-              No vaccines, tests or treatments recorded yet.
+              Nothing recorded yet.
             </p>
           )}
         </section>

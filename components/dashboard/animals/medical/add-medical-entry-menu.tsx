@@ -27,7 +27,7 @@ import {
   DirtyFormHandle,
   useConfirmedOpenChange,
 } from "@/hooks/use-confirmed-open-change";
-import { MedicalEntryForm } from "./medical-entry-form";
+import { CareEntryForm, recordDialogDescription } from "./care-entry-form";
 import { ScheduleMedicalEntryForm } from "./schedule-medical-entry-form";
 import { DiscardChangesDialog } from "./discard-changes-dialog";
 import { ADD_ENTRY_BUTTON_ID } from "./use-entry-dialog-focus";
@@ -36,6 +36,13 @@ interface Props {
   animalId: string;
   options: MedicalEntryFormOptions;
 }
+
+// Care given from the catalog first, then the kinds with forms of their own.
+const RECORDED_KINDS: MedicalEntryKind[] = [
+  ...CATALOG_ENTRY_KINDS,
+  MedicalEntryKind.SURGERY,
+  MedicalEntryKind.MICROCHIP,
+];
 
 /** What the menu's dialog is doing: recording care of a kind, or scheduling. */
 type Mode = { record: MedicalEntryKind } | "schedule";
@@ -71,9 +78,7 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {/* The record form serves only the kinds given from the
-              catalog: surgeries and microchips have no item to pick. */}
-          {CATALOG_ENTRY_KINDS.map((value) => (
+          {RECORDED_KINDS.map((value) => (
             <DropdownMenuItem
               key={value}
               onSelect={() => setMode({ record: value })}
@@ -100,12 +105,9 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
                 <DialogTitle>
                   Record a {MEDICAL_ENTRY_KIND_LABELS[kind].toLowerCase()}
                 </DialogTitle>
-                <DialogDescription>
-                  Record care already given. Pick the item first: its defaults
-                  fill in the rest.
-                </DialogDescription>
+                <DialogDescription>{recordDialogDescription(kind)}</DialogDescription>
               </DialogHeader>
-              <MedicalEntryForm
+              <CareEntryForm
                 key={kind}
                 animalId={animalId}
                 kind={kind}
@@ -120,8 +122,8 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
               <DialogHeader>
                 <DialogTitle>Schedule care</DialogTitle>
                 <DialogDescription>
-                  Plan a vaccine, test or treatment for the day it is due. How
-                  it was given is recorded when it is.
+                  Plan care for the day it is due. How it was given is
+                  recorded when it is.
                 </DialogDescription>
               </DialogHeader>
               <ScheduleMedicalEntryForm

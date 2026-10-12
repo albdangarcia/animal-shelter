@@ -41,7 +41,7 @@ import {
   DirtyFormHandle,
   useConfirmedOpenChange,
 } from "@/hooks/use-confirmed-open-change";
-import { MedicalEntryForm } from "./medical-entry-form";
+import { CareEntryForm } from "./care-entry-form";
 import { DiscardChangesDialog } from "./discard-changes-dialog";
 import { useEntryDialogFocus } from "./use-entry-dialog-focus";
 import { entryLabel } from "./medical-entry-item";
@@ -145,7 +145,7 @@ export function MedicalEntryActions({ animalId, entry, options }: Props) {
               entry&apos;s history, with what it was before.
             </DialogDescription>
           </DialogHeader>
-          <MedicalEntryForm
+          <CareEntryForm
             animalId={animalId}
             kind={entry.kind}
             options={options}

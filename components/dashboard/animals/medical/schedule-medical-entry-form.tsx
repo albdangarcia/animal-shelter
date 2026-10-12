@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { DayField } from "@/components/forms/day-field";
-import { MedicalEntryKind } from "@/prisma/generated/enums";
+import { MedicalEntryKind, type SurgeryProcedure } from "@/prisma/generated/enums";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import { scheduleMedicalEntry } from "@/app/lib/actions/medical-entry.actions";
 import {
@@ -35,7 +35,9 @@ import {
 import {
   CATALOG_ENTRY_KINDS,
   MEDICAL_ENTRY_KIND_LABELS,
+  SURGERY_PROCEDURE_LABELS,
 } from "@/app/lib/constants/medical";
+import { proceduresFor } from "@/app/lib/utils/spay-neuter";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { dueDateIssue, latestDueDate } from "@/app/lib/utils/medical-days";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
@@ -45,13 +47,24 @@ import {
   haveFormValuesChanged,
 } from "@/hooks/use-confirmed-open-change";
 
-/** The form's own state: no kind or day until one is picked. */
+/**
+ * The form's own state: no kind or day until one is picked. Care from the
+ * catalog names its item, a surgery its procedure, and a microchip neither.
+ */
 type ScheduleFormState = {
   kind: MedicalEntryKind | "";
   itemId: string;
+  procedure: SurgeryProcedure | "";
   dueDate: string | null;
   notes: string;
 };
+
+// Care from the catalog first, then the kinds planned without an item.
+const SCHEDULED_KINDS: MedicalEntryKind[] = [
+  ...CATALOG_ENTRY_KINDS,
+  MedicalEntryKind.SURGERY,
+  MedicalEntryKind.MICROCHIP,
+];
 
 interface Props {
   animalId: string;
@@ -61,8 +74,9 @@ interface Props {
 }
 
 /**
- * Schedules a vaccine, test or treatment for a due day: what and when, and
- * nothing about how it will be given, which is recorded when it is.
+ * Schedules care for a due day: what and when, and nothing about how it will
+ * be given, which is recorded when it is. A chip's number is recorded then
+ * too.
  */
 export function ScheduleMedicalEntryForm({
   animalId,
@@ -79,10 +93,18 @@ export function ScheduleMedicalEntryForm({
     resolver: standardSchemaResolver(
       ScheduleMedicalEntrySchema,
     ) as unknown as Resolver<ScheduleFormState>,
-    defaultValues: { kind: "", itemId: "", dueDate: null, notes: "" },
+    defaultValues: {
+      kind: "",
+      itemId: "",
+      procedure: "",
+      dueDate: null,
+      notes: "",
+    },
   });
   const kind = useWatch({ control: form.control, name: "kind" });
   const items = options.items.filter((item) => item.kind === kind);
+  // A spay or neuter only as the animal's sex allows.
+  const procedures = proceduresFor(options.sex);
 
   const initialValuesRef = useRef(form.getValues());
   useImperativeHandle(
@@ -94,10 +116,13 @@ export function ScheduleMedicalEntryForm({
     [form],
   );
 
-  // An item belongs to one kind, so picking another kind clears it.
+  // An item belongs to one kind, and a procedure to surgery, so picking
+  // another kind clears both.
   const pickKind = (next: MedicalEntryKind) => {
     form.setValue("kind", next, { shouldValidate: true });
     form.setValue("itemId", "");
+    form.setValue("procedure", "");
+    form.clearErrors(["itemId", "procedure"]);
   };
 
   const onSubmit = (state: ScheduleFormState) => {
@@ -146,9 +171,7 @@ export function ScheduleMedicalEntryForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {/* This form schedules by catalog item, which
-                        surgeries and microchips don't have. */}
-                    {CATALOG_ENTRY_KINDS.map((value) => (
+                    {SCHEDULED_KINDS.map((value) => (
                       <SelectItem key={value} value={value}>
                         {MEDICAL_ENTRY_KIND_LABELS[value]}
                       </SelectItem>
@@ -160,50 +183,87 @@ export function ScheduleMedicalEntryForm({
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="itemId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel htmlFor="schedule-item" required>
-                  Item
-                </FormLabel>
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                  name={field.name}
-                  disabled={!kind}
-                >
-                  <FormControl>
-                    <SelectTrigger className="w-full" id="schedule-item">
-                      <SelectValue
-                        placeholder={noun ? `Pick a ${noun}` : "Pick a kind first"}
-                      />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {items.map((option) => (
-                      <SelectItem key={option.id} value={option.id}>
-                        {option.name}
-                        {option.scheduledEntryIds.length > 0 && (
-                          <span className="text-muted-foreground">
-                            {" "}
-                            (already scheduled)
-                          </span>
-                        )}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {noun && items.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    The catalog has no {noun} for this animal&apos;s species.
-                  </p>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          {kind === MedicalEntryKind.SURGERY ? (
+            <FormField
+              control={form.control}
+              name="procedure"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel htmlFor="schedule-procedure" required>
+                    Procedure
+                  </FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    name={field.name}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full" id="schedule-procedure">
+                        <SelectValue placeholder="Pick the procedure" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {procedures.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {SURGERY_PROCEDURE_LABELS[value]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          ) : kind === MedicalEntryKind.MICROCHIP ? (
+            <p className="self-end pb-2 text-sm text-muted-foreground">
+              The chip&apos;s number is recorded when it is implanted.
+            </p>
+          ) : (
+            <FormField
+              control={form.control}
+              name="itemId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel htmlFor="schedule-item" required>
+                    Item
+                  </FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    name={field.name}
+                    disabled={!kind}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full" id="schedule-item">
+                        <SelectValue
+                          placeholder={noun ? `Pick a ${noun}` : "Pick a kind first"}
+                        />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {items.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.name}
+                          {option.scheduledEntryIds.length > 0 && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              (already scheduled)
+                            </span>
+                          )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {noun && items.length === 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      The catalog has no {noun} for this animal&apos;s species.
+                    </p>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
           <DayField
             control={form.control}

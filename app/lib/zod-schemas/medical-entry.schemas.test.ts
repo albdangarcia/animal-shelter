@@ -356,6 +356,19 @@ test("ScheduleMedicalEntrySchema: a surgery takes a procedure, other care an ite
     "itemId",
     "kind",
   ]);
+  // The form holds an empty choice for the fields its kind hides.
+  assert.deepEqual(
+    ScheduleMedicalEntrySchema.parse({ kind: "MICROCHIP", itemId: "", procedure: "", dueDate }),
+    { kind: "MICROCHIP", dueDate, notes: null },
+  );
+  assert.deepEqual(
+    ScheduleMedicalEntrySchema.parse({ kind: "VACCINE", itemId: "item", procedure: "", dueDate }),
+    { kind: "VACCINE", itemId: "item", dueDate, notes: null },
+  );
+  assert.deepEqual(
+    errorsOf({ kind: "SURGERY", itemId: "", procedure: "", dueDate }).procedure,
+    ["Pick the procedure."],
+  );
 });
 
 test("medicalEntryKindsParam: a comma list or a repeated param, unknown kinds ignored", () => {

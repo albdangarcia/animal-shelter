@@ -332,7 +332,11 @@ export const ScheduleMedicalEntrySchema = z
   .object({
     kind: z.enum(SCHEDULED_KINDS, { error: "Choose what to schedule." }),
     itemId: z.string().nullish(),
-    procedure: procedure.nullish(),
+    // A form's empty choice is no procedure, as it is no item.
+    procedure: procedure
+      .nullish()
+      .or(z.literal(""))
+      .transform((value) => value || null),
     dueDate,
     notes: common.notes,
   })

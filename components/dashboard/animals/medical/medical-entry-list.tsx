@@ -18,14 +18,19 @@ interface Props {
    * done with care that is due, as the viewer may.
    */
   due?: boolean;
+  /**
+   * On the due list, the spay/neuter exemption open for review: it is due on
+   * its review day, and isn't recorded, rescheduled or declined.
+   */
+  reviewId?: string | null;
   className?: string;
 }
 
 /**
  * Entries with their change history, and the row actions menu on each one
  * that isn't voided when the viewer may manage them: Void on every entry,
- * and Edit on given care only. On the due list, each row also gets
- * Record, Reschedule and Decline.
+ * and Edit on given care only. On the due list, each row of scheduled care
+ * also gets Record, Reschedule and Decline.
  */
 export function MedicalEntryList({
   entries,
@@ -33,6 +38,7 @@ export function MedicalEntryList({
   today,
   controls,
   due = false,
+  reviewId = null,
   className,
 }: Props) {
   return (
@@ -42,6 +48,7 @@ export function MedicalEntryList({
           key={entry.id}
           entry={entry}
           today={today}
+          review={due && entry.id === reviewId}
           actions={
             controls?.canManage && !entry.voidedAt ? (
               <MedicalEntryActions
@@ -53,7 +60,7 @@ export function MedicalEntryList({
           }
           footer={
             <>
-              {due && controls && (
+              {due && controls && entry.id !== reviewId && (
                 <ScheduledEntryActions
                   animalId={controls.animalId}
                   entry={entry}

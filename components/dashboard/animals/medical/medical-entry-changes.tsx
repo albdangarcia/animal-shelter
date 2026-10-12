@@ -6,7 +6,10 @@ import { clsx } from "clsx";
 import { Button } from "@/components/ui/button";
 import { TimeAgo } from "@/components/common/time-ago";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
-import { describeEntryChanges } from "@/app/lib/utils/medical-entry-changes";
+import {
+  declineText,
+  describeEntryChanges,
+} from "@/app/lib/utils/medical-entry-changes";
 import {
   MedicalEntryEventAction,
   MedicalEntryStatus,
@@ -24,12 +27,14 @@ const EVENT_VERB: Record<Exclude<EntryEvent["action"], "CREATED">, string> = {
 };
 
 /** The reason a void or a decline stored, from its event's `after`. */
-const reasonOf = (event: EntryEvent) => {
-  const after = (event.after ?? {}) as { voidReason?: string; declineReason?: string };
-  return event.action === MedicalEntryEventAction.VOIDED
-    ? after.voidReason
-    : after.declineReason;
-};
+const reasonOf = (event: EntryEvent) =>
+  event.action === MedicalEntryEventAction.VOIDED
+    ? (event.after as { voidReason?: string } | null)?.voidReason
+    : declineText(event.after);
+
+/** Whether a decline was of a spay or neuter, as an exemption. */
+const isExemptionEvent = (event: EntryEvent) =>
+  !!(event.after as { exemptionReason?: string } | null)?.exemptionReason;
 
 interface Props {
   events: MedicalEntryDisplay["events"];
@@ -50,16 +55,21 @@ export function MedicalEntryChanges({ events, names }: Props) {
   const later = events.filter(
     (event) => event.action !== MedicalEntryEventAction.CREATED,
   );
-  const scheduled =
-    (created?.after as { status?: string } | null)?.status ===
-    MedicalEntryStatus.SCHEDULED;
+  const createdStatus = (created?.after as { status?: string } | null)?.status;
+  // An exemption recorded on its own is written declined.
+  const createdVerb =
+    createdStatus === MedicalEntryStatus.SCHEDULED
+      ? "Scheduled"
+      : createdStatus === MedicalEntryStatus.DECLINED
+        ? "Exemption recorded"
+        : "Recorded";
 
   return (
     <div className="mt-3 border-t pt-2 text-sm text-muted-foreground">
       <div className="flex flex-wrap items-center gap-x-2">
         {created && (
           <span>
-            {scheduled ? "Scheduled" : "Recorded"} by {created.actor.name}{" "}
+            {createdVerb} by {created.actor.name}{" "}
             <TimeAgo date={created.createdAt} />
           </span>
         )}
@@ -85,7 +95,11 @@ export function MedicalEntryChanges({ events, names }: Props) {
           {later.map((event) => (
             <li key={event.id}>
               <p>
-                {EVENT_VERB[event.action as keyof typeof EVENT_VERB]} by{" "}
+                {isExemptionEvent(event) &&
+                event.action === MedicalEntryEventAction.DECLINED
+                  ? "Declined as an exemption"
+                  : EVENT_VERB[event.action as keyof typeof EVENT_VERB]}{" "}
+                by{" "}
                 {event.actor.name} <TimeAgo date={event.createdAt} />
                 {(event.action === MedicalEntryEventAction.VOIDED ||
                   event.action === MedicalEntryEventAction.DECLINED) &&

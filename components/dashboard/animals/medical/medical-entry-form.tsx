@@ -8,9 +8,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -53,7 +51,6 @@ import {
   type MedicalEntryFormValues,
 } from "@/app/lib/zod-schemas/medical-entry.schemas";
 import {
-  MEDICAL_ENTRY_SOURCE_LABELS,
   MEDICAL_ENTRY_KIND_LABELS,
   isCatalogEntryKind,
   TEST_RESULT_LABELS,
@@ -76,15 +73,16 @@ import {
 } from "@/hooks/use-confirmed-open-change";
 import {
   DoseUnitField,
+  GivenCareFields,
   MedicalRouteField,
   MedicalTextField,
-  VetClinicField,
+  vetClinicChoices,
 } from "./medical-form-fields";
 
 /** What recording scheduled care needs of the entry: it fills in the rest. */
 export type ScheduledCare = Pick<
   MedicalEntryDisplay,
-  "id" | "kind" | "itemId" | "notes"
+  "id" | "kind" | "itemId" | "procedure" | "notes"
 >;
 
 /**
@@ -301,12 +299,7 @@ export function MedicalEntryForm({
 }: Props) {
   const [isPending, startSubmitTransition] = useTransition();
   const items = itemChoices(kind, options, entry, scheduled);
-  const vetClinics =
-    entry?.vetPartnerId &&
-    entry.vetPartner &&
-    !options.vetClinics.some((clinic) => clinic.id === entry.vetPartnerId)
-      ? [...options.vetClinics, { id: entry.vetPartnerId, name: entry.vetPartner.name }]
-      : options.vetClinics;
+  const vetClinics = vetClinicChoices(options.vetClinics, entry);
 
   // Editing never schedules the next dose: the service ignores it there.
   const offeredNextDose = (state: EntryFormState) =>
@@ -442,20 +435,6 @@ export function MedicalEntryForm({
     }
   };
 
-  // Care in the shelter has no outside vet, and only care before intake can
-  // have an unknown day: the hidden fields go with the choice.
-  const pickSource = (next: MedicalEntrySource) => {
-    form.setValue("source", next);
-    if (next === MedicalEntrySource.IN_HOUSE) {
-      form.setValue("vetPartnerId", null);
-      form.setValue("vetName", "");
-    }
-    if (next !== MedicalEntrySource.BEFORE_INTAKE && form.getValues("dateUnknown")) {
-      form.setValue("dateUnknown", false);
-      form.setValue("completedDate", options.today);
-    }
-  };
-
   const onSubmit = (state: EntryFormState) => {
     const values = state as unknown as MedicalEntryFormValues;
     const durationIssue =
@@ -544,89 +523,12 @@ export function MedicalEntryForm({
             )}
           />
 
-          <FormField
-            control={form.control}
-            name="source"
-            render={({ field }) => (
-              <FormItem className="md:col-span-2">
-                <FormLabel id="source-label" required>
-                  Given
-                </FormLabel>
-                <FormControl>
-                  <RadioGroup
-                    aria-labelledby="source-label"
-                    value={field.value}
-                    onValueChange={(value) =>
-                      pickSource(value as MedicalEntrySource)
-                    }
-                    className="flex flex-wrap gap-4"
-                  >
-                    {sources.map((value) => (
-                      <label key={value} className="flex items-center gap-2 text-sm">
-                        <RadioGroupItem value={value} />
-                        {MEDICAL_ENTRY_SOURCE_LABELS[value]}
-                      </label>
-                    ))}
-                  </RadioGroup>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+          <GivenCareFields
+            form={form}
+            sources={sources}
+            vetClinics={vetClinics}
+            today={options.today}
           />
-
-          <div className="space-y-2">
-            {dateUnknown ? (
-              <FormItem>
-                <FormLabel htmlFor="completedDate">Date given</FormLabel>
-                <Input id="completedDate" value="Unknown" disabled />
-              </FormItem>
-            ) : (
-              <DayField
-                control={form.control}
-                name="completedDate"
-                label="Date given"
-                required
-                triggerClassName="w-full"
-                disabledDates={(date) => format(date, "yyyy-MM-dd") > options.today}
-              />
-            )}
-            {source === MedicalEntrySource.BEFORE_INTAKE && (
-              <FormField
-                control={form.control}
-                name="dateUnknown"
-                render={({ field }) => (
-                  <label className="flex items-center gap-2 text-sm">
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={(checked) => {
-                        field.onChange(!!checked);
-                        form.setValue(
-                          "completedDate",
-                          checked ? null : options.today,
-                        );
-                      }}
-                    />
-                    Date unknown
-                  </label>
-                )}
-              />
-            )}
-          </div>
-
-          {source !== MedicalEntrySource.IN_HOUSE && (
-            <>
-              <VetClinicField
-                control={form.control}
-                name="vetPartnerId"
-                vetClinics={vetClinics}
-              />
-              <MedicalTextField
-                control={form.control}
-                name="vetName"
-                label="Vet or clinic name"
-              />
-            </>
-          )}
 
           {kind === MedicalEntryKind.VACCINE && (
             <>

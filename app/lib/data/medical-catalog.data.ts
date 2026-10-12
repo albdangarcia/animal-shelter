@@ -2,7 +2,7 @@ import prisma from "@/app/lib/prisma";
 import { RequirePermission } from "../auth/protected-actions";
 import { hasPermission } from "../auth/hasPermission";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { AnimalListingStatus } from "@/prisma/generated/enums";
+import { AnimalListingStatus, type Sex } from "@/prisma/generated/enums";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { getShelterToday } from "./shelter-settings.data";
 import {
@@ -69,6 +69,11 @@ export interface MedicalEntryFormOptions {
    * so recording doesn't offer the next dose.
    */
   inCare: boolean;
+  /**
+   * The animal's sex, which decides whether a spay or a neuter can be picked
+   * for it.
+   */
+  sex: Sex;
   /** Active vet clinics. */
   vetClinics: { id: string; name: string }[];
   /** The shelter's today: the date given starts there, and can't pass it. */
@@ -89,7 +94,7 @@ const _fetchMedicalEntryFormOptions = async (
   try {
     const animal = await prisma.animal.findUniqueOrThrow({
       where: { id: id.data },
-      select: { id: true, speciesId: true, listingStatus: true },
+      select: { id: true, speciesId: true, listingStatus: true, sex: true },
     });
     const [{ items, scheduledItems }, vetClinics, today] = await Promise.all([
       findMedicalEntryFormItems(prisma, animal),
@@ -100,6 +105,7 @@ const _fetchMedicalEntryFormOptions = async (
       items,
       scheduledItems,
       inCare: animal.listingStatus !== AnimalListingStatus.ARCHIVED,
+      sex: animal.sex,
       vetClinics,
       today,
     };

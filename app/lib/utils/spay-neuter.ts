@@ -5,8 +5,9 @@
 
 import {
   MedicalEntryStatus,
+  Sex,
+  SurgeryProcedure,
   type SpayNeuterExemptionReason,
-  type SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
@@ -138,3 +139,28 @@ export const openExemptionReview = (
     .sort(latestFirst)[0];
   return latest && isExemption(latest) && latest.reviewDate !== null ? latest : null;
 };
+
+/**
+ * Why a procedure doesn't suit an animal of this sex, or null when it does. A
+ * spay is for a female and a neuter for a male; an animal whose sex isn't
+ * known can have either, and every other procedure suits any animal.
+ */
+export const procedureSexIssue = (
+  procedure: SurgeryProcedure,
+  sex: Sex,
+): string | null => {
+  if (procedure === SurgeryProcedure.SPAY && sex === Sex.MALE) {
+    return "A spay is for a female, and this animal is male.";
+  }
+  if (procedure === SurgeryProcedure.NEUTER && sex === Sex.FEMALE) {
+    return "A neuter is for a male, and this animal is female.";
+  }
+  return null;
+};
+
+/** The procedures that suit an animal of this sex, in the order pickers list
+ * them. */
+export const proceduresFor = (sex: Sex): SurgeryProcedure[] =>
+  Object.values(SurgeryProcedure).filter(
+    (procedure) => !procedureSexIssue(procedure, sex),
+  );

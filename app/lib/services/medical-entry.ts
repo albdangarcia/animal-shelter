@@ -23,7 +23,10 @@ import { dueDateIssue } from "@/app/lib/utils/medical-days";
 import { lockMedicalItemForUse } from "@/app/lib/services/medical-catalog";
 import { findOpenScheduledItemIds } from "@/app/lib/data/animals/medical-entry";
 import { findSpayNeuterEntries } from "@/app/lib/data/animals/medical-status";
-import { spayNeuterStatus } from "@/app/lib/utils/spay-neuter";
+import {
+  procedureSexIssue,
+  spayNeuterStatus,
+} from "@/app/lib/utils/spay-neuter";
 import {
   medicalEntryName,
   type NameableMedicalEntry,
@@ -449,17 +452,9 @@ const checkProcedure = (
   if (!procedure) {
     throw new MedicalEntryRefusal("Pick the procedure.", "procedure");
   }
-  if (procedure === SurgeryProcedure.SPAY && animal.sex === Sex.MALE) {
-    throw new MedicalEntryRefusal(
-      "A spay is for a female, and this animal is male.",
-      "procedure",
-    );
-  }
-  if (procedure === SurgeryProcedure.NEUTER && animal.sex === Sex.FEMALE) {
-    throw new MedicalEntryRefusal(
-      "A neuter is for a male, and this animal is female.",
-      "procedure",
-    );
+  const issue = procedureSexIssue(procedure, animal.sex);
+  if (issue) {
+    throw new MedicalEntryRefusal(issue, "procedure");
   }
 };
 

@@ -6,6 +6,7 @@ import { useForm, type Resolver } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { format } from "date-fns";
 import { CalendarClock, CircleSlash, Loader2, Syringe } from "lucide-react";
+import { MedicalEntryKind } from "@/prisma/generated/enums";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -55,7 +56,8 @@ import {
   useConfirmedOpenChange,
 } from "@/hooks/use-confirmed-open-change";
 import { entryLabel } from "./medical-entry-item";
-import { MedicalEntryForm, type ScheduledCare } from "./medical-entry-form";
+import type { ScheduledCare } from "./medical-entry-form";
+import { CareEntryForm } from "./care-entry-form";
 import { DiscardChangesDialog } from "./discard-changes-dialog";
 import { useEntryDialogFocus } from "./use-entry-dialog-focus";
 
@@ -213,12 +215,16 @@ function RecordButton({
               {animalName && ` for ${animalName}`} as given
             </DialogTitle>
             <DialogDescription>
-              It was due {formatShelterDayOrNA(entry.dueDate)}. Record how it
-              was given: the item&apos;s defaults are filled in.
+              It was due {formatShelterDayOrNA(entry.dueDate)}.{" "}
+              {entry.kind === MedicalEntryKind.SURGERY
+                ? "Record how it was done, and how it went."
+                : entry.kind === MedicalEntryKind.MICROCHIP
+                  ? "Record the chip's number, and how it was implanted."
+                  : "Record how it was given: the item's defaults are filled in."}
             </DialogDescription>
           </DialogHeader>
           {formOptions ? (
-            <MedicalEntryForm
+            <CareEntryForm
               animalId={animalId}
               kind={entry.kind}
               options={formOptions}

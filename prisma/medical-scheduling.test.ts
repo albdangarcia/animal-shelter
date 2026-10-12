@@ -1318,7 +1318,12 @@ test("history shows every entry, newest first by the day given or due", async ()
   const today = await record(animalId, givenVaccine({ completedDate: TODAY }));
 
   const page = (perPage: number, pageNumber = 1, kinds: MedicalEntryKind[] = []) =>
-    findMedicalHistoryPage(prisma, animalId, { kinds, page: pageNumber, perPage });
+    findMedicalHistoryPage(prisma, animalId, {
+      kinds,
+      page: pageNumber,
+      perPage,
+      timeZone: "UTC",
+    });
 
   const all = await page(10);
   assert.deepEqual(
