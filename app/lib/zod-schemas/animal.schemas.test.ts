@@ -5,6 +5,7 @@ import {
   AnimalEditFormSchema,
   CreateAnimalFormSchema,
   createTaskFormSchema,
+  hasIntakeMedical,
   TaskFormSchema,
 } from "./animal.schemas";
 import {
@@ -12,6 +13,8 @@ import {
   AnimalListingStatus,
   IntakeType,
   Sex,
+  SurgeryEvidence,
+  SurgeryProcedure,
   TaskCategory,
 } from "@/prisma/generated/enums";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
@@ -28,7 +31,6 @@ const baseInput = {
   listingStatus: AnimalListingStatus.DRAFT as AnimalListingStatus,
   heightCm: null,
   weightGrams: null,
-  isSpayedNeutered: false,
   intakeType: IntakeType.SEIZE,
   intakeDate: "2026-01-01",
 };
@@ -95,6 +97,116 @@ test("AnimalEditFormSchema: the edit form still resubmits a locked listing", () 
     });
     assert.equal(result.success, true, listingStatus);
   }
+});
+
+test("CreateAnimalFormSchema: a chip and a spay or neuter at intake are parsed in their stored form", () => {
+  const result = CreateAnimalFormSchema.safeParse({
+    ...baseInput,
+    intakeMedical: {
+      chipNumber: " 985 141-000a 10009 ",
+      altered: {
+        procedure: SurgeryProcedure.SPAY,
+        evidence: SurgeryEvidence.SCAR,
+      },
+    },
+  });
+  assert.equal(result.success, true);
+  assert.deepEqual(result.data?.intakeMedical, {
+    chipNumber: "985141000A10009",
+    altered: { procedure: SurgeryProcedure.SPAY, evidence: SurgeryEvidence.SCAR },
+  });
+});
+
+test("CreateAnimalFormSchema: what the form parsed parses again unchanged, as the action parses it", () => {
+  const first = CreateAnimalFormSchema.parse({
+    ...baseInput,
+    intakeMedical: {
+      chipNumber: "9851-4100 0100099",
+      altered: {
+        procedure: SurgeryProcedure.SPAY,
+        evidence: SurgeryEvidence.VET_RECORDS,
+      },
+    },
+  });
+  assert.deepEqual(CreateAnimalFormSchema.parse(first), first);
+});
+
+test("CreateAnimalFormSchema: no chip and no spay or neuter put nothing on the medical record", () => {
+  for (const intakeMedical of [
+    undefined,
+    { chipNumber: "", altered: null },
+    { chipNumber: "   ", altered: undefined },
+  ]) {
+    const result = CreateAnimalFormSchema.safeParse({
+      ...baseInput,
+      intakeMedical,
+    });
+    assert.equal(result.success, true);
+    assert.equal(hasIntakeMedical(result.data?.intakeMedical), false);
+  }
+  const chipOnly = CreateAnimalFormSchema.parse({
+    ...baseInput,
+    intakeMedical: { chipNumber: "985141000100099", altered: null },
+  });
+  assert.equal(hasIntakeMedical(chipOnly.intakeMedical), true);
+});
+
+test("CreateAnimalFormSchema: a bad chip, a missing procedure or evidence, and a spay for a male are refused on their fields", () => {
+  const issuesOf = (intakeMedical: unknown, sex: Sex = Sex.FEMALE) => {
+    const result = CreateAnimalFormSchema.safeParse({
+      ...baseInput,
+      sex,
+      intakeMedical,
+    });
+    assert.equal(result.success, false);
+    return result.error!.issues.map((issue) => [
+      issue.path.join("."),
+      issue.message,
+    ]);
+  };
+
+  assert.deepEqual(issuesOf({ chipNumber: "1234", altered: null }), [
+    ["intakeMedical.chipNumber", "A chip number is 9 to 15 letters or digits."],
+  ]);
+  assert.deepEqual(
+    issuesOf({ chipNumber: "", altered: { procedure: null, evidence: null } }),
+    [
+      ["intakeMedical.altered.procedure", "Pick spay or neuter."],
+      [
+        "intakeMedical.altered.evidence",
+        "Say what shows the surgery was done before intake.",
+      ],
+    ],
+  );
+  assert.deepEqual(
+    issuesOf(
+      {
+        chipNumber: "",
+        altered: {
+          procedure: SurgeryProcedure.SPAY,
+          evidence: SurgeryEvidence.TATTOO,
+        },
+      },
+      Sex.MALE,
+    ),
+    [
+      [
+        "intakeMedical.altered.procedure",
+        "A spay is for a female, and this animal is male.",
+      ],
+    ],
+  );
+  // Only a spay or a neuter: the animal arrived altered, not after a dental.
+  assert.equal(
+    issuesOf({
+      chipNumber: "",
+      altered: {
+        procedure: SurgeryProcedure.DENTAL,
+        evidence: SurgeryEvidence.TATTOO,
+      },
+    })[0][0],
+    "intakeMedical.altered.procedure",
+  );
 });
 
 test("TaskFormSchema: a cleared due date parses as no due date", () => {

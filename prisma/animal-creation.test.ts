@@ -15,14 +15,22 @@ import {
   AnimalHealthStatus,
   AnimalListingStatus,
   IntakeType,
+  MedicalEntryEventAction,
+  MedicalEntryKind,
+  MedicalEntrySource,
+  MedicalEntryStatus,
   Sex,
+  SurgeryEvidence,
+  SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import {
   createAnimalFromForm,
   recordAnimalCreation,
 } from "@/app/lib/services/animal-creation";
+import { MedicalEntryRefusal } from "@/app/lib/services/medical-entry";
+import { findMedicalStatus } from "@/app/lib/data/animals/medical-status";
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
-import { shiftDayKey } from "@/app/lib/utils/shelter-day";
+import { calendarDay, shiftDayKey } from "@/app/lib/utils/shelter-day";
 import { CreateAnimalFormSchema } from "@/app/lib/zod-schemas/animal.schemas";
 import { assertNoListingMismatch } from "./listing-consistency";
 
@@ -89,7 +97,6 @@ const submission = (
     listingStatus: AnimalListingStatus.DRAFT,
     heightCm: null,
     weightGrams: null,
-    isSpayedNeutered: false,
     intakeType: IntakeType.SEIZE,
     intakeDate: "2026-01-01",
     ...changes,
@@ -126,6 +133,25 @@ const assertPublishFollowsIntake = async (animalId: string) => {
   );
   assert.ok(rows[1].changedAt > rows[0].changedAt);
 };
+
+// Unique to this run, so another run's animals never hold them.
+const chipNumber = (n: number) => `CR${runId.toUpperCase()}${n}`;
+
+const readMedicalEntries = (animalId: string) =>
+  prisma.medicalEntry.findMany({
+    where: { animalId },
+    select: {
+      kind: true,
+      status: true,
+      source: true,
+      completedDate: true,
+      chipNumber: true,
+      procedure: true,
+      createdById: true,
+      surgery: { select: { evidence: true } },
+      events: { select: { action: true, actorId: true } },
+    },
+  });
 
 test("a draft animal starts with one intake and agrees with its timeline", async () => {
   const { animalId } = await create("Draft");
@@ -243,4 +269,213 @@ test("a first intake dated after today is refused with nothing written, and one 
     { intakeDate: today, type: IntakeType.SEIZE },
   ]);
   await assertNoListingMismatch(created.animalId);
+});
+
+test("a chip and a spay or neuter given at intake go on the medical record as found before intake", async () => {
+  const { animalId } = await create("Chipped and spayed", {
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    // As typed off a scanner: spaces, a hyphen, lower case.
+    intakeMedical: {
+      chipNumber: ` ${chipNumber(1).toLowerCase().slice(0, 4)}-${chipNumber(1).slice(4)} `,
+      altered: {
+        procedure: SurgeryProcedure.SPAY,
+        evidence: SurgeryEvidence.VET_RECORDS,
+      },
+    },
+  });
+
+  const surgeryFirst = (await readMedicalEntries(animalId)).sort(
+    (a, b) =>
+      Number(b.kind === MedicalEntryKind.SURGERY) -
+      Number(a.kind === MedicalEntryKind.SURGERY),
+  );
+  assert.deepEqual(surgeryFirst, [
+    {
+      kind: MedicalEntryKind.SURGERY,
+      status: MedicalEntryStatus.COMPLETED,
+      source: MedicalEntrySource.BEFORE_INTAKE,
+      completedDate: null,
+      chipNumber: null,
+      procedure: SurgeryProcedure.SPAY,
+      createdById: staffId,
+      surgery: { evidence: SurgeryEvidence.VET_RECORDS },
+      events: [{ action: MedicalEntryEventAction.CREATED, actorId: staffId }],
+    },
+    {
+      kind: MedicalEntryKind.MICROCHIP,
+      status: MedicalEntryStatus.COMPLETED,
+      source: MedicalEntrySource.BEFORE_INTAKE,
+      completedDate: null,
+      chipNumber: chipNumber(1),
+      procedure: null,
+      createdById: staffId,
+      surgery: null,
+      events: [{ action: MedicalEntryEventAction.CREATED, actorId: staffId }],
+    },
+  ]);
+
+  // The feed reads the animal as admitted and published before anything was
+  // found on it.
+  const feed = await prisma.animalActivityLog.findMany({
+    where: { animalId },
+    select: { activityType: true, changeSummary: true },
+    orderBy: { changedAt: "asc" },
+  });
+  assert.deepEqual(
+    feed.map((row) => row.activityType),
+    [
+      AnimalActivityType.INTAKE_PROCESSED,
+      AnimalActivityType.STATUS_CHANGE,
+      AnimalActivityType.MEDICAL_ENTRY_RECORDED,
+      AnimalActivityType.MEDICAL_ENTRY_RECORDED,
+    ],
+  );
+  assert.deepEqual(feed.slice(2).map((row) => row.changeSummary), [
+    `Microchip ${chipNumber(1)} recorded: found before intake, on an unknown date.`,
+    "Spay surgery recorded: done before intake, on an unknown date. Evidence: vet records.",
+  ]);
+
+  const status = await findMedicalStatus(
+    prisma,
+    animalId,
+    calendarDay("2026-01-02"),
+  );
+  assert.equal(status.spayNeuter.status, "ALTERED");
+  assert.deepEqual(
+    status.chips.map((chip) => chip.chipNumber),
+    [chipNumber(1)],
+  );
+  await assertNoListingMismatch(animalId);
+});
+
+test("a chip and a spay given at intake within one millisecond are still logged after the intake and the publication", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  let animalId: string;
+  try {
+    ({ animalId } = await create("Chipped and spayed, same millisecond", {
+      listingStatus: AnimalListingStatus.PUBLISHED,
+      intakeMedical: {
+        chipNumber: chipNumber(4),
+        altered: {
+          procedure: SurgeryProcedure.SPAY,
+          evidence: SurgeryEvidence.SCAR,
+        },
+      },
+    }));
+  } finally {
+    t.mock.timers.reset();
+  }
+
+  // Ordered by time alone, as the feed orders them.
+  const rows = await prisma.animalActivityLog.findMany({
+    where: { animalId },
+    select: { activityType: true, changeSummary: true, changedAt: true },
+    orderBy: { changedAt: "asc" },
+  });
+  assert.deepEqual(
+    rows.map((row) => row.activityType),
+    [
+      AnimalActivityType.INTAKE_PROCESSED,
+      AnimalActivityType.STATUS_CHANGE,
+      AnimalActivityType.MEDICAL_ENTRY_RECORDED,
+      AnimalActivityType.MEDICAL_ENTRY_RECORDED,
+    ],
+  );
+  assert.match(rows[2].changeSummary ?? "", /^Microchip /);
+  assert.match(rows[3].changeSummary ?? "", /^Spay surgery /);
+  for (let i = 1; i < rows.length; i++) {
+    assert.ok(rows[i].changedAt > rows[i - 1].changedAt, `row ${i}`);
+  }
+});
+
+test("an intake with no medical facts, or empty ones, writes no medical entries", async () => {
+  const { animalId: without } = await create("No medical facts");
+  const { animalId: empty } = await create("Empty medical facts", {
+    intakeMedical: { chipNumber: "  ", altered: null },
+  });
+
+  assert.equal(
+    await prisma.medicalEntry.count({
+      where: { animalId: { in: [without, empty] } },
+    }),
+    0,
+  );
+});
+
+test("a chip number already on another animal's record rolls the whole intake back", async () => {
+  const { animalId: holder } = await create("Chip holder", {
+    intakeMedical: { chipNumber: chipNumber(2), altered: null },
+  });
+  const holderName = `Chip holder ${runId}`;
+
+  await assert.rejects(
+    create("Chip duplicate", {
+      weightGrams: 3100,
+      intakeMedical: {
+        chipNumber: chipNumber(2),
+        altered: {
+          procedure: SurgeryProcedure.SPAY,
+          evidence: SurgeryEvidence.SCAR,
+        },
+      },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof MedicalEntryRefusal);
+      assert.equal(error.field, "chipNumber");
+      assert.equal(
+        error.message,
+        `That chip number is already on ${holderName}'s record.`,
+      );
+      return true;
+    },
+  );
+
+  // Nothing of the refused intake is left: no animal, so no intake, weight,
+  // activity or medical entry either.
+  assert.equal(
+    await prisma.animal.count({ where: { name: `Chip duplicate ${runId}` } }),
+    0,
+  );
+  assert.equal(
+    await prisma.medicalEntry.count({ where: { chipNumber: chipNumber(2) } }),
+    1,
+  );
+  assert.equal(
+    (await prisma.medicalEntry.findFirstOrThrow({
+      where: { chipNumber: chipNumber(2) },
+      select: { animalId: true },
+    })).animalId,
+    holder,
+  );
+});
+
+// The form's schema refuses this too. Past it, the service still does.
+test("a spay at intake follows the entry service's sex rule, and rolls the intake back when refused", async () => {
+  const values = {
+    ...submission("Spayed male", { sex: Sex.MALE }),
+    intakeMedical: {
+      chipNumber: chipNumber(3),
+      altered: {
+        procedure: SurgeryProcedure.SPAY,
+        evidence: SurgeryEvidence.TATTOO,
+      },
+    },
+  };
+  await assert.rejects(
+    prisma.$transaction((tx) => recordAnimalCreation(tx, values, staffId)),
+    (error: unknown) => {
+      assert.ok(error instanceof MedicalEntryRefusal);
+      assert.equal(error.field, "procedure");
+      return true;
+    },
+  );
+  assert.equal(
+    await prisma.animal.count({ where: { name: `Spayed male ${runId}` } }),
+    0,
+  );
+  // The chip was written before the surgery was refused, and went with it.
+  assert.equal(
+    await prisma.medicalEntry.count({ where: { chipNumber: chipNumber(3) } }),
+    0,
+  );
 });

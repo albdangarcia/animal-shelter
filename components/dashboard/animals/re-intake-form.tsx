@@ -31,7 +31,6 @@ import {
   FormLabel,
   FormMessage,
 } from "@/components/ui/form";
-import { Switch } from "@/components/ui/switch";
 import { animalHealthStatusOptions } from "@/app/lib/utils/enum-formatter";
 import { AnimalHealthStatus } from "@/prisma/generated/enums";
 import { AnimalReIntakeFormPayload, PartnerPayload } from "@/app/lib/types";
@@ -74,7 +73,6 @@ const ReIntakeForm = ({
       intakeDate: today,
       intakeType: undefined,
       healthStatus: AnimalHealthStatus.HEALTHY,
-      isSpayedNeutered: false,
       notes: "",
       sourcePartnerId: "",
       foundAddress: "",
@@ -144,24 +142,6 @@ const ReIntakeForm = ({
                           ))}
                         </SelectContent>
                       </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="isSpayedNeutered"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Spayed / Neutered</FormLabel>
-                      <div className="flex h-9 items-center">
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </div>
                       <FormMessage />
                     </FormItem>
                   )}

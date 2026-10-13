@@ -133,7 +133,6 @@ const seized = (intakeDate: string): ReIntakeFormOutput =>
     intakeDate,
     notes: "",
     healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
-    isSpayedNeutered: false,
   });
 
 const reIntake = (

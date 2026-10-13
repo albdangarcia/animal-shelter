@@ -14,8 +14,6 @@ export const toAnimalData = (data: {
   foundCity?: string;
   foundState?: string;
   notes?: string;
-  microchipNumber?: string;
-  isSpayedNeutered: boolean;
   description?: string;
 }) => ({
   size: data.size || null,
@@ -26,9 +24,5 @@ export const toAnimalData = (data: {
   foundCity: data.foundCity || null,
   foundState: data.foundState || null,
   notes: data.notes || null,
-  microchipNumber: data.microchipNumber || null,
-  // Non-nullable with a default — no "" -> null treatment, unlike the fields
-  // above; passed straight through.
-  isSpayedNeutered: data.isSpayedNeutered,
   description: data.description || null,
 });

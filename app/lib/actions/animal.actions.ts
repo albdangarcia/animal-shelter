@@ -7,6 +7,7 @@ import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   CreateAnimalFormSchema,
   AnimalEditFormSchema,
+  hasIntakeMedical,
   type CreateAnimalFormInput,
   type AnimalEditFormInput,
 } from "../zod-schemas/animal.schemas";
@@ -16,6 +17,7 @@ import {
   withAuthenticatedUser,
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { can } from "../auth/can";
 import {
   AnimalActivityType,
   AnimalListingStatus,
@@ -26,6 +28,10 @@ import { buildLocationChangeSummary } from "../utils/location-activity";
 import { ConflictError, NotFoundError } from "../utils/errors";
 import { findLiveUnitForPlacement } from "../services/unit-housing";
 import { createAnimalFromForm } from "../services/animal-creation";
+import {
+  MedicalEntryRefusal,
+  nameChipNumberHolder,
+} from "../services/medical-entry";
 import { toAnimalData } from "../utils/animal-data";
 import { del } from "@vercel/blob";
 import { isDemo } from "@/lib/flags";
@@ -35,6 +41,17 @@ import {
   effectiveApplicationStatuses,
   lockAnimal,
 } from "../data/application-status.data";
+
+/**
+ * Where the create form shows a refusal from the medical record. A chip's is
+ * on its number; a spay's or neuter's on its own fields.
+ */
+const intakeMedicalField = (field: string | null | undefined) => {
+  if (!field) return null;
+  return field === "chipNumber"
+    ? "intakeMedical.chipNumber"
+    : `intakeMedical.altered.${field}`;
+};
 
 const _createAnimal = async (
   user: SessionUser,
@@ -61,7 +78,22 @@ const _createAnimal = async (
     };
   }
 
-  const { intakeType, surrenderingPersonId } = validatedFields.data;
+  const { intakeType, surrenderingPersonId, intakeMedical } =
+    validatedFields.data;
+
+  // A chip or a spay or neuter recorded at intake goes on the medical record,
+  // which only someone who may record medical care writes to. The form shows
+  // the fields to them alone.
+  if (
+    hasIntakeMedical(intakeMedical) &&
+    !can(user.role, AppPermissions.MEDICAL_MANAGE)
+  ) {
+    return {
+      ok: false,
+      message:
+        "You don't have permission to record a microchip or a spay/neuter at intake.",
+    };
+  }
 
   if (intakeType === IntakeType.OWNER_SURRENDER) {
     const parsedPersonId = cuidSchema.safeParse(surrenderingPersonId);
@@ -91,6 +123,20 @@ const _createAnimal = async (
       };
     }
   } catch (error) {
+    // The medical record's refusal (a chip number already on another
+    // animal's record, maybe taken at the same moment) rolled the intake
+    // back. It goes under the intake's own field.
+    const named = await nameChipNumberHolder(prisma, error);
+    if (named instanceof MedicalEntryRefusal) {
+      const field = intakeMedicalField(named.field);
+      return {
+        ok: false,
+        message: named.message,
+        fieldErrors: field
+          ? ({ [field]: [named.message] } as FieldErrors<CreateAnimalFormInput>)
+          : undefined,
+      };
+    }
     console.error("Database Error creating intake record:", error);
     return {
       ok: false,
@@ -302,8 +348,6 @@ const _updateAnimal = async (
           healthStatus: healthStatus,
           listingStatus: listingStatus,
           publishedAt: publishedAt,
-          microchipNumber: mapped.microchipNumber,
-          isSpayedNeutered: mapped.isSpayedNeutered,
           currentUnit: resolvedUnitId
             ? { connect: { id: resolvedUnitId } }
             : { disconnect: true },

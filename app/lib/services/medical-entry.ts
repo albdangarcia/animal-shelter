@@ -161,6 +161,21 @@ export interface EntryWriteOptions {
   batch?: MedicalBatchTag | null;
 }
 
+/** How care recorded on its own is written, beyond what it holds. */
+export interface RecordEntryOptions extends EntryWriteOptions {
+  /**
+   * Its activity row is stamped at least a millisecond after this instant.
+   * The feed orders by time alone, and rows written back to back can share a
+   * millisecond, so a caller that writes rows the feed must show first passes
+   * the last one's stamp.
+   */
+  loggedAfter?: Date | null;
+}
+
+/** Now, or a millisecond after `after` when now isn't later. */
+const loggedAtAfter = (after: Date | null | undefined) =>
+  after ? new Date(Math.max(Date.now(), after.getTime() + 1)) : undefined;
+
 export type MedicalEntryEdit =
   | { status: "edited"; entryId: string; animalId: string; changeSummary: string }
   | { status: "unchanged"; entryId: string; animalId: string };
@@ -1475,15 +1490,15 @@ const scheduleNextDose = async (
 /**
  * Records care as given, with nothing scheduled before it. With
  * `scheduleNext`, the next dose of a repeating catalog item is scheduled in
- * the same transaction.
+ * the same transaction. Also returns when its activity row was stamped.
  */
 export async function recordMedicalEntry(
   tx: TransactionClient,
   input: RecordMedicalEntryInput & { animalId: string },
   actorId: string,
   today: CalendarDay,
-  options: EntryWriteOptions = {},
-): Promise<RecordedMedicalEntry> {
+  options: RecordEntryOptions = {},
+): Promise<RecordedMedicalEntry & { loggedAt: Date }> {
   const { animalId } = input;
   await lockAnimal(tx, animalId);
 
@@ -1521,20 +1536,23 @@ export async function recordMedicalEntry(
     },
   });
 
-  await tx.animalActivityLog.create({
+  const changeSummary = await recordedSummary(
+    tx,
+    item,
+    input.kind,
+    values,
+    null,
+    options.batch,
+  );
+  const { changedAt: loggedAt } = await tx.animalActivityLog.create({
     data: {
       animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_RECORDED,
       changedById: actorId,
-      changeSummary: await recordedSummary(
-        tx,
-        item,
-        input.kind,
-        values,
-        null,
-        options.batch,
-      ),
+      changeSummary,
+      changedAt: loggedAtAfter(options.loggedAfter),
     },
+    select: { changedAt: true },
   });
 
   const nextEntryId = await scheduleNextDose(
@@ -1548,7 +1566,7 @@ export async function recordMedicalEntry(
     today,
     options,
   );
-  return { entryId: entry.id, animalId, nextEntryId };
+  return { entryId: entry.id, animalId, nextEntryId, loggedAt };
 }
 
 /**

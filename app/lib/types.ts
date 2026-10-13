@@ -145,8 +145,6 @@ export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{
     heightCm: true;
     description: true;
     listingStatus: true;
-    microchipNumber: true;
-    isSpayedNeutered: true;
     healthStatus: true;
     speciesId: true;
     primaryColorId: true;

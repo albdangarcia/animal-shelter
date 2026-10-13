@@ -22,14 +22,21 @@ const Page = async () => {
 };
 
 const PageContent = async () => {
-  const [partners, colors, speciesList, unitOptions, canCreatePerson] =
-    await Promise.all([
-      fetchPartners(),
-      fetchColors(),
-      fetchSpecies(),
-      fetchUnitPickerOptions(),
-      hasPermission(AppPermissions.PERSONS_MANAGE),
-    ]);
+  const [
+    partners,
+    colors,
+    speciesList,
+    unitOptions,
+    canCreatePerson,
+    canManageMedical,
+  ] = await Promise.all([
+    fetchPartners(),
+    fetchColors(),
+    fetchSpecies(),
+    fetchUnitPickerOptions(),
+    hasPermission(AppPermissions.PERSONS_MANAGE),
+    hasPermission(AppPermissions.MEDICAL_MANAGE),
+  ]);
 
   return (
     <main>
@@ -40,6 +47,7 @@ const PageContent = async () => {
         colors={colors}
         unitOptions={unitOptions}
         canCreatePerson={canCreatePerson}
+        canManageMedical={canManageMedical}
         today={await getShelterToday()}
       />
     </main>

@@ -10,6 +10,8 @@ import {
   TaskPriority,
   NoteCategory,
   AnimalListingStatus,
+  SurgeryEvidence,
+  SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import {
   cuidSchema,
@@ -18,6 +20,11 @@ import {
   searchQuerySchema,
 } from "./common.schemas";
 import { intakeFieldsShape, intakeSuperRefine } from "./intake.schema";
+import {
+  chipNumberIssue,
+  normaliseChipNumber,
+} from "@/app/lib/utils/microchip";
+import { procedureSexIssue } from "@/app/lib/utils/spay-neuter";
 
 const speciesNameSchema = z
   .string()
@@ -130,12 +137,6 @@ const animalFieldsShape = {
     .number()
     .positive({ error: "Height must be a positive number." })
     .nullable(),
-  microchipNumber: z.string().optional(),
-  // Plain z.boolean() (no .default(false)): a default would make the input
-  // optional and break the z.input / z.output symmetry this file preserves so
-  // the input type stays usable as react-hook-form's values type. The form
-  // supplies the default in both the create and edit branches instead.
-  isSpayedNeutered: z.boolean(),
   description: z.string().optional(),
   // Optional kennel placement. Empty = Unplaced (null). Location is only a UI
   // cascade helper and is NOT persisted — the unit implies its location.
@@ -173,6 +174,72 @@ const weightGramsShape = {
     .nullable(),
 };
 
+// What an intake can put on the medical record: a chip found on the first
+// scan, and a spay or neuter the animal arrived with. Both are written as care
+// given before intake, on an unknown day; anything later is recorded on the
+// Medical tab, where corrections keep their history. The form shows these
+// only to someone who may record medical care, and the action checks the same.
+//
+// Like the rest of this file, the output parses to itself: the action parses
+// again what the form already parsed. A chip left empty is no chip.
+const intakeChipNumber = z
+  .string()
+  .nullish()
+  .transform((value, ctx): string | null => {
+    const normalised = normaliseChipNumber(value ?? "");
+    if (normalised === "") return null;
+    const issue = chipNumberIssue(normalised);
+    if (issue) {
+      ctx.addIssue({ code: "custom", message: issue });
+      return z.NEVER;
+    }
+    return normalised;
+  });
+
+// Present only when the animal arrived already spayed or neutered. The form
+// holds no procedure or evidence until one is picked.
+const intakeAltered = z
+  .object({
+    procedure: z
+      .enum([SurgeryProcedure.SPAY, SurgeryProcedure.NEUTER])
+      .nullish(),
+    evidence: z.enum(SurgeryEvidence).nullish(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.procedure) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["procedure"],
+        message: "Pick spay or neuter.",
+      });
+    }
+    if (!value.evidence) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["evidence"],
+        message: "Say what shows the surgery was done before intake.",
+      });
+    }
+  })
+  // Both checked just above.
+  .transform(({ procedure, evidence }) => ({
+    procedure: procedure!,
+    evidence: evidence!,
+  }));
+
+const intakeMedicalSchema = z.object({
+  chipNumber: intakeChipNumber,
+  altered: intakeAltered.nullish().transform((value) => value ?? null),
+});
+
+export type IntakeMedical = z.output<typeof intakeMedicalSchema>;
+
+/** Whether the intake puts anything on the medical record. */
+export const hasIntakeMedical = (
+  intakeMedical: IntakeMedical | undefined,
+): intakeMedical is IntakeMedical =>
+  !!intakeMedical && (!!intakeMedical.chipNumber || !!intakeMedical.altered);
+
 // Spread into a fresh z.object() rather than built via AnimalEditFormSchema
 // .extend(), per the migration's rule against extending an already-refined
 // schema.
@@ -196,10 +263,22 @@ export const CreateAnimalFormSchema = z
     ),
     ...weightGramsShape,
     ...intakeFieldsShape,
+    intakeMedical: intakeMedicalSchema.optional(),
   })
   .superRefine((data, ctx) => {
     animalColorSuperRefine(data, ctx);
     intakeSuperRefine(data, ctx);
+    // The service's rule, mirrored so the form shows it before submit. An
+    // animal of unknown sex can have either.
+    const procedure = data.intakeMedical?.altered?.procedure;
+    const sexIssue = procedure ? procedureSexIssue(procedure, data.sex) : null;
+    if (sexIssue) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["intakeMedical", "altered", "procedure"],
+        message: sexIssue,
+      });
+    }
   });
 
 export const AnimalEditFormSchema = z

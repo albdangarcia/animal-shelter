@@ -7,8 +7,9 @@ import {
 } from "../support/applications";
 
 // The create form's one happy path: the form sends what the action needs, the
-// action saves it, and the new animal can be found on the list afterwards.
-// What the save writes is proved in prisma/animal-creation.test.ts.
+// action saves it, and the new animal can be found on the list afterwards. A
+// chip found on the intake scan goes on its medical record. What the save
+// writes is proved in prisma/animal-creation.test.ts.
 
 const adminPassword = process.env.ADMIN_PASSWORD;
 
@@ -95,7 +96,10 @@ test("an animal created with the required fields is saved and listed", async ({
 }) => {
   test.setTimeout(120_000);
   // Generated, so no spec that skips animals named elsewhere ever skips it.
-  const name = `Created by form ${Date.now()}`;
+  const stamp = Date.now();
+  const name = `Created by form ${stamp}`;
+  // Fifteen digits no seeded chip uses, new on every attempt.
+  const chipNumber = `99${stamp}`;
 
   // Start on the list and reach the form through its link, so the save lands
   // back on the list without a page load, as it does for a user. The list's
@@ -135,6 +139,11 @@ test("an animal created with the required fields is saved and listed", async ({
     .click();
   await page.keyboard.press("Escape");
   await expect(birthCalendar).toBeHidden();
+  // Typed in groups, as read off a scanner. It's stored without the spaces.
+  await fillStable(
+    page.getByLabel("Microchip number", { exact: true }),
+    chipNumber.replace(/(\d{3})(?=\d)/g, "$1 "),
+  );
 
   await page.getByRole("button", { name: "Create Intake" }).click();
 
@@ -144,12 +153,23 @@ test("an animal created with the required fields is saved and listed", async ({
   await waitForPathname(page, "/dashboard/animals");
 
   // The list sorts newest first, so the new animal is on its first page.
-  await expect(
-    page.locator("tbody").getByRole("link", { name, exact: true }),
-  ).toHaveAttribute("href", /^\/dashboard\/animals\/[^/]+$/);
+  const animalLink = page.locator("tbody").getByRole("link", { name, exact: true });
+  await expect(animalLink).toHaveAttribute(
+    "href",
+    /^\/dashboard\/animals\/[^/]+$/,
+  );
   expect(
     await page.evaluate(
       () => (window as { sameDocument?: boolean }).sameDocument,
     ),
   ).toBe(true);
+
+  // The chip is on its Medical Overview, as the record holds it.
+  await page.goto(`${await animalLink.getAttribute("href")}/medical`);
+  await expect(
+    page
+      .locator('dl[aria-label="Medical status"] div')
+      .filter({ has: page.locator("dt", { hasText: "Microchip" }) })
+      .locator("dd"),
+  ).toHaveText(chipNumber);
 });

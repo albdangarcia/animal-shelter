@@ -1,14 +1,24 @@
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import { checkFirstIntakeDay } from "@/app/lib/data/animal-timeline.data";
-import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
+import {
+  getShelterSettings,
+  getShelterToday,
+} from "@/app/lib/data/shelter-settings.data";
 import { findLiveUnitForPlacement } from "@/app/lib/services/unit-housing";
+import { recordMedicalEntry } from "@/app/lib/services/medical-entry";
 import { toAnimalData } from "@/app/lib/utils/animal-data";
 import { startOfShelterDay } from "@/app/lib/utils/shelter-day";
-import type { CreateAnimalFormOutput } from "@/app/lib/zod-schemas/animal.schemas";
+import {
+  hasIntakeMedical,
+  type CreateAnimalFormOutput,
+  type IntakeMedical,
+} from "@/app/lib/zod-schemas/animal.schemas";
 import {
   AnimalActivityType,
   AnimalListingStatus,
   IntakeType,
+  MedicalEntryKind,
+  MedicalEntrySource,
 } from "@/prisma/generated/enums";
 
 /**
@@ -22,6 +32,12 @@ import {
  * the animal, so the timeline a new animal starts with is always one intake and
  * no outcome. That is what makes the listing safe to choose here: a draft or
  * published animal is here, and the schema refuses every other status.
+ *
+ * A chip found on the first scan, and a spay or neuter the animal arrived
+ * with, go on the medical record in the same transaction, through the entry
+ * service and its rules. One it refuses (a chip number already on another
+ * animal's record) rolls back the whole intake. The caller checks that the
+ * actor may record medical care.
  */
 export const recordAnimalCreation = async (
   tx: TransactionClient,
@@ -42,6 +58,7 @@ export const recordAnimalCreation = async (
     intakeDate,
     weightGrams,
     heightCm,
+    intakeMedical,
   } = values;
 
   const mapped = toAnimalData(values);
@@ -105,8 +122,6 @@ export const recordAnimalCreation = async (
       healthStatus: healthStatus,
       listingStatus: listingStatus,
       publishedAt: publishedAt,
-      microchipNumber: mapped.microchipNumber,
-      isSpayedNeutered: mapped.isSpayedNeutered,
       currentUnit: resolvedUnitId
         ? { connect: { id: resolvedUnitId } }
         : undefined,
@@ -180,9 +195,12 @@ export const recordAnimalCreation = async (
     select: { changedAt: true },
   });
 
+  // The latest row written so far, which any row after it must follow.
+  let lastLoggedAt = intakeRow.changedAt;
+
   // Log status change if published
   if (listingStatus === AnimalListingStatus.PUBLISHED) {
-    await tx.animalActivityLog.create({
+    ({ changedAt: lastLoggedAt } = await tx.animalActivityLog.create({
       data: {
         animalId: newAnimal.id,
         activityType: AnimalActivityType.STATUS_CHANGE,
@@ -196,10 +214,69 @@ export const recordAnimalCreation = async (
           Math.max(Date.now(), intakeRow.changedAt.getTime() + 1),
         ),
       },
-    });
+      select: { changedAt: true },
+    }));
+  }
+
+  // After the intake and its activity, and stamped after them, so the feed
+  // reads the animal as admitted before anything was found on it.
+  if (hasIntakeMedical(intakeMedical)) {
+    await recordIntakeMedical(
+      tx,
+      newAnimal.id,
+      intakeMedical,
+      staffMemberId,
+      lastLoggedAt,
+    );
   }
 
   return { animalId: newAnimal.id };
+};
+
+/**
+ * Care the animal arrived with, recorded as given before intake on an
+ * unknown day: the day it was implanted or done is rarely known. Each
+ * activity row is stamped after the one before it, the chip's first.
+ */
+const recordIntakeMedical = async (
+  tx: TransactionClient,
+  animalId: string,
+  { chipNumber, altered }: IntakeMedical,
+  staffMemberId: string,
+  loggedAfter: Date,
+) => {
+  const today = await getShelterToday();
+  if (chipNumber) {
+    ({ loggedAt: loggedAfter } = await recordMedicalEntry(
+      tx,
+      {
+        animalId,
+        kind: MedicalEntryKind.MICROCHIP,
+        chipNumber,
+        completedDate: null,
+        source: MedicalEntrySource.BEFORE_INTAKE,
+      },
+      staffMemberId,
+      today,
+      { loggedAfter },
+    ));
+  }
+  if (altered) {
+    await recordMedicalEntry(
+      tx,
+      {
+        animalId,
+        kind: MedicalEntryKind.SURGERY,
+        procedure: altered.procedure,
+        evidence: altered.evidence,
+        completedDate: null,
+        source: MedicalEntrySource.BEFORE_INTAKE,
+      },
+      staffMemberId,
+      today,
+      { loggedAfter },
+    );
+  }
 };
 
 /**
