@@ -655,8 +655,9 @@ let pendingCharacteristicAssignments: {
   characteristicIds: string[];
 }[] = [];
 
-// Each animal's spay/neuter flag and microchip number, collected while
-// animals are created, then written as medical records by seedMedicalFacts()
+// Whether each animal arrived spayed or neutered, and its microchip number,
+// collected while animals are created, then written as medical records by
+// seedMedicalFacts()
 // at the tail of seedAll(). Deferred for the same reason as
 // pendingCharacteristicAssignments: a medical entry written here would draw
 // cuid()s from the shared mulberry32 stream and shift every draw after it.
@@ -780,7 +781,8 @@ interface AnimalBlueprint {
   size: AnimalSize | null;
   weightGrams: number;
   heightCm: number;
-  microchipNumber?: string;
+  // Recorded as a chip found before intake (see pendingMedicalFacts).
+  chipNumber?: string;
   species: { name: string };
   breeds: { name: string }[];
   colors: { name: string }[];
@@ -810,10 +812,12 @@ interface AnimalBlueprint {
   // disambiguation pair needs two same-named animals a human can tell apart by
   // birth date alone, every reseed.
   birthDate?: CalendarDay;
-  // Whether the animal has been spayed/neutered. Normally derived from age by
+  // Whether the animal arrived spayed/neutered. Normally derived from age by
   // `resolveBlueprintDerivedFields`; set here only to pin it against the age
-  // gate. Read by the public pet detail page and the redesigned homepage badge.
-  isSpayedNeutered?: boolean;
+  // gate. Recorded as a spay or neuter done before intake (see
+  // pendingMedicalFacts), which the public pet page and the homepage badge
+  // read.
+  altered?: boolean;
   // Public-facing copy, shown on the homepage hero and the pet detail page.
   // Only the hero six set this; everything else keeps the generic literal.
   description?: string;
@@ -829,7 +833,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 30000,
     heightCm: 58,
-    microchipNumber: "985141000100001",
+    chipNumber: "985141000100001",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.GOLDEN_RETRIEVER],
     colors: [allColors.GOLDEN, allColors.WHITE],
@@ -856,7 +860,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.XLARGE,
     weightGrams: 8000,
     heightCm: 32,
-    microchipNumber: "985141000100002",
+    chipNumber: "985141000100002",
     species: allSpecies.DOG,
     breeds: [
       allSpecies.DOG.breeds.AMERICAN_ESKIMO,
@@ -878,7 +882,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.MEDIUM,
     weightGrams: 18000,
     heightCm: 45,
-    microchipNumber: "985141000100003",
+    chipNumber: "985141000100003",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.AIREDALE_TERRIER],
     colors: [allColors.BROWN, allColors.BLACK],
@@ -900,7 +904,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.SMALL,
     weightGrams: 3500,
     heightCm: 24,
-    microchipNumber: "985141000100004",
+    chipNumber: "985141000100004",
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.SIAMESE],
     colors: [allColors.WHITE, allColors.BROWN],
@@ -928,7 +932,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: null,
     weightGrams: 3000,
     heightCm: 23,
-    microchipNumber: "985141000100005",
+    chipNumber: "985141000100005",
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.DOMESTIC_SHORTHAIR],
     colors: [allColors.GRAY, allColors.TABBY, allColors.WHITE],
@@ -951,7 +955,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 6000,
     heightCm: 40,
-    microchipNumber: "985141000100006",
+    chipNumber: "985141000100006",
     species: allSpecies.REPTILE,
     breeds: [allSpecies.REPTILE.breeds.IGUANA],
     colors: [allColors.GREEN, allColors.ORANGE],
@@ -977,7 +981,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 32000,
     heightCm: 57,
-    microchipNumber: "985141000100007",
+    chipNumber: "985141000100007",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.LABRADOR, allSpecies.DOG.breeds.MIXED_BREED],
     colors: [allColors.BLACK, allColors.WHITE],
@@ -1002,7 +1006,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.SMALL,
     weightGrams: 3200,
     heightCm: 22,
-    microchipNumber: "985141000100008",
+    chipNumber: "985141000100008",
     species: allSpecies.CAT,
     breeds: [
       allSpecies.CAT.breeds.TABBY,
@@ -1026,7 +1030,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 28000,
     heightCm: 55,
-    microchipNumber: "985141000100009",
+    chipNumber: "985141000100009",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.GOLDEN_RETRIEVER],
     colors: [allColors.GOLDEN, allColors.WHITE],
@@ -1056,7 +1060,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.SMALL,
     weightGrams: 3600,
     heightCm: 24,
-    microchipNumber: "985141000100010",
+    chipNumber: "985141000100010",
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.DOMESTIC_SHORTHAIR],
     colors: [allColors.BLACK, allColors.WHITE],
@@ -1076,7 +1080,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.MEDIUM,
     weightGrams: 15000,
     heightCm: 42,
-    microchipNumber: "985141000100011",
+    chipNumber: "985141000100011",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.MIXED_BREED],
     colors: [allColors.BROWN],
@@ -1096,7 +1100,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.SMALL,
     weightGrams: 1600,
     heightCm: 22,
-    microchipNumber: "985141000100012",
+    chipNumber: "985141000100012",
     species: allSpecies.RABBIT,
     breeds: [allSpecies.RABBIT.breeds.LIONHEAD],
     colors: [allColors.WHITE, allColors.GRAY],
@@ -1116,7 +1120,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 26000,
     heightCm: 54,
-    microchipNumber: "985141000100013",
+    chipNumber: "985141000100013",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.LABRADOR],
     colors: [allColors.GOLDEN],
@@ -1139,7 +1143,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.SMALL,
     weightGrams: 3200,
     heightCm: 23,
-    microchipNumber: "985141000100014",
+    chipNumber: "985141000100014",
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.TABBY],
     colors: [allColors.TABBY],
@@ -1162,7 +1166,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.MEDIUM,
     weightGrams: 19000,
     heightCm: 46,
-    microchipNumber: "985141000100015",
+    chipNumber: "985141000100015",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.AIREDALE_TERRIER],
     colors: [allColors.BLACK, allColors.BROWN],
@@ -1190,7 +1194,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 27000,
     heightCm: 55,
-    microchipNumber: "985141000100016",
+    chipNumber: "985141000100016",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.LABRADOR],
     colors: [allColors.GOLDEN],
@@ -1210,7 +1214,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.MEDIUM,
     weightGrams: 19000,
     heightCm: 46,
-    microchipNumber: "985141000100017",
+    chipNumber: "985141000100017",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.MIXED_BREED],
     colors: [allColors.BLACK, allColors.WHITE],
@@ -1666,14 +1670,14 @@ function generateAnimalBlueprints(
 }
 
 // The hand-authored blueprints hold microchip numbers 985141000100001 through
-// 985141000100017. `microchipNumber` is `String? @unique`, so a collision
-// fails the seed partway through — every chip assigned procedurally continues
-// that one sequence rather than being randomised.
+// 985141000100017. A chip number can't be on two live medical entries, so a
+// collision fails the seed partway through — every chip assigned procedurally
+// continues that one sequence rather than being randomised.
 const FIRST_GENERATED_MICROCHIP = 985141000100018;
 
 // Single pass over every blueprint — hand-authored and generated alike — run
 // once before any animal is created. It resolves each blueprint's birth date,
-// then derives `isSpayedNeutered` and `microchipNumber` from it. Doing all
+// then derives `altered` and `chipNumber` from it. Doing all
 // three here (rather than at the two create sites) keeps the age math and the
 // timing identical for hand-authored and generated animals and gives the chip
 // sequence a single home.
@@ -1713,22 +1717,22 @@ function resolveBlueprintDerivedFields(blueprints: AnimalBlueprint[]): void {
     }
 
     // 2. Spay/neuter status, gated by age unless the blueprint pins it.
-    if (blueprint.isSpayedNeutered === undefined) {
+    if (blueprint.altered === undefined) {
       if (blueprint.longStay) {
-        blueprint.isSpayedNeutered = true;
+        blueprint.altered = true;
       } else {
         const neuterRate =
           blueprint.birthDate > shelterDayKey(sixMonthsAgo, seedTimezone) ? 0.15 : 0.85;
-        blueprint.isSpayedNeutered = Math.random() < neuterRate;
+        blueprint.altered = Math.random() < neuterRate;
       }
     }
 
     // 3. Microchip number, conditional on neuter status unless already set.
     //    Long-stayers are always chipped for the same hero-determinism reason.
-    if (!blueprint.microchipNumber) {
-      const chipRate = blueprint.isSpayedNeutered ? 0.95 : 0.65;
+    if (!blueprint.chipNumber) {
+      const chipRate = blueprint.altered ? 0.95 : 0.65;
       if (blueprint.longStay || Math.random() < chipRate) {
-        blueprint.microchipNumber = String(nextMicrochip);
+        blueprint.chipNumber = String(nextMicrochip);
         nextMicrochip += 1;
       }
     }
@@ -2253,8 +2257,6 @@ async function seedReturnAndReadoptAnimal(opts: {
       size: blueprint.size,
       currentWeightGrams: blueprint.weightGrams,
       heightCm: blueprint.heightCm,
-      microchipNumber: blueprint.microchipNumber,
-      isSpayedNeutered: blueprint.isSpayedNeutered,
       description:
         blueprint.description ?? "A wonderful companion looking for a home.",
       listingStatus: AnimalListingStatus.PUBLISHED,
@@ -2277,8 +2279,8 @@ async function seedReturnAndReadoptAnimal(opts: {
   // Written as medical records in the tail (see pendingMedicalFacts).
   pendingMedicalFacts.push({
     animalId: animal.id,
-    altered: blueprint.isSpayedNeutered ?? false,
-    chipNumber: blueprint.microchipNumber ?? null,
+    altered: blueprint.altered ?? false,
+    chipNumber: blueprint.chipNumber ?? null,
     sex: blueprint.sex,
     intakeType: blueprint.intakeType,
   });
@@ -2656,8 +2658,8 @@ async function seedAnimalsAndRelations() {
     ...generateAnimalBlueprints("RETURN_READOPT", RETURN_READOPT_COUNT),
   ];
 
-  // Resolve birth dates and derive the age-gated `isSpayedNeutered` /
-  // `microchipNumber` values for the whole set before any animal is written.
+  // Resolve birth dates and derive the age-gated `altered` / `chipNumber`
+  // values for the whole set before any animal is written.
   resolveBlueprintDerivedFields(blueprints);
 
   // Failures are collected rather than swallowed: a partial/inconsistent
@@ -2787,8 +2789,6 @@ async function seedAnimalsAndRelations() {
           size: blueprint.size,
           currentWeightGrams: blueprint.weightGrams,
           heightCm: blueprint.heightCm,
-          microchipNumber: blueprint.microchipNumber,
-          isSpayedNeutered: blueprint.isSpayedNeutered,
           description:
             blueprint.description ??
             "A wonderful companion looking for a home.",
@@ -2814,8 +2814,8 @@ async function seedAnimalsAndRelations() {
       // Written as medical records in the tail (see pendingMedicalFacts).
       pendingMedicalFacts.push({
         animalId: animal.id,
-        altered: blueprint.isSpayedNeutered ?? false,
-        chipNumber: blueprint.microchipNumber ?? null,
+        altered: blueprint.altered ?? false,
+        chipNumber: blueprint.chipNumber ?? null,
         sex: blueprint.sex,
         intakeType: blueprint.intakeType,
       });
@@ -3464,18 +3464,13 @@ async function seedFostering() {
     const animal = await prisma.animal.create({
       data: {
         name: "Winston",
-        // Adopted adult dog: draw an adult age so the hard-set
-        // isSpayedNeutered below stays consistent with the age gate.
+        // Adopted adult dog: draw an adult age so the neuter recorded for
+        // him below stays consistent with the age gate.
         birthDate: shelterDayKey(getRandomDate(6, 1), seedTimezone),
         sex: Sex.MALE,
         size: AnimalSize.LARGE,
         currentWeightGrams: winstonWeightGrams,
         heightCm: 48,
-        // Outside the blueprint system, so both flags are set explicitly. The
-        // microchip sits well clear of the seeded sequence (…018 upward, a few
-        // hundred at most) and the hand-authored block (…001–…017).
-        isSpayedNeutered: true,
-        microchipNumber: "985141000109999",
         description: "A wonderful companion looking for a home.",
         listingStatus: AnimalListingStatus.PUBLISHED,
         publishedAt: intakeDate,
@@ -3494,7 +3489,10 @@ async function seedFostering() {
       },
     });
 
-    // His flags as medical records, in the tail (see pendingMedicalFacts).
+    // Outside the blueprint system, so his facts are set explicitly, as
+    // medical records in the tail (see pendingMedicalFacts). The microchip
+    // sits well clear of the seeded sequence (…018 upward, a few hundred at
+    // most) and the hand-authored block (…001–…017).
     pendingMedicalFacts.push({
       animalId: animal.id,
       altered: true,
@@ -6831,7 +6829,7 @@ async function seedMedicalScheduling() {
 }
 
 // The animals seedSurgeryAndMicrochipFixtures() scripts, and which of their
-// old flags it writes itself instead of seedMedicalFacts(). Hand-authored
+// blueprint facts it writes itself instead of seedMedicalFacts(). Hand-authored
 // animals are the first created under their name.
 const SCRIPTED_MEDICAL_FACTS: Record<string, { altered?: true; chip?: true }> = {
   // An in-house spay with its day.
@@ -6873,14 +6871,14 @@ const evidenceForIntake = (intakeType: IntakeType): SurgeryEvidence =>
       ? SurgeryEvidence.VET_RECORDS
       : SurgeryEvidence.SCAR;
 
-// Every animal's spay/neuter flag and microchip number, written as the
-// medical records they stand for: a chip found on a scan before intake, and
+// Every animal's blueprint facts (arrived spayed or neutered, and its
+// microchip number), written as the medical records they stand for: a chip found on a scan before intake, and
 // a spay (female) or neuter (male, or sex unknown) done before intake, both
 // on a day nobody knows. Through the entry service, one transaction per
 // animal, recorded by Olivia. The animals the fixtures below script are left
 // out for the fact they script.
 async function seedMedicalFacts() {
-  console.log("Seeding spay/neuter and microchip records from each animal's flags...");
+  console.log("Seeding spay/neuter and microchip records from each animal's blueprint...");
 
   const today = shelterToday(seedTimezone);
   const olivia = await prisma.person.findFirst({

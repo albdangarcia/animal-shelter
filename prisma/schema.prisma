@@ -478,7 +478,6 @@ model Animal {
   heightCm           Float?              @map(name: "height_cm")
   description        String?
   listingStatus      AnimalListingStatus @default(DRAFT)
-  microchipNumber    String?             @unique
   archiveReason      OutcomeType? /// Should only be set when listingStatus is ARCHIVED. Explains why the animal is no longer available.
 
   // Relations
@@ -505,9 +504,6 @@ model Animal {
   Outcome              Outcome[]
   activityLog          AnimalActivityLog[]
   healthStatus         AnimalHealthStatus?
-  // denormalized flags to animal
-  // isMixedBreed    Boolean           @default(false)
-  isSpayedNeutered Boolean @default(false)
 
   // Dated foster placement events. "Currently in foster" is derived — an open
   // placement (endDate == null) exists — never stored as a flag on the animal.

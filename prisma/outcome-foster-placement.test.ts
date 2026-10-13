@@ -405,7 +405,6 @@ test("an outcome reversed after a re-intake leaves its placement ended and linke
           intakeDate: "2026-01-20",
           notes: "",
           healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
-          isSpayedNeutered: false,
         }),
       },
       staffId,

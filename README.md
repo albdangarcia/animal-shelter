@@ -37,7 +37,8 @@ A chat assistant in the staff dashboard that answers from **live shelter data**.
 
 ### Comprehensive Animal Profiles
 
-- **Core details**: name, species, breed, age, weight, photos, microchip number, and more.
+- **Core details**: name, species, breed, age, weight, photos, and more.
+- **Medical records**: vaccines, tests, treatments, surgeries and microchips, scheduled or given, with spay/neuter status read from the record and every correction kept.
 - **Characteristics tagging**: filterable tags (e.g. "Good with Kids," "Heartworm Positive") to help match animals with suitable adopters.
 - **Dynamic assessments**: standardized, template-driven evaluations (behavioral, medical intake, etc.) with consistent data capture.
 - **Notes & history**: categorized notes plus an automatic log of an animal's status changes and key events.
