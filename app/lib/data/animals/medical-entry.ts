@@ -115,6 +115,7 @@ export const MEDICAL_ENTRY_DISPLAY_SELECT = {
       findings: true,
       anesthesiaNotes: true,
       evidence: true,
+      foundOnExamId: true,
     },
   },
   microchip: { select: { brand: true } },

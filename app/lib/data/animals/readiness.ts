@@ -27,11 +27,15 @@ import {
   startOfShelterDay,
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
-import { findSpayNeuterEntries } from "./medical-status";
+import { findCompletedExams, findSpayNeuterEntries } from "./medical-status";
 import {
   spayNeuterStatus,
   type SpayNeuterEntry,
 } from "@/app/lib/utils/spay-neuter";
+import {
+  latestReproductiveFinding,
+  type ExamFact,
+} from "@/app/lib/utils/exams";
 
 type Db = typeof prisma;
 
@@ -151,6 +155,7 @@ function readinessFor(
   assessmentRows: ReadinessAssessmentRow[],
   claimRows: ReadinessClaimRow[],
   spayNeuterEntries: SpayNeuterEntry[],
+  exams: ExamFact[],
   { timezone, today }: ShelterDay,
 ): ReadinessBlocker[] {
   const latestIntake = animal.intake[0];
@@ -196,7 +201,11 @@ function readinessFor(
     requirements: readinessRequirementsFor(animal.species.name),
     assessments,
     claims,
-    spayNeuter: spayNeuterStatus(spayNeuterEntries, today),
+    spayNeuter: spayNeuterStatus(
+      spayNeuterEntries,
+      today,
+      latestReproductiveFinding(exams),
+    ),
     hasPhoto: animal._count.animalImages > 0,
     healthStatus: animal.healthStatus,
     // Blockers are dated by instants, so a latest intake — which is a day —
@@ -215,7 +224,7 @@ export const findAnimalReadiness = async (
   animalId: string,
   shelterDay: ShelterDay,
 ): Promise<AnimalReadiness | null> => {
-  const [animal, assessmentRows, claimRows, spayNeuterEntries] = await Promise.all([
+  const [animal, assessmentRows, claimRows, spayNeuterEntries, exams] = await Promise.all([
     db.animal.findUnique({
       where: { id: animalId },
       select: BOARD_ANIMAL_SELECT,
@@ -233,6 +242,7 @@ export const findAnimalReadiness = async (
       select: READINESS_CLAIM_SELECT,
     }),
     findSpayNeuterEntries(db, [animalId]),
+    findCompletedExams(db, [animalId]),
   ]);
 
   if (!animal) return null;
@@ -244,6 +254,7 @@ export const findAnimalReadiness = async (
       assessmentRows,
       claimRows,
       spayNeuterEntries.get(animalId) ?? [],
+      exams.get(animalId) ?? [],
       shelterDay,
     ),
   };
@@ -300,12 +311,11 @@ export const findReadinessForAnimals = async (
     claimsByAnimal.set(animalId, list);
   }
 
-  // One query for every animal's spay and neuter entries, once the animals
-  // are known.
-  const spayNeuterByAnimal = await findSpayNeuterEntries(
-    db,
-    animals.map((animal) => animal.id),
-  );
+  // One query each for every animal's spay and neuter entries and its exams,
+  // once the animals are known.
+  const animalIdsFound = animals.map((animal) => animal.id);
+  const spayNeuterByAnimal = await findSpayNeuterEntries(db, animalIdsFound);
+  const examsByAnimal = await findCompletedExams(db, animalIdsFound);
   return animals.map((animal) => ({
     animal: toReadinessAnimal(animal),
     blockers: readinessFor(
@@ -313,6 +323,7 @@ export const findReadinessForAnimals = async (
       assessmentsByAnimal.get(animal.id) ?? [],
       claimsByAnimal.get(animal.id) ?? [],
       spayNeuterByAnimal.get(animal.id) ?? [],
+      examsByAnimal.get(animal.id) ?? [],
       shelterDay,
     ),
   }));

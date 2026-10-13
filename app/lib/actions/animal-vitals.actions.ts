@@ -4,7 +4,7 @@ import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import prisma, { type TransactionClient } from "@/app/lib/prisma";
+import prisma from "@/app/lib/prisma";
 import {
   withAuthenticatedUser,
   SessionUser,
@@ -14,8 +14,11 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { VitalsFormInput, VitalsFormSchema } from "../zod-schemas/vitals.schemas";
 import { AnimalActivityType } from "@/prisma/generated/enums";
-import { formatWeight } from "../utils/weight-format";
-import { LATEST_ENTRY_ORDER } from "../utils/vitals-order";
+import {
+  VitalsRefusal,
+  recomputeCurrentWeight,
+  recordVitals,
+} from "../services/vitals";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 type VitalsResult = FormResult<VitalsFormInput>;
@@ -29,31 +32,6 @@ const toVitalsData = (data: z.output<typeof VitalsFormSchema>) => ({
   bodyConditionScore: data.bodyConditionScore,
   notes: data.notes || null,
 });
-
-/**
- * The ONLY function allowed to write Animal.currentWeightGrams. Recomputes it as the
- * weightGrams of the most recent non-deleted VitalsLog entry with a non-null weight,
- * ordered by recordedAt — NOT createdAt, since a backdated entry must not "win" just
- * because it was entered most recently. Must be called, inside the same transaction,
- * after every vitals create/update/delete/restore.
- */
-const recomputeCurrentWeight = async (
-  tx: TransactionClient,
-  animalId: string
-): Promise<number | null> => {
-  const latestWeighIn = await tx.vitalsLog.findFirst({
-    where: { animalId, deletedAt: null, weightGrams: { not: null } },
-    orderBy: LATEST_ENTRY_ORDER,
-    select: { weightGrams: true },
-  });
-
-  const currentWeightGrams = latestWeighIn?.weightGrams ?? null;
-  await tx.animal.update({
-    where: { id: animalId },
-    data: { currentWeightGrams },
-  });
-  return currentWeightGrams;
-};
 
 const _createVitalsEntry = async (
   user: SessionUser, // Injected by withAuthenticatedUser
@@ -75,62 +53,24 @@ const _createVitalsEntry = async (
     };
   }
 
-  const { weightGrams, recordedAt } = validatedFields.data;
-
   try {
     const unitSystem = (await getShelterSettings()).weightUnitSystem;
-    await prisma.$transaction(async (tx) => {
-      // Captured before the insert so the activity log can note the change since
-      // the prior weigh-in. This is a display convenience, not part of the cache
-      // invariant itself, which recomputeCurrentWeight handles independently.
-      // Bounded to recordedAt < this entry's recordedAt so a backdated entry is
-      // compared against the entry chronologically before it — not whatever is
-      // globally latest, which could be a later, unrelated weigh-in.
-      const previousWeighIn = await tx.vitalsLog.findFirst({
-        where: {
-          animalId,
-          deletedAt: null,
-          weightGrams: { not: null },
-          recordedAt: { lt: recordedAt },
-        },
-        orderBy: LATEST_ENTRY_ORDER,
-        select: { weightGrams: true },
-      });
-
-      await tx.vitalsLog.create({
-        data: {
-          animalId,
-          recordedById: user.personId,
-          ...toVitalsData(validatedFields.data),
-        },
-      });
-
-      await recomputeCurrentWeight(tx, animalId);
-
-      let changeSummary = "Vitals recorded.";
-      if (weightGrams != null) {
-        changeSummary = `Weight recorded: ${formatWeight(weightGrams, unitSystem)}`;
-        if (previousWeighIn?.weightGrams != null) {
-          const delta = weightGrams - previousWeighIn.weightGrams;
-          if (delta !== 0) {
-            changeSummary += ` (${delta > 0 ? "up" : "down"} ${formatWeight(
-              Math.abs(delta),
-              unitSystem,
-            )})`;
-          }
-        }
-      }
-
-      await tx.animalActivityLog.create({
-        data: {
-          animalId,
-          activityType: AnimalActivityType.VITALS_RECORDED,
-          changedById: user.personId,
-          changeSummary,
-        },
-      });
-    });
+    await prisma.$transaction((tx) =>
+      recordVitals(
+        tx,
+        { animalId, ...toVitalsData(validatedFields.data) },
+        user.personId,
+        { unitSystem },
+      ),
+    );
   } catch (error) {
+    if (error instanceof VitalsRefusal) {
+      return {
+        ok: false,
+        message: error.message,
+        fieldErrors: { [error.field]: [error.message] },
+      };
+    }
     console.error("Database Error creating vitals log:", error);
     return { ok: false, message: "Database Error: Failed to record vitals." };
   }

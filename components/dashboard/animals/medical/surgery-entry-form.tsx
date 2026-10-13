@@ -25,7 +25,7 @@ import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import {
   MedicalEntryKind,
   MedicalEntrySource,
-  SurgeryEvidence,
+  type SurgeryEvidence,
   type SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
@@ -40,6 +40,7 @@ import {
   type MedicalEntryFormInput,
 } from "@/app/lib/zod-schemas/medical-entry.schemas";
 import {
+  PICKABLE_SURGERY_EVIDENCE,
   SURGERY_EVIDENCE_LABELS,
   SURGERY_PROCEDURE_LABELS,
 } from "@/app/lib/constants/medical";
@@ -179,10 +180,16 @@ export function SurgeryEntryForm({
     });
   };
 
+  // A spay or neuter an exam found keeps how it was found: before intake,
+  // with that exam as its evidence. It is voided and recorded again to change
+  // either.
+  const foundOnExam = Boolean(entry?.surgery?.foundOnExamId);
   // A surgery scheduled during the stay was done then, never before intake.
-  const sources = Object.values(MedicalEntrySource).filter(
-    (value) => !scheduled || value !== MedicalEntrySource.BEFORE_INTAKE,
-  );
+  const sources = foundOnExam
+    ? [MedicalEntrySource.BEFORE_INTAKE]
+    : Object.values(MedicalEntrySource).filter(
+        (value) => !scheduled || value !== MedicalEntrySource.BEFORE_INTAKE,
+      );
 
   return (
     <Form {...form}>
@@ -232,7 +239,17 @@ export function SurgeryEntryForm({
             }}
           />
 
-          {source === MedicalEntrySource.BEFORE_INTAKE && (
+          {foundOnExam && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Evidence</p>
+              <p className="text-sm text-muted-foreground">
+                {SURGERY_EVIDENCE_LABELS.FOUND_ON_EXAM}. Void this entry and
+                record it again to change how it was found.
+              </p>
+            </div>
+          )}
+
+          {source === MedicalEntrySource.BEFORE_INTAKE && !foundOnExam && (
             <FormField
               control={form.control}
               name="evidence"
@@ -252,7 +269,7 @@ export function SurgeryEntryForm({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {Object.values(SurgeryEvidence).map((value) => (
+                      {PICKABLE_SURGERY_EVIDENCE.map((value) => (
                         <SelectItem key={value} value={value}>
                           {SURGERY_EVIDENCE_LABELS[value]}
                         </SelectItem>

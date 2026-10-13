@@ -23,6 +23,10 @@ import {
 import { chipNumberIssue, normaliseChipNumber } from "@/app/lib/utils/microchip";
 import { examFindingsIssue } from "@/app/lib/utils/exam-findings";
 import { cuidSchema } from "./common.schemas";
+import {
+  VitalsMeasurementsSchema,
+  hasVitalsMeasurement,
+} from "./vitals.schemas";
 
 // The entry forms' view of a medical entry, one shape per kind. The rules that
 // need nothing but the form's own values are mirrored from the entry service
@@ -213,11 +217,36 @@ const MicrochipEntrySchema = z.object({
   brand: optionalText(100),
 });
 
+/**
+ * Vitals measured during an exam, with the Vitals page's bounds. Left blank,
+ * none were taken. When they were taken is worked out from the exam's day
+ * when it is recorded.
+ */
+const examVitals = z
+  .object({
+    weightGrams: VitalsMeasurementsSchema.shape.weightGrams.nullish(),
+    temperatureC: VitalsMeasurementsSchema.shape.temperatureC.nullish(),
+    bodyConditionScore: VitalsMeasurementsSchema.shape.bodyConditionScore.nullish(),
+  })
+  .nullish()
+  .transform((value) =>
+    value && hasVitalsMeasurement(value)
+      ? {
+          weightGrams: value.weightGrams ?? null,
+          temperatureC: value.temperatureC ?? null,
+          bodyConditionScore: value.bodyConditionScore ?? null,
+        }
+      : null,
+  );
+
 // An exam has no catalog item: its type says which exam it was. Which body
 // systems it must have a finding for depends on the exam (a correction is
 // held to the systems it was recorded with), so the service checks that. The
 // form's own values are checked here: no system twice, and a note on every
-// abnormal finding.
+// abnormal finding. Recording one can bring the vitals measured during it,
+// and the spay or neuter it found when it reads the animal as altered (whether
+// the animal is already altered, and the procedure suits its sex, need the
+// animal, so the service checks those). A correction takes neither.
 const ExamEntrySchema = z
   .object({
     kind: z.literal(MedicalEntryKind.EXAM),
@@ -232,8 +261,25 @@ const ExamEntrySchema = z
         notes: optionalText(2000),
       }),
     ),
+    vitals: examVitals,
+    foundAltered: z
+      .object({
+        procedure: z.enum([SurgeryProcedure.SPAY, SurgeryProcedure.NEUTER], {
+          error: "Pick spay or neuter.",
+        }),
+      })
+      .nullish()
+      .transform((value) => value ?? null),
   })
-  .superRefine(({ findings }, ctx) => {
+  .superRefine(({ findings, reproductiveStatus, foundAltered }, ctx) => {
+    if (foundAltered && reproductiveStatus !== ReproductiveStatus.ALTERED) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["foundAltered"],
+        message:
+          "A spay or neuter is recorded with an exam only when the exam found the animal altered.",
+      });
+    }
     const issue = examFindingsIssue(findings, [
       ...new Set(findings.map((finding) => finding.bodySystem)),
     ]);

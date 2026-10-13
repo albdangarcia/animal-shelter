@@ -157,10 +157,10 @@ export const recordAnimalCreation = async (
   });
 
   // A dated first data point with real provenance, rather than a bare
-  // number with no history. See VitalsLog and recomputeCurrentWeight in
-  // animal-vitals.actions.ts for the cache invariant this must respect —
-  // safe to set currentWeightGrams directly here since this is the only
-  // entry that will exist for this animal.
+  // number with no history. See the vitals service (`services/vitals.ts`)
+  // for the cache invariant this must respect — safe to set
+  // currentWeightGrams directly here since this is the only entry that will
+  // exist for this animal.
   if (weightGrams) {
     await tx.vitalsLog.create({
       data: {

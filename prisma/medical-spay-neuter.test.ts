@@ -9,11 +9,15 @@ import prisma from "@/app/lib/prisma";
 import {
   AnimalActivityType,
   AnimalListingStatus,
+  ExamFindingStatus,
+  ExamResult,
+  ExamType,
   IntakeType,
   MedicalEntryEventAction,
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalEntryStatus,
+  ReproductiveStatus,
   Sex,
   SpayNeuterExemptionReason,
   SurgeryEvidence,
@@ -42,6 +46,7 @@ import {
   findReadinessForAnimals,
 } from "@/app/lib/data/animals/readiness";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
+import { EXAM_BODY_SYSTEM_KEYS } from "@/app/lib/constants/exam";
 
 // Random, not the time: the files run in parallel.
 const runId = randomUUID().slice(0, 8);
@@ -169,6 +174,33 @@ const chip = (animalId: string, chipNumber: string, completedDate: CalendarDay |
         source: completedDate
           ? MedicalEntrySource.IN_HOUSE
           : MedicalEntrySource.BEFORE_INTAKE,
+      },
+      staffId,
+      TODAY,
+    ),
+  );
+
+/** An in-house vet exam on `completedDate`, finding what `reproductiveStatus` says. */
+const examFound = (
+  animalId: string,
+  reproductiveStatus: ReproductiveStatus | null,
+  completedDate: CalendarDay,
+) =>
+  prisma.$transaction((tx) =>
+    recordMedicalEntry(
+      tx,
+      {
+        animalId,
+        kind: MedicalEntryKind.EXAM,
+        examType: ExamType.VET,
+        overallResult: ExamResult.NO_CONCERNS,
+        reproductiveStatus,
+        completedDate,
+        source: MedicalEntrySource.IN_HOUSE,
+        findings: EXAM_BODY_SYSTEM_KEYS.map((bodySystem) => ({
+          bodySystem,
+          status: ExamFindingStatus.NORMAL,
+        })),
       },
       staffId,
       TODAY,
@@ -529,13 +561,14 @@ test("the spay/neuter read leaves out voided entries and other surgeries", async
   assert.deepEqual(byAnimal.get(other), []);
 });
 
-test("the medical status reads Altered, Exempt or Unknown, with the chips the animal carries", async () => {
+test("the medical status reads Altered, Exempt or Unknown, with the chips the animal carries and no exam yet", async () => {
   const unknown = await makeAnimal("Status unknown");
   const unknownStatus = await findMedicalStatus(prisma, unknown, TODAY);
   assert.deepEqual(unknownStatus, {
     spayNeuter: { status: "UNKNOWN", lapsedOn: null },
     exemptionReview: null,
     chips: [],
+    lastExam: null,
   });
 
   const exempt = await makeAnimal("Status exempt");
@@ -585,12 +618,68 @@ test("the medical status reads Altered, Exempt or Unknown, with the chips the an
   ]);
 });
 
+test("the medical status reads Intact from the latest exam that looked, until a spay is recorded", async () => {
+  const animalId = await makeAnimal("Intact status");
+  assert.equal((await findMedicalStatus(prisma, animalId, TODAY)).lastExam, null);
+
+  const { entryId: intactExam } = await examFound(
+    animalId,
+    ReproductiveStatus.INTACT,
+    day("2026-09-01"),
+  );
+  // A later exam that didn't look leaves the finding standing, and is the
+  // last exam.
+  const { entryId: silentExam } = await examFound(animalId, null, day("2026-09-15"));
+  const status = await findMedicalStatus(prisma, animalId, TODAY);
+  assert.deepEqual(status.spayNeuter, {
+    status: "INTACT",
+    examEntryId: intactExam,
+    examDate: "2026-09-01",
+    lapsedOn: null,
+  });
+  assert.equal(status.lastExam?.entryId, silentExam);
+  assert.equal(status.lastExam?.examType, ExamType.VET);
+  assert.equal(status.lastExam?.completedDate, "2026-09-15");
+  assert.equal(status.lastExam?.overallResult, ExamResult.NO_CONCERNS);
+
+  await spayGiven(animalId);
+  assert.equal(
+    (await findMedicalStatus(prisma, animalId, TODAY)).spayNeuter.status,
+    "ALTERED",
+  );
+});
+
+test("a voided exam's finding counts for nothing, and the exam before it speaks again", async () => {
+  const animalId = await makeAnimal("Voided finding");
+  const { entryId: undetermined } = await examFound(
+    animalId,
+    ReproductiveStatus.UNDETERMINED,
+    day("2026-08-10"),
+  );
+  const { entryId: intact } = await examFound(
+    animalId,
+    ReproductiveStatus.INTACT,
+    day("2026-09-01"),
+  );
+  assert.equal(
+    (await findMedicalStatus(prisma, animalId, TODAY)).spayNeuter.status,
+    "INTACT",
+  );
+
+  await voidEntry(intact, "Recorded on the wrong animal.");
+  const status = await findMedicalStatus(prisma, animalId, TODAY);
+  assert.deepEqual(status.spayNeuter, { status: "UNKNOWN", lapsedOn: null });
+  assert.equal(status.lastExam?.entryId, undetermined);
+});
+
 test("readiness reads each animal's spay/neuter status from its record, on the day it is given", async () => {
   const nothing = await makeAnimal("Readiness nothing");
   const altered = await makeAnimal("Readiness altered");
   const exempt = await makeAnimal("Readiness exempt");
   const lapsed = await makeAnimal("Readiness lapsed");
+  const intact = await makeAnimal("Readiness intact");
   await spayGiven(altered);
+  await examFound(intact, ReproductiveStatus.INTACT, day("2026-08-02"));
   await exemption(exempt, {
     exemptionReason: SpayNeuterExemptionReason.MEDICAL_RISK,
   });
@@ -604,7 +693,7 @@ test("readiness reads each animal's spay/neuter status from its record, on the d
   });
 
   const timezone = "America/Los_Angeles";
-  const animalIds = [nothing, altered, exempt, lapsed];
+  const animalIds = [nothing, altered, exempt, lapsed, intact];
   // The spay/neuter blocker of each animal, as the single-animal read and
   // the board's read give it. The board's read is narrowed to this test's
   // animals, so other files deleting theirs mid-read can't reach it.
@@ -647,6 +736,8 @@ test("readiness reads each animal's spay/neuter status from its record, on the d
   assert.equal(onToday.get(exempt), null);
   // Needed from the start of the day after the review day.
   assert.deepEqual(onToday.get(lapsed), new Date("2026-10-06T07:00:00Z"));
+  // Found intact on an exam: needed from the stay, as for no record.
+  assert.deepEqual(onToday.get(intact), stayBegan);
 
   // On its review day the exemption still holds: the day given is the one
   // the status is read on, whatever the clock says.

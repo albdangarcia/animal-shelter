@@ -71,8 +71,8 @@ const HEALTH_STATUS_ALERTS = {
   { variant: "default" | "destructive"; label: string }
 >;
 
-// "Yes (spay)", "Exempt until Nov 3, 2026", "Exempt" or "Not on record". The
-// Medical tab has the detail.
+// "Yes (spay)", "Exempt until Nov 3, 2026", "Exempt", "Intact" or "Not on
+// record". The Medical tab has the detail.
 const spayNeuterText = (status: SpayNeuterStatus) => {
   switch (status.status) {
     case "ALTERED":
@@ -81,6 +81,8 @@ const spayNeuterText = (status: SpayNeuterStatus) => {
       return status.reviewDate
         ? `Exempt until ${formatShelterDay(status.reviewDate)}`
         : "Exempt";
+    case "INTACT":
+      return "Intact";
     case "UNKNOWN":
       return "Not on record";
   }

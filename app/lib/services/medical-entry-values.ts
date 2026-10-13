@@ -257,7 +257,8 @@ export const currentBodySystems = (): readonly string[] => EXAM_BODY_SYSTEM_KEYS
  * analyte, turning the rabies flag on or off) neither rewrites the entry nor
  * blocks a correction to it. `bodySystems` does the same for an exam: the
  * systems the code lists when it is recorded, and the ones it was recorded
- * with on an edit.
+ * with on an edit. `foundOnExam` is true only when the surgery is written
+ * from the exam that found it, or is one that was.
  */
 export const valuesFor = (
   input: MedicalEntryInput,
@@ -268,10 +269,11 @@ export const valuesFor = (
     isRabies: boolean;
     analytes: { id: string; name: string }[];
     bodySystems: readonly string[];
+    foundOnExam?: boolean;
   },
 ): EntryValues => {
   if (input.kind === MedicalEntryKind.SURGERY) {
-    return surgeryValues(input, common);
+    return surgeryValues(input, common, options.foundOnExam ?? false);
   }
   if (input.kind === MedicalEntryKind.MICROCHIP) {
     return microchipValues(input, common);
@@ -392,14 +394,22 @@ export const valuesFor = (
 
 /**
  * A surgery's values. Its evidence is what shows a surgery done before intake
- * was done, so it is required then and refused otherwise. Nobody is stored
- * as having given it: the surgeon is free text.
+ * was done, so it is required then and refused otherwise. Found on an exam is
+ * evidence only the exam that found it gives, since the surgery then points
+ * back at it. Nobody is stored as having given it: the surgeon is free text.
  */
 const surgeryValues = (
   input: SurgeryEntryInput,
   common: Omit<EntryValues, "itemId">,
+  foundOnExam: boolean,
 ): EntryValues => {
   const evidence = input.evidence ?? null;
+  if (evidence === SurgeryEvidence.FOUND_ON_EXAM && !foundOnExam) {
+    throw new MedicalEntryRefusal(
+      "A spay or neuter found on an exam is recorded from that exam.",
+      "evidence",
+    );
+  }
   const beforeIntake = common.source === MedicalEntrySource.BEFORE_INTAKE;
   if (beforeIntake && !evidence) {
     throw new MedicalEntryRefusal(
@@ -596,8 +606,15 @@ export const entryData = (values: EntryValues) => ({
   notes: values.notes,
 });
 
-/** The nested create for the kind's details row. */
-export const detailsCreate = (kind: MedicalEntryKind, values: EntryValues) => ({
+/**
+ * The nested create for the kind's details row. A surgery found on an exam
+ * links to it.
+ */
+export const detailsCreate = (
+  kind: MedicalEntryKind,
+  values: EntryValues,
+  foundOnExamId: string | null = null,
+) => ({
   ...(kind === MedicalEntryKind.VACCINE && {
     vaccine: { create: vaccineData(values) },
   }),
@@ -613,7 +630,9 @@ export const detailsCreate = (kind: MedicalEntryKind, values: EntryValues) => ({
     treatment: { create: treatmentData(values) },
   }),
   ...(kind === MedicalEntryKind.SURGERY && {
-    surgery: { create: surgeryData(values) },
+    surgery: {
+      create: { ...surgeryData(values), ...(foundOnExamId && { foundOnExamId }) },
+    },
   }),
   ...(kind === MedicalEntryKind.MICROCHIP && {
     microchip: { create: microchipData(values) },

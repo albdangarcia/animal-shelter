@@ -32,10 +32,14 @@ import {
   FosterReturnReason,
   AssessmentSignal,
   DoseUnit,
+  ExamFindingStatus,
+  ExamResult,
+  ExamType,
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalItemKind,
   MedicalRoute,
+  ReproductiveStatus,
   SpayNeuterExemptionReason,
   SurgeryEvidence,
   SurgeryProcedure,
@@ -72,8 +76,12 @@ import {
   rescheduleMedicalEntry,
   scheduleMedicalEntry,
   voidMedicalEntry,
+  type ExamEntryInput,
   type MedicalEntryInput,
+  type RecordMedicalEntryInput,
 } from "@/app/lib/services/medical-entry";
+import { EXAM_BODY_SYSTEM_KEYS } from "@/app/lib/constants/exam";
+import { examVitalsInstant } from "@/app/lib/utils/exam-vitals";
 import { nextDueDate } from "@/app/lib/utils/medical-days";
 import type { CatalogEntryKind } from "@/app/lib/constants/medical";
 import { recordMedicalBatch } from "@/app/lib/services/medical-batch";
@@ -7161,6 +7169,284 @@ async function seedSurgeryAndMicrochipFixtures() {
   );
 }
 
+// Exams in each state the record can show, through the entry service, one
+// transaction per animal, recorded by Olivia unless noted. Days are fixed
+// offsets from the animal's latest intake, never after today, with no random
+// draws:
+// - Frisco, Whiskers and Leo: the intake exams that replace their
+//   Intake Medical assessments. Whiskers' finds her intact, three days
+//   before her spay, so her status shows the spay beats the exam. Leo's,
+//   the day after he arrived, needs treatment and brings his vitals.
+// - Fido: an intake exam asking for a vet's review, cleared a week later by
+//   a vet exam at Downtown Veterinary Clinic.
+// - Rocket: an intake exam asking for a vet's review, still open.
+// - Nutmeg: a vet exam finding her intact, beside her scheduled spay.
+// - A generated male: a vet exam that found him already neutered, which
+//   records the neuter with it.
+// - Flash: a vet exam scheduled three days out.
+// - Marigold: a recheck recorded on her by mistake, voided by Benjamin.
+async function seedExamFixtures() {
+  console.log("Seeding exam fixtures...");
+
+  const today = shelterToday(seedTimezone);
+  const settings = resolveShelterSettings(
+    await prisma.shelterSettings.findUnique({ where: { id: "shelter" } }),
+  );
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  const downtownVet = await prisma.partner.findFirst({
+    where: { name: "Downtown Veterinary Clinic" },
+  });
+  if (!olivia || !benjamin || !downtownVet) {
+    throw new Error(
+      "seedExamFixtures: staff or Downtown Veterinary Clinic fixtures not found.",
+    );
+  }
+
+  const latestIntakeOf = (intake: { intakeDate: string }[]) =>
+    intake.map((row) => calendarDay(row.intakeDate)).sort().at(-1)!;
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, intake: { select: { intakeDate: true } } },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(`seedExamFixtures: ${name} was not seeded with an intake.`);
+    }
+    return { id: row.id, name, latestIntake: latestIntakeOf(row.intake) };
+  };
+  // A day in the current stay, `offset` days after it began, never after today.
+  const inStay = (subject: { latestIntake: CalendarDay }, offset: number) => {
+    const day = shiftDayKey(subject.latestIntake, offset);
+    return day > today ? today : day;
+  };
+  // Every body system Normal, unless named with its finding and note.
+  const findings = (
+    named: Record<string, { status?: ExamFindingStatus; notes: string }> = {},
+  ) =>
+    EXAM_BODY_SYSTEM_KEYS.map((bodySystem) => ({
+      bodySystem,
+      status: named[bodySystem]?.status ?? ExamFindingStatus.NORMAL,
+      notes: named[bodySystem]?.notes ?? null,
+    }));
+  const exam = (
+    completedDate: CalendarDay,
+    fields: Omit<
+      ExamEntryInput,
+      "kind" | "completedDate" | "source" | "findings"
+    > &
+      Partial<Pick<ExamEntryInput, "source" | "findings" | "vetPartnerId">>,
+  ): ExamEntryInput => ({
+    kind: MedicalEntryKind.EXAM,
+    completedDate,
+    source: MedicalEntrySource.IN_HOUSE,
+    findings: findings(),
+    ...fields,
+  });
+  const record = (
+    animalId: string,
+    input: RecordMedicalEntryInput,
+    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  ) =>
+    recordMedicalEntry(tx, { ...input, animalId }, olivia.id, today, {
+      weightUnitSystem: settings.weightUnitSystem,
+    });
+  const recordOne = (animalId: string, input: RecordMedicalEntryInput) =>
+    prisma.$transaction((tx) => record(animalId, input, tx));
+
+  // --- The intake exams that replace the Intake Medical assessments --------
+  const frisco = await animal("Frisco");
+  await recordOne(
+    frisco.id,
+    exam(frisco.latestIntake, {
+      examType: ExamType.INTAKE,
+      overallResult: ExamResult.NO_CONCERNS,
+      findings: findings({
+        MOUTH_TEETH: { notes: "Mild tartar." },
+        EXTERNAL_PARASITES: { notes: "None seen." },
+      }),
+    }),
+  );
+
+  const whiskers = await animal("Whiskers");
+  await recordOne(
+    whiskers.id,
+    exam(whiskers.latestIntake, {
+      examType: ExamType.INTAKE,
+      overallResult: ExamResult.NO_CONCERNS,
+      reproductiveStatus: ReproductiveStatus.INTACT,
+      findings: findings({
+        MOUTH_TEETH: {
+          status: ExamFindingStatus.ABNORMAL,
+          notes: "Moderate dental disease.",
+        },
+        EXTERNAL_PARASITES: { notes: "Treated for fleas." },
+      }),
+    }),
+  );
+
+  // The day after he arrived: an exam dated before today places its weigh-in
+  // at the start of its day, and his intake weigh-in was taken later on the
+  // intake day, so only a later day makes the exam's weight his current one.
+  const leo = await animal("Leo");
+  const leoExamDay = inStay(leo, 1);
+  await recordOne(leo.id, {
+    ...exam(leoExamDay, {
+      examType: ExamType.INTAKE,
+      overallResult: ExamResult.NEEDS_TREATMENT,
+      findings: findings({
+        MOUTH_TEETH: {
+          status: ExamFindingStatus.ABNORMAL,
+          notes: "Multiple fractured teeth, gingival recession.",
+        },
+        EARS: { status: ExamFindingStatus.ABNORMAL, notes: "Ear mites." },
+      }),
+    }),
+    vitals: {
+      recordedAt: examVitalsInstant(leoExamDay, today, seedTimezone, new Date()),
+      weightGrams: 3350,
+      temperatureC: 38.7,
+      bodyConditionScore: 4,
+    },
+  });
+
+  // --- Fido: a vet's review asked for, then cleared a week later ----------
+  const fido = await animal("Fido");
+  await prisma.$transaction(async (tx) => {
+    await record(
+      fido.id,
+      exam(fido.latestIntake, {
+        examType: ExamType.INTAKE,
+        overallResult: ExamResult.NEEDS_VET_REVIEW,
+        findings: findings({
+          HEART: {
+            status: ExamFindingStatus.ABNORMAL,
+            notes: "Grade II/VI systolic murmur.",
+          },
+        }),
+      }),
+      tx,
+    );
+    await record(
+      fido.id,
+      exam(inStay(fido, 7), {
+        examType: ExamType.VET,
+        overallResult: ExamResult.NO_CONCERNS,
+        source: MedicalEntrySource.OUTSIDE_VET,
+        vetPartnerId: downtownVet.id,
+        findings: findings({
+          HEART: {
+            status: ExamFindingStatus.ABNORMAL,
+            notes: "Innocent murmur; no treatment needed.",
+          },
+        }),
+      }),
+      tx,
+    );
+  });
+
+  // --- Rocket: a vet's review asked for, still open ------------------------
+  const rocket = await animal("Rocket");
+  await recordOne(
+    rocket.id,
+    exam(rocket.latestIntake, {
+      examType: ExamType.INTAKE,
+      overallResult: ExamResult.NEEDS_VET_REVIEW,
+      findings: findings({
+        LUNGS: {
+          status: ExamFindingStatus.ABNORMAL,
+          notes: "Harsh lung sounds and a mild cough.",
+        },
+      }),
+    }),
+  );
+
+  // --- Nutmeg: found intact, with her spay already scheduled ---------------
+  const nutmeg = await animal("Nutmeg");
+  await recordOne(
+    nutmeg.id,
+    exam(inStay(nutmeg, 1), {
+      examType: ExamType.VET,
+      overallResult: ExamResult.NO_CONCERNS,
+      reproductiveStatus: ReproductiveStatus.INTACT,
+    }),
+  );
+
+  // --- A male found already neutered on an exam ----------------------------
+  // Claimed as the lapsed exemption is, never a hand-authored animal: a
+  // published male with no spay or neuter on his record in any state, the
+  // one that has been in care longest.
+  const unaltered = await prisma.animal.findMany({
+    where: {
+      name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+      listingStatus: AnimalListingStatus.PUBLISHED,
+      sex: Sex.MALE,
+      intake: { some: {} },
+      medicalEntries: {
+        none: {
+          kind: MedicalEntryKind.SURGERY,
+          procedure: { in: [SurgeryProcedure.SPAY, SurgeryProcedure.NEUTER] },
+        },
+      },
+    },
+    select: { id: true, name: true, intake: { select: { intakeDate: true } } },
+  });
+  const foundMale = unaltered
+    .map((row) => ({ ...row, latestIntake: latestIntakeOf(row.intake) }))
+    .sort(
+      (a, b) =>
+        a.latestIntake.localeCompare(b.latestIntake) || a.id.localeCompare(b.id),
+    )[0];
+  if (!foundMale) {
+    throw new Error("seedExamFixtures: no published male without a spay or neuter.");
+  }
+  await recordOne(foundMale.id, {
+    ...exam(inStay(foundMale, 2), {
+      examType: ExamType.VET,
+      overallResult: ExamResult.NO_CONCERNS,
+      reproductiveStatus: ReproductiveStatus.ALTERED,
+    }),
+    foundAltered: { procedure: SurgeryProcedure.NEUTER },
+  });
+
+  // --- Flash: a vet exam three days out ------------------------------------
+  const flash = await animal("Flash");
+  await prisma.$transaction((tx) =>
+    scheduleMedicalEntry(
+      tx,
+      {
+        animalId: flash.id,
+        kind: MedicalEntryKind.EXAM,
+        examType: ExamType.VET,
+        dueDate: shiftDayKey(today, 3),
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- Marigold: a recheck recorded on the wrong animal, voided -----------
+  const marigold = await animal("Marigold");
+  await prisma.$transaction(async (tx) => {
+    const { entryId } = await record(
+      marigold.id,
+      exam(inStay(marigold, 3), {
+        examType: ExamType.RECHECK,
+        overallResult: ExamResult.NO_CONCERNS,
+      }),
+      tx,
+    );
+    await voidMedicalEntry(tx, entryId, "Recorded on the wrong animal.", benjamin.id);
+  });
+
+  console.log(
+    `Seeded exams for Frisco, Whiskers, Leo, Fido, Rocket, Nutmeg, Flash and Marigold, and a neuter found on an exam for ${foundMale.name}.`,
+  );
+}
+
 let seedTimezone = fallbackShelterSettings().timezone;
 
 export async function main() {
@@ -7227,6 +7513,7 @@ async function seedAll() {
   await seedMedicalScheduling();
   await seedMedicalFacts();
   await seedSurgeryAndMicrochipFixtures();
+  await seedExamFixtures();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

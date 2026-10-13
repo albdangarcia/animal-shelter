@@ -1,6 +1,7 @@
 import type { TransactionClient } from "@/app/lib/prisma";
 import {
   ExamFindingStatus,
+  type ExamType,
   MedicalEntryKind,
   MedicalEntrySource,
   SpayNeuterExemptionReason,
@@ -47,6 +48,12 @@ import {
 /** A batch, as the text names it: by how many animals it covers. */
 interface BatchCount {
   size: number;
+}
+
+/** The exam a spay or neuter was found on, as its evidence names it. */
+export interface FoundOnExamText {
+  examType: ExamType;
+  completedDate: string | null;
 }
 
 /** What an exemption's text reads: its reason, its note and its review day. */
@@ -326,8 +333,10 @@ const examText = (values: EntryValues) => {
 /**
  * "DHPP vaccine recorded: given in house, on Oct 15, 2026 (due Oct 14,
  * 2026).", "Neuter surgery recorded: done before intake, on an unknown
- * date. Evidence: tattoo." or "Intake exam recorded: done in house, on Oct
- * 3, 2026. Result: needs vet review. Abnormal: heart."
+ * date. Evidence: tattoo.", "Neuter surgery recorded: done before intake, on
+ * an unknown date. Evidence: found on the intake exam of Oct 3, 2026." or
+ * "Intake exam recorded: done in house, on Oct 3, 2026. Result: needs vet
+ * review. Abnormal: heart."
  */
 export const recordedSummary = async (
   tx: TransactionClient,
@@ -336,6 +345,7 @@ export const recordedSummary = async (
   values: EntryValues,
   dueDate: CalendarDay | null,
   batch: BatchCount | null | undefined,
+  foundOn: FoundOnExamText | null = null,
 ) => {
   const partnerName = values.vetPartnerId
     ? (await readNames(tx, [values])).partners.get(values.vetPartnerId)
@@ -351,7 +361,11 @@ export const recordedSummary = async (
     dueDate ? ` (due ${dayText(dueDate)})` : ""
   }.${values.results ? ` Results: ${describeResults(values.results)}.` : ""}${
     values.evidence
-      ? ` Evidence: ${SURGERY_EVIDENCE_LABELS[values.evidence].toLowerCase()}.`
+      ? ` Evidence: ${
+          foundOn
+            ? `found on the ${EXAM_TYPE_LABELS[foundOn.examType].toLowerCase()} of ${dayText(foundOn.completedDate)}`
+            : SURGERY_EVIDENCE_LABELS[values.evidence].toLowerCase()
+        }.`
       : ""
   }${examText(values)}${batchText(batch)}`;
 };

@@ -36,7 +36,7 @@ const rabiesText = (rabies: RabiesStatus) => {
 };
 
 // "Altered (spay, Oct 3, 2026)", "Exempt until Nov 3, 2026: too young or
-// underweight", "Not on record".
+// underweight", "Intact (exam Oct 3, 2026)", "Not on record".
 const spayNeuterText = (status: SpayNeuterStatus) => {
   switch (status.status) {
     case "ALTERED":
@@ -49,6 +49,8 @@ const spayNeuterText = (status: SpayNeuterStatus) => {
         ? `Exempt until ${formatShelterDay(status.reviewDate)}: ${reason}`
         : `Exempt: ${reason}`;
     }
+    case "INTACT":
+      return `Intact (exam ${formatShelterDay(status.examDate)})`;
     case "UNKNOWN":
       return "Not on record";
   }
@@ -127,7 +129,7 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
             <dt className="text-xs text-muted-foreground">Spay/neuter</dt>
             <dd
               className={
-                spayNeuter.status === "UNKNOWN"
+                spayNeuter.status === "UNKNOWN" || spayNeuter.status === "INTACT"
                   ? "text-sm font-medium text-destructive"
                   : "text-sm font-medium"
               }

@@ -10,8 +10,10 @@ import {
   MedicalEntrySource,
   MedicalEntryStatus,
   PartnerType,
+  ReproductiveStatus,
   Sex,
   SpayNeuterExemptionReason,
+  SurgeryEvidence,
   SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import { ConflictError, NotFoundError } from "@/app/lib/utils/errors";
@@ -21,6 +23,13 @@ import {
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
 import { dueDateIssue } from "@/app/lib/utils/medical-days";
+import { stampedAfter } from "@/app/lib/utils/activity-stamp";
+import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
+import {
+  recordVitals,
+  vitalsMeasurementIssue,
+  type VitalsMeasurementsInput,
+} from "@/app/lib/services/vitals";
 import { lockMedicalItemForUse } from "@/app/lib/services/medical-catalog";
 import { findOpenScheduledItemIds } from "@/app/lib/data/animals/medical-entry";
 import { findSpayNeuterEntries } from "@/app/lib/data/animals/medical-status";
@@ -66,6 +75,7 @@ import {
   recordedSummary,
   subjectText,
   verbFor,
+  type FoundOnExamText,
 } from "@/app/lib/services/medical-entry-text";
 
 export {
@@ -92,6 +102,11 @@ export {
  * its number says which chip it is, and no two entries that aren't voided
  * hold the same number. An exam has no item either: its type says which exam
  * it is, and an intake exam is dated in the stay it starts.
+ *
+ * Recording an exam can write two things beside it, in the same transaction:
+ * the vitals measured during it, as a normal vitals entry through the vitals
+ * service, and a spay or neuter it found already done, as a surgery before
+ * intake whose evidence points back at the exam.
  *
  * Scheduled care is an entry with a due day and nothing else: no source, no
  * details row. Lot numbers and results are written only when it is given, so
@@ -126,9 +141,29 @@ export interface ScheduleNextInput {
   dueDate: CalendarDay;
 }
 
-/** Care to record as given, and optionally the next dose to schedule. */
+/** Vitals measured during an exam, recorded with it. */
+export interface ExamVitalsInput extends VitalsMeasurementsInput {
+  /** When they were measured. */
+  recordedAt: Date;
+}
+
+/**
+ * A spay or neuter an exam found already done, recorded with the exam when
+ * the exam reads the animal as altered and its record doesn't yet say so.
+ */
+export interface FoundAlteredInput {
+  procedure: SurgeryProcedure;
+}
+
+/**
+ * Care to record as given, and optionally the next dose to schedule. An exam
+ * can also bring the vitals measured during it and the spay or neuter it
+ * found; any other kind is refused them.
+ */
 export type RecordMedicalEntryInput = MedicalEntryInput & {
   scheduleNext?: ScheduleNextInput | null;
+  vitals?: ExamVitalsInput | null;
+  foundAltered?: FoundAlteredInput | null;
 };
 
 /** What recording wrote: the entry, and the next one when it was scheduled. */
@@ -173,11 +208,12 @@ export interface RecordEntryOptions extends EntryWriteOptions {
    * the last one's stamp.
    */
   loggedAfter?: Date | null;
+  /** The shelter's weight unit, for the text of an exam's vitals. */
+  weightUnitSystem?: WeightUnitSystem;
 }
 
-/** Now, or a millisecond after `after` when now isn't later. */
-const loggedAtAfter = (after: Date | null | undefined) =>
-  after ? new Date(Math.max(Date.now(), after.getTime() + 1)) : undefined;
+/** How scheduled care recorded as given is written, beyond what it holds. */
+export type RecordScheduledEntryOptions = Omit<RecordEntryOptions, "loggedAfter">;
 
 export type MedicalEntryEdit =
   | { status: "edited"; entryId: string; animalId: string; changeSummary: string }
@@ -195,6 +231,8 @@ type StoredEntry = {
   kind: MedicalEntryKind;
   dueDate: string | null;
   voidedAt: Date | null;
+  /** The exam a surgery was found on, when it was. */
+  foundOnExamId: string | null;
 } & (
   | { status: typeof MedicalEntryStatus.COMPLETED; values: EntryValues }
   // Scheduled and declined care was never given, so it has no values to
@@ -247,13 +285,13 @@ const readStoredEntry = async (
     ...rest
   } = entry;
   if (status !== MedicalEntryStatus.COMPLETED) {
-    return { kind, status, dueDate, voidedAt, values: null };
+    return { kind, status, dueDate, voidedAt, foundOnExamId: null, values: null };
   }
   if (!source) {
     throw new Error(`Completed medical entry ${entryId} has no source.`);
   }
   const common = { ...rest, source };
-  const stored = { kind, status, dueDate, voidedAt };
+  const stored = { kind, status, dueDate, voidedAt, foundOnExamId: null };
 
   switch (kind) {
     case MedicalEntryKind.VACCINE: {
@@ -317,7 +355,7 @@ const readStoredEntry = async (
         anesthesiaNotes: surgery.anesthesiaNotes,
         evidence: surgery.evidence,
       };
-      return { ...stored, values };
+      return { ...stored, foundOnExamId: surgery.foundOnExamId, values };
     }
     case MedicalEntryKind.MICROCHIP: {
       if (!chipNumber) {
@@ -1231,6 +1269,7 @@ const givenValues = async (
   animal: AnimalFacts,
   actorId: string,
   today: CalendarDay,
+  foundOnExam = false,
 ): Promise<EntryValues> => {
   checkDay(input.completedDate, input.source, animal, today);
   if (input.kind === MedicalEntryKind.EXAM) {
@@ -1259,7 +1298,12 @@ const givenValues = async (
       administeredById,
       notes: tidy(input.notes),
     },
-    { itemDefaults: true, ...catalogTerms(item), bodySystems: currentBodySystems() },
+    {
+      itemDefaults: true,
+      ...catalogTerms(item),
+      bodySystems: currentBodySystems(),
+      foundOnExam,
+    },
   );
 };
 
@@ -1325,9 +1369,152 @@ const scheduleNextDose = async (
 };
 
 /**
+ * Refuses what only an exam brings with it, for any other kind, and checks
+ * an exam's extras before anything is written: its vitals against the
+ * measurement rules, and the spay or neuter it found. That one is recorded
+ * only when the exam reads the animal as altered, the animal isn't altered
+ * on its record already, and the procedure suits its sex. Call it behind the
+ * animal's lock.
+ */
+const checkRecordExtras = async (
+  tx: TransactionClient,
+  input: RecordMedicalEntryInput,
+  animalId: string,
+  animal: AnimalFacts,
+  today: CalendarDay,
+) => {
+  if (input.kind !== MedicalEntryKind.EXAM) {
+    if (input.vitals) {
+      throw new MedicalEntryRefusal(
+        "Only an exam records vitals with it. Record them on the Vitals page.",
+        "vitals",
+      );
+    }
+    if (input.foundAltered) {
+      throw new MedicalEntryRefusal(
+        "Only an exam can find a spay or neuter already done.",
+        "foundAltered",
+      );
+    }
+    return;
+  }
+  if (input.vitals) {
+    const issue = vitalsMeasurementIssue(input.vitals);
+    if (issue) {
+      throw new MedicalEntryRefusal(issue.message, `vitals.${issue.field}`);
+    }
+  }
+  if (input.foundAltered) {
+    if (input.reproductiveStatus !== ReproductiveStatus.ALTERED) {
+      throw new MedicalEntryRefusal(
+        "A spay or neuter is recorded with an exam only when the exam found the animal altered.",
+        "foundAltered",
+      );
+    }
+    const { procedure } = input.foundAltered;
+    if (!isSpayOrNeuter(procedure)) {
+      throw new MedicalEntryRefusal("Pick spay or neuter.", "foundAltered.procedure");
+    }
+    const sexIssue = procedureSexIssue(procedure, animal.sex);
+    if (sexIssue) {
+      throw new MedicalEntryRefusal(sexIssue, "foundAltered.procedure");
+    }
+    const entries = (await findSpayNeuterEntries(tx, [animalId])).get(animalId) ?? [];
+    if (spayNeuterStatus(entries, today).status === "ALTERED") {
+      throw new MedicalEntryRefusal(
+        "This animal is already spayed or neutered on its record.",
+        "foundAltered",
+      );
+    }
+  }
+};
+
+/**
+ * Writes the vitals an exam measured as a normal vitals entry, its activity
+ * row stamped after the exam's, and links it from the exam's details. The
+ * entry is then the Vitals page's to edit or delete; correcting the exam
+ * never touches it. Returns its id, and the last activity row's stamp.
+ */
+const writeExamVitals = async (
+  tx: TransactionClient,
+  exam: { entryId: string; animalId: string },
+  vitals: ExamVitalsInput | null | undefined,
+  actorId: string,
+  loggedAfter: Date,
+  unitSystem: WeightUnitSystem | undefined,
+): Promise<{ vitalsLogId: string | null; loggedAt: Date }> => {
+  if (!vitals) return { vitalsLogId: null, loggedAt: loggedAfter };
+  if (!unitSystem) {
+    throw new Error("Recording an exam's vitals needs the shelter's weight unit.");
+  }
+  const { vitalsLogId, loggedAt } = await recordVitals(
+    tx,
+    { ...vitals, animalId: exam.animalId },
+    actorId,
+    { unitSystem, loggedAfter },
+  );
+  await tx.examDetails.update({
+    where: { entryId: exam.entryId },
+    data: { vitalsLogId },
+  });
+  return { vitalsLogId, loggedAt };
+};
+
+/** The exam a spay or neuter was found on, which its surgery links to. */
+interface FoundOnExam extends FoundOnExamText {
+  entryId: string;
+}
+
+/**
+ * Records the spay or neuter an exam found, after the exam and its vitals:
+ * done before intake, on a day nobody knows, its evidence the exam it links
+ * to. Checked already by `checkRecordExtras`; anything the surgery's own
+ * rules still refuse comes back under `foundAltered`. Returns the last
+ * activity row's stamp.
+ */
+const writeFoundAltered = async (
+  tx: TransactionClient,
+  animalId: string,
+  exam: FoundOnExam,
+  foundAltered: FoundAlteredInput | null | undefined,
+  actorId: string,
+  today: CalendarDay,
+  loggedAfter: Date,
+): Promise<Date> => {
+  if (!foundAltered) return loggedAfter;
+  try {
+    const { loggedAt } = await writeRecordedEntry(
+      tx,
+      {
+        animalId,
+        kind: MedicalEntryKind.SURGERY,
+        procedure: foundAltered.procedure,
+        completedDate: null,
+        source: MedicalEntrySource.BEFORE_INTAKE,
+        evidence: SurgeryEvidence.FOUND_ON_EXAM,
+      },
+      actorId,
+      today,
+      { loggedAfter },
+      exam,
+    );
+    return loggedAt;
+  } catch (error) {
+    if (error instanceof MedicalEntryRefusal) {
+      throw new MedicalEntryRefusal(
+        error.message,
+        error.field ? `foundAltered.${error.field}` : "foundAltered",
+      );
+    }
+    throw error;
+  }
+};
+
+/**
  * Records care as given, with nothing scheduled before it. With
  * `scheduleNext`, the next dose of a repeating catalog item is scheduled in
- * the same transaction. Also returns when its activity row was stamped.
+ * the same transaction. An exam's vitals, then the spay or neuter it found,
+ * are written after it. Also returns when its last activity row was stamped.
  */
 export async function recordMedicalEntry(
   tx: TransactionClient,
@@ -1336,12 +1523,37 @@ export async function recordMedicalEntry(
   today: CalendarDay,
   options: RecordEntryOptions = {},
 ): Promise<RecordedMedicalEntry & { loggedAt: Date }> {
+  return writeRecordedEntry(tx, input, actorId, today, options, null);
+}
+
+/**
+ * `recordMedicalEntry`, and, with `foundOn`, the surgery an exam found:
+ * only then is found on an exam allowed as its evidence, and the surgery
+ * links to that exam.
+ */
+async function writeRecordedEntry(
+  tx: TransactionClient,
+  input: RecordMedicalEntryInput & { animalId: string },
+  actorId: string,
+  today: CalendarDay,
+  options: RecordEntryOptions,
+  foundOn: FoundOnExam | null,
+): Promise<RecordedMedicalEntry & { loggedAt: Date }> {
   const { animalId } = input;
   await lockAnimal(tx, animalId);
 
   const animal = await readAnimal(tx, animalId);
   const item = await checkCare(tx, input, animal);
-  const values = await givenValues(tx, input, item, animal, actorId, today);
+  const values = await givenValues(
+    tx,
+    input,
+    item,
+    animal,
+    actorId,
+    today,
+    foundOn !== null,
+  );
+  await checkRecordExtras(tx, input, animalId, animal, today);
   await checkChipNumberFree(tx, values.chipNumber, animalId, null);
 
   const entry = await writingChipNumber(values.chipNumber, () =>
@@ -1353,10 +1565,39 @@ export async function recordMedicalEntry(
         createdById: actorId,
         ...entryData(values),
         ...batchData(options.batch),
-        ...detailsCreate(input.kind, values),
+        ...detailsCreate(input.kind, values, foundOn?.entryId),
       },
       select: { id: true },
     }),
+  );
+
+  const changeSummary = await recordedSummary(
+    tx,
+    item,
+    input.kind,
+    values,
+    null,
+    options.batch,
+    foundOn,
+  );
+  const { changedAt: entryLoggedAt } = await tx.animalActivityLog.create({
+    data: {
+      animalId,
+      activityType: AnimalActivityType.MEDICAL_ENTRY_RECORDED,
+      changedById: actorId,
+      changeSummary,
+      changedAt: stampedAfter(options.loggedAfter),
+    },
+    select: { changedAt: true },
+  });
+
+  const { vitalsLogId, loggedAt: vitalsLoggedAt } = await writeExamVitals(
+    tx,
+    { entryId: entry.id, animalId },
+    input.vitals,
+    actorId,
+    entryLoggedAt,
+    options.weightUnitSystem,
   );
 
   await tx.medicalEntryEvent.create({
@@ -1369,28 +1610,25 @@ export async function recordMedicalEntry(
         status: MedicalEntryStatus.COMPLETED,
         ...values,
         ...batchData(options.batch),
+        ...(vitalsLogId && { vitalsLogId }),
+        ...(foundOn && { foundOnExamId: foundOn.entryId }),
       }),
     },
   });
 
-  const changeSummary = await recordedSummary(
+  const loggedAt = await writeFoundAltered(
     tx,
-    item,
-    input.kind,
-    values,
-    null,
-    options.batch,
-  );
-  const { changedAt: loggedAt } = await tx.animalActivityLog.create({
-    data: {
-      animalId,
-      activityType: AnimalActivityType.MEDICAL_ENTRY_RECORDED,
-      changedById: actorId,
-      changeSummary,
-      changedAt: loggedAtAfter(options.loggedAfter),
+    animalId,
+    {
+      entryId: entry.id,
+      examType: values.examType!,
+      completedDate: values.completedDate,
     },
-    select: { changedAt: true },
-  });
+    input.foundAltered,
+    actorId,
+    today,
+    vitalsLoggedAt,
+  );
 
   const nextEntryId = await scheduleNextDose(
     tx,
@@ -1421,7 +1659,8 @@ export async function recordMedicalEntry(
  *
  * Works for an animal that has left the shelter's care, so its open entries
  * can still be cleared. With `scheduleNext`, the next dose is scheduled in
- * the same transaction.
+ * the same transaction. An exam's vitals, then the spay or neuter it found,
+ * are written after it.
  */
 export async function recordScheduledMedicalEntry(
   tx: TransactionClient,
@@ -1429,7 +1668,7 @@ export async function recordScheduledMedicalEntry(
   input: RecordMedicalEntryInput,
   actorId: string,
   today: CalendarDay,
-  options: EntryWriteOptions = {},
+  options: RecordScheduledEntryOptions = {},
 ): Promise<RecordedMedicalEntry> {
   const entry = await lockScheduledEntry(tx, entryId, "recorded as given");
   const { animalId } = entry;
@@ -1448,6 +1687,7 @@ export async function recordScheduledMedicalEntry(
   const animal = await readAnimal(tx, animalId);
   const item = await checkCare(tx, input, animal, entry);
   const values = await givenValues(tx, input, item, animal, actorId, today);
+  await checkRecordExtras(tx, input, animalId, animal, today);
   await checkChipNumberFree(tx, values.chipNumber, animalId, entryId);
 
   await writingChipNumber(values.chipNumber, () =>
@@ -1464,21 +1704,7 @@ export async function recordScheduledMedicalEntry(
     }),
   );
 
-  await tx.medicalEntryEvent.create({
-    data: {
-      entryId,
-      action: MedicalEntryEventAction.COMPLETED,
-      actorId,
-      before: { status: MedicalEntryStatus.SCHEDULED },
-      after: asJson({
-        status: MedicalEntryStatus.COMPLETED,
-        ...values,
-        ...batchData(options.batch),
-      }),
-    },
-  });
-
-  await tx.animalActivityLog.create({
+  const { changedAt: entryLoggedAt } = await tx.animalActivityLog.create({
     data: {
       animalId,
       activityType: AnimalActivityType.MEDICAL_ENTRY_RECORDED,
@@ -1492,7 +1718,46 @@ export async function recordScheduledMedicalEntry(
         options.batch,
       ),
     },
+    select: { changedAt: true },
   });
+
+  const { vitalsLogId, loggedAt: vitalsLoggedAt } = await writeExamVitals(
+    tx,
+    { entryId, animalId },
+    input.vitals,
+    actorId,
+    entryLoggedAt,
+    options.weightUnitSystem,
+  );
+
+  await tx.medicalEntryEvent.create({
+    data: {
+      entryId,
+      action: MedicalEntryEventAction.COMPLETED,
+      actorId,
+      before: { status: MedicalEntryStatus.SCHEDULED },
+      after: asJson({
+        status: MedicalEntryStatus.COMPLETED,
+        ...values,
+        ...batchData(options.batch),
+        ...(vitalsLogId && { vitalsLogId }),
+      }),
+    },
+  });
+
+  await writeFoundAltered(
+    tx,
+    animalId,
+    {
+      entryId,
+      examType: values.examType!,
+      completedDate: values.completedDate,
+    },
+    input.foundAltered,
+    actorId,
+    today,
+    vitalsLoggedAt,
+  );
 
   const nextEntryId = await scheduleNextDose(
     tx,
@@ -1520,7 +1785,7 @@ export async function recordScheduledMedicalEntry(
  * Likewise a test keeps asking for the results it was recorded with until its
  * item changes, so an analyte added to the catalog later doesn't block it. A
  * surgery's procedure can be corrected too, and the sex rule applies only
- * when it changes.
+ * when it changes. A surgery an exam found keeps its source and evidence.
  */
 export async function editMedicalEntry(
   tx: TransactionClient,
@@ -1568,6 +1833,18 @@ export async function editMedicalEntry(
 
   const before = entry.values;
   input = withStoredValues(input, before);
+  // A surgery an exam found keeps how it was found: its link to that exam is
+  // its evidence.
+  if (
+    entry.foundOnExamId &&
+    input.kind === MedicalEntryKind.SURGERY &&
+    (input.source !== before.source || (input.evidence ?? null) !== before.evidence)
+  ) {
+    throw new MedicalEntryRefusal(
+      `This ${SURGERY_PROCEDURE_LABELS[before.procedure!].toLowerCase()} was found on an exam. Void it and record it again to change how it was found.`,
+      "evidence",
+    );
+  }
   const animal = await readAnimal(tx, animalId);
   const item = await checkCare(tx, input, animal, before);
   // What the entry is held to: see `valuesFor`.
@@ -1624,7 +1901,7 @@ export async function editMedicalEntry(
       administeredById,
       notes: tidy(input.notes),
     },
-    { itemDefaults: false, ...terms },
+    { itemDefaults: false, ...terms, foundOnExam: entry.foundOnExamId !== null },
   );
 
   const changed = (Object.keys(after) as EntryField[]).filter(

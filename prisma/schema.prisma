@@ -472,8 +472,8 @@ model Animal {
   /// public size facet, so the animal will not appear in size-filtered search results.
   size               AnimalSize?
   /// Last known weight, CACHED from the most recent non-deleted VitalsLog entry with a
-  /// non-null weight. NEVER write this directly — only VitalsLog's recomputeCurrentWeight
-  /// helper (and animal intake, for the seed entry) may set it.
+  /// non-null weight. NEVER write this directly — only the vitals service's
+  /// recomputeCurrentWeight (and animal intake, for the seed entry) may set it.
   currentWeightGrams Int?                @map(name: "current_weight_grams")
   heightCm           Float?              @map(name: "height_cm")
   description        String?

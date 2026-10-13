@@ -10,7 +10,7 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "../auth/permissions";
 import { can } from "../auth/can";
-import { SurgeryProcedure } from "@/prisma/generated/enums";
+import { MedicalEntryKind, SurgeryProcedure } from "@/prisma/generated/enums";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   DeclineMedicalEntrySchema,
@@ -25,6 +25,7 @@ import {
   type DeclineMedicalEntryInput,
   type MedicalBatchFormInput,
   type MedicalEntryFormInput,
+  type MedicalEntryFormValues,
   type RecordScheduledBatchFormInput,
   type RecordSpayNeuterExemptionFormInput,
   type RescheduleMedicalEntryInput,
@@ -42,6 +43,8 @@ import {
   rescheduleMedicalEntry as rescheduleEntry,
   scheduleMedicalEntry as scheduleEntry,
   voidMedicalEntry as voidEntry,
+  type RecordMedicalEntryInput,
+  type RecordScheduledEntryOptions,
 } from "../services/medical-entry";
 import {
   MedicalBatchRefusal,
@@ -52,7 +55,12 @@ import {
   type MedicalBatchResult,
 } from "../services/medical-batch";
 import { NO_OP_EDIT_MESSAGE } from "../services/note-audit";
-import { getShelterToday } from "../data/shelter-settings.data";
+import {
+  getShelterSettings,
+  getShelterToday,
+} from "../data/shelter-settings.data";
+import { examVitalsInstant } from "../utils/exam-vitals";
+import type { CalendarDay } from "../utils/shelter-day";
 import {
   fetchMedicalEntryFormOptions,
   type MedicalEntryFormOptions,
@@ -76,15 +84,17 @@ import type {
 type EntryResult = FormResult<MedicalEntryFormInput>;
 
 // The Medical pages, the animal's page for its activity feed and its card, the
-// shelter-wide due list, and the public pet pages, whose "Neutered" and
-// "Microchipped" pills are read from the record. The home page renders per
-// request (it reads the session), so it has no cached copy to refresh.
+// Vitals page for the vitals an exam measured, the shelter-wide due list, and
+// the public pet pages, whose "Neutered" and "Microchipped" pills are read
+// from the record. The home page renders per request (it reads the session),
+// so it has no cached copy to refresh.
 const revalidateMedical = (animalId: string) => {
   const animalPath = `/dashboard/animals/${animalId}`;
   revalidatePath(animalPath);
   revalidatePath(`${animalPath}/medical`);
   revalidatePath(`${animalPath}/medical/history`);
   revalidatePath(`${animalPath}/medical/vaccines-tests`);
+  revalidatePath(`${animalPath}/medical/vitals`);
   revalidatePath("/dashboard/medical/due");
   revalidatePath("/pets");
   revalidatePath("/pets/favorites");
@@ -120,6 +130,60 @@ const invalidFields = (
   ) as FieldErrors<MedicalEntryFormInput>,
 });
 
+/**
+ * The parsed form as the service records it. Vitals an exam measured were
+ * taken on its day: now when that is today, or as the day began. Sending
+ * them needs the permission to record vitals too. A spay or neuter the exam
+ * found is new care, not care that was planned, so it needs the permission
+ * to record care on its own, even when the exam itself was scheduled.
+ */
+const toRecordInput = async (
+  user: SessionUser,
+  data: MedicalEntryFormValues,
+  today: CalendarDay,
+): Promise<
+  | { ok: true; input: RecordMedicalEntryInput; options: RecordScheduledEntryOptions }
+  | { ok: false; result: EntryResult }
+> => {
+  const settings = await getShelterSettings();
+  const options = { weightUnitSystem: settings.weightUnitSystem };
+  if (
+    data.kind === MedicalEntryKind.EXAM &&
+    data.foundAltered &&
+    !can(user.role, AppPermissions.MEDICAL_MANAGE)
+  ) {
+    return {
+      ok: false,
+      result: {
+        ok: false,
+        message: "You don't have permission to record a spay or neuter.",
+      },
+    };
+  }
+  if (data.kind !== MedicalEntryKind.EXAM || !data.vitals) {
+    return { ok: true, input: { ...data, vitals: null }, options };
+  }
+  if (!can(user.role, AppPermissions.ANIMAL_VITALS_MANAGE)) {
+    return {
+      ok: false,
+      result: { ok: false, message: "You don't have permission to record vitals." },
+    };
+  }
+  // An exam's day is always known: the schema refuses one before intake. If
+  // it were missing, the service refuses the day before writing anything.
+  const recordedAt = examVitalsInstant(
+    data.completedDate ?? today,
+    today,
+    settings.timezone,
+    new Date(),
+  );
+  return {
+    ok: true,
+    input: { ...data, vitals: { ...data.vitals, recordedAt } },
+    options,
+  };
+};
+
 const _recordMedicalEntry = async (
   user: SessionUser,
   animalId: string,
@@ -135,13 +199,16 @@ const _recordMedicalEntry = async (
   }
 
   const today = await getShelterToday();
+  const recording = await toRecordInput(user, validated.data, today);
+  if (!recording.ok) return recording.result;
   try {
     await prisma.$transaction((tx) =>
       recordEntry(
         tx,
-        { ...validated.data, animalId: parsedAnimalId.data },
+        { ...recording.input, animalId: parsedAnimalId.data },
         user.personId,
         today,
+        recording.options,
       ),
     );
   } catch (error) {
@@ -174,15 +241,18 @@ const _recordScheduledMedicalEntry = async (
   }
 
   const today = await getShelterToday();
+  const recording = await toRecordInput(user, validated.data, today);
+  if (!recording.ok) return recording.result;
   let animalId: string;
   try {
     ({ animalId } = await prisma.$transaction((tx) =>
       recordScheduledEntry(
         tx,
         parsedId.data,
-        validated.data,
+        recording.input,
         user.personId,
         today,
+        recording.options,
       ),
     ));
   } catch (error) {
@@ -252,6 +322,33 @@ const _editMedicalEntry = async (
   const validated = MedicalEntryFormSchema.safeParse(values);
   if (!validated.success) {
     return invalidFields(validated.error);
+  }
+  // What an exam brings when it is recorded is an entry of its own once
+  // written: its vitals are corrected on the Vitals page, and the spay or
+  // neuter it found on that surgery's entry.
+  if (validated.data.kind === MedicalEntryKind.EXAM) {
+    const extra = validated.data.vitals
+      ? {
+          field: "vitals",
+          message:
+            "Vitals are recorded with a new exam. Correct an exam's vitals on the Vitals page.",
+        }
+      : validated.data.foundAltered
+        ? {
+            field: "foundAltered",
+            message:
+              "A spay or neuter found on an exam is recorded with the exam. Correct it on its own entry.",
+          }
+        : null;
+    if (extra) {
+      return {
+        ok: false,
+        message: extra.message,
+        fieldErrors: {
+          [extra.field]: [extra.message],
+        } as FieldErrors<MedicalEntryFormInput>,
+      };
+    }
   }
 
   const today = await getShelterToday();

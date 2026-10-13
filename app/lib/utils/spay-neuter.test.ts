@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   MedicalEntryStatus,
+  ReproductiveStatus,
   Sex,
   SpayNeuterExemptionReason,
   SurgeryProcedure,
@@ -104,6 +105,52 @@ test("of several lapsed exemptions, the last to lapse dates the need", () => {
     spayNeuterStatus([exemption("2026-10-01"), exemption("2026-09-20")], TODAY),
     { status: "UNKNOWN", lapsedOn: "2026-10-01" },
   );
+});
+
+const finding = (status: ReproductiveStatus) => ({
+  entryId: "exam-1",
+  examDate: calendarDay("2026-10-03"),
+  status,
+});
+
+test("an exam that found the animal intact is Intact, when nothing else says otherwise", () => {
+  assert.deepEqual(spayNeuterStatus([], TODAY, finding(ReproductiveStatus.INTACT)), {
+    status: "INTACT",
+    examEntryId: "exam-1",
+    examDate: "2026-10-03",
+    lapsedOn: null,
+  });
+  // A lapsed exemption still dates the need, as it does for Unknown.
+  assert.deepEqual(
+    spayNeuterStatus([exemption("2026-10-01")], TODAY, finding(ReproductiveStatus.INTACT)),
+    {
+      status: "INTACT",
+      examEntryId: "exam-1",
+      examDate: "2026-10-03",
+      lapsedOn: "2026-10-01",
+    },
+  );
+});
+
+test("an exemption in force beats Intact, and a spay or neuter given beats both", () => {
+  const holding = exemption("2026-11-03");
+  assert.equal(
+    spayNeuterStatus([holding], TODAY, finding(ReproductiveStatus.INTACT)).status,
+    "EXEMPT",
+  );
+  assert.equal(
+    spayNeuterStatus([holding, entry({})], TODAY, finding(ReproductiveStatus.INTACT)).status,
+    "ALTERED",
+  );
+});
+
+test("an exam that found the animal altered, or couldn't tell, leaves it Unknown", () => {
+  for (const status of [ReproductiveStatus.ALTERED, ReproductiveStatus.UNDETERMINED]) {
+    assert.deepEqual(spayNeuterStatus([], TODAY, finding(status)), {
+      status: "UNKNOWN",
+      lapsedOn: null,
+    });
+  }
 });
 
 test("an exemption with a review day is open for review until something replaces it", () => {

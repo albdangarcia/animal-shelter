@@ -62,6 +62,18 @@ export const SURGERY_EVIDENCE_LABELS: Record<SurgeryEvidence, string> = {
   FOUND_ON_EXAM: "Found on exam",
 };
 
+/**
+ * The evidence a person picks for a surgery done before intake. Found on an
+ * exam isn't among them: the exam that found the spay or neuter records it,
+ * linked back to itself.
+ */
+export const PICKABLE_SURGERY_EVIDENCE = [
+  "OWNER_RECORDS",
+  "VET_RECORDS",
+  "TATTOO",
+  "SCAR",
+] as const satisfies readonly SurgeryEvidence[];
+
 export const SPAY_NEUTER_EXEMPTION_REASON_LABELS: Record<
   SpayNeuterExemptionReason,
   string

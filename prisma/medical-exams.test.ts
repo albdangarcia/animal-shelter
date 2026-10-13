@@ -21,6 +21,8 @@ import {
   PartnerType,
   ReproductiveStatus,
   Sex,
+  SurgeryEvidence,
+  SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import {
   MedicalEntryRefusal,
@@ -47,6 +49,7 @@ import {
   findRecentMedicalEntries,
   findVaccinesAndTests,
 } from "@/app/lib/data/animals/medical-entry";
+import { findMedicalStatus } from "@/app/lib/data/animals/medical-status";
 import { EXAM_BODY_SYSTEM_KEYS } from "@/app/lib/constants/exam";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
@@ -121,13 +124,17 @@ after(async () => {
 });
 
 /** An animal that arrived on each of `intakeDays`, the first by default. */
-const makeAnimal = async (label: string, intakeDays: CalendarDay[] = [INTAKE_DAY]) =>
+const makeAnimal = async (
+  label: string,
+  intakeDays: CalendarDay[] = [INTAKE_DAY],
+  sex: Sex = Sex.FEMALE,
+) =>
   (
     await prisma.animal.create({
       data: {
         name: name(label),
         birthDate: "2024-01-01",
-        sex: Sex.FEMALE,
+        sex,
         speciesId,
         primaryColorId: colorId,
         intake: {
@@ -162,9 +169,12 @@ const exam = (overrides: Partial<ExamEntryInput> = {}): ExamEntryInput => ({
   ...overrides,
 });
 
+// The shelter's weight unit, for the text of an exam's vitals.
+const UNITS = { weightUnitSystem: "metric" } as const;
+
 const record = (animalId: string, input: RecordMedicalEntryInput) =>
   prisma.$transaction((tx) =>
-    recordMedicalEntry(tx, { ...input, animalId }, staffId, TODAY),
+    recordMedicalEntry(tx, { ...input, animalId }, staffId, TODAY, UNITS),
   );
 
 const schedule = (
@@ -183,7 +193,7 @@ const schedule = (
 
 const recordScheduled = (entryId: string, input: RecordMedicalEntryInput) =>
   prisma.$transaction((tx) =>
-    recordScheduledMedicalEntry(tx, entryId, input, editorId, TODAY),
+    recordScheduledMedicalEntry(tx, entryId, input, editorId, TODAY, UNITS),
   );
 
 const edit = (entryId: string, input: MedicalEntryInput) =>
@@ -804,4 +814,367 @@ test("exams aren't recorded or scheduled in a batch", async () => {
     /exams aren't recorded in a batch/,
   );
   assert.equal((await entryOf(entryId)).status, MedicalEntryStatus.SCHEDULED);
+});
+
+// ---------------------------------------------------------------------------
+// Vitals measured during an exam
+// ---------------------------------------------------------------------------
+
+const MEASURED_AT = new Date("2026-10-03T16:30:00Z");
+
+const vitalsOf = (animalId: string) =>
+  prisma.vitalsLog.findMany({ where: { animalId }, orderBy: { createdAt: "asc" } });
+
+const feedOf = async (animalId: string) =>
+  (
+    await prisma.animalActivityLog.findMany({
+      where: { animalId },
+      orderBy: [{ changedAt: "asc" }, { id: "asc" }],
+      select: { activityType: true, changeSummary: true },
+    })
+  ).map((row) => `${row.activityType}: ${row.changeSummary}`);
+
+test("an exam with vitals writes one vitals entry, links it, and logs it after the exam", async () => {
+  const animalId = await makeAnimal("With vitals");
+  const { entryId } = await record(
+    animalId,
+    {
+      ...exam(),
+      vitals: {
+        recordedAt: MEASURED_AT,
+        weightGrams: 12400,
+        temperatureC: 38.6,
+        bodyConditionScore: 5,
+      },
+    },
+  );
+
+  const [log] = await vitalsOf(animalId);
+  assert.equal((await vitalsOf(animalId)).length, 1);
+  assert.equal(log.recordedAt.toISOString(), MEASURED_AT.toISOString());
+  assert.equal(log.recordedById, staffId);
+  assert.equal(log.weightGrams, 12400);
+  assert.equal(log.temperatureC, 38.6);
+  assert.equal(log.bodyConditionScore, 5);
+  assert.equal((await entryOf(entryId)).exam?.vitalsLogId, log.id);
+  assert.equal(
+    (await prisma.animal.findUniqueOrThrow({ where: { id: animalId } })).currentWeightGrams,
+    12400,
+  );
+
+  const [created] = await eventsOf(entryId);
+  assert.equal((created.after as { vitalsLogId?: string }).vitalsLogId, log.id);
+
+  assert.deepEqual(await feedOf(animalId), [
+    `${AnimalActivityType.MEDICAL_ENTRY_RECORDED}: Intake exam recorded: done in house, on Oct 3, 2026. Result: no concerns.`,
+    `${AnimalActivityType.VITALS_RECORDED}: Weight recorded: 12.4 kg`,
+  ]);
+
+  // Another exam with none writes no vitals entry, and its event names none.
+  const { entryId: second } = await record(
+    animalId,
+    exam({ examType: ExamType.VET, completedDate: day("2026-10-05") }),
+  );
+  assert.equal((await vitalsOf(animalId)).length, 1);
+  assert.equal((await entryOf(second)).exam?.vitalsLogId, null);
+  const [secondCreated] = await eventsOf(second);
+  assert.equal("vitalsLogId" in (secondCreated.after as object), false);
+});
+
+test("recording a scheduled exam can bring its vitals too", async () => {
+  const animalId = await makeAnimal("Scheduled vitals");
+  const { entryId } = await schedule(animalId, ExamType.RECHECK, day("2026-10-12"));
+  await recordScheduled(entryId, {
+    ...exam({ examType: ExamType.RECHECK, completedDate: TODAY }),
+    vitals: { recordedAt: MEASURED_AT, temperatureC: 38.9 },
+  });
+
+  const [log] = await vitalsOf(animalId);
+  assert.equal(log.recordedById, editorId);
+  assert.equal(log.weightGrams, null);
+  assert.equal((await entryOf(entryId)).exam?.vitalsLogId, log.id);
+  const completed = (await eventsOf(entryId)).find(
+    (event) => event.action === MedicalEntryEventAction.COMPLETED,
+  );
+  assert.equal((completed?.after as { vitalsLogId?: string }).vitalsLogId, log.id);
+  assert.equal((await feedOf(animalId)).at(-1), `${AnimalActivityType.VITALS_RECORDED}: Vitals recorded.`);
+});
+
+test("vitals out of bounds or with no measurement refuse the whole exam, and other kinds can't bring them", async () => {
+  const animalId = await makeAnimal("Bad vitals");
+  await refusedOn(
+    record(animalId, { ...exam(), vitals: { recordedAt: MEASURED_AT, temperatureC: 50 } }),
+    "vitals.temperatureC",
+    /at most 45/,
+  );
+  await refusedOn(
+    record(animalId, { ...exam(), vitals: { recordedAt: MEASURED_AT } }),
+    "vitals.weightGrams",
+    /at least one measurement/,
+  );
+  await refusedOn(
+    record(animalId, {
+      kind: MedicalEntryKind.VACCINE,
+      itemId: rabiesId,
+      durationMonths: 12,
+      completedDate: day("2026-10-03"),
+      source: MedicalEntrySource.IN_HOUSE,
+      vitals: { recordedAt: MEASURED_AT, weightGrams: 5000 },
+    }),
+    "vitals",
+    /Only an exam records vitals/,
+  );
+  await assertNothingWritten(animalId);
+  assert.equal((await vitalsOf(animalId)).length, 0);
+});
+
+test("correcting an exam leaves its vitals entry alone, and a deleted one still reads through the link", async () => {
+  const animalId = await makeAnimal("Vitals kept");
+  const { entryId } = await record(animalId, {
+    ...exam(),
+    vitals: { recordedAt: MEASURED_AT, weightGrams: 8000 },
+  });
+  const [log] = await vitalsOf(animalId);
+
+  const edited = await edit(entryId, exam({ overallResult: ExamResult.NEEDS_TREATMENT }));
+  assert.equal(edited.status, "edited");
+  const [after] = await vitalsOf(animalId);
+  assert.deepEqual(after, log);
+  assert.equal((await entryOf(entryId)).exam?.vitalsLogId, log.id);
+  const [, editedEvent] = await eventsOf(entryId);
+  assert.deepEqual(Object.keys(editedEvent.after as object), ["overallResult"]);
+
+  // Deleted on the Vitals page: soft-deleted, so the exam still reaches it.
+  const deletedAt = new Date("2026-10-08T12:00:00Z");
+  await prisma.vitalsLog.update({ where: { id: log.id }, data: { deletedAt } });
+  const linked = await prisma.examDetails.findUniqueOrThrow({
+    where: { entryId },
+    select: { vitalsLog: { select: { id: true, weightGrams: true, deletedAt: true } } },
+  });
+  assert.deepEqual(linked.vitalsLog, { id: log.id, weightGrams: 8000, deletedAt });
+});
+
+// ---------------------------------------------------------------------------
+// A spay or neuter found on an exam
+// ---------------------------------------------------------------------------
+
+const alteredExam = (overrides: Partial<ExamEntryInput> = {}) =>
+  exam({
+    examType: ExamType.VET,
+    reproductiveStatus: ReproductiveStatus.ALTERED,
+    ...overrides,
+  });
+
+const surgeriesOf = (animalId: string) =>
+  prisma.medicalEntry.findMany({
+    where: { animalId, kind: MedicalEntryKind.SURGERY },
+    include: { surgery: true },
+  });
+
+test("an exam reading altered records the neuter it found, linked to it, after the exam and its vitals", async () => {
+  const animalId = await makeAnimal("Found neuter", [INTAKE_DAY], Sex.MALE);
+  const { entryId } = await record(animalId, {
+    ...alteredExam(),
+    vitals: { recordedAt: MEASURED_AT, weightGrams: 21000 },
+    foundAltered: { procedure: SurgeryProcedure.NEUTER },
+  });
+
+  const [surgery] = await surgeriesOf(animalId);
+  assert.equal((await surgeriesOf(animalId)).length, 1);
+  assert.equal(surgery.status, MedicalEntryStatus.COMPLETED);
+  assert.equal(surgery.procedure, SurgeryProcedure.NEUTER);
+  assert.equal(surgery.source, MedicalEntrySource.BEFORE_INTAKE);
+  assert.equal(surgery.completedDate, null);
+  assert.equal(surgery.createdById, staffId);
+  assert.equal(surgery.surgery?.evidence, SurgeryEvidence.FOUND_ON_EXAM);
+  assert.equal(surgery.surgery?.foundOnExamId, entryId);
+
+  const [examCreated] = await eventsOf(entryId);
+  assert.equal(examCreated.action, MedicalEntryEventAction.CREATED);
+  assert.equal((examCreated.after as { reproductiveStatus: string }).reproductiveStatus, "ALTERED");
+  const [surgeryCreated] = await eventsOf(surgery.id);
+  assert.equal(surgeryCreated.action, MedicalEntryEventAction.CREATED);
+  assert.deepEqual(surgeryCreated.after, {
+    kind: MedicalEntryKind.SURGERY,
+    status: MedicalEntryStatus.COMPLETED,
+    itemId: null,
+    completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE,
+    vetPartnerId: null,
+    vetName: null,
+    administeredById: null,
+    notes: null,
+    procedure: SurgeryProcedure.NEUTER,
+    surgeon: null,
+    findings: null,
+    anesthesiaNotes: null,
+    evidence: SurgeryEvidence.FOUND_ON_EXAM,
+    foundOnExamId: entryId,
+  });
+
+  assert.deepEqual(await feedOf(animalId), [
+    `${AnimalActivityType.MEDICAL_ENTRY_RECORDED}: Vet exam recorded: done in house, on Oct 3, 2026. Result: no concerns.`,
+    `${AnimalActivityType.VITALS_RECORDED}: Weight recorded: 21 kg`,
+    `${AnimalActivityType.MEDICAL_ENTRY_RECORDED}: Neuter surgery recorded: done before intake, on an unknown date. Evidence: found on the vet exam of Oct 3, 2026.`,
+  ]);
+
+  const status = await findMedicalStatus(prisma, animalId, TODAY);
+  assert.equal(status.spayNeuter.status, "ALTERED");
+  assert.equal(
+    status.spayNeuter.status === "ALTERED" && status.spayNeuter.entryId,
+    surgery.id,
+  );
+});
+
+test("recording a scheduled exam can record the spay it found too", async () => {
+  const animalId = await makeAnimal("Found spay");
+  const { entryId } = await schedule(animalId, ExamType.INTAKE);
+  await recordScheduled(entryId, {
+    ...alteredExam({ examType: ExamType.INTAKE, completedDate: day("2026-10-09") }),
+    foundAltered: { procedure: SurgeryProcedure.SPAY },
+  });
+  const [surgery] = await surgeriesOf(animalId);
+  assert.equal(surgery.procedure, SurgeryProcedure.SPAY);
+  assert.equal(surgery.createdById, editorId);
+  assert.equal(surgery.surgery?.foundOnExamId, entryId);
+  assert.equal(
+    (await summariesOf(animalId)).at(-1),
+    "Spay surgery recorded: done before intake, on an unknown date. Evidence: found on the intake exam of Oct 9, 2026.",
+  );
+});
+
+test("a found spay or neuter is refused unless the exam reads altered, the animal isn't already, and its sex allows it", async () => {
+  const female = await makeAnimal("Found refused");
+  await refusedOn(
+    record(female, {
+      ...alteredExam({ reproductiveStatus: ReproductiveStatus.UNDETERMINED }),
+      foundAltered: { procedure: SurgeryProcedure.SPAY },
+    }),
+    "foundAltered",
+    /only when the exam found the animal altered/,
+  );
+  await refusedOn(
+    record(female, {
+      ...alteredExam(),
+      foundAltered: { procedure: SurgeryProcedure.NEUTER },
+    }),
+    "foundAltered.procedure",
+    /A neuter is for a male/,
+  );
+  await refusedOn(
+    record(female, {
+      ...alteredExam(),
+      foundAltered: { procedure: SurgeryProcedure.DENTAL },
+    }),
+    "foundAltered.procedure",
+    /Pick spay or neuter/,
+  );
+  await refusedOn(
+    record(female, {
+      kind: MedicalEntryKind.VACCINE,
+      itemId: rabiesId,
+      durationMonths: 12,
+      completedDate: day("2026-10-03"),
+      source: MedicalEntrySource.IN_HOUSE,
+      foundAltered: { procedure: SurgeryProcedure.SPAY },
+    }),
+    "foundAltered",
+    /Only an exam/,
+  );
+  await assertNothingWritten(female);
+
+  // Already spayed on its record: the exam alone is recorded, or nothing.
+  const spayed = await makeAnimal("Already spayed");
+  await record(spayed, {
+    kind: MedicalEntryKind.SURGERY,
+    procedure: SurgeryProcedure.SPAY,
+    completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE,
+    evidence: SurgeryEvidence.SCAR,
+  });
+  await refusedOn(
+    record(spayed, { ...alteredExam(), foundAltered: { procedure: SurgeryProcedure.SPAY } }),
+    "foundAltered",
+    /already spayed or neutered on its record/,
+  );
+  assert.equal(
+    await prisma.medicalEntry.count({ where: { animalId: spayed, kind: MedicalEntryKind.EXAM } }),
+    0,
+  );
+  assert.equal((await surgeriesOf(spayed)).length, 1);
+});
+
+test("found on an exam isn't evidence a plain surgery record or correction can give", async () => {
+  const animalId = await makeAnimal("Plain surgery");
+  const foundOnExam = {
+    kind: MedicalEntryKind.SURGERY,
+    procedure: SurgeryProcedure.SPAY,
+    completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE,
+    evidence: SurgeryEvidence.FOUND_ON_EXAM,
+  } as const;
+  await refusedOn(
+    record(animalId, foundOnExam),
+    "evidence",
+    /A spay or neuter found on an exam is recorded from that exam/,
+  );
+  await assertNothingWritten(animalId);
+
+  const { entryId } = await record(animalId, { ...foundOnExam, evidence: SurgeryEvidence.SCAR });
+  await refusedOn(
+    edit(entryId, foundOnExam),
+    "evidence",
+    /recorded from that exam/,
+  );
+  assert.equal((await surgeriesOf(animalId))[0].surgery?.evidence, SurgeryEvidence.SCAR);
+});
+
+test("a surgery found on an exam keeps how it was found, its other fields can be corrected, and voiding the exam leaves it", async () => {
+  const animalId = await makeAnimal("Linked surgery", [INTAKE_DAY], Sex.MALE);
+  const { entryId: examId } = await record(animalId, {
+    ...alteredExam(),
+    foundAltered: { procedure: SurgeryProcedure.NEUTER },
+  });
+  const [surgery] = await surgeriesOf(animalId);
+  const linked = {
+    kind: MedicalEntryKind.SURGERY,
+    procedure: SurgeryProcedure.NEUTER,
+    completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE,
+    evidence: SurgeryEvidence.FOUND_ON_EXAM,
+  } as const;
+
+  const notes = await edit(surgery.id, { ...linked, notes: "Scar along the midline." });
+  assert.equal(notes.status, "edited");
+  const corrected = (await surgeriesOf(animalId))[0];
+  assert.equal(corrected.notes, "Scar along the midline.");
+  assert.equal(corrected.surgery?.foundOnExamId, examId);
+  assert.equal(corrected.surgery?.evidence, SurgeryEvidence.FOUND_ON_EXAM);
+
+  await refusedOn(
+    edit(surgery.id, { ...linked, evidence: SurgeryEvidence.SCAR }),
+    "evidence",
+    /This neuter was found on an exam\. Void it and record it again/,
+  );
+  await refusedOn(
+    edit(surgery.id, {
+      ...linked,
+      source: MedicalEntrySource.OUTSIDE_VET,
+      completedDate: day("2026-10-03"),
+      evidence: null,
+    }),
+    "evidence",
+    /found on an exam/,
+  );
+
+  await prisma.$transaction((tx) =>
+    voidMedicalEntry(tx, examId, "Recorded on the wrong animal.", editorId),
+  );
+  const afterVoid = (await surgeriesOf(animalId))[0];
+  assert.equal(afterVoid.voidedAt, null);
+  assert.equal(afterVoid.surgery?.foundOnExamId, examId);
+  assert.equal(
+    (await findMedicalStatus(prisma, animalId, TODAY)).spayNeuter.status,
+    "ALTERED",
+  );
 });

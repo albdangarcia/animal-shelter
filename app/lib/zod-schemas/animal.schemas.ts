@@ -10,7 +10,6 @@ import {
   TaskPriority,
   NoteCategory,
   AnimalListingStatus,
-  SurgeryEvidence,
   SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import {
@@ -25,6 +24,7 @@ import {
   normaliseChipNumber,
 } from "@/app/lib/utils/microchip";
 import { procedureSexIssue } from "@/app/lib/utils/spay-neuter";
+import { PICKABLE_SURGERY_EVIDENCE } from "@/app/lib/constants/medical";
 
 const speciesNameSchema = z
   .string()
@@ -203,7 +203,8 @@ const intakeAltered = z
     procedure: z
       .enum([SurgeryProcedure.SPAY, SurgeryProcedure.NEUTER])
       .nullish(),
-    evidence: z.enum(SurgeryEvidence).nullish(),
+    // Found on an exam is the exam's to record, never an intake's.
+    evidence: z.enum(PICKABLE_SURGERY_EVIDENCE).nullish(),
   })
   .superRefine((value, ctx) => {
     if (!value.procedure) {

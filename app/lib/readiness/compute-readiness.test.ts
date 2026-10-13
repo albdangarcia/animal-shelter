@@ -276,6 +276,23 @@ test("an exemption that lapsed before this stay began blocks from the stay", () 
   assert.deepEqual(blockers, [{ kind: "NOT_SPAYED_NEUTERED", since: IN_CARE_SINCE }]);
 });
 
+test("an exam that found the animal intact blocks as Unknown does: from the stay, or after a lapse", () => {
+  const intact = (lapsedOn: CalendarDay | null) =>
+    ({
+      status: "INTACT",
+      examEntryId: "exam-1",
+      examDate: day("2026-08-20"),
+      lapsedOn,
+    }) as const;
+  assert.deepEqual(computeReadiness({ ...baseInputs, spayNeuter: intact(null) }), [
+    { kind: "NOT_SPAYED_NEUTERED", since: IN_CARE_SINCE },
+  ]);
+  assert.deepEqual(
+    computeReadiness({ ...baseInputs, spayNeuter: intact(day("2026-09-05")) }),
+    [{ kind: "NOT_SPAYED_NEUTERED", since: new Date("2026-09-06T07:00:00Z") }],
+  );
+});
+
 test("no photo blocks from the start of the stay", () => {
   const blockers = computeReadiness({ ...baseInputs, hasPhoto: false });
   assert.deepEqual(blockers, [{ kind: "NO_PHOTO", since: IN_CARE_SINCE }]);

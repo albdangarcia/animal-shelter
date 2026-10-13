@@ -57,10 +57,10 @@ import {
   AnimalHealthStatus,
   AnimalListingStatus,
   Sex,
-  SurgeryEvidence,
   SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import {
+  PICKABLE_SURGERY_EVIDENCE,
   SURGERY_EVIDENCE_LABELS,
   SURGERY_PROCEDURE_LABELS,
 } from "@/app/lib/constants/medical";
@@ -839,7 +839,7 @@ const AnimalForm = ({
                                   </SelectTrigger>
                                 </FormControl>
                                 <SelectContent>
-                                  {Object.values(SurgeryEvidence).map(
+                                  {PICKABLE_SURGERY_EVIDENCE.map(
                                     (evidence) => (
                                       <SelectItem key={evidence} value={evidence}>
                                         {SURGERY_EVIDENCE_LABELS[evidence]}

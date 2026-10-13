@@ -207,6 +207,17 @@ test("CreateAnimalFormSchema: a bad chip, a missing procedure or evidence, and a
     })[0][0],
     "intakeMedical.altered.procedure",
   );
+  // Found on an exam is the exam's to record, never an intake's.
+  assert.equal(
+    issuesOf({
+      chipNumber: "",
+      altered: {
+        procedure: SurgeryProcedure.SPAY,
+        evidence: SurgeryEvidence.FOUND_ON_EXAM,
+      },
+    })[0][0],
+    "intakeMedical.altered.evidence",
+  );
 });
 
 test("TaskFormSchema: a cleared due date parses as no due date", () => {

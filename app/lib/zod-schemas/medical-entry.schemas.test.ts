@@ -480,6 +480,64 @@ test("MedicalEntryFormSchema: an exam is in house or by an outside vet, never be
   );
 });
 
+test("MedicalEntryFormSchema: an exam's vitals are optional, blank is none, and each keeps the Vitals page's bounds", () => {
+  const vitalsOf = (values: MedicalEntryFormInput) => {
+    const parsed = MedicalEntryFormSchema.parse(values);
+    if (parsed.kind !== "EXAM") throw new Error("unreachable");
+    return parsed.vitals;
+  };
+  assert.equal(vitalsOf(exam), null);
+  assert.equal(
+    vitalsOf({
+      ...exam,
+      vitals: { weightGrams: null, temperatureC: null, bodyConditionScore: null },
+    }),
+    null,
+  );
+  assert.deepEqual(vitalsOf({ ...exam, vitals: { temperatureC: 38.6 } }), {
+    weightGrams: null,
+    temperatureC: 38.6,
+    bodyConditionScore: null,
+  });
+
+  const errors = fieldErrorsOf({
+    ...exam,
+    vitals: { weightGrams: 0, temperatureC: 50, bodyConditionScore: 10 },
+  });
+  assert.deepEqual(errors["vitals.weightGrams"], ["Weight must be a positive number."]);
+  assert.deepEqual(errors["vitals.temperatureC"], ["Temperature must be at most 45°C."]);
+  assert.deepEqual(errors["vitals.bodyConditionScore"], [
+    "Body condition score must be between 1 and 9.",
+  ]);
+});
+
+test("MedicalEntryFormSchema: an exam records the spay or neuter it found only when it reads altered", () => {
+  const altered = { ...exam, reproductiveStatus: "ALTERED" } as MedicalEntryFormInput;
+  const parsed = MedicalEntryFormSchema.parse({
+    ...altered,
+    foundAltered: { procedure: "NEUTER" },
+  });
+  assert.deepEqual(parsed.kind === "EXAM" && parsed.foundAltered, { procedure: "NEUTER" });
+  const none = MedicalEntryFormSchema.parse(altered);
+  assert.equal(none.kind === "EXAM" && none.foundAltered, null);
+
+  assert.deepEqual(
+    fieldErrorsOf({
+      ...exam,
+      reproductiveStatus: "INTACT",
+      foundAltered: { procedure: "SPAY" },
+    } as MedicalEntryFormInput).foundAltered,
+    ["A spay or neuter is recorded with an exam only when the exam found the animal altered."],
+  );
+  assert.deepEqual(
+    fieldErrorsOf({
+      ...altered,
+      foundAltered: { procedure: "DENTAL" },
+    } as unknown as MedicalEntryFormInput)["foundAltered.procedure"],
+    ["Pick spay or neuter."],
+  );
+});
+
 test("ScheduleMedicalEntrySchema: an exam takes its type", () => {
   const dueDate = "2026-10-14";
   assert.deepEqual(

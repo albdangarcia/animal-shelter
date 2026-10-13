@@ -111,7 +111,8 @@ export interface ComputeReadinessInputs {
   /** The animal's active characteristic assignments. */
   claims: ReadinessCharacteristicClaim[];
   /** From the medical record: no spay or neuter given and no exemption in
-   *  force reads as UNKNOWN, which blocks. */
+   *  force reads as UNKNOWN, or as INTACT when the latest exam to look found
+   *  the animal intact. Both block, dated the same way. */
   spayNeuter: SpayNeuterStatus;
   hasPhoto: boolean;
   healthStatus: AnimalHealthStatus | null;
@@ -214,7 +215,10 @@ export function computeReadiness(
     ...characteristicClaimBlockers(inputs.claims),
   ];
 
-  if (inputs.spayNeuter.status === "UNKNOWN") {
+  if (
+    inputs.spayNeuter.status === "UNKNOWN" ||
+    inputs.spayNeuter.status === "INTACT"
+  ) {
     // An exemption covered the animal up to and including its review day, so
     // the need starts the day after — unless that was before this stay.
     const { lapsedOn } = inputs.spayNeuter;

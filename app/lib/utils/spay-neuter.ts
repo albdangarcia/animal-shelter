@@ -1,15 +1,19 @@
 // Whether an animal is spayed or neutered, worked out from its medical record
 // when someone looks. Nothing stores the answer: a spay recorded, voided or
 // corrected changes it at once, and an exemption lapses on its own when its
-// review day has passed.
+// review day has passed. The status is one of four, in this order: Altered (a
+// spay or neuter was done), Exempt (an exemption holds), Intact (the latest
+// exam to look found the animal intact) and Unknown (none of these).
 
 import {
   MedicalEntryStatus,
+  ReproductiveStatus,
   Sex,
   SurgeryProcedure,
   type SpayNeuterExemptionReason,
 } from "@/prisma/generated/enums";
 import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
+import type { ReproductiveFinding } from "@/app/lib/utils/exams";
 
 /**
  * One of the animal's spay or neuter entries that isn't voided: given,
@@ -47,6 +51,14 @@ export type SpayNeuterStatus =
       reviewDate: CalendarDay | null;
     }
   | {
+      status: "INTACT";
+      /** The exam that found it intact, and its day. */
+      examEntryId: string;
+      examDate: CalendarDay;
+      /** As for Unknown: the animal still needs a spay or neuter. */
+      lapsedOn: CalendarDay | null;
+    }
+  | {
       status: "UNKNOWN";
       /**
        * The review day of the exemption that lapsed last, if one did: the
@@ -63,17 +75,26 @@ const latestFirst = (a: SpayNeuterEntry, b: SpayNeuterEntry) =>
 
 /**
  * The animal's spay/neuter status on `today`, from its spay and neuter
- * entries that aren't voided:
+ * entries that aren't voided, and what its latest exam to look found
+ * (`reproductive`):
  * - **Altered**: a spay or neuter was given, from any source. It beats an
  *   exemption. Of several, the one given last (an unknown day counts as
  *   earliest).
  * - **Exempt**: an exemption holds, because it has no review day or its
  *   review day is today or later. Of several, the one that holds longest.
- * - **Unknown**: neither.
+ * - **Intact**: neither, and the latest exam that recorded a reproductive
+ *   status found the animal intact. An exam that found it altered or
+ *   couldn't tell leaves it Unknown: only a surgery entry makes an animal
+ *   Altered.
+ * - **Unknown**: none of these.
+ *
+ * Callers that only ask whether the animal is altered can leave
+ * `reproductive` out.
  */
 export const spayNeuterStatus = (
   entries: SpayNeuterEntry[],
   today: CalendarDay,
+  reproductive: ReproductiveFinding | null = null,
 ): SpayNeuterStatus => {
   const given = entries
     .filter((entry) => entry.status === MedicalEntryStatus.COMPLETED)
@@ -109,12 +130,22 @@ export const spayNeuterStatus = (
     };
   }
 
-  const lapsedOn = exemptions
-    .map((entry) => entry.reviewDate)
-    .filter((day): day is string => day !== null)
-    .sort()
-    .at(-1);
-  return { status: "UNKNOWN", lapsedOn: parseCalendarDay(lapsedOn ?? null) };
+  const lapsedOn = parseCalendarDay(
+    exemptions
+      .map((entry) => entry.reviewDate)
+      .filter((day): day is string => day !== null)
+      .sort()
+      .at(-1) ?? null,
+  );
+  if (reproductive?.status === ReproductiveStatus.INTACT) {
+    return {
+      status: "INTACT",
+      examEntryId: reproductive.entryId,
+      examDate: reproductive.examDate,
+      lapsedOn,
+    };
+  }
+  return { status: "UNKNOWN", lapsedOn };
 };
 
 /**

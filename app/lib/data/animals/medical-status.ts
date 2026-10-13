@@ -1,5 +1,5 @@
 // Facts about an animal worked out from its medical record: whether it is
-// spayed or neutered, and which microchips it carries. No auth or `next/*`
+// spayed or neutered, which microchips it carries, and its exams. No auth or `next/*`
 // imports, so database tests and the entry service can call them. Readiness,
 // global search, the public pages and the animal page all read these through
 // the fragments and functions here, so they can't disagree. The database
@@ -20,7 +20,16 @@ import {
   type SpayNeuterEntry,
   type SpayNeuterStatus,
 } from "@/app/lib/utils/spay-neuter";
-import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
+import {
+  calendarDay,
+  parseCalendarDay,
+  type CalendarDay,
+} from "@/app/lib/utils/shelter-day";
+import {
+  latestExam,
+  latestReproductiveFinding,
+  type ExamFact,
+} from "@/app/lib/utils/exams";
 
 type Db = TransactionClient | typeof prisma;
 
@@ -148,17 +157,60 @@ export const findCurrentChips = async (
   return byAnimal;
 };
 
+/**
+ * The exams each of `animalIds` has had, done and not voided, newest first
+ * (the later day, then the one recorded later), read in one query. An animal
+ * with none has an empty list.
+ */
+export const findCompletedExams = async (
+  db: Db,
+  animalIds: string[],
+): Promise<Map<string, ExamFact[]>> => {
+  const rows = await db.medicalEntry.findMany({
+    where: {
+      animalId: { in: animalIds },
+      kind: MedicalEntryKind.EXAM,
+      status: MedicalEntryStatus.COMPLETED,
+      voidedAt: null,
+    },
+    orderBy: [{ completedDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: {
+      id: true,
+      animalId: true,
+      examType: true,
+      completedDate: true,
+      createdAt: true,
+      exam: { select: { overallResult: true, reproductiveStatus: true } },
+    },
+  });
+  const byAnimal = new Map<string, ExamFact[]>(animalIds.map((id) => [id, []]));
+  for (const row of rows) {
+    // A completed exam always has its type, its day and its details.
+    byAnimal.get(row.animalId)?.push({
+      entryId: row.id,
+      examType: row.examType!,
+      completedDate: calendarDay(row.completedDate!),
+      overallResult: row.exam!.overallResult,
+      reproductiveStatus: row.exam!.reproductiveStatus,
+      createdAt: row.createdAt,
+    });
+  }
+  return byAnimal;
+};
+
 export interface MedicalStatus {
   spayNeuter: SpayNeuterStatus;
   /** The exemption open for review, if any. */
   exemptionReview: SpayNeuterEntry | null;
   chips: CurrentChip[];
+  /** The latest exam done, if any. */
+  lastExam: ExamFact | null;
 }
 
 /**
  * One animal's spay/neuter status on `today`, its exemption open for review,
- * and the chips it carries. The two reads run one after the other, so this
- * is safe inside a transaction.
+ * the chips it carries and its latest exam. The reads run one after the
+ * other, so this is safe inside a transaction.
  */
 export const findMedicalStatus = async (
   db: Db,
@@ -167,9 +219,11 @@ export const findMedicalStatus = async (
 ): Promise<MedicalStatus> => {
   const entries = (await findSpayNeuterEntries(db, [animalId])).get(animalId) ?? [];
   const chips = (await findCurrentChips(db, [animalId])).get(animalId) ?? [];
+  const exams = (await findCompletedExams(db, [animalId])).get(animalId) ?? [];
   return {
-    spayNeuter: spayNeuterStatus(entries, today),
+    spayNeuter: spayNeuterStatus(entries, today, latestReproductiveFinding(exams)),
     exemptionReview: openExemptionReview(entries),
     chips,
+    lastExam: latestExam(exams),
   };
 };
