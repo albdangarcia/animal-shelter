@@ -196,7 +196,9 @@ function RecordButton({
                 ? "Record how it was done, and how it went."
                 : entry.kind === MedicalEntryKind.MICROCHIP
                   ? "Record the chip's number, and how it was implanted."
-                  : "Record how it was given: the item's defaults are filled in."}
+                  : entry.kind === MedicalEntryKind.EXAM
+                    ? "Record how it went: each body system's finding, and what it concluded."
+                    : "Record how it was given: the item's defaults are filled in."}
             </DialogDescription>
           </DialogHeader>
           {formOptions ? (

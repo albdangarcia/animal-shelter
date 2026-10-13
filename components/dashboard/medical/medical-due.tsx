@@ -47,7 +47,7 @@ import {
 // shelter's today, passed in, not the browser's clock.
 
 export const MEDICAL_DUE_TITLE = "Medical Care Due";
-export const MEDICAL_DUE_DESCRIPTION = `Vaccines, tests, treatments, surgeries and microchips that are overdue, due today or due in the next ${UPCOMING_DAYS} days, and spay/neuter exemptions up for review, by where each animal is.`;
+export const MEDICAL_DUE_DESCRIPTION = `Vaccines, tests, treatments, surgeries, microchips and exams that are overdue, due today or due in the next ${UPCOMING_DAYS} days, and spay/neuter exemptions up for review, by where each animal is.`;
 
 const kindOptions = Object.values(MedicalEntryKind).map((kind) => ({
   value: kind,
@@ -78,8 +78,8 @@ interface Props {
 /**
  * A row that can be picked to record with others: a vaccine or treatment,
  * for a viewer who may give scheduled care. Tests have results of their own,
- * and surgeries and microchips details of their own, so they are recorded one
- * at a time.
+ * and surgeries, microchips and exams details of their own, so they are
+ * recorded one at a time.
  */
 const selectableOf = (
   row: MedicalDueListRow,

@@ -4,7 +4,7 @@ import { hasPermission } from "../auth/hasPermission";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { AnimalListingStatus, type Sex } from "@/prisma/generated/enums";
 import { cuidSchema } from "../zod-schemas/common.schemas";
-import { getShelterToday } from "./shelter-settings.data";
+import { getShelterSettings, getShelterToday } from "./shelter-settings.data";
 import {
   findActiveVetClinics,
   findMedicalCatalog,
@@ -13,6 +13,7 @@ import {
   type MedicalEntryFormItem,
 } from "./medical-catalog";
 import type { CalendarDay } from "../utils/shelter-day";
+import type { WeightUnitSystem } from "../utils/shelter-settings";
 import { spayNeuterStatus } from "../utils/spay-neuter";
 import { findSpayNeuterEntries } from "./animals/medical-status";
 
@@ -85,6 +86,8 @@ export interface MedicalEntryFormOptions {
   vetClinics: { id: string; name: string }[];
   /** The shelter's today: the date given starts there, and can't pass it. */
   today: CalendarDay;
+  /** The shelter's units, for the vitals an exam measures. */
+  weightUnitSystem: WeightUnitSystem;
 }
 
 // What the entry forms offer for one animal. Behind MEDICAL_ADMINISTER, not
@@ -103,12 +106,13 @@ const _fetchMedicalEntryFormOptions = async (
       where: { id: id.data },
       select: { id: true, speciesId: true, listingStatus: true, sex: true },
     });
-    const [{ items, scheduledItems }, vetClinics, today, spayNeuter] =
+    const [{ items, scheduledItems }, vetClinics, today, spayNeuter, settings] =
       await Promise.all([
         findMedicalEntryFormItems(prisma, animal),
         findActiveVetClinics(prisma),
         getShelterToday(),
         findSpayNeuterEntries(prisma, [animal.id]),
+        getShelterSettings(),
       ]);
     return {
       items,
@@ -120,6 +124,7 @@ const _fetchMedicalEntryFormOptions = async (
         "ALTERED",
       vetClinics,
       today,
+      weightUnitSystem: settings.weightUnitSystem,
     };
   } catch (error) {
     console.error("Failed to fetch medical entry form options:", error);

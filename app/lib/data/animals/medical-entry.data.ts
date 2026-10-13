@@ -22,6 +22,7 @@ import {
   type CurrentChip,
 } from "./medical-status";
 import type { SpayNeuterStatus } from "../../utils/spay-neuter";
+import type { ExamFact } from "../../utils/exams";
 
 export type { MedicalEntryDisplay } from "./medical-entry";
 
@@ -44,6 +45,8 @@ export interface MedicalOverview {
   spayNeuter: SpayNeuterStatus;
   /** The chips the animal carries, newest first. */
   chips: CurrentChip[];
+  /** The latest exam done that isn't voided, of any type. */
+  lastExam: ExamFact | null;
   currentWeightGrams: number | null;
   /** Scheduled care not given yet, soonest due first, overdue included. */
   dueEntries: MedicalEntryDisplay[];
@@ -85,6 +88,7 @@ const _fetchMedicalOverview = async (
       rabies: rabiesStatus(latestRabies, today),
       spayNeuter: status.spayNeuter,
       chips: status.chips,
+      lastExam: status.lastExam,
       currentWeightGrams: animal?.currentWeightGrams ?? null,
       dueEntries,
       reviewEntry,

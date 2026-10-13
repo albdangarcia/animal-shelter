@@ -34,14 +34,14 @@ export const MedicalOverviewSkeleton = () => (
     <CardHeader>
       <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
       <CardDescription>
-        Vaccines, tests, treatments, surgeries and microchips: what is due,
-        and what this animal has been given.
+        Vaccines, tests, treatments, surgeries, microchips and exams: what
+        is due, and what this animal has been given.
       </CardDescription>
     </CardHeader>
     <CardContent className="space-y-6">
       <div className="grid grid-cols-1 gap-4 rounded-lg border p-4 sm:grid-cols-2">
-        {/* Rabies, spay/neuter, microchip and current weight. */}
-        {[0, 1, 2, 3].map((cell) => (
+        {/* Rabies, spay/neuter, microchip, last exam and current weight. */}
+        {[0, 1, 2, 3, 4].map((cell) => (
           <div key={cell} className="space-y-2">
             <Skeleton className="h-3 w-20" />
             <Skeleton className="h-4 w-40" />

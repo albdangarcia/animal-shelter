@@ -7,6 +7,7 @@ import type { DirtyFormHandle } from "@/hooks/use-confirmed-open-change";
 import { MedicalEntryForm, type ScheduledCare } from "./medical-entry-form";
 import { SurgeryEntryForm } from "./surgery-entry-form";
 import { MicrochipEntryForm } from "./microchip-entry-form";
+import { ExamEntryForm } from "./exam-entry-form";
 
 interface Props {
   animalId: string;
@@ -21,8 +22,8 @@ interface Props {
 }
 
 /**
- * The form for care of this kind: a surgery and a microchip have their own,
- * and care given from the catalog shares one.
+ * The form for care of this kind: a surgery, a microchip and an exam have
+ * their own, and care given from the catalog shares one.
  */
 export function CareEntryForm({ kind, ...props }: Props) {
   switch (kind) {
@@ -31,7 +32,7 @@ export function CareEntryForm({ kind, ...props }: Props) {
     case MedicalEntryKind.MICROCHIP:
       return <MicrochipEntryForm {...props} />;
     case MedicalEntryKind.EXAM:
-      throw new Error("Exams can't be recorded or edited here yet.");
+      return <ExamEntryForm {...props} />;
     default:
       return <MedicalEntryForm kind={kind} {...props} />;
   }
@@ -44,6 +45,8 @@ export const recordDialogDescription = (kind: MedicalEntryKind) => {
       return "Record a surgery already done: what it was, who did it and how it went.";
     case MedicalEntryKind.MICROCHIP:
       return "Record a chip implanted, or found on a scan before intake.";
+    case MedicalEntryKind.EXAM:
+      return "Record an exam already done: how each body system looked, what it concluded, and any vitals measured.";
     default:
       return "Record care already given. Pick the item first: its defaults fill in the rest.";
   }

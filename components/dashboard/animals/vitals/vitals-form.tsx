@@ -27,13 +27,12 @@ import {
   type VitalsFormValues,
 } from "@/app/lib/zod-schemas/vitals.schemas";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
-import { NumberField } from "@/components/forms/number-field";
 import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
-import { WeightInput } from "@/components/forms/weight-input";
 import {
   DirtyFormHandle,
   haveFormValuesChanged,
 } from "@/hooks/use-confirmed-open-change";
+import { VitalsMeasurementFields } from "./vitals-measurement-fields";
 
 interface VitalsFormProps {
   animalId: string;
@@ -108,46 +107,11 @@ export function VitalsForm({
             condition score.
           </p>
 
-          {/* Weight */}
-          <FormField
+          <VitalsMeasurementFields
             control={form.control}
-            name="weightGrams"
-            render={({ field }) => (
-              <FormItem className="md:col-span-3">
-                <FormLabel>Weight</FormLabel>
-                <FormControl>
-                  <WeightInput
-                    unitSystem={unitSystem}
-                    placeholder="0"
-                    value={field.value}
-                    onChange={field.onChange}
-                    inferFrom={previousWeightGrams}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          {/* Temperature */}
-          <NumberField
-            control={form.control}
-            name="temperatureC"
-            label="Temperature (°C)"
-            className="md:col-span-3"
-            decimal
-            placeholder="38.5"
-          />
-
-          {/* Body Condition Score */}
-          <NumberField
-            control={form.control}
-            name="bodyConditionScore"
-            label="Body Condition Score (1-9)"
-            className="md:col-span-3"
-            min={1}
-            max={9}
-            placeholder="5"
+            unitSystem={unitSystem}
+            inferWeightFrom={previousWeightGrams}
+            cellClassName="md:col-span-3"
           />
 
           {/* Recorded At */}

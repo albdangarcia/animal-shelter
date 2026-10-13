@@ -14,6 +14,7 @@ import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry.d
 import { MEDICAL_ENTRY_KIND_LABELS } from "@/app/lib/constants/medical";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { MedicalEntryList } from "./medical-entry-list";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
 
@@ -27,6 +28,8 @@ interface Props {
   totalPages: number;
   names: Record<string, string>;
   today: CalendarDay;
+  /** The shelter\'s units, for an exam\'s vitals. */
+  unitSystem: WeightUnitSystem;
   controls: MedicalControls | null;
 }
 
@@ -35,6 +38,7 @@ const MedicalHistory = ({
   totalPages,
   names,
   today,
+  unitSystem,
   controls,
 }: Props) => {
   return (
@@ -68,6 +72,7 @@ const MedicalHistory = ({
             entries={entries}
             names={names}
             today={today}
+            unitSystem={unitSystem}
             controls={controls}
           />
         ) : (

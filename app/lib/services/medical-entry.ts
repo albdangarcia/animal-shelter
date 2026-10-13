@@ -24,6 +24,7 @@ import {
 } from "@/app/lib/utils/shelter-day";
 import { dueDateIssue } from "@/app/lib/utils/medical-days";
 import { stampedAfter } from "@/app/lib/utils/activity-stamp";
+import { orderFindings } from "@/app/lib/utils/exam-findings";
 import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import {
   recordVitals,
@@ -52,7 +53,6 @@ import {
   entryData,
   examData,
   microchipData,
-  orderFindings,
   surgeryData,
   testData,
   tidy,
@@ -584,6 +584,7 @@ const plannedData = (care: CareKind) => {
 };
 
 const checkDay = (
+  kind: MedicalEntryKind,
   completedDate: CalendarDay | null,
   source: MedicalEntrySource,
   animal: AnimalFacts,
@@ -609,8 +610,13 @@ const checkDay = (
     animal.firstIntakeDate &&
     completedDate < animal.firstIntakeDate
   ) {
+    // An exam can't be recorded as before intake, so it isn't pointed there.
     throw new MedicalEntryRefusal(
-      `The date given can't be before the animal's intake on ${formatShelterDay(animal.firstIntakeDate)}. Care given before the animal arrived is recorded as before intake.`,
+      `The date given can't be before the animal's intake on ${formatShelterDay(animal.firstIntakeDate)}.${
+        kind === MedicalEntryKind.EXAM
+          ? ""
+          : " Care given before the animal arrived is recorded as before intake."
+      }`,
       "completedDate",
     );
   }
@@ -1271,7 +1277,7 @@ const givenValues = async (
   today: CalendarDay,
   foundOnExam = false,
 ): Promise<EntryValues> => {
-  checkDay(input.completedDate, input.source, animal, today);
+  checkDay(input.kind, input.completedDate, input.source, animal, today);
   if (input.kind === MedicalEntryKind.EXAM) {
     checkExamDay(input.examType, input.completedDate, animal);
   }
@@ -1861,7 +1867,7 @@ export async function editMedicalEntry(
         }),
     bodySystems: (before.examFindings ?? []).map((row) => row.bodySystem),
   };
-  checkDay(input.completedDate, input.source, animal, today);
+  checkDay(input.kind, input.completedDate, input.source, animal, today);
   if (
     input.kind === MedicalEntryKind.EXAM &&
     (input.examType !== before.examType ||

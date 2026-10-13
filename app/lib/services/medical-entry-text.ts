@@ -26,9 +26,9 @@ import {
   formatDose,
 } from "@/app/lib/constants/medical";
 import { examBodySystemLabel } from "@/app/lib/constants/exam";
+import { orderFindings } from "@/app/lib/utils/exam-findings";
 import {
   KIND_NOUN,
-  orderFindings,
   type CatalogItem,
   type EntryField,
   type EntryValues,
@@ -319,14 +319,16 @@ export const exemptionText = ({
     reviewDate ? ` Review on ${dayText(reviewDate)}.` : ""
   }${declineReason ? ` Note: ${declineReason}` : ""}`;
 
-// What an exam concluded: " Result: needs vet review. Abnormal: heart."
+// What an exam concluded: " Result: needs vet review. Abnormal: heart." The
+// systems are set apart by semicolons, since some names hold an "and" of
+// their own: "Abnormal: ears; mouth and teeth."
 const examText = (values: EntryValues) => {
   if (!values.overallResult) return "";
   const abnormal = (values.examFindings ?? [])
     .filter((row) => row.status === ExamFindingStatus.ABNORMAL)
     .map((row) => systemText(row.bodySystem));
   return ` Result: ${EXAM_RESULT_LABELS[values.overallResult].toLowerCase()}.${
-    abnormal.length > 0 ? ` Abnormal: ${joinList(abnormal)}.` : ""
+    abnormal.length > 0 ? ` Abnormal: ${abnormal.join("; ")}.` : ""
   }`;
 };
 

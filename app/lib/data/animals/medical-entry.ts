@@ -61,6 +61,7 @@ export const findLatestRabiesVaccine = async (
  * and change history need. */
 export const MEDICAL_ENTRY_DISPLAY_SELECT = {
   id: true,
+  animalId: true,
   kind: true,
   status: true,
   dueDate: true,
@@ -116,9 +117,33 @@ export const MEDICAL_ENTRY_DISPLAY_SELECT = {
       anesthesiaNotes: true,
       evidence: true,
       foundOnExamId: true,
+      // The exam that found it, which may since have been voided.
+      foundOnExam: {
+        select: { examType: true, completedDate: true, voidedAt: true },
+      },
     },
   },
   microchip: { select: { brand: true } },
+  exam: {
+    select: {
+      overallResult: true,
+      reproductiveStatus: true,
+      // In the code's order of systems once read: the database can't sort
+      // by it.
+      findings: { select: { bodySystem: true, status: true, notes: true } },
+      // Read live, deleted or not: the exam shows what the vitals entry
+      // holds now, or that it was deleted.
+      vitalsLog: {
+        select: {
+          recordedAt: true,
+          weightGrams: true,
+          temperatureC: true,
+          bodyConditionScore: true,
+          deletedAt: true,
+        },
+      },
+    },
+  },
   events: {
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: {

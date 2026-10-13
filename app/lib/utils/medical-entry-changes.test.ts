@@ -140,3 +140,88 @@ test("declineText: the words given, or an exemption's reason, review day and wor
   );
   assert.equal(declineText(null), "");
 });
+
+test("formatEntryFieldValue: exam fields read as words", () => {
+  assert.equal(formatEntryFieldValue("examType", "PRE_ADOPTION", names), "Pre-adoption exam");
+  assert.equal(formatEntryFieldValue("overallResult", "NEEDS_VET_REVIEW", names), "Needs vet review");
+  assert.equal(formatEntryFieldValue("reproductiveStatus", "INTACT", names), "Intact");
+  assert.equal(formatEntryFieldValue("reproductiveStatus", null, names), "none");
+});
+
+test("describeEntryChanges: a corrected exam lists each changed system in form order", () => {
+  const finding = (bodySystem: string, status: string, notes: string | null = null) => ({
+    bodySystem,
+    status,
+    notes,
+  });
+  assert.deepEqual(
+    describeEntryChanges(
+      {
+        examType: "VET",
+        overallResult: "NEEDS_VET_REVIEW",
+        reproductiveStatus: null,
+        examFindings: [
+          finding("EYES", "NORMAL"),
+          finding("EARS", "ABNORMAL", "Ear mites."),
+          finding("HEART", "NORMAL"),
+          finding("LUNGS", "NOT_EXAMINED"),
+        ],
+      },
+      {
+        examType: "RECHECK",
+        overallResult: "NO_CONCERNS",
+        reproductiveStatus: "INTACT",
+        // Stored in any order: the rows follow the form's.
+        examFindings: [
+          finding("LUNGS", "NOT_EXAMINED"),
+          finding("HEART", "ABNORMAL", "Grade II murmur"),
+          finding("EARS", "ABNORMAL", "Ear mites, cleared."),
+          finding("EYES", "NORMAL"),
+        ],
+      },
+      names,
+    ),
+    [
+      { field: "examType", label: "Exam type", from: "Vet exam", to: "Recheck exam" },
+      {
+        field: "overallResult",
+        label: "Result",
+        from: "Needs vet review",
+        to: "No concerns",
+      },
+      {
+        field: "examFindings.EARS",
+        label: "Ears",
+        from: "abnormal (Ear mites.)",
+        to: "abnormal (Ear mites, cleared.)",
+      },
+      {
+        field: "examFindings.HEART",
+        label: "Heart",
+        from: "normal",
+        to: "abnormal (Grade II murmur)",
+      },
+      {
+        field: "reproductiveStatus",
+        label: "Reproductive status",
+        from: "none",
+        to: "Intact",
+      },
+    ],
+  );
+});
+
+test("describeEntryChanges: a system missing on one side reads as none, and record links are left out", () => {
+  assert.deepEqual(
+    describeEntryChanges(
+      { examFindings: [{ bodySystem: "HEART", status: "NORMAL", notes: null }] },
+      {
+        examFindings: [],
+        vitalsLogId: "vitals1",
+        foundOnExamId: "exam1",
+      },
+      names,
+    ),
+    [{ field: "examFindings.HEART", label: "Heart", from: "normal", to: "none" }],
+  );
+});

@@ -43,7 +43,14 @@ const RECORDED_KINDS: MedicalEntryKind[] = [
   ...CATALOG_ENTRY_KINDS,
   MedicalEntryKind.SURGERY,
   MedicalEntryKind.MICROCHIP,
+  MedicalEntryKind.EXAM,
 ];
+
+// "a vaccine", "an exam".
+const withArticle = (kind: MedicalEntryKind) => {
+  const noun = MEDICAL_ENTRY_KIND_LABELS[kind].toLowerCase();
+  return `${/^[aeiou]/.test(noun) ? "an" : "a"} ${noun}`;
+};
 
 /**
  * What the menu's dialog is doing: recording care of a kind, scheduling, or
@@ -114,9 +121,7 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
           {kind && (
             <>
               <DialogHeader>
-                <DialogTitle>
-                  Record a {MEDICAL_ENTRY_KIND_LABELS[kind].toLowerCase()}
-                </DialogTitle>
+                <DialogTitle>Record {withArticle(kind)}</DialogTitle>
                 <DialogDescription>{recordDialogDescription(kind)}</DialogDescription>
               </DialogHeader>
               <CareEntryForm

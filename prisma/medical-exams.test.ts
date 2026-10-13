@@ -356,7 +356,7 @@ test("an exam by an outside vet names the clinic, and nobody here as giver", asy
   assert.equal(entry.vetPartnerId, clinicId);
   assert.equal(entry.administeredById, null);
   assert.deepEqual(await summariesOf(animalId), [
-    `Vet exam recorded: done by an outside vet at ${name("Exam clinic")}, on Oct 3, 2026. Result: needs treatment. Abnormal: ears and lungs.`,
+    `Vet exam recorded: done by an outside vet at ${name("Exam clinic")}, on Oct 3, 2026. Result: needs treatment. Abnormal: ears; lungs.`,
   ]);
 });
 
@@ -373,6 +373,13 @@ test("an exam isn't recorded before intake, and an intake exam is dated in the l
     record(animalId, exam({ completedDate: day("2026-09-10") })),
     "completedDate",
     /^An intake exam is dated on or after the animal's latest intake, on Sep 15, 2026\.$/,
+  );
+  // Before the first intake, the day is refused as for any care, without
+  // pointing to before intake, which an exam can't be.
+  await refusedOn(
+    record(animalId, exam({ examType: ExamType.VET, completedDate: day("2026-07-31") })),
+    "completedDate",
+    /^The date given can't be before the animal's intake on Aug 1, 2026\.$/,
   );
   await assertNothingWritten(animalId);
 

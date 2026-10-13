@@ -10,7 +10,11 @@ import {
 import type { MedicalOverview as MedicalOverviewData } from "@/app/lib/data/animals/medical-entry.data";
 import type { RabiesStatus } from "@/app/lib/utils/medical-days";
 import type { SpayNeuterStatus } from "@/app/lib/utils/spay-neuter";
+import type { ExamFact } from "@/app/lib/utils/exams";
+import { ExamResult } from "@/prisma/generated/enums";
 import {
+  EXAM_RESULT_LABELS,
+  EXAM_TYPE_LABELS,
   SPAY_NEUTER_EXEMPTION_REASON_LABELS,
   SURGERY_PROCEDURE_LABELS,
 } from "@/app/lib/constants/medical";
@@ -56,6 +60,14 @@ const spayNeuterText = (status: SpayNeuterStatus) => {
   }
 };
 
+// "Intake exam, Oct 3, 2026: no concerns", or "None on record".
+const lastExamText = (exam: ExamFact | null) =>
+  exam
+    ? `${EXAM_TYPE_LABELS[exam.examType]}, ${formatShelterDay(exam.completedDate)}: ${EXAM_RESULT_LABELS[
+        exam.overallResult
+      ].toLowerCase()}`
+    : "None on record";
+
 /**
  * The due rows in the order they fall due: scheduled care by its due day, and
  * the exemption open for review by its review day.
@@ -83,6 +95,7 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
     rabies,
     spayNeuter,
     chips,
+    lastExam,
     currentWeightGrams,
     reviewEntry,
     recentEntries,
@@ -96,8 +109,8 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
       <CardHeader>
         <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
         <CardDescription>
-          Vaccines, tests, treatments, surgeries and microchips: what is due,
-          and what this animal has been given.
+          Vaccines, tests, treatments, surgeries, microchips and exams: what
+          is due, and what this animal has been given.
         </CardDescription>
         {controls?.canManage && (
           <CardAction>
@@ -154,6 +167,18 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
             </dd>
           </div>
           <div>
+            <dt className="text-xs text-muted-foreground">Last exam</dt>
+            <dd
+              className={
+                lastExam?.overallResult === ExamResult.NEEDS_VET_REVIEW
+                  ? "text-sm font-medium text-destructive"
+                  : "text-sm font-medium"
+              }
+            >
+              {lastExamText(lastExam)}
+            </dd>
+          </div>
+          <div>
             <dt className="text-xs text-muted-foreground">Current weight</dt>
             <dd className="text-sm font-medium">
               {currentWeightGrams !== null
@@ -180,6 +205,7 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
               entries={due}
               names={names}
               today={today}
+              unitSystem={unitSystem}
               controls={controls}
               due
               reviewId={reviewEntry?.id}
@@ -208,6 +234,7 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
               entries={recentEntries}
               names={names}
               today={today}
+              unitSystem={unitSystem}
               controls={controls}
             />
           ) : (

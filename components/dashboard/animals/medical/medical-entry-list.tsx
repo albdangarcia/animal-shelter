@@ -1,6 +1,7 @@
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { MedicalEntryItem } from "./medical-entry-item";
 import { MedicalEntryActions } from "./medical-entry-actions";
 import { MedicalEntryChanges } from "./medical-entry-changes";
@@ -12,6 +13,8 @@ interface Props {
   names: Record<string, string>;
   /** The shelter's today, for marking scheduled care overdue or due today. */
   today: CalendarDay;
+  /** The shelter's units, for an exam's vitals. */
+  unitSystem: WeightUnitSystem;
   /** Null for a viewer who may only read. */
   controls: MedicalControls | null;
   /**
@@ -39,6 +42,7 @@ export function MedicalEntryList({
   entries,
   names,
   today,
+  unitSystem,
   controls,
   due = false,
   reviewId = null,
@@ -51,6 +55,7 @@ export function MedicalEntryList({
           key={entry.id}
           entry={entry}
           today={today}
+          unitSystem={unitSystem}
           review={due && entry.id === reviewId}
           actions={
             controls?.canManage && !entry.voidedAt ? (

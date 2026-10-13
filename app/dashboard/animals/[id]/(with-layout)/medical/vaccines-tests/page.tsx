@@ -3,6 +3,7 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchMedicalControls } from "@/app/lib/data/medical-catalog.data";
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import { fetchVaccinesAndTests } from "@/app/lib/data/animals/medical-entry.data";
 import VaccinesAndTests from "@/components/dashboard/animals/medical/vaccines-and-tests";
 
@@ -23,8 +24,9 @@ const Page = async ({ params }: Props) => {
 
 const PageContent = async ({ params }: Props) => {
   const { id: animalId } = await params;
-  const [{ entries, names, today }, controls] = await Promise.all([
+  const [{ entries, names, today }, settings, controls] = await Promise.all([
     fetchVaccinesAndTests(animalId),
+    getShelterSettings(),
     fetchMedicalControls(animalId),
   ]);
 
@@ -33,6 +35,7 @@ const PageContent = async ({ params }: Props) => {
       entries={entries}
       names={names}
       today={today}
+      unitSystem={settings.weightUnitSystem}
       controls={controls}
     />
   );

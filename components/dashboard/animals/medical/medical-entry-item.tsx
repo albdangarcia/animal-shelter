@@ -1,18 +1,31 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { clsx } from "clsx";
 import { Badge } from "@/components/ui/badge";
 import { TimeAgo } from "@/components/common/time-ago";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
-import { MedicalEntryStatus } from "@/prisma/generated/enums";
 import {
+  ExamFindingStatus,
+  MedicalEntryStatus,
+  SurgeryEvidence,
+} from "@/prisma/generated/enums";
+import {
+  EXAM_FINDING_STATUS_LABELS,
+  EXAM_RESULT_LABELS,
+  EXAM_TYPE_LABELS,
   MEDICAL_ENTRY_SOURCE_LABELS,
   MEDICAL_ENTRY_KIND_LABELS,
   MEDICAL_ROUTE_LABELS,
+  REPRODUCTIVE_STATUS_LABELS,
   SPAY_NEUTER_EXEMPTION_REASON_LABELS,
   SURGERY_EVIDENCE_LABELS,
   TEST_RESULT_LABELS,
   formatDose,
 } from "@/app/lib/constants/medical";
+import { examBodySystemLabel } from "@/app/lib/constants/exam";
+import { orderFindings } from "@/app/lib/utils/exam-findings";
+import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
+import { formatTemperature, formatWeight } from "@/app/lib/utils/weight-format";
 import {
   formatShelterDayOrNA,
   type CalendarDay,
@@ -103,6 +116,21 @@ const sourceText = (entry: MedicalEntryDisplay) =>
     .filter(Boolean)
     .join(" · ");
 
+/**
+ * What shows a surgery was done before intake. One an exam found names that
+ * exam: "Found on the intake exam of Oct 3, 2026", and says so if the exam
+ * was voided since.
+ */
+const evidenceText = (surgery: NonNullable<MedicalEntryDisplay["surgery"]>) => {
+  const exam = surgery.foundOnExam;
+  if (surgery.evidence === SurgeryEvidence.FOUND_ON_EXAM && exam?.examType) {
+    return `Found on the ${EXAM_TYPE_LABELS[exam.examType].toLowerCase()} of ${formatShelterDayOrNA(
+      exam.completedDate,
+    )}${exam.voidedAt ? " (since voided)" : ""}`;
+  }
+  return surgery.evidence && SURGERY_EVIDENCE_LABELS[surgery.evidence];
+};
+
 /** The kind's own fields, as "Label: value" pairs, leaving out the empty ones. */
 const detailPairs = (entry: MedicalEntryDisplay): [string, string][] => {
   const pairs: [string, string | null | undefined][] = [];
@@ -151,11 +179,17 @@ const detailPairs = (entry: MedicalEntryDisplay): [string, string][] => {
     const s = entry.surgery;
     pairs.push(
       ["Surgeon", s.surgeon],
-      ["Evidence", s.evidence && SURGERY_EVIDENCE_LABELS[s.evidence]],
+      ["Evidence", evidenceText(s)],
     );
   }
   if (entry.microchip) {
     pairs.push(["Brand", entry.microchip.brand]);
+  }
+  if (entry.exam?.reproductiveStatus) {
+    pairs.push([
+      "Reproductive status",
+      REPRODUCTIVE_STATUS_LABELS[entry.exam.reproductiveStatus],
+    ]);
   }
   return pairs.filter((pair): pair is [string, string] => !!pair[1]);
 };
@@ -167,10 +201,121 @@ const RESULT_VARIANT = {
   INVALID: "outline",
 } as const;
 
+const EXAM_RESULT_VARIANT = {
+  NO_CONCERNS: "secondary",
+  NEEDS_TREATMENT: "outline",
+  NEEDS_VET_REVIEW: "destructive",
+} as const;
+
+type ExamDisplay = NonNullable<MedicalEntryDisplay["exam"]>;
+
+// A list of body systems as a line reads them: "eyes, ears, nose and throat".
+const systemsText = (findings: ExamDisplay["findings"]) =>
+  findings.map((row) => examBodySystemLabel(row.bodySystem).toLowerCase()).join(", ");
+
+/**
+ * How each body system looked, every system once: those found abnormal, then
+ * any other with a note, each on its own line with what was found; then the
+ * rest by name, normal and not examined.
+ */
+function ExamFindings({ findings }: { findings: ExamDisplay["findings"] }) {
+  const ordered = orderFindings(findings);
+  const noted = [
+    ...ordered.filter((row) => row.status === ExamFindingStatus.ABNORMAL),
+    ...ordered.filter(
+      (row) => row.status !== ExamFindingStatus.ABNORMAL && row.notes,
+    ),
+  ];
+  const plain = (status: ExamFindingStatus) =>
+    ordered.filter((row) => row.status === status && !row.notes);
+  const normal = plain(ExamFindingStatus.NORMAL);
+  const notExamined = plain(ExamFindingStatus.NOT_EXAMINED);
+  return (
+    <div className="mt-2 space-y-1 text-sm">
+      {noted.length > 0 && (
+        <dl aria-label="Findings" className="space-y-1">
+          {noted.map((row) => (
+            <div key={row.bodySystem}>
+              <dt className="inline text-xs text-muted-foreground">
+                {examBodySystemLabel(row.bodySystem)} (
+                {EXAM_FINDING_STATUS_LABELS[row.status].toLowerCase()}):{" "}
+              </dt>
+              <dd className="inline whitespace-pre-wrap">{row.notes}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {normal.length > 0 && (
+        <p>
+          <span className="text-xs text-muted-foreground">Normal: </span>
+          {systemsText(normal)}
+        </p>
+      )}
+      {notExamined.length > 0 && (
+        <p>
+          <span className="text-xs text-muted-foreground">Not examined: </span>
+          {systemsText(notExamined)}
+        </p>
+      )}
+    </div>
+  );
+}
+
+type ExamVitalsLog = NonNullable<ExamDisplay["vitalsLog"]>;
+
+/** An exam's vitals in a line: "Weight 12.4 kg · 38.6°C · Body condition 5/9". */
+export const examVitalsText = (vitals: ExamVitalsLog, unitSystem: WeightUnitSystem) =>
+  [
+    vitals.weightGrams != null &&
+      `Weight ${formatWeight(vitals.weightGrams, unitSystem)}`,
+    vitals.temperatureC != null && formatTemperature(vitals.temperatureC, unitSystem),
+    vitals.bodyConditionScore != null &&
+      `Body condition ${vitals.bodyConditionScore}/9`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+/**
+ * The vitals measured during an exam, as the vitals entry holds them now,
+ * with a link to the Vitals page where the entry is corrected. Once that
+ * entry is deleted, it says so.
+ */
+function ExamVitals({
+  vitals,
+  animalId,
+  unitSystem,
+}: {
+  vitals: ExamVitalsLog;
+  animalId: string;
+  unitSystem: WeightUnitSystem;
+}) {
+  const text = examVitalsText(vitals, unitSystem);
+  return (
+    <p className="mt-1 text-sm">
+      <span className="text-xs text-muted-foreground">Vitals: </span>
+      {vitals.deletedAt ? (
+        "Vitals entry deleted"
+      ) : (
+        <>
+          {text}{" "}
+          <Link
+            href={`/dashboard/animals/${animalId}/medical/vitals`}
+            className="text-muted-foreground underline underline-offset-4"
+          >
+            Vitals page
+          </Link>
+        </>
+      )}
+    </p>
+  );
+}
+
 interface Props {
   entry: MedicalEntryDisplay;
   /** The shelter's today, for marking scheduled care overdue or due today. */
   today: CalendarDay;
+  /** The shelter's units, for an exam's vitals. */
+  unitSystem: WeightUnitSystem;
   /** Shown top right: the row's actions, when the viewer may use them. */
   actions?: ReactNode;
   /** Shown under the entry: its change history. */
@@ -185,6 +330,7 @@ interface Props {
 export function MedicalEntryItem({
   entry,
   today,
+  unitSystem,
   actions,
   footer,
   review = false,
@@ -201,6 +347,7 @@ export function MedicalEntryItem({
   const source = sourceText(entry);
   const name = medicalEntryName(entry);
   const surgery = entry.surgery;
+  const exam = entry.exam;
 
   return (
     <li
@@ -217,6 +364,11 @@ export function MedicalEntryItem({
               )}
             </span>
             <Badge variant="outline">{MEDICAL_ENTRY_KIND_LABELS[entry.kind]}</Badge>
+            {exam && (
+              <Badge variant={EXAM_RESULT_VARIANT[exam.overallResult]}>
+                {EXAM_RESULT_LABELS[exam.overallResult]}
+              </Badge>
+            )}
             {voided && <Badge variant="destructive">Voided</Badge>}
             {due === "OVERDUE" && <Badge variant="destructive">Overdue</Badge>}
             {due === "DUE_TODAY" && <Badge>Due today</Badge>}
@@ -277,6 +429,15 @@ export function MedicalEntryItem({
                 </span>
                 {surgery.anesthesiaNotes}
               </p>
+            )}
+
+            {exam && <ExamFindings findings={exam.findings} />}
+            {exam?.vitalsLog && (
+              <ExamVitals
+                vitals={exam.vitalsLog}
+                animalId={entry.animalId}
+                unitSystem={unitSystem}
+              />
             )}
 
             {entry.test && entry.test.results.length > 0 && (

@@ -82,7 +82,7 @@ import {
 /** What recording scheduled care needs of the entry: it fills in the rest. */
 export type ScheduledCare = Pick<
   MedicalEntryDisplay,
-  "id" | "kind" | "itemId" | "procedure" | "notes"
+  "id" | "kind" | "itemId" | "procedure" | "examType" | "notes"
 >;
 
 /**

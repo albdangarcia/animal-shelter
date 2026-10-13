@@ -1,6 +1,7 @@
 import { ExamFindingStatus } from "@/prisma/generated/enums";
 import {
   EXAM_BODY_SYSTEMS,
+  EXAM_BODY_SYSTEM_KEYS,
   examBodySystemLabel,
 } from "@/app/lib/constants/exam";
 
@@ -65,3 +66,22 @@ export const blankFindings = (): {
     status: ExamFindingStatus.NOT_EXAMINED,
     notes: "",
   }));
+
+/**
+ * Findings in the order the code lists the systems, any it no longer lists
+ * after them by key, so a stored exam and its correction compare row by row,
+ * and an exam reads in the form's order.
+ */
+export const orderFindings = <T extends { bodySystem: string }>(
+  findings: readonly T[],
+): T[] => {
+  const rank = (key: string) => {
+    const at = EXAM_BODY_SYSTEM_KEYS.indexOf(key);
+    return at === -1 ? EXAM_BODY_SYSTEM_KEYS.length : at;
+  };
+  return [...findings].sort(
+    (a, b) =>
+      rank(a.bodySystem) - rank(b.bodySystem) ||
+      a.bodySystem.localeCompare(b.bodySystem),
+  );
+};

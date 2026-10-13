@@ -10,6 +10,7 @@ import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry.data";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { medicalEntryName } from "@/app/lib/utils/medical-entry-name";
 import { MedicalEntryList } from "./medical-entry-list";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
@@ -19,10 +20,18 @@ interface Props {
   entries: MedicalEntryDisplay[];
   names: Record<string, string>;
   today: CalendarDay;
+  /** The shelter\'s units, for an exam\'s vitals. */
+  unitSystem: WeightUnitSystem;
   controls: MedicalControls | null;
 }
 
-const VaccinesAndTests = ({ entries, names, today, controls }: Props) => {
+const VaccinesAndTests = ({
+  entries,
+  names,
+  today,
+  unitSystem,
+  controls,
+}: Props) => {
   const vaccines = entries.filter(
     (entry) => entry.kind === MedicalEntryKind.VACCINE,
   );
@@ -72,6 +81,7 @@ const VaccinesAndTests = ({ entries, names, today, controls }: Props) => {
                   entries={doses}
                   names={names}
                   today={today}
+                  unitSystem={unitSystem}
                   controls={controls}
                   className="space-y-2"
                 />
@@ -91,6 +101,7 @@ const VaccinesAndTests = ({ entries, names, today, controls }: Props) => {
               entries={tests}
               names={names}
               today={today}
+              unitSystem={unitSystem}
               controls={controls}
               className="space-y-2"
             />

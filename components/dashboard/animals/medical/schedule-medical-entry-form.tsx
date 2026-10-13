@@ -25,7 +25,11 @@ import {
 } from "@/components/ui/form";
 import { DialogClose, DialogFooter } from "@/components/ui/dialog";
 import { DayField } from "@/components/forms/day-field";
-import { MedicalEntryKind, type SurgeryProcedure } from "@/prisma/generated/enums";
+import {
+  ExamType,
+  MedicalEntryKind,
+  type SurgeryProcedure,
+} from "@/prisma/generated/enums";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import { scheduleMedicalEntry } from "@/app/lib/actions/medical-entry.actions";
 import {
@@ -34,6 +38,7 @@ import {
 } from "@/app/lib/zod-schemas/medical-entry.schemas";
 import {
   CATALOG_ENTRY_KINDS,
+  EXAM_TYPE_LABELS,
   MEDICAL_ENTRY_KIND_LABELS,
   SURGERY_PROCEDURE_LABELS,
 } from "@/app/lib/constants/medical";
@@ -49,12 +54,14 @@ import {
 
 /**
  * The form's own state: no kind or day until one is picked. Care from the
- * catalog names its item, a surgery its procedure, and a microchip neither.
+ * catalog names its item, a surgery its procedure, an exam its type, and a
+ * microchip none of these.
  */
 type ScheduleFormState = {
   kind: MedicalEntryKind | "";
   itemId: string;
   procedure: SurgeryProcedure | "";
+  examType: ExamType | "";
   dueDate: string | null;
   notes: string;
 };
@@ -64,6 +71,7 @@ const SCHEDULED_KINDS: MedicalEntryKind[] = [
   ...CATALOG_ENTRY_KINDS,
   MedicalEntryKind.SURGERY,
   MedicalEntryKind.MICROCHIP,
+  MedicalEntryKind.EXAM,
 ];
 
 interface Props {
@@ -108,6 +116,7 @@ export function ScheduleMedicalEntryForm({
         initial && proceduresFor(options.sex).includes(initial.procedure)
           ? initial.procedure
           : "",
+      examType: "",
       dueDate: null,
       notes: "",
     },
@@ -127,13 +136,14 @@ export function ScheduleMedicalEntryForm({
     [form],
   );
 
-  // An item belongs to one kind, and a procedure to surgery, so picking
-  // another kind clears both.
+  // An item belongs to one kind, a procedure to surgery and a type to an
+  // exam, so picking another kind clears them.
   const pickKind = (next: MedicalEntryKind) => {
     form.setValue("kind", next, { shouldValidate: true });
     form.setValue("itemId", "");
     form.setValue("procedure", "");
-    form.clearErrors(["itemId", "procedure"]);
+    form.setValue("examType", "");
+    form.clearErrors(["itemId", "procedure", "examType"]);
   };
 
   const onSubmit = (state: ScheduleFormState) => {
@@ -217,6 +227,37 @@ export function ScheduleMedicalEntryForm({
                       {procedures.map((value) => (
                         <SelectItem key={value} value={value}>
                           {SURGERY_PROCEDURE_LABELS[value]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          ) : kind === MedicalEntryKind.EXAM ? (
+            <FormField
+              control={form.control}
+              name="examType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel htmlFor="schedule-exam-type" required>
+                    Exam type
+                  </FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    value={field.value}
+                    name={field.name}
+                  >
+                    <FormControl>
+                      <SelectTrigger className="w-full" id="schedule-exam-type">
+                        <SelectValue placeholder="Pick the exam type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {Object.values(ExamType).map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {EXAM_TYPE_LABELS[value]}
                         </SelectItem>
                       ))}
                     </SelectContent>

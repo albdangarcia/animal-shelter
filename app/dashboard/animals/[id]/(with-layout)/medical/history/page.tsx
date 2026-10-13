@@ -3,6 +3,7 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchMedicalControls } from "@/app/lib/data/medical-catalog.data";
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import { fetchMedicalHistory } from "@/app/lib/data/animals/medical-entry.data";
 import MedicalHistory from "@/components/dashboard/animals/medical/medical-history";
 
@@ -28,10 +29,12 @@ const PageContent = async ({ params, searchParams }: Props) => {
   const { page, kind } = await searchParams;
   // One page is shown: of a repeated `page`, the first. Every `kind` counts.
   const pageNumber = Number([page ?? "1"].flat()[0]);
-  const [{ entries, totalPages, names, today }, controls] = await Promise.all([
-    fetchMedicalHistory(animalId, pageNumber, kind),
-    fetchMedicalControls(animalId),
-  ]);
+  const [{ entries, totalPages, names, today }, settings, controls] =
+    await Promise.all([
+      fetchMedicalHistory(animalId, pageNumber, kind),
+      getShelterSettings(),
+      fetchMedicalControls(animalId),
+    ]);
 
   return (
     <MedicalHistory
@@ -39,6 +42,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
       totalPages={totalPages}
       names={names}
       today={today}
+      unitSystem={settings.weightUnitSystem}
       controls={controls}
     />
   );

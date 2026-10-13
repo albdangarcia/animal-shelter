@@ -17,6 +17,7 @@ import { addCalendarMonths } from "@/app/lib/utils/medical-days";
 import { chipNumberIssue, normaliseChipNumber } from "@/app/lib/utils/microchip";
 import {
   examFindingsIssue,
+  orderFindings,
   type ExamFindingInput,
 } from "@/app/lib/utils/exam-findings";
 import { EXAM_BODY_SYSTEM_KEYS } from "@/app/lib/constants/exam";
@@ -497,22 +498,6 @@ const examValues = (
       })),
     ),
   };
-};
-
-/**
- * Findings in the order the code lists the systems, any it no longer lists
- * after them by key, so a stored exam and its correction compare row by row.
- */
-export const orderFindings = (findings: StoredFinding[]): StoredFinding[] => {
-  const rank = (key: string) => {
-    const at = EXAM_BODY_SYSTEM_KEYS.indexOf(key);
-    return at === -1 ? EXAM_BODY_SYSTEM_KEYS.length : at;
-  };
-  return [...findings].sort(
-    (a, b) =>
-      rank(a.bodySystem) - rank(b.bodySystem) ||
-      a.bodySystem.localeCompare(b.bodySystem),
-  );
 };
 
 // The optional fields an edit may leave out. Left out (undefined) keeps what
