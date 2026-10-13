@@ -5651,18 +5651,6 @@ const handAssignedCharacteristics: HandAssignedCharacteristic[] = [
 const assessmentSeedData: SeedAssessment[] = [
   {
     animalName: "Frisco",
-    templateKey: "INTAKE_MEDICAL",
-    signal: AssessmentSignal.NO_CONCERNS,
-    observedAt: daysAgo(38),
-    summary: "Healthy adult dog, no findings on the intake exam.",
-    answers: [
-      { fieldKey: "dental", value: "Mild tartar" },
-      { fieldKey: "parasites", value: "None seen" },
-      { fieldKey: "heart_lungs", value: "Clear" },
-    ],
-  },
-  {
-    animalName: "Frisco",
     templateKey: "INTAKE_BEHAVIORAL",
     signal: AssessmentSignal.NO_CONCERNS,
     observedAt: daysAgo(36),
@@ -5766,18 +5754,6 @@ const assessmentSeedData: SeedAssessment[] = [
   },
   {
     animalName: "Whiskers",
-    templateKey: "INTAKE_MEDICAL",
-    signal: AssessmentSignal.NO_CONCERNS,
-    observedAt: daysAgo(50),
-    summary: "Healthy senior-ish cat; moderate dental disease noted.",
-    answers: [
-      { fieldKey: "dental", value: "Moderate disease" },
-      { fieldKey: "parasites", value: "Treated" },
-      { fieldKey: "heart_lungs", value: "Clear" },
-    ],
-  },
-  {
-    animalName: "Whiskers",
     templateKey: "HANDLING",
     signal: AssessmentSignal.NO_CONCERNS,
     observedAt: daysAgo(48),
@@ -5788,23 +5764,6 @@ const assessmentSeedData: SeedAssessment[] = [
       { fieldKey: "paws_nails", value: "No concern" },
       { fieldKey: "ears_mouth", value: "No concern" },
       { fieldKey: "overall_sensitivity", value: "Low" },
-    ],
-  },
-  {
-    animalName: "Leo",
-    templateKey: "INTAKE_MEDICAL",
-    signal: AssessmentSignal.FOLLOW_UP,
-    observedAt: daysAgo(20),
-    summary:
-      "Severe dental disease — needs a dental before the profile goes public.",
-    answers: [
-      {
-        fieldKey: "dental",
-        value: "Severe disease",
-        notes: "Multiple fractured teeth, gingival recession.",
-      },
-      { fieldKey: "parasites", value: "Ear mites" },
-      { fieldKey: "heart_lungs", value: "Clear" },
     ],
   },
   {
@@ -7173,10 +7132,10 @@ async function seedSurgeryAndMicrochipFixtures() {
 // transaction per animal, recorded by Olivia unless noted. Days are fixed
 // offsets from the animal's latest intake, never after today, with no random
 // draws:
-// - Frisco, Whiskers and Leo: the intake exams that replace their
-//   Intake Medical assessments. Whiskers' finds her intact, three days
-//   before her spay, so her status shows the spay beats the exam. Leo's,
-//   the day after he arrived, needs treatment and brings his vitals.
+// - Frisco, Whiskers and Leo: their intake exams. Whiskers' finds her
+//   intact, three days before her spay, so her status shows the spay beats
+//   the exam. Leo's, the day after he arrived, needs treatment and brings
+//   his vitals.
 // - Fido: an intake exam asking for a vet's review, cleared a week later by
 //   a vet exam at Downtown Veterinary Clinic.
 // - Rocket: an intake exam asking for a vet's review, still open.
@@ -7257,7 +7216,7 @@ async function seedExamFixtures() {
   const recordOne = (animalId: string, input: RecordMedicalEntryInput) =>
     prisma.$transaction((tx) => record(animalId, input, tx));
 
-  // --- The intake exams that replace the Intake Medical assessments --------
+  // --- Intake exams -------------------------------------------------------
   const frisco = await animal("Frisco");
   await recordOne(
     frisco.id,

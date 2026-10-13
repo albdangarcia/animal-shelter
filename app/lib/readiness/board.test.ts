@@ -4,6 +4,7 @@ import { fromZonedTime } from "date-fns-tz";
 const SHELTER_TIMEZONE = "America/New_York";
 import { shelterDaysBetween as rawShelterDaysBetween } from "../utils/shelter-day";
 import type { ReadinessBlocker } from "./compute-readiness";
+import type { CalendarDay } from "../utils/shelter-day";
 import {
   BLOCKER_KIND_ORDER,
   FOSTER_LOCATION,
@@ -12,6 +13,8 @@ import {
   UNPLACED_LOCATION,
   blockerAction,
   buildReadinessBoard as rawBuildReadinessBoard,
+  describeBlocker,
+  orderBlockers,
   parseReadinessBoardFilters,
   readinessBoardFilterOptions,
   type AnimalReadiness,
@@ -104,7 +107,7 @@ test("an animal appears once per kind, carrying every blocker of that kind", () 
   const board = buildReadinessBoard(
     [
       entry(animal(), [
-        missing("Intake Medical", at(2)),
+        missing("Intake Behavioral", at(2)),
         missing("Cat Test", at(2)),
         { kind: "NOT_SPAYED_NEUTERED", since: at(2) },
       ]),
@@ -136,7 +139,7 @@ test("within a group the animal blocked longest comes first", () => {
 
 test("a row is as old as its oldest blocker of the kind", () => {
   const board = buildReadinessBoard(
-    [entry(animal(), [missing("Cat Test", at(8)), missing("Intake Medical", at(2))])],
+    [entry(animal(), [missing("Cat Test", at(8)), missing("Intake Behavioral", at(2))])],
     NO_FILTERS,
     NOW,
   );
@@ -425,4 +428,79 @@ test("spay/neuter links to the medical record, worded for who may record it", ()
     blockerAction(blocker, "a1", { ...EVERYTHING, manageAnimalInfo: false }).label,
     "Record spay/neuter",
   );
+});
+
+const noIntakeExam: ReadinessBlocker = { kind: "NO_INTAKE_EXAM", since: at(1) };
+const needsVetReview: ReadinessBlocker = {
+  kind: "NEEDS_VET_REVIEW",
+  entryId: "exam-1",
+  examType: "INTAKE",
+  examDate: "2026-10-03" as CalendarDay,
+  since: at(3),
+};
+
+test("a vet review comes with the urgent groups, and a missing intake exam after the missing checks", () => {
+  assert.deepEqual(
+    orderBlockers([
+      { kind: "NO_PHOTO", since: at(1) },
+      { kind: "NOT_SPAYED_NEUTERED", since: at(1) },
+      noIntakeExam,
+      missing("Intake Behavioral", at(1)),
+      { kind: "ACUTE_HEALTH", healthStatus: "UNDER_VET_CARE", since: null },
+      needsVetReview,
+      {
+        kind: "ESCALATED_FINDING",
+        assessmentId: "rounds",
+        templateName: "Daily Rounds",
+        observedAt: at(2),
+        since: at(2),
+      },
+    ]).map((b) => b.kind),
+    [
+      "ESCALATED_FINDING",
+      "NEEDS_VET_REVIEW",
+      "ACUTE_HEALTH",
+      "MISSING_ASSESSMENT",
+      "NO_INTAKE_EXAM",
+      "NOT_SPAYED_NEUTERED",
+      "NO_PHOTO",
+    ],
+  );
+});
+
+test("the exam blockers read as the board shows them", () => {
+  assert.equal(describeBlocker(noIntakeExam, SHELTER_TIMEZONE), "No intake exam");
+  assert.equal(
+    describeBlocker(needsVetReview, SHELTER_TIMEZONE),
+    "Intake exam of Oct 3, 2026 needs vet review",
+  );
+  assert.equal(
+    describeBlocker({ ...needsVetReview, examType: "RECHECK" }, SHELTER_TIMEZONE),
+    "Recheck exam of Oct 3, 2026 needs vet review",
+  );
+});
+
+test("a missing intake exam links to the medical record, worded for who may record it", () => {
+  assert.deepEqual(blockerAction(noIntakeExam, "a1", EVERYTHING), {
+    label: "Record intake exam",
+    href: "/dashboard/animals/a1/medical",
+  });
+  assert.deepEqual(blockerAction(noIntakeExam, "a1", READ_ONLY), {
+    label: "View medical record",
+    href: "/dashboard/animals/a1/medical",
+  });
+  // Recording it takes the medical permission, not the assessments'.
+  assert.equal(
+    blockerAction(noIntakeExam, "a1", { ...EVERYTHING, manageMedical: false }).label,
+    "View medical record",
+  );
+});
+
+test("a vet review links every viewer to the animal's exams", () => {
+  for (const can of [EVERYTHING, READ_ONLY]) {
+    assert.deepEqual(blockerAction(needsVetReview, "a1", can), {
+      label: "Review the exam",
+      href: "/dashboard/animals/a1/medical/history?kind=EXAM",
+    });
+  }
 });

@@ -5,9 +5,11 @@ import {
   IconAlertTriangle,
   IconArrowRight,
   IconClipboardX,
+  IconHeartbeat,
   IconMedicalCross,
   IconPhotoOff,
   IconStethoscope,
+  IconStethoscopeOff,
   IconTagOff,
   type TablerIcon,
 } from "@tabler/icons-react";
@@ -62,6 +64,13 @@ export const KIND_META: Record<
     icon: IconAlertTriangle,
     urgent: true,
   },
+  NEEDS_VET_REVIEW: {
+    title: "Needs vet review",
+    description:
+      "The latest exam this stay asked for a vet's review. A later exam with another result clears it.",
+    icon: IconHeartbeat,
+    urgent: true,
+  },
   ACUTE_HEALTH: {
     title: "Acute health",
     description:
@@ -79,6 +88,12 @@ export const KIND_META: Record<
     title: "Missing assessments",
     description: "Required checks with nothing on file for the current stay.",
     icon: IconClipboardX,
+  },
+  NO_INTAKE_EXAM: {
+    title: "No intake exam",
+    description:
+      "No intake exam on the medical record for the current stay.",
+    icon: IconStethoscopeOff,
   },
   NOT_SPAYED_NEUTERED: {
     title: "Not spayed or neutered",
@@ -115,6 +130,8 @@ export const blockerKey = (blocker: ReadinessBlocker): string => {
       return blocker.templateKey;
     case "ESCALATED_FINDING":
       return blocker.assessmentId;
+    case "NEEDS_VET_REVIEW":
+      return blocker.entryId;
     case "UNSUPPORTED_CHARACTERISTIC":
       return `${blocker.characteristicId}-${blocker.issue}`;
     default:

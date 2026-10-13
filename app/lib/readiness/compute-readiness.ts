@@ -7,15 +7,29 @@
  * Every blocker carries `since`: when the recorded evidence says it began.
  * Nothing about a blocker is stored, so this is read off dates the evidence
  * already has — the start of the current stay, an observation, a deletion,
- * an edit, the day after a spay/neuter exemption lapsed. `null` means
- * nothing in the app dates the onset at all.
+ * an edit, the day after a spay/neuter exemption lapsed, the day of an exam.
+ * `null` means nothing in the app dates the onset at all.
+ *
+ * The medical record's exams count for the stay they were done in: an
+ * intake exam from an earlier stay doesn't stand for this one, and an
+ * earlier stay's call for a vet's review doesn't hold this one up.
  */
 
-import type { AssessmentSignal, AnimalHealthStatus } from "@/prisma/generated/enums";
+import type {
+  AssessmentSignal,
+  AnimalHealthStatus,
+  ExamType,
+} from "@/prisma/generated/enums";
 import { ACUTE_HEALTH_STATUSES } from "../data/animals/attention-queue";
 import type { ReadinessRequirement } from "./requirements";
 import type { SpayNeuterStatus } from "../utils/spay-neuter";
-import { shiftDayKey, startOfShelterDay } from "../utils/shelter-day";
+import { stayExams, type ExamFact } from "../utils/exams";
+import {
+  shelterDayKey,
+  shiftDayKey,
+  startOfShelterDay,
+  type CalendarDay,
+} from "../utils/shelter-day";
 
 export type CharacteristicClaimIssue =
   /** A live finding on the animal argues against the trait. */
@@ -51,6 +65,20 @@ export type ReadinessBlocker =
       since: Date;
     }
   | {
+      kind: "NO_INTAKE_EXAM";
+      /** The start of the current stay — the exam was due from arrival. */
+      since: Date;
+    }
+  | {
+      kind: "NEEDS_VET_REVIEW";
+      /** The stay's latest exam, which asked for the review. */
+      entryId: string;
+      examType: ExamType;
+      examDate: CalendarDay;
+      /** The start of that exam's day on the shelter's calendar. */
+      since: Date;
+    }
+  | {
       kind: "NOT_SPAYED_NEUTERED";
       /** The start of the current stay, or the day after an exemption
        *  lapsed when that is later. */
@@ -70,6 +98,9 @@ export type ReadinessBlocker =
        *  onset to report. */
       since: null;
     };
+
+/** One of the animal's completed, unvoided exams, from any stay. */
+export type ReadinessExam = ExamFact;
 
 /** One recorded, non-deleted assessment, as far as readiness cares. */
 export interface ReadinessAssessment {
@@ -114,6 +145,10 @@ export interface ComputeReadinessInputs {
    *  force reads as UNKNOWN, or as INTACT when the latest exam to look found
    *  the animal intact. Both block, dated the same way. */
   spayNeuter: SpayNeuterStatus;
+  /** Every completed, unvoided exam on the animal's medical record. Only
+   *  those dated on or after the stay's first day (`inCareSince` on the
+   *  shelter's calendar) count. */
+  exams: ReadinessExam[];
   hasPhoto: boolean;
   healthStatus: AnimalHealthStatus | null;
   /** When the animal's current stay began (its latest intake). What it needs
@@ -202,6 +237,35 @@ function characteristicClaimBlockers(
   return blockers;
 }
 
+/**
+ * The stay needs an intake exam, and its latest exam of any type speaks for
+ * the animal now: one that asked for a vet's review holds it up until a
+ * later exam says otherwise. "Needs treatment" doesn't: the treatment is
+ * recorded as care.
+ */
+function examBlockers(
+  exams: ReadinessExam[],
+  inCareSince: Date,
+  timezone: string,
+): ReadinessBlocker[] {
+  const blockers: ReadinessBlocker[] = [];
+  const thisStay = stayExams(exams, shelterDayKey(inCareSince, timezone));
+  if (!thisStay.some((exam) => exam.examType === "INTAKE")) {
+    blockers.push({ kind: "NO_INTAKE_EXAM", since: inCareSince });
+  }
+  const latest = thisStay[0];
+  if (latest?.overallResult === "NEEDS_VET_REVIEW") {
+    blockers.push({
+      kind: "NEEDS_VET_REVIEW",
+      entryId: latest.entryId,
+      examType: latest.examType,
+      examDate: latest.completedDate,
+      since: startOfShelterDay(latest.completedDate, timezone),
+    });
+  }
+  return blockers;
+}
+
 export function computeReadiness(
   inputs: ComputeReadinessInputs,
 ): ReadinessBlocker[] {
@@ -213,6 +277,7 @@ export function computeReadiness(
     ),
     ...escalatedFindingBlockers(inputs.assessments),
     ...characteristicClaimBlockers(inputs.claims),
+    ...examBlockers(inputs.exams, inputs.inCareSince, inputs.timezone),
   ];
 
   if (

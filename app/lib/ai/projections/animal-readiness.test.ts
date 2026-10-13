@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { fromZonedTime } from "date-fns-tz";
 const SHELTER_TIMEZONE = "America/New_York";
 import type { ReadinessBlocker } from "@/app/lib/readiness/compute-readiness";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import type {
   AnimalReadiness,
   ReadinessViewerCan,
@@ -215,11 +216,41 @@ test("the next step is worded for what the viewer may change", () => {
   );
 });
 
+test("the exam items' next steps", () => {
+  const blockers: ReadinessBlocker[] = [
+    { kind: "NO_INTAKE_EXAM", since: ARRIVED },
+    {
+      kind: "NEEDS_VET_REVIEW",
+      entryId: "exam-1",
+      examType: "VET",
+      examDate: "2026-09-01" as CalendarDay,
+      since: at("2026-09-01", "00:00"),
+    },
+  ];
+  const staff = toAnimalReadinessView(buddy(blockers), STAFF, NOW);
+  const volunteer = toAnimalReadinessView(buddy(blockers), VOLUNTEER, NOW);
+  assert.equal(staff.status, "NOT_READY");
+  assert.equal(volunteer.status, "NOT_READY");
+  if (staff.status !== "NOT_READY" || volunteer.status !== "NOT_READY") return;
+  // The review is urgent, so it comes first.
+  assert.deepEqual(
+    staff.outstanding.map((b) => [b.kind, b.description, b.nextStep]),
+    [
+      ["NEEDS_VET_REVIEW", "Vet exam of Sep 1, 2026 needs vet review", "Review the exam"],
+      ["NO_INTAKE_EXAM", "No intake exam", "Record intake exam"],
+    ],
+  );
+  assert.deepEqual(
+    volunteer.outstanding.map((b) => b.nextStep),
+    ["Review the exam", "View medical record"],
+  );
+});
+
 test("the summary line counts outstanding items and names each kind once", () => {
   const secondMissing: ReadinessBlocker = {
     ...missingBehavioral,
-    templateKey: "INTAKE_MEDICAL",
-    templateName: "Intake Medical",
+    templateKey: "CAT_TEST",
+    templateName: "Cat Test",
   };
   assert.deepEqual(
     toReadinessLine(

@@ -257,3 +257,10 @@ test("getActiveTemplate returns the highest active version for a key", () => {
   );
   assert.equal(getActiveTemplate("missing", [v1])?.version, undefined);
 });
+
+test("Intake Medical is retired: kept for the assessments recorded on it, never offered", () => {
+  const retired = ASSESSMENT_TEMPLATES.filter((t) => t.key === "INTAKE_MEDICAL");
+  assert.equal(retired.length, 1);
+  assert.equal(retired[0].isActive, false);
+  assert.equal(getActiveTemplate("INTAKE_MEDICAL"), undefined);
+});

@@ -86,8 +86,9 @@ type EntryResult = FormResult<MedicalEntryFormInput>;
 // The Medical pages, the animal's page for its activity feed and its card, the
 // Vitals page for the vitals an exam measured, the shelter-wide due list, and
 // the public pet pages, whose "Neutered" and "Microchipped" pills are read
-// from the record. The home page renders per request (it reads the session),
-// so it has no cached copy to refresh.
+// from the record. The home page and the readiness board render per request
+// (both read the session, and the board its search params), so neither has a
+// cached copy to refresh.
 const revalidateMedical = (animalId: string) => {
   const animalPath = `/dashboard/animals/${animalId}`;
   revalidatePath(animalPath);

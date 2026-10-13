@@ -50,6 +50,10 @@ import {
   findVaccinesAndTests,
 } from "@/app/lib/data/animals/medical-entry";
 import { findMedicalStatus } from "@/app/lib/data/animals/medical-status";
+import {
+  findAnimalReadiness,
+  findReadinessForAnimals,
+} from "@/app/lib/data/animals/readiness";
 import { EXAM_BODY_SYSTEM_KEYS } from "@/app/lib/constants/exam";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
@@ -1184,4 +1188,150 @@ test("a surgery found on an exam keeps how it was found, its other fields can be
     (await findMedicalStatus(prisma, animalId, TODAY)).spayNeuter.status,
     "ALTERED",
   );
+});
+
+test("readiness needs an intake exam this stay, and holds while the stay's latest exam asks for a vet's review", async () => {
+  const noExam = await makeAnimal("Readiness no exam");
+  const clear = await makeAnimal("Readiness clear");
+  const review = await makeAnimal("Readiness review");
+  const cleared = await makeAnimal("Readiness cleared");
+  const returned = await makeAnimal("Readiness returned");
+
+  await record(clear, exam({ completedDate: day("2026-08-01") }));
+  const reviewExam = await record(
+    review,
+    exam({
+      completedDate: day("2026-08-03"),
+      overallResult: ExamResult.NEEDS_VET_REVIEW,
+      findings: findings({ HEART: { status: ABNORMAL, notes: "Murmur." } }),
+    }),
+  );
+  await record(
+    cleared,
+    exam({
+      completedDate: day("2026-08-03"),
+      overallResult: ExamResult.NEEDS_VET_REVIEW,
+      findings: findings({ HEART: { status: ABNORMAL, notes: "Murmur." } }),
+    }),
+  );
+  await record(
+    cleared,
+    exam({ examType: ExamType.RECHECK, completedDate: day("2026-08-10") }),
+  );
+  // An intake exam asking for review in the stay that began Aug 1. The
+  // animal came back on Sep 20, and has had no exam since.
+  await record(
+    returned,
+    exam({
+      completedDate: day("2026-08-02"),
+      overallResult: ExamResult.NEEDS_VET_REVIEW,
+      findings: findings({ LUNGS: { status: ABNORMAL, notes: "Cough." } }),
+    }),
+  );
+  await prisma.intake.create({
+    data: {
+      animalId: returned,
+      type: IntakeType.OWNER_SURRENDER,
+      intakeDate: "2026-09-20",
+      staffMemberId: staffId,
+    },
+  });
+
+  const timezone = "America/Los_Angeles";
+  const animalIds = [noExam, clear, review, cleared, returned];
+  const examBlockersOf = (
+    blockers: Awaited<ReturnType<typeof findAnimalReadiness>>,
+  ) =>
+    blockers!.blockers.filter(
+      (b) => b.kind === "NO_INTAKE_EXAM" || b.kind === "NEEDS_VET_REVIEW",
+    );
+  const one = new Map<string, unknown>();
+  for (const animalId of animalIds) {
+    one.set(
+      animalId,
+      examBlockersOf(
+        await findAnimalReadiness(prisma, animalId, { timezone, today: TODAY }),
+      ),
+    );
+  }
+  // Narrowed to this test's animals, so other files deleting theirs mid-read
+  // can't reach it.
+  const board = new Map<string, unknown>();
+  for (const readiness of await findReadinessForAnimals(
+    prisma,
+    { timezone, today: TODAY },
+    { animalIds },
+  )) {
+    board.set(readiness.animal.id, examBlockersOf(readiness));
+  }
+  assert.deepEqual(board, one, "the board and the single read disagree");
+
+  // Each stay began at midnight in Los Angeles (07:00 UTC, daylight time).
+  assert.deepEqual(one.get(noExam), [
+    { kind: "NO_INTAKE_EXAM", since: new Date("2026-08-01T07:00:00Z") },
+  ]);
+  assert.deepEqual(one.get(clear), []);
+  assert.deepEqual(one.get(review), [
+    {
+      kind: "NEEDS_VET_REVIEW",
+      entryId: reviewExam.entryId,
+      examType: ExamType.INTAKE,
+      examDate: day("2026-08-03"),
+      since: new Date("2026-08-03T07:00:00Z"),
+    },
+  ]);
+  // The recheck a week later, with no concerns, clears it.
+  assert.deepEqual(one.get(cleared), []);
+  // The earlier stay's intake exam counts for neither rule now.
+  assert.deepEqual(one.get(returned), [
+    { kind: "NO_INTAKE_EXAM", since: new Date("2026-09-20T07:00:00Z") },
+  ]);
+});
+
+test("with no intake on record, the stay starts on the shelter's day the animal was written", async () => {
+  // Written at 18:30 on Aug 1 in Los Angeles, which is already Aug 2 in UTC.
+  const writtenAt = new Date("2026-08-02T01:30:00Z");
+  const onTheDay = await makeAnimal("Readiness no intake, exam that day", []);
+  const dayBefore = await makeAnimal("Readiness no intake, exam the day before", []);
+  await prisma.animal.updateMany({
+    where: { id: { in: [onTheDay, dayBefore] } },
+    data: { createdAt: writtenAt },
+  });
+  await record(onTheDay, exam({ completedDate: day("2026-08-01") }));
+  await record(dayBefore, exam({ completedDate: day("2026-07-31") }));
+
+  const timezone = "America/Los_Angeles";
+  const animalIds = [onTheDay, dayBefore];
+  const examBlockersOf = (
+    readiness: Awaited<ReturnType<typeof findAnimalReadiness>>,
+  ) =>
+    readiness!.blockers.filter(
+      (b) => b.kind === "NO_INTAKE_EXAM" || b.kind === "NEEDS_VET_REVIEW",
+    );
+  const one = new Map<string, unknown>();
+  for (const animalId of animalIds) {
+    one.set(
+      animalId,
+      examBlockersOf(
+        await findAnimalReadiness(prisma, animalId, { timezone, today: TODAY }),
+      ),
+    );
+  }
+  const board = new Map<string, unknown>();
+  for (const readiness of await findReadinessForAnimals(
+    prisma,
+    { timezone, today: TODAY },
+    { animalIds },
+  )) {
+    board.set(readiness.animal.id, examBlockersOf(readiness));
+  }
+  assert.deepEqual(board, one, "the board and the single read disagree");
+
+  // Aug 1 is the stay's first day in Los Angeles, so that day's intake exam
+  // counts; the day before doesn't, and the need dates from the moment the
+  // animal was written.
+  assert.deepEqual(one.get(onTheDay), []);
+  assert.deepEqual(one.get(dayBefore), [
+    { kind: "NO_INTAKE_EXAM", since: writtenAt },
+  ]);
 });

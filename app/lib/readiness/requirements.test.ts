@@ -5,10 +5,16 @@ import { readinessRequirementsFor } from "./requirements";
 test("species-agnostic templates apply to every species", () => {
   const dogKeys = readinessRequirementsFor("Dog").map((r) => r.templateKey);
   const catKeys = readinessRequirementsFor("Cat").map((r) => r.templateKey);
-  assert.ok(dogKeys.includes("INTAKE_MEDICAL"));
   assert.ok(dogKeys.includes("INTAKE_BEHAVIORAL"));
-  assert.ok(catKeys.includes("INTAKE_MEDICAL"));
   assert.ok(catKeys.includes("INTAKE_BEHAVIORAL"));
+});
+
+test("a retired template is no requirement: the intake exam replaced Intake Medical", () => {
+  for (const species of ["Dog", "Cat", "Rabbit"]) {
+    const keys = readinessRequirementsFor(species).map((r) => r.templateKey);
+    assert.ok(!keys.includes("INTAKE_MEDICAL"), species);
+    assert.ok(keys.includes("INTAKE_BEHAVIORAL"), species);
+  }
 });
 
 test("dog-scoped templates apply only to dogs", () => {

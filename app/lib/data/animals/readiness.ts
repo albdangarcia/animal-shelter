@@ -206,6 +206,7 @@ function readinessFor(
       today,
       latestReproductiveFinding(exams),
     ),
+    exams,
     hasPhoto: animal._count.animalImages > 0,
     healthStatus: animal.healthStatus,
     // Blockers are dated by instants, so a latest intake — which is a day —

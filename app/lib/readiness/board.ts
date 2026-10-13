@@ -11,6 +11,7 @@
 
 import type { AnimalListingStatus } from "@/prisma/generated/enums";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
+import { EXAM_TYPE_LABELS } from "../constants/medical";
 import {
   formatShelterDay,
   shelterDayKey,
@@ -46,9 +47,11 @@ export type ReadinessBlockerKind = ReadinessBlocker["kind"];
  */
 export const BLOCKER_KIND_ORDER: readonly ReadinessBlockerKind[] = [
   "ESCALATED_FINDING",
+  "NEEDS_VET_REVIEW",
   "ACUTE_HEALTH",
   "UNSUPPORTED_CHARACTERISTIC",
   "MISSING_ASSESSMENT",
+  "NO_INTAKE_EXAM",
   "NOT_SPAYED_NEUTERED",
   "NO_PHOTO",
 ];
@@ -347,6 +350,10 @@ export const describeBlocker = (blocker: ReadinessBlocker, timezone: string): st
       return `${blocker.templateName} of ${formatShelterDay(shelterDayKey(blocker.observedAt, timezone))}`;
     case "UNSUPPORTED_CHARACTERISTIC":
       return `${blocker.characteristicName} — ${CLAIM_ISSUE_TEXT[blocker.issue]}`;
+    case "NO_INTAKE_EXAM":
+      return "No intake exam";
+    case "NEEDS_VET_REVIEW":
+      return `${EXAM_TYPE_LABELS[blocker.examType]} of ${formatShelterDay(blocker.examDate)} needs vet review`;
     case "NOT_SPAYED_NEUTERED":
       return "Not spayed or neutered";
     case "NO_PHOTO":
@@ -396,6 +403,16 @@ export function blockerAction(
       };
     case "UNSUPPORTED_CHARACTERISTIC":
       return { label: "Review characteristics", href: `${animal}/characteristics` };
+    case "NO_INTAKE_EXAM":
+      return {
+        label: can.manageMedical ? "Record intake exam" : "View medical record",
+        href: `${animal}/medical`,
+      };
+    case "NEEDS_VET_REVIEW":
+      return {
+        label: "Review the exam",
+        href: `${animal}/medical/history?kind=EXAM`,
+      };
     case "NOT_SPAYED_NEUTERED":
       return {
         label: can.manageMedical ? "Record spay/neuter" : "View medical record",

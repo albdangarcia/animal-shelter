@@ -76,6 +76,11 @@ export const ASSESSMENT_TEMPLATES: AssessmentTemplateDef[] = [
     description:
       "First-pass physical check performed at or shortly after intake for every animal.",
     stage: "intake",
+    // Retired: the intake exam on the medical record replaced it, with a
+    // finding for each body system. Kept so assessments recorded against it
+    // stay readable; it is no longer required for readiness or offered for a
+    // new assessment.
+    isActive: false,
     // Weight and body condition are deliberately absent — they live on
     // VitalsLog (weightGrams feeds Animal.currentWeightGrams and the chart;
     // bodyConditionScore is the 1-9 ordinal). A second copy here would drift

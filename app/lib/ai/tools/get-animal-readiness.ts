@@ -54,10 +54,13 @@ export const getAnimalReadinessTool = tool({
     "still open. When NOT_READY, `outstanding` is already sorted most " +
     "urgent first — report every item, in the order given. Each item's " +
     "`kind` is one of: ESCALATED_FINDING (the latest check of that " +
-    "assessment was escalated), ACUTE_HEALTH, UNSUPPORTED_CHARACTERISTIC (a " +
+    "assessment was escalated), NEEDS_VET_REVIEW (the latest exam this stay " +
+    "asked for a vet's review; a later exam with another result clears it), " +
+    "ACUTE_HEALTH, UNSUPPORTED_CHARACTERISTIC (a " +
     "trait on the profile that the assessments contradict or no longer back " +
     "up), MISSING_ASSESSMENT (a required check with nothing on file), " +
-    "NOT_SPAYED_NEUTERED (the medical record has no spay or neuter, and no " +
+    "NO_INTAKE_EXAM (no intake exam on the medical record for the current " +
+    "stay), NOT_SPAYED_NEUTERED (the medical record has no spay or neuter, and no " +
     "exemption from one is in force), NO_PHOTO. `description` says which " +
     "one; `nextStep` is what the person asking can do about it — relay it " +
     "as written. How long is already worked out: `daysOutstanding` is whole " +
