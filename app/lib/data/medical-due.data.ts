@@ -4,9 +4,10 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { medicalEntryKindsParam } from "../zod-schemas/medical-entry.schemas";
 import { getShelterToday } from "./shelter-settings.data";
 import type { CalendarDay } from "../utils/shelter-day";
-import type { MedicalEntryKind } from "@/prisma/generated/enums";
+import { MedicalEntryKind } from "@/prisma/generated/enums";
 import {
   UPCOMING_DAYS,
+  findExemptionReviewsDue,
   findMedicalDue,
   groupMedicalDue,
   type MedicalDueGroup,
@@ -16,6 +17,8 @@ export type {
   MedicalDueEntry,
   MedicalDueGroup,
   MedicalDueListRow,
+  MedicalDueReviewRow,
+  MedicalDueSectionRow,
 } from "./medical-due";
 
 const _fetchMedicalDue = async (
@@ -30,19 +33,25 @@ const _fetchMedicalDue = async (
   const kinds = medicalEntryKindsParam.parse(kindInput);
   try {
     const today = await getShelterToday();
-    const rows = await findMedicalDue(prisma, today, {
-      upcomingDays: UPCOMING_DAYS,
-      kinds,
-    });
-    return { groups: groupMedicalDue(rows, today), today, kinds };
+    // An exemption up for review is about a surgery, so the Surgery filter
+    // keeps it.
+    const withReviews =
+      kinds.length === 0 || kinds.includes(MedicalEntryKind.SURGERY);
+    const [rows, reviews] = await Promise.all([
+      findMedicalDue(prisma, today, { upcomingDays: UPCOMING_DAYS, kinds }),
+      withReviews
+        ? findExemptionReviewsDue(prisma, today, { upcomingDays: UPCOMING_DAYS })
+        : [],
+    ]);
+    return { groups: groupMedicalDue(rows, today, reviews), today, kinds };
   } catch (error) {
     console.error("Failed to fetch the medical due list:", error);
     throw new Error("Could not fetch the medical due list.");
   }
 };
 
-/** Scheduled care across the shelter, overdue to a week ahead, grouped by
- * where each animal is. */
+/** Scheduled care across the shelter, and spay/neuter exemptions up for
+ * review, overdue to a week ahead, grouped by where each animal is. */
 export const fetchMedicalDue = RequirePermission(AppPermissions.MEDICAL_READ)(
   _fetchMedicalDue,
 );

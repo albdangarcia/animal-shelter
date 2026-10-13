@@ -331,12 +331,12 @@ test("an exemption's review day is from today to five years ahead", async () => 
   await refusedOn(
     exemption(animalId, { reviewDate: day("2026-10-09") }),
     "reviewDate",
-    /can't be in the past/,
+    /^The review date can't be in the past\.$/,
   );
   await refusedOn(
     exemption(animalId, { reviewDate: day("2031-10-11") }),
     "reviewDate",
-    /more than 5 years/,
+    /^The review date can't be more than 5 years/,
   );
   await exemption(animalId, { reviewDate: TODAY });
   await exemption(animalId, { reviewDate: day("2031-10-10") });
@@ -431,6 +431,36 @@ test("a scheduled spay is declined only as an exemption", async () => {
   );
   const status = await findMedicalStatus(prisma, animalId, TODAY);
   assert.equal(status.spayNeuter.status, "EXEMPT");
+});
+
+test("a scheduled spay can't be declined as an exemption once the animal is spayed", async () => {
+  // Spayed elsewhere while the appointment was still open.
+  const animalId = await makeAnimal("Spayed before the appointment");
+  const { entryId } = await schedule(animalId, SurgeryProcedure.SPAY);
+  const { entryId: givenId } = await spayGiven(animalId);
+  const terms = { exemptionReason: SpayNeuterExemptionReason.MEDICAL_RISK };
+
+  await refusedOn(
+    decline(entryId, null, terms),
+    undefined,
+    /^This animal is already spayed or neutered on its record, so it can't be exempt\. Void this scheduled spay instead\.$/,
+  );
+  const entry = await entryOf(entryId);
+  assert.equal(entry.status, MedicalEntryStatus.SCHEDULED);
+  assert.equal(entry.exemptionReason, null);
+  assert.deepEqual(
+    (await eventsOf(entryId)).map((event) => event.action),
+    [MedicalEntryEventAction.CREATED],
+  );
+  assert.equal(
+    (await findMedicalStatus(prisma, animalId, TODAY)).spayNeuter.status,
+    "ALTERED",
+  );
+
+  // Once that spay is voided, it doesn't count, and the exemption is taken.
+  await voidEntry(givenId, "Recorded on the wrong animal.");
+  await decline(entryId, null, terms);
+  assert.equal((await entryOf(entryId)).status, MedicalEntryStatus.DECLINED);
 });
 
 test("a scheduled neuter declined as an exemption keeps the words given", async () => {

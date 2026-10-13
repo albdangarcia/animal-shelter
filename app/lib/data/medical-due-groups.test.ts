@@ -5,6 +5,7 @@ import {
   groupMedicalDue,
   type MedicalDuePlace,
   type MedicalDueListRow,
+  type MedicalDueReviewRow,
 } from "./medical-due-groups";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
@@ -52,9 +53,39 @@ const row = (
   place,
 });
 
+const review = (
+  id: string,
+  reviewDate: string,
+  place: MedicalDuePlace,
+  options: { animal?: string } = {},
+): MedicalDueReviewRow => ({
+  review: true,
+  entry: {
+    id,
+    kind: "SURGERY",
+    procedure: "SPAY",
+    exemptionReason: "TOO_YOUNG_OR_UNDERWEIGHT",
+    declineReason: null,
+    reviewDate: calendarDay(reviewDate),
+  },
+  animal: {
+    id: `animal-${options.animal ?? id}`,
+    name: options.animal ?? id,
+    species: "Cat",
+    sex: "FEMALE",
+    primaryColor: "Tabby",
+    birthDate: "2026-09-01",
+  },
+  place,
+});
+
 /** Each group as "title: BUCKET ids | BUCKET ids". */
-const shape = (rows: MedicalDueListRow[], today: CalendarDay = TODAY) =>
-  groupMedicalDue(rows, today).map(
+const shape = (
+  rows: MedicalDueListRow[],
+  today: CalendarDay = TODAY,
+  reviews: MedicalDueReviewRow[] = [],
+) =>
+  groupMedicalDue(rows, today, reviews).map(
     (group) =>
       `${group.title}: ${group.sections
         .map((section) => `${section.bucket} ${section.rows.map((r) => r.entry.id).join(",")}`)
@@ -147,4 +178,30 @@ test("rows in a bucket run soonest due first, then by animal, then by item", () 
     ]),
     ["Dog block: OVERDUE oldest,ace,rex-dhpp,rex-rabies"],
   );
+});
+
+test("an exemption up for review is bucketed by its review day, after the animal's care due that day", () => {
+  const room = inUnit("l1", "Cat room");
+  assert.deepEqual(
+    shape(
+      [
+        row("milo-fvrcp", "2026-10-09", room, { animal: "Milo", item: "FVRCP" }),
+        row("ace-today", "2026-10-11", room, { animal: "Ace" }),
+      ],
+      TODAY,
+      [
+        review("milo-review", "2026-10-09", room, { animal: "Milo" }),
+        review("zed-review", "2026-10-11", room, { animal: "Zed" }),
+        review("bo-review", "2026-10-15", fostered("p1", "Amir Khan"), { animal: "Bo" }),
+      ],
+    ),
+    [
+      "Cat room: OVERDUE milo-fvrcp,milo-review | TODAY ace-today,zed-review",
+      "Amir Khan: UPCOMING bo-review",
+    ],
+  );
+  // Reviews alone make groups too.
+  assert.deepEqual(shape([], TODAY, [review("r", "2026-10-11", notHoused)]), [
+    "Not housed: TODAY r",
+  ]);
 });

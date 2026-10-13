@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { CalendarPlus, Plus } from "lucide-react";
+import { CalendarPlus, Plus, ShieldOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -30,6 +30,7 @@ import {
 import { CareEntryForm, recordDialogDescription } from "./care-entry-form";
 import { ScheduleMedicalEntryForm } from "./schedule-medical-entry-form";
 import { DiscardChangesDialog } from "./discard-changes-dialog";
+import { SpayNeuterExemptionForm } from "./spay-neuter-exemption-form";
 import { ADD_ENTRY_BUTTON_ID } from "./use-entry-dialog-focus";
 
 interface Props {
@@ -44,16 +45,21 @@ const RECORDED_KINDS: MedicalEntryKind[] = [
   MedicalEntryKind.MICROCHIP,
 ];
 
-/** What the menu's dialog is doing: recording care of a kind, or scheduling. */
-type Mode = { record: MedicalEntryKind } | "schedule";
+/**
+ * What the menu's dialog is doing: recording care of a kind, scheduling, or
+ * recording a spay/neuter exemption.
+ */
+type Mode = { record: MedicalEntryKind } | "schedule" | "exemption";
 
 /**
- * "+ Add entry": pick a kind and record care already given, or schedule care
- * for a due day, in a dialog.
+ * "+ Add entry": pick a kind and record care already given, schedule care
+ * for a due day, or record that the animal is exempt from a spay or neuter,
+ * in a dialog. An animal already spayed or neutered can't be exempt, so it
+ * isn't offered one.
  */
 export function AddMedicalEntryMenu({ animalId, options }: Props) {
   const [mode, setMode] = useState<Mode | null>(null);
-  const kind = mode && mode !== "schedule" ? mode.record : null;
+  const kind = mode && typeof mode === "object" ? mode.record : null;
   const formRef = useRef<DirtyFormHandle>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
@@ -91,6 +97,12 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
             <CalendarPlus className="mr-2 size-4" />
             Schedule…
           </DropdownMenuItem>
+          {!options.altered && (
+            <DropdownMenuItem onSelect={() => setMode("exemption")}>
+              <ShieldOff className="mr-2 size-4" />
+              Spay/neuter exemption…
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -129,6 +141,26 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
               <ScheduleMedicalEntryForm
                 animalId={animalId}
                 options={options}
+                onFormSubmit={() => setMode(null)}
+                ref={formRef}
+              />
+            </>
+          )}
+          {mode === "exemption" && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Record a spay/neuter exemption</DialogTitle>
+                <DialogDescription>
+                  Record why this animal isn&apos;t to be spayed or neutered,
+                  for now or for good. It counts as exempt until the review
+                  date, or until the exemption is voided.
+                </DialogDescription>
+              </DialogHeader>
+              <SpayNeuterExemptionForm
+                animalId={animalId}
+                mode={{ record: { sex: options.sex } }}
+                today={options.today}
+                submitLabel="Record exemption"
                 onFormSubmit={() => setMode(null)}
                 ref={formRef}
               />

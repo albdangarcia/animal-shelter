@@ -13,6 +13,8 @@ import {
   type MedicalEntryFormItem,
 } from "./medical-catalog";
 import type { CalendarDay } from "../utils/shelter-day";
+import { spayNeuterStatus } from "../utils/spay-neuter";
+import { findSpayNeuterEntries } from "./animals/medical-status";
 
 export type {
   MedicalBatchItem,
@@ -74,6 +76,11 @@ export interface MedicalEntryFormOptions {
    * for it.
    */
   sex: Sex;
+  /**
+   * Whether the animal is spayed or neutered on its record. Then it can't be
+   * exempt, so no exemption is offered.
+   */
+  altered: boolean;
   /** Active vet clinics. */
   vetClinics: { id: string; name: string }[];
   /** The shelter's today: the date given starts there, and can't pass it. */
@@ -96,16 +103,21 @@ const _fetchMedicalEntryFormOptions = async (
       where: { id: id.data },
       select: { id: true, speciesId: true, listingStatus: true, sex: true },
     });
-    const [{ items, scheduledItems }, vetClinics, today] = await Promise.all([
-      findMedicalEntryFormItems(prisma, animal),
-      findActiveVetClinics(prisma),
-      getShelterToday(),
-    ]);
+    const [{ items, scheduledItems }, vetClinics, today, spayNeuter] =
+      await Promise.all([
+        findMedicalEntryFormItems(prisma, animal),
+        findActiveVetClinics(prisma),
+        getShelterToday(),
+        findSpayNeuterEntries(prisma, [animal.id]),
+      ]);
     return {
       items,
       scheduledItems,
       inCare: animal.listingStatus !== AnimalListingStatus.ARCHIVED,
       sex: animal.sex,
+      altered:
+        spayNeuterStatus(spayNeuter.get(animal.id) ?? [], today).status ===
+        "ALTERED",
       vetClinics,
       today,
     };

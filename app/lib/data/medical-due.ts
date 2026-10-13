@@ -1,5 +1,6 @@
-// The shelter-wide due list: scheduled care across every animal in care. The
-// reads have no auth or `next/*` imports, so database tests can call them;
+// The shelter-wide due list: scheduled care across every animal in care, and
+// the spay/neuter exemptions up for review. The reads have no auth or
+// `next/*` imports, so database tests can call them;
 // `medical-due.data.ts` wraps them behind MEDICAL_READ. Grouping and bucketing
 // are in `medical-due-groups.ts`, pure functions of the rows and the shelter's
 // today.
@@ -13,8 +14,9 @@ import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import {
   AnimalListingStatus,
+  MedicalEntryKind,
   MedicalEntryStatus,
-  type MedicalEntryKind,
+  SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import {
   calendarDay,
@@ -22,11 +24,14 @@ import {
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
 import { medicalEntryName } from "@/app/lib/utils/medical-entry-name";
+import { openExemptionReview } from "@/app/lib/utils/spay-neuter";
 import {
   UPCOMING_DAYS,
   type MedicalDueListRow,
   type MedicalDuePlace,
+  type MedicalDueReviewRow,
 } from "./medical-due-groups";
+import { findSpayNeuterEntries } from "./animals/medical-status";
 import {
   attentionUnitLabel,
   type MedicalDueRow,
@@ -35,11 +40,16 @@ import {
 export {
   UPCOMING_DAYS,
   dueBucket,
+  dueRowDay,
+  dueRowName,
   groupMedicalDue,
   type MedicalDueBucket,
   type MedicalDueGroup,
   type MedicalDueListRow,
   type MedicalDuePlace,
+  type MedicalDueReviewEntry,
+  type MedicalDueReviewRow,
+  type MedicalDueSectionRow,
 } from "./medical-due-groups";
 
 type Db = TransactionClient | typeof prisma;
@@ -66,6 +76,28 @@ export const ANIMAL_PLACE_SELECT = {
     },
   },
 } as const satisfies Prisma.AnimalSelect;
+
+/** The animal as a due row shows it, and where it is. */
+const DUE_ANIMAL_SELECT = {
+  id: true,
+  name: true,
+  species: { select: { name: true } },
+  sex: true,
+  primaryColor: { select: { name: true } },
+  birthDate: true,
+  ...ANIMAL_PLACE_SELECT,
+} as const satisfies Prisma.AnimalSelect;
+
+const dueAnimal = (
+  animal: Prisma.AnimalGetPayload<{ select: typeof DUE_ANIMAL_SELECT }>,
+): MedicalDueListRow["animal"] => ({
+  id: animal.id,
+  name: animal.name,
+  species: animal.species.name,
+  sex: animal.sex,
+  primaryColor: animal.primaryColor.name,
+  birthDate: animal.birthDate,
+});
 
 const DUE_ENTRY_SELECT = {
   id: true,
@@ -106,39 +138,87 @@ export const findMedicalDue = async (
       ...(kinds.length > 0 && { kind: { in: kinds } }),
       animal: { listingStatus: { not: AnimalListingStatus.ARCHIVED } },
     },
-    orderBy: [
-      { dueDate: "asc" },
-      { animal: { name: "asc" } },
-      { item: { name: "asc" } },
-      { id: "asc" },
-    ],
+    // The grouping puts each section's rows in order, names and all; this
+    // only makes the read stable.
+    orderBy: [{ dueDate: "asc" }, { id: "asc" }],
     select: {
       ...DUE_ENTRY_SELECT,
-      animal: {
-        select: {
-          id: true,
-          name: true,
-          species: { select: { name: true } },
-          sex: true,
-          primaryColor: { select: { name: true } },
-          birthDate: true,
-          ...ANIMAL_PLACE_SELECT,
-        },
-      },
+      animal: { select: DUE_ANIMAL_SELECT },
     },
   });
 
   return rows.map(({ animal, ...entry }) => ({
     // `lte` matched, so the due day is there.
     entry: { ...entry, dueDate: calendarDay(entry.dueDate!) },
-    animal: {
-      id: animal.id,
-      name: animal.name,
-      species: animal.species.name,
-      sex: animal.sex,
-      primaryColor: animal.primaryColor.name,
-      birthDate: animal.birthDate,
+    animal: dueAnimal(animal),
+    place: placeOf(animal),
+  }));
+};
+
+const SPAY_NEUTER = [SurgeryProcedure.SPAY, SurgeryProcedure.NEUTER];
+
+/**
+ * The spay/neuter exemptions open for review whose review day is on or
+ * before today plus `upcomingDays`, for animals in care, as due-list rows.
+ * An exemption with no review day is never reviewed. One stays open until a
+ * spay or neuter is given, scheduled, or exempted again after it (the rule
+ * is `openExemptionReview`), so a lapsed one stays on the list, as overdue
+ * care does.
+ */
+export const findExemptionReviewsDue = async (
+  db: Db,
+  today: CalendarDay,
+  options: { upcomingDays?: number } = {},
+): Promise<MedicalDueReviewRow[]> => {
+  const { upcomingDays = UPCOMING_DAYS } = options;
+  const until = shiftDayKey(today, upcomingDays);
+  // The animals with an exemption due for review in the window. Whether it
+  // is still open needs the animal's other spay and neuter entries.
+  const candidates = await db.medicalEntry.findMany({
+    where: {
+      kind: MedicalEntryKind.SURGERY,
+      procedure: { in: SPAY_NEUTER },
+      status: MedicalEntryStatus.DECLINED,
+      exemptionReason: { not: null },
+      reviewDate: { lte: until },
+      voidedAt: null,
+      animal: { listingStatus: { not: AnimalListingStatus.ARCHIVED } },
     },
+    distinct: ["animalId"],
+    select: { animalId: true },
+  });
+  if (candidates.length === 0) return [];
+
+  const entries = await findSpayNeuterEntries(
+    db,
+    candidates.map((row) => row.animalId),
+  );
+  const open = new Map<string, MedicalDueReviewRow["entry"]>();
+  for (const [animalId, animalEntries] of entries) {
+    const review = openExemptionReview(animalEntries);
+    // Days are `yyyy-MM-dd` strings, so they compare as days.
+    if (!review || !review.reviewDate || review.reviewDate > until) continue;
+    open.set(animalId, {
+      id: review.id,
+      kind: MedicalEntryKind.SURGERY,
+      procedure: review.procedure,
+      // An open review is an exemption, which always has its reason.
+      exemptionReason: review.exemptionReason!,
+      declineReason: review.declineReason,
+      reviewDate: calendarDay(review.reviewDate),
+    });
+  }
+  if (open.size === 0) return [];
+
+  const animals = await db.animal.findMany({
+    where: { id: { in: [...open.keys()] } },
+    orderBy: { id: "asc" },
+    select: DUE_ANIMAL_SELECT,
+  });
+  return animals.map((animal) => ({
+    review: true,
+    entry: open.get(animal.id)!,
+    animal: dueAnimal(animal),
     place: placeOf(animal),
   }));
 };

@@ -6,7 +6,7 @@ import { useForm, type Resolver } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { format } from "date-fns";
 import { CalendarClock, CircleSlash, Loader2, Syringe } from "lucide-react";
-import { MedicalEntryKind } from "@/prisma/generated/enums";
+import { MedicalEntryKind, SurgeryProcedure } from "@/prisma/generated/enums";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,7 +35,6 @@ import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import {
   declineMedicalEntry,
-  loadMedicalEntryFormOptions,
   rescheduleMedicalEntry,
 } from "@/app/lib/actions/medical-entry.actions";
 import { RescheduleMedicalEntrySchema } from "@/app/lib/zod-schemas/medical-entry.schemas";
@@ -60,6 +59,8 @@ import type { ScheduledCare } from "./medical-entry-form";
 import { CareEntryForm } from "./care-entry-form";
 import { DiscardChangesDialog } from "./discard-changes-dialog";
 import { useEntryDialogFocus } from "./use-entry-dialog-focus";
+import { EntryFormLoading, useEntryFormOptions } from "./use-entry-form-options";
+import { SpayNeuterExemptionForm } from "./spay-neuter-exemption-form";
 
 /** Scheduled care as its row shows it, and as its buttons need it. */
 export type DueCare = ScheduledCare &
@@ -85,9 +86,16 @@ interface Props {
   canAdminister: boolean;
 }
 
+/** A spay or neuter, whose decline is an exemption. */
+const isSpayOrNeuter = (entry: DueCare) =>
+  entry.procedure === SurgeryProcedure.SPAY ||
+  entry.procedure === SurgeryProcedure.NEUTER;
+
 /**
  * The buttons on a row of the due list: Record when the care was given,
  * Reschedule to plan it for another day, and Decline when it won't be given.
+ * Declining a spay or neuter records an exemption, which plans the animal's
+ * care rather than gives it, so it is for a viewer who may manage care.
  */
 export function ScheduledEntryActions({
   animalId,
@@ -122,7 +130,16 @@ export function ScheduledEntryActions({
           what={what}
         />
       )}
-      {canAdminister && <DeclineButton entry={entry} what={what} />}
+      {isSpayOrNeuter(entry)
+        ? canManage && (
+            <DeclineAsExemptionButton
+              animalId={animalId}
+              entry={entry}
+              today={today}
+              what={what}
+            />
+          )
+        : canAdminister && <DeclineButton entry={entry} what={what} />}
     </div>
   );
 }
@@ -140,56 +157,15 @@ function RecordButton({
   animalName?: string;
   what: string;
 }) {
-  const [open, setOpen] = useState(false);
-  // The options the open form uses: the ones given, or the ones read when it
-  // opened.
-  const [formOptions, setFormOptions] = useState(options);
-  // Counts the openings, so a read that answers after its dialog closed, or
-  // after it was opened again, is dropped.
-  const opening = useRef(0);
+  const { open, setOpen, openDialog, formOptions } = useEntryFormOptions(
+    animalId,
+    options,
+  );
   const formRef = useRef<DirtyFormHandle>(null);
   const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
-    useConfirmedOpenChange(
-      () => formRef.current?.isDirty() ?? false,
-      (next: boolean) => {
-        if (!next) opening.current++;
-        setOpen(next);
-      },
-    );
+    useConfirmedOpenChange(() => formRef.current?.isDirty() ?? false, setOpen);
   // Recording takes the row off the due list, button and all.
   const { triggerRef, returnFocus } = useEntryDialogFocus();
-
-  const openDialog = () => {
-    // Open at once, whether or not the options are here: the dialog holds
-    // the page while they load, so no other row's form can open meanwhile.
-    setOpen(true);
-    if (options) {
-      setFormOptions(options);
-      return;
-    }
-    // Read each time it opens, so what the form offers (whether the next
-    // dose is already planned, say) is as it is now.
-    setFormOptions(undefined);
-    const thisOpening = ++opening.current;
-    void (async () => {
-      let message: string;
-      try {
-        const result = await loadMedicalEntryFormOptions(animalId);
-        if (thisOpening !== opening.current) return;
-        if (result.ok) {
-          setFormOptions(result.options);
-          return;
-        }
-        message = result.message;
-      } catch {
-        if (thisOpening !== opening.current) return;
-        message = "Could not load the form. Try again.";
-      }
-      toast.error(message);
-      opening.current++;
-      setOpen(false);
-    })();
-  };
 
   return (
     <>
@@ -233,13 +209,7 @@ function RecordButton({
               ref={formRef}
             />
           ) : (
-            <p
-              role="status"
-              className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground"
-            >
-              <Loader2 className="size-4 animate-spin" />
-              Loading the form…
-            </p>
+            <EntryFormLoading />
           )}
         </DialogContent>
       </Dialog>
@@ -480,6 +450,71 @@ function DeclineButton({ entry, what }: { entry: DueCare; what: string }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </>
+  );
+}
+
+function DeclineAsExemptionButton({
+  animalId,
+  entry,
+  today,
+  what,
+}: {
+  animalId: string;
+  entry: DueCare;
+  today: CalendarDay;
+  what: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const formRef = useRef<DirtyFormHandle>(null);
+  const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
+    useConfirmedOpenChange(() => formRef.current?.isDirty() ?? false, setOpen);
+  // A decline takes the row off the due list, button and all.
+  const { triggerRef, returnFocus } = useEntryDialogFocus();
+  const procedure = medicalEntryName(entry).toLowerCase();
+
+  return (
+    <>
+      <Button
+        ref={triggerRef}
+        type="button"
+        variant="outline"
+        size="sm"
+        aria-label={`Decline ${what}`}
+        onClick={() => setOpen(true)}
+      >
+        <CircleSlash className="mr-2 size-4" />
+        Decline
+      </Button>
+      <Dialog open={open} onOpenChange={guardedOnOpenChange}>
+        <DialogContent
+          className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto"
+          onCloseAutoFocus={returnFocus}
+        >
+          <DialogHeader>
+            <DialogTitle>Decline {what}</DialogTitle>
+            <DialogDescription>
+              Declining a {procedure} records that the animal is exempt from
+              it, and why. The entry stays on the record as declined. A decline
+              is final: to extend the exemption, record a new one, and to end
+              it, schedule or record the {procedure}.
+            </DialogDescription>
+          </DialogHeader>
+          <SpayNeuterExemptionForm
+            animalId={animalId}
+            mode={{ decline: { entryId: entry.id } }}
+            today={today}
+            submitLabel="Decline Entry"
+            onFormSubmit={() => setOpen(false)}
+            ref={formRef}
+          />
+        </DialogContent>
+      </Dialog>
+      <DiscardChangesDialog
+        open={isConfirmOpen}
+        onConfirm={confirmDiscard}
+        onCancel={cancelDiscard}
+      />
     </>
   );
 }

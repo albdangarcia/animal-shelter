@@ -27,7 +27,8 @@ export const getAttentionQueueTool = tool({
   description:
     "List the animals that need attention today and why. Each entry carries " +
     "one or more structured reasons: an overdue or due-today task, a " +
-    "vaccine, test or treatment that's due today or overdue, an acute " +
+    "vaccine, test, treatment, surgery or microchip that's due today or " +
+    "overdue, an acute " +
     "health status with no open task, or a foster placement past its " +
     "expected end date. Use this for questions like \"what needs attention\", " +
     "\"what's overdue\", or \"what should we prioritise today\". Takes no " +

@@ -8,6 +8,7 @@ import {
   RecordScheduledBatchSchema,
   RecordSpayNeuterExemptionSchema,
   ScheduleMedicalEntrySchema,
+  SpayNeuterExemptionTermsSchema,
   VoidMedicalEntrySchema,
   medicalEntryKindsParam,
   medicalEntryFieldErrors,
@@ -229,6 +230,33 @@ test("RecordSpayNeuterExemptionSchema: spay or neuter, a reason, and words for O
       procedure: "SPAY",
       exemptionReason: "OTHER",
       declineReason: "  ",
+    }).declineReason,
+    ["Say why the animal is exempt."],
+  );
+});
+
+test("SpayNeuterExemptionTermsSchema: a reason, words for Other, and maybe a review day", () => {
+  // What the form declining a scheduled spay holds: no procedure, which the
+  // entry already has.
+  assert.deepEqual(
+    SpayNeuterExemptionTermsSchema.parse({
+      procedure: "",
+      exemptionReason: "MEDICAL_RISK",
+      declineReason: " ",
+      reviewDate: "2027-01-15",
+    }),
+    { exemptionReason: "MEDICAL_RISK", declineReason: null, reviewDate: "2027-01-15" },
+  );
+  // A blank reason, as the form starts.
+  assert.deepEqual(
+    flatErrorsOf(SpayNeuterExemptionTermsSchema, { exemptionReason: "" })
+      .exemptionReason,
+    ["Pick the reason for the exemption."],
+  );
+  assert.deepEqual(
+    flatErrorsOf(SpayNeuterExemptionTermsSchema, {
+      exemptionReason: "OTHER",
+      declineReason: "",
     }).declineReason,
     ["Say why the animal is exempt."],
   );

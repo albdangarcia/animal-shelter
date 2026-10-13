@@ -69,6 +69,11 @@ const SCHEDULED_KINDS: MedicalEntryKind[] = [
 interface Props {
   animalId: string;
   options: MedicalEntryFormOptions;
+  /**
+   * What the form starts with, when it is opened to plan one thing: a spay
+   * or neuter, from an exemption due for review.
+   */
+  initial?: { kind: typeof MedicalEntryKind.SURGERY; procedure: SurgeryProcedure };
   onFormSubmit: () => void;
   ref?: React.Ref<DirtyFormHandle>;
 }
@@ -81,6 +86,7 @@ interface Props {
 export function ScheduleMedicalEntryForm({
   animalId,
   options,
+  initial,
   onFormSubmit,
   ref,
 }: Props) {
@@ -94,9 +100,14 @@ export function ScheduleMedicalEntryForm({
       ScheduleMedicalEntrySchema,
     ) as unknown as Resolver<ScheduleFormState>,
     defaultValues: {
-      kind: "",
+      kind: initial?.kind ?? "",
       itemId: "",
-      procedure: "",
+      // Scheduling checks the sex rule, so a procedure the animal's sex no
+      // longer allows (it was corrected since) isn't filled in.
+      procedure:
+        initial && proceduresFor(options.sex).includes(initial.procedure)
+          ? initial.procedure
+          : "",
       dueDate: null,
       notes: "",
     },

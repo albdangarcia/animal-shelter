@@ -311,3 +311,23 @@ test("reason payloads carry the fields each consumer needs, and no more", () => 
     ],
   });
 });
+
+test("a surgery or microchip due is named as the due list names it, with its kind", () => {
+  const rex = animal("rex", { name: "Rex" });
+  const [item] = buildAttentionQueue({
+    ...empty,
+    medicalDue: [
+      medicalRow(rex, { entryId: "spay", itemName: "Neuter", kind: "SURGERY", dueDate: calendarDay("2026-08-18") }),
+      medicalRow(rex, { entryId: "chip", itemName: "Microchip", kind: "MICROCHIP", dueDate: calendarDay("2026-08-20") }),
+    ],
+  });
+  assert.deepEqual(
+    item.reasons.map((reason) =>
+      reason.kind === "MEDICAL_DUE" ? [reason.itemName, reason.entryKind] : null,
+    ),
+    [
+      ["Neuter", "SURGERY"],
+      ["Microchip", "MICROCHIP"],
+    ],
+  );
+});

@@ -553,14 +553,16 @@ const checkDay = (
 
 /**
  * Refuses a due day the scheduling rules don't allow: before today, or too
- * far ahead. `field` is the form field the day was typed in.
+ * far ahead. `field` is the form field the day was typed in, and `label`
+ * names the day in the message when it isn't a due day.
  */
 export const checkDueDate = (
   dueDate: CalendarDay,
   today: CalendarDay,
   field = "dueDate",
+  label?: string,
 ) => {
-  const issue = dueDateIssue(dueDate, today);
+  const issue = dueDateIssue(dueDate, today, label);
   if (issue) {
     throw new MedicalEntryRefusal(issue, field);
   }
@@ -1121,9 +1123,28 @@ const exemptionValues = (
   }
   const reviewDate = terms.reviewDate ?? null;
   if (reviewDate) {
-    checkDueDate(reviewDate, today, "reviewDate");
+    checkDueDate(reviewDate, today, "reviewDate", "The review date");
   }
   return { exemptionReason: terms.exemptionReason, declineReason, reviewDate };
+};
+
+/**
+ * Refuses an exemption for an animal already spayed or neutered on its
+ * record: the status would read Altered whatever the exemption said. Call it
+ * behind the animal's lock. `instead` says what to do, if anything.
+ */
+const refuseExemptionWhenAltered = async (
+  tx: TransactionClient,
+  animalId: string,
+  today: CalendarDay,
+  instead = "",
+) => {
+  const entries = (await findSpayNeuterEntries(tx, [animalId])).get(animalId) ?? [];
+  if (spayNeuterStatus(entries, today).status === "ALTERED") {
+    throw new MedicalEntryRefusal(
+      `This animal is already spayed or neutered on its record, so it can't be exempt.${instead}`,
+    );
+  }
 };
 
 // "too young or underweight. Review on Nov 3, 2026. Note: …"
@@ -1144,6 +1165,8 @@ const exemptionText = ({
  * Declining a spay or neuter records an exemption, so the animal's status
  * says why it isn't altered: `exemption` is required then, with its reason
  * and maybe a review day, and the reason in words is needed only for Other.
+ * It is refused for an animal already spayed or neutered on its record,
+ * whose leftover appointment is voided instead.
  * Any other care can't be declined as an exemption, and needs `reason`.
  */
 export async function declineMedicalEntry(
@@ -1169,6 +1192,12 @@ export async function declineMedicalEntry(
       );
     }
     const values = exemptionValues(exemption, reason, exemption.today, "reason");
+    await refuseExemptionWhenAltered(
+      tx,
+      entry.animalId,
+      exemption.today,
+      ` Void this scheduled ${SURGERY_PROCEDURE_LABELS[entry.procedure!].toLowerCase()} instead.`,
+    );
     declined = values;
     summary = `${entry.subject} due ${dayText(entry.dueDate)} was declined as an exemption: ${exemptionText(values)}`;
   } else {
@@ -1262,12 +1291,7 @@ export async function recordSpayNeuterExemption(
   checkProcedure(procedure, animal);
   const values = exemptionValues(input, input.declineReason, today, "declineReason");
 
-  const entries = (await findSpayNeuterEntries(tx, [animalId])).get(animalId) ?? [];
-  if (spayNeuterStatus(entries, today).status === "ALTERED") {
-    throw new MedicalEntryRefusal(
-      "This animal is already spayed or neutered on its record, so it can't be exempt.",
-    );
-  }
+  await refuseExemptionWhenAltered(tx, animalId, today);
 
   const entry = await tx.medicalEntry.create({
     data: {

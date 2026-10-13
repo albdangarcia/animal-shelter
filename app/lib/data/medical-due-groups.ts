@@ -2,7 +2,12 @@
 // its rows and the shelter's today, with no Prisma import, so unit tests and
 // the page can use them. The rows are read in `medical-due.ts`.
 
-import type { Sex } from "@/prisma/generated/enums";
+import type {
+  MedicalEntryKind,
+  Sex,
+  SpayNeuterExemptionReason,
+  SurgeryProcedure,
+} from "@/prisma/generated/enums";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { medicalEntryName } from "@/app/lib/utils/medical-entry-name";
 import type { MedicalDueEntry } from "./medical-due";
@@ -36,6 +41,40 @@ export interface MedicalDueListRow {
   place: MedicalDuePlace;
 }
 
+/** A spay/neuter exemption open for review, as the due list shows it. */
+export interface MedicalDueReviewEntry {
+  id: string;
+  kind: typeof MedicalEntryKind.SURGERY;
+  procedure: SurgeryProcedure;
+  exemptionReason: SpayNeuterExemptionReason;
+  declineReason: string | null;
+  /** The day it is listed by, as care is by its due day. */
+  reviewDate: CalendarDay;
+}
+
+/**
+ * An exemption open for review on the due list. It has no due day of its
+ * own: it falls due on its review day, and is done by scheduling the spay or
+ * neuter, or recording a new exemption.
+ */
+export interface MedicalDueReviewRow {
+  review: true;
+  entry: MedicalDueReviewEntry;
+  animal: MedicalDueListRow["animal"];
+  place: MedicalDuePlace;
+}
+
+/** A row of the due list: scheduled care, or an exemption up for review. */
+export type MedicalDueSectionRow = MedicalDueListRow | MedicalDueReviewRow;
+
+/** The day a row falls due: care's due day, or a review's review day. */
+export const dueRowDay = (row: MedicalDueSectionRow): CalendarDay =>
+  "review" in row ? row.entry.reviewDate : row.entry.dueDate;
+
+/** What a row is called: care by its name, a review as one. */
+export const dueRowName = (row: MedicalDueSectionRow) =>
+  "review" in row ? "Spay/neuter exemption review" : medicalEntryName(row.entry);
+
 export type MedicalDueBucket = "OVERDUE" | "TODAY" | "UPCOMING";
 
 /** Overdue is due before the shelter's today; due today is today itself. */
@@ -54,7 +93,7 @@ export interface MedicalDueGroup {
   type: MedicalDuePlace["type"];
   title: string;
   /** Only the buckets with rows, in the order Overdue, Today, Upcoming. */
-  sections: { bucket: MedicalDueBucket; rows: MedicalDueListRow[] }[];
+  sections: { bucket: MedicalDueBucket; rows: MedicalDueSectionRow[] }[];
 }
 
 const GROUP_RANK: Record<MedicalDuePlace["type"], number> = {
@@ -74,28 +113,31 @@ const groupOf = (place: MedicalDuePlace) => {
   }
 };
 
-// Soonest due first, then by animal and item, so rows on one day read in a
-// stable order.
-const compareRows = (a: MedicalDueListRow, b: MedicalDueListRow) =>
-  a.entry.dueDate.localeCompare(b.entry.dueDate) ||
+// Soonest due first, then by animal and name, so rows on one day read in a
+// stable order. An animal's review comes after its care due the same day.
+const compareRows = (a: MedicalDueSectionRow, b: MedicalDueSectionRow) =>
+  dueRowDay(a).localeCompare(dueRowDay(b)) ||
   a.animal.name.localeCompare(b.animal.name) ||
-  medicalEntryName(a.entry).localeCompare(medicalEntryName(b.entry)) ||
+  Number("review" in a) - Number("review" in b) ||
+  dueRowName(a).localeCompare(dueRowName(b)) ||
   a.entry.id.localeCompare(b.entry.id);
 
 /**
  * The due list as the page shows it: a group per location (by name), then
  * per foster (by name), then "Not housed". Inside each, Overdue, Today and
- * Upcoming, leaving out the empty ones.
+ * Upcoming, leaving out the empty ones. Exemptions up for review are
+ * bucketed by their review day, as care is by its due day.
  */
 export const groupMedicalDue = (
   rows: MedicalDueListRow[],
   today: CalendarDay,
+  reviews: MedicalDueReviewRow[] = [],
 ): MedicalDueGroup[] => {
   const groups = new Map<
     string,
-    { group: MedicalDueGroup; rank: number; rows: MedicalDueListRow[] }
+    { group: MedicalDueGroup; rank: number; rows: MedicalDueSectionRow[] }
   >();
-  for (const row of rows) {
+  for (const row of [...rows, ...reviews]) {
     const { key, title } = groupOf(row.place);
     let entry = groups.get(key);
     if (!entry) {
@@ -121,7 +163,7 @@ export const groupMedicalDue = (
       sections: BUCKET_ORDER.map((bucket) => ({
         bucket,
         rows: groupRows
-          .filter((row) => dueBucket(row.entry.dueDate, today) === bucket)
+          .filter((row) => dueBucket(dueRowDay(row), today) === bucket)
           .sort(compareRows),
       })).filter((section) => section.rows.length > 0),
     }));

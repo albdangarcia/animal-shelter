@@ -467,17 +467,35 @@ export const DeclineMedicalEntrySchema = z
 
 export type DeclineMedicalEntryInput = z.input<typeof DeclineMedicalEntrySchema>;
 
+const otherNeedsNote = (
+  { exemptionReason, declineReason }: {
+    exemptionReason: SpayNeuterExemptionReason;
+    declineReason: string | null;
+  },
+  ctx: z.RefinementCtx,
+) => {
+  if (exemptionReason === SpayNeuterExemptionReason.OTHER && !declineReason) {
+    ctx.addIssue({ code: "custom", path: ["declineReason"], message: OTHER_NEEDS_NOTE });
+  }
+};
+
+/**
+ * An exemption's terms as its form holds them: the reason from the list, the
+ * note in words (`declineReason`, required for Other) and maybe a review day.
+ * The form declining a scheduled spay or neuter checks these, and sends the
+ * note as the decline's `reason`.
+ */
+export const SpayNeuterExemptionTermsSchema = SpayNeuterExemptionSchema.extend({
+  declineReason: optionalReason,
+}).superRefine(otherNeedsNote);
+
 /** An exemption recorded on its own, with no spay or neuter scheduled first. */
 export const RecordSpayNeuterExemptionSchema = SpayNeuterExemptionSchema.extend({
   procedure: z.enum([SurgeryProcedure.SPAY, SurgeryProcedure.NEUTER], {
     error: "Pick spay or neuter.",
   }),
   declineReason: optionalReason,
-}).superRefine(({ exemptionReason, declineReason }, ctx) => {
-  if (exemptionReason === SpayNeuterExemptionReason.OTHER && !declineReason) {
-    ctx.addIssue({ code: "custom", path: ["declineReason"], message: OTHER_NEEDS_NOTE });
-  }
-});
+}).superRefine(otherNeedsNote);
 
 export type RecordSpayNeuterExemptionFormInput = z.input<
   typeof RecordSpayNeuterExemptionSchema

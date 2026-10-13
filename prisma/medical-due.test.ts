@@ -20,20 +20,27 @@ import {
   MedicalEntrySource,
   MedicalItemKind,
   Sex,
+  SpayNeuterExemptionReason,
+  SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import {
   declineMedicalEntry,
+  recordMedicalEntry,
   recordScheduledMedicalEntry,
+  recordSpayNeuterExemption,
   scheduleMedicalEntry,
   voidMedicalEntry,
 } from "@/app/lib/services/medical-entry";
+import { medicalEntryName } from "@/app/lib/utils/medical-entry-name";
 import { createMedicalItem } from "@/app/lib/services/medical-catalog";
 import type { CatalogEntryKind } from "@/app/lib/constants/medical";
 import {
+  findExemptionReviewsDue,
   findMedicalDue,
   findMedicalDueForQueue,
   groupMedicalDue,
   type MedicalDueListRow,
+  type MedicalDueReviewRow,
 } from "@/app/lib/data/medical-due";
 import {
   calendarDay,
@@ -400,4 +407,198 @@ test("the attention queue takes open care due today or overdue, for animals in c
   assert.equal(byEntry.get(dueToday)?.kind, MedicalEntryKind.TREATMENT);
   assert.equal(byEntry.get(dueToday)?.itemName, name("Due dewormer"));
   assert.equal(byEntry.get(unhousedDue)?.animal.currentUnit, null);
+});
+
+test("a scheduled surgery and a microchip are due like other care, named by procedure and as a chip", async () => {
+  const housed = await makeAnimal("Surgery and chip", { currentUnitId: unitId });
+  const plan = (care: { kind: "SURGERY"; procedure: SurgeryProcedure } | { kind: "MICROCHIP" }) =>
+    prisma.$transaction((tx) =>
+      scheduleMedicalEntry(tx, { animalId: housed, ...care, dueDate: TODAY }, staffId, TODAY),
+    );
+  const spay = (await plan({ kind: MedicalEntryKind.SURGERY, procedure: SurgeryProcedure.SPAY })).entryId;
+  const chip = (await plan({ kind: MedicalEntryKind.MICROCHIP })).entryId;
+
+  const rows = await dueFor([housed]);
+  assert.deepEqual(
+    rows.map((row) => [row.entry.id, row.entry.kind, medicalEntryName(row.entry)]).sort(),
+    [
+      [spay, MedicalEntryKind.SURGERY, "Spay"],
+      [chip, MedicalEntryKind.MICROCHIP, "Microchip"],
+    ].sort(),
+  );
+  // The Surgery filter keeps the spay alone.
+  assert.deepEqual(
+    (await dueFor([housed], { kinds: [MedicalEntryKind.SURGERY] })).map((row) => row.entry.id),
+    [spay],
+  );
+  // The attention queue names them the same way.
+  const queue = (await findMedicalDueForQueue(prisma, TODAY)).filter(
+    (row) => row.animal.id === housed,
+  );
+  assert.deepEqual(
+    queue.map((row) => [row.entryId, row.itemName]).sort(),
+    [
+      [spay, "Spay"],
+      [chip, "Microchip"],
+    ].sort(),
+  );
+});
+
+/**
+ * Records a spay exemption reviewed on `reviewDate` (or never), as if on
+ * `on`, the shelter's today when it was recorded, which a review day can't
+ * be before.
+ */
+const exempt = async (
+  animalId: string,
+  reviewDate: CalendarDay | null,
+  on: CalendarDay = reviewDate && reviewDate < TODAY ? reviewDate : TODAY,
+) =>
+  (
+    await prisma.$transaction((tx) =>
+      recordSpayNeuterExemption(
+        tx,
+        {
+          animalId,
+          procedure: SurgeryProcedure.SPAY,
+          exemptionReason: SpayNeuterExemptionReason.TOO_YOUNG_OR_UNDERWEIGHT,
+          reviewDate,
+        },
+        staffId,
+        on,
+      ),
+    )
+  ).entryId;
+
+/** The reviews due for these animals only. */
+const reviewsFor = async (animalIds: string[]): Promise<MedicalDueReviewRow[]> =>
+  (await findExemptionReviewsDue(prisma, TODAY)).filter((row) =>
+    animalIds.includes(row.animal.id),
+  );
+
+test("an exemption with a review day is due for review in its bucket, until something replaces it", async () => {
+  // Due for review: lapsed two days ago, today, and on the window's last day.
+  const lapsed = await makeAnimal("Review lapsed", { currentUnitId: unitId });
+  const lapsedReview = await exempt(lapsed, shiftDayKey(TODAY, -2));
+  const today = await makeAnimal("Review today");
+  const todayReview = await exempt(today, TODAY);
+  const lastDay = await makeAnimal("Review in a week");
+  const lastDayReview = await exempt(lastDay, shiftDayKey(TODAY, 7));
+
+  // Not yet, or never.
+  const later = await makeAnimal("Review later");
+  await exempt(later, shiftDayKey(TODAY, 8));
+  const never = await makeAnimal("Never reviewed");
+  await exempt(never, null);
+
+  // Replaced: by a spay scheduled after it, a spay given, or a newer
+  // exemption whose review is out of the window.
+  const scheduled = await makeAnimal("Spay scheduled since");
+  await exempt(scheduled, shiftDayKey(TODAY, -1));
+  await prisma.$transaction((tx) =>
+    scheduleMedicalEntry(
+      tx,
+      {
+        animalId: scheduled,
+        kind: MedicalEntryKind.SURGERY,
+        procedure: SurgeryProcedure.SPAY,
+        dueDate: shiftDayKey(TODAY, 3),
+      },
+      staffId,
+      TODAY,
+    ),
+  );
+  const given = await makeAnimal("Spayed since");
+  await exempt(given, TODAY);
+  await prisma.$transaction((tx) =>
+    recordMedicalEntry(
+      tx,
+      {
+        animalId: given,
+        kind: MedicalEntryKind.SURGERY,
+        procedure: SurgeryProcedure.SPAY,
+        completedDate: TODAY,
+        source: MedicalEntrySource.IN_HOUSE,
+      },
+      staffId,
+      TODAY,
+    ),
+  );
+  const extended = await makeAnimal("Exempt again");
+  await exempt(extended, TODAY);
+  await exempt(extended, shiftDayKey(TODAY, 60));
+
+  // Voided, or the animal has left.
+  const voided = await makeAnimal("Exemption voided");
+  const voidedReview = await exempt(voided, TODAY);
+  await prisma.$transaction((tx) =>
+    voidMedicalEntry(tx, voidedReview, "Recorded on the wrong animal.", staffId),
+  );
+  const left = await makeAnimal("Review left");
+  await exempt(left, TODAY);
+  await prisma.animal.update({
+    where: { id: left },
+    data: { listingStatus: AnimalListingStatus.ARCHIVED },
+  });
+
+  const mine = [lapsed, today, lastDay, later, never, scheduled, given, extended, voided, left];
+  const reviews = await reviewsFor(mine);
+  assert.deepEqual(
+    reviews.map((row) => row.entry.id).sort(),
+    [lapsedReview, todayReview, lastDayReview].sort(),
+  );
+
+  const lapsedRow = reviews.find((row) => row.animal.id === lapsed)!;
+  assert.deepEqual(lapsedRow.entry, {
+    id: lapsedReview,
+    kind: MedicalEntryKind.SURGERY,
+    procedure: SurgeryProcedure.SPAY,
+    exemptionReason: SpayNeuterExemptionReason.TOO_YOUNG_OR_UNDERWEIGHT,
+    declineReason: null,
+    reviewDate: shiftDayKey(TODAY, -2),
+  });
+  assert.equal(lapsedRow.review, true);
+  assert.equal(lapsedRow.animal.name, name("Review lapsed"));
+  assert.equal(lapsedRow.place.type, "UNIT");
+
+  // Bucketed by the review day, as care is by its due day.
+  assert.deepEqual(
+    groupMedicalDue([], TODAY, reviews).flatMap((group) =>
+      group.sections.map((section) => [
+        group.title,
+        section.bucket,
+        section.rows.map((row) => row.entry.id),
+      ]),
+    ),
+    [
+      [name("Due kennels"), "OVERDUE", [lapsedReview]],
+      ["Not housed", "TODAY", [todayReview]],
+      ["Not housed", "UPCOMING", [lastDayReview]],
+    ],
+  );
+
+  // A spay scheduled in error, then voided, no longer replaces it.
+  const planned = (
+    await prisma.$transaction((tx) =>
+      scheduleMedicalEntry(
+        tx,
+        {
+          animalId: lapsed,
+          kind: MedicalEntryKind.SURGERY,
+          procedure: SurgeryProcedure.SPAY,
+          dueDate: TODAY,
+        },
+        staffId,
+        TODAY,
+      ),
+    )
+  ).entryId;
+  assert.deepEqual(await reviewsFor([lapsed]), []);
+  await prisma.$transaction((tx) =>
+    voidMedicalEntry(tx, planned, "Scheduled in error.", staffId),
+  );
+  assert.deepEqual(
+    (await reviewsFor([lapsed])).map((row) => row.entry.id),
+    [lapsedReview],
+  );
 });

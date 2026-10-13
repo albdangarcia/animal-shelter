@@ -9,15 +9,22 @@ import {
 } from "@/components/ui/card";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { MedicalEntryKind } from "@/prisma/generated/enums";
-import { MEDICAL_ENTRY_KIND_LABELS } from "@/app/lib/constants/medical";
+import {
+  MEDICAL_ENTRY_KIND_LABELS,
+  SPAY_NEUTER_EXEMPTION_REASON_LABELS,
+  SURGERY_PROCEDURE_LABELS,
+} from "@/app/lib/constants/medical";
 import {
   UPCOMING_DAYS,
   dueBucket,
+  dueRowName,
   type MedicalDueBucket,
 } from "@/app/lib/data/medical-due-groups";
 import type {
   MedicalDueGroup,
   MedicalDueListRow,
+  MedicalDueReviewRow,
+  MedicalDueSectionRow,
 } from "@/app/lib/data/medical-due.data";
 import {
   formatShelterDay,
@@ -25,6 +32,7 @@ import {
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
 import { ScheduledEntryActions } from "@/components/dashboard/animals/medical/scheduled-entry-actions";
+import { ExemptionReviewActions } from "@/components/dashboard/animals/medical/exemption-review-actions";
 import { DUE_HEADING_ID } from "@/components/dashboard/animals/medical/use-entry-dialog-focus";
 import { sameNameDetails } from "@/app/lib/utils/medical-batch";
 import { medicalEntryName } from "@/app/lib/utils/medical-entry-name";
@@ -39,7 +47,7 @@ import {
 // shelter's today, passed in, not the browser's clock.
 
 export const MEDICAL_DUE_TITLE = "Medical Care Due";
-export const MEDICAL_DUE_DESCRIPTION = `Vaccines, tests and treatments that are overdue, due today or due in the next ${UPCOMING_DAYS} days, by where each animal is.`;
+export const MEDICAL_DUE_DESCRIPTION = `Vaccines, tests, treatments, surgeries and microchips that are overdue, due today or due in the next ${UPCOMING_DAYS} days, and spay/neuter exemptions up for review, by where each animal is.`;
 
 const kindOptions = Object.values(MedicalEntryKind).map((kind) => ({
   value: kind,
@@ -103,7 +111,7 @@ const selectableOf = (
 type DueNames = Map<string, string | null>;
 
 /** "Misty", or "Rex (Dog · male, orange, 1 year)" when the name is shared. */
-const animalNameOf = ({ animal }: MedicalDueListRow, names: DueNames) => {
+const animalNameOf = ({ animal }: MedicalDueSectionRow, names: DueNames) => {
   const details = names.get(animal.id);
   return details ? `${animal.name} (${details})` : animal.name;
 };
@@ -124,7 +132,7 @@ export function MedicalDue({
   );
   const selectable = canAdminister
     ? rows
-        .map((row) => selectableOf(row, names))
+        .map((row) => ("review" in row ? null : selectableOf(row, names)))
         .filter((entry): entry is SelectableDue => entry !== null)
     : [];
   return (
@@ -237,16 +245,26 @@ function DueGroup({
               {BUCKET_TITLES[section.bucket]}
             </h3>
             <ul className="space-y-2">
-              {section.rows.map((row) => (
-                <DueRow
-                  key={row.entry.id}
-                  row={row}
-                  names={names}
-                  today={today}
-                  canManage={canManage}
-                  canAdminister={canAdminister}
-                />
-              ))}
+              {section.rows.map((row) =>
+                "review" in row ? (
+                  <ReviewRow
+                    key={row.entry.id}
+                    row={row}
+                    names={names}
+                    today={today}
+                    canManage={canManage}
+                  />
+                ) : (
+                  <DueRow
+                    key={row.entry.id}
+                    row={row}
+                    names={names}
+                    today={today}
+                    canManage={canManage}
+                    canAdminister={canAdminister}
+                  />
+                ),
+              )}
             </ul>
           </section>
         );
@@ -259,6 +277,109 @@ const overdueText = (dueDate: CalendarDay, today: CalendarDay) => {
   const days = shelterDaysBetweenKeys(dueDate, today);
   return `${days} ${days === 1 ? "day" : "days"} overdue`;
 };
+
+/** The animal's name, linking to its Medical page, and where it is. */
+function RowAnimal({
+  row,
+  names,
+}: {
+  row: MedicalDueSectionRow;
+  names: DueNames;
+}) {
+  const { animal, place } = row;
+  // A name another animal on the list shares is told apart by its details.
+  const where = [
+    names.get(animal.id) ?? animal.species,
+    place.type === "UNIT" ? place.unitName : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-2">
+      <Link
+        href={`/dashboard/animals/${animal.id}/medical`}
+        className="font-semibold underline-offset-4 hover:underline"
+      >
+        {animal.name}
+      </Link>
+      <span className="text-sm text-muted-foreground">{where}</span>
+    </p>
+  );
+}
+
+/** The day a row falls due, and how late it is. */
+function RowDay({
+  label,
+  day,
+  today,
+}: {
+  label: string;
+  day: CalendarDay;
+  today: CalendarDay;
+}) {
+  const bucket = dueBucket(day, today);
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="text-muted-foreground">
+        {label} {formatShelterDay(day)}
+      </span>
+      {bucket === "OVERDUE" && (
+        <Badge variant="destructive">{overdueText(day, today)}</Badge>
+      )}
+      {bucket === "TODAY" && <Badge>Due today</Badge>}
+    </div>
+  );
+}
+
+/**
+ * A spay/neuter exemption up for review: why the animal is exempt, and the
+ * two ways to settle it, scheduling the spay or neuter or recording a new
+ * exemption. Both plan care, so they are for a viewer who may manage it.
+ */
+function ReviewRow({
+  row,
+  names,
+  today,
+  canManage,
+}: {
+  row: MedicalDueReviewRow;
+  names: DueNames;
+  today: CalendarDay;
+  canManage: boolean;
+}) {
+  const { entry, animal } = row;
+  const name = animalNameOf(row, names);
+  const reason = SPAY_NEUTER_EXEMPTION_REASON_LABELS[entry.exemptionReason];
+  return (
+    <li
+      className="rounded-lg border p-3"
+      aria-label={`${name}: ${dueRowName(row)}, review on ${formatShelterDay(entry.reviewDate)}`}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+        <div className="min-w-0">
+          <RowAnimal row={row} names={names} />
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">{dueRowName(row)}</span>
+            <Badge variant="outline">{MEDICAL_ENTRY_KIND_LABELS[entry.kind]}</Badge>
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Exempt from {SURGERY_PROCEDURE_LABELS[entry.procedure].toLowerCase()}:{" "}
+            {reason.toLowerCase()}
+            {entry.declineReason && `. ${entry.declineReason}`}
+          </p>
+        </div>
+        <RowDay label="Review on" day={entry.reviewDate} today={today} />
+      </div>
+      {canManage && (
+        <ExemptionReviewActions
+          animalId={animal.id}
+          exemption={entry}
+          animalName={name}
+        />
+      )}
+    </li>
+  );
+}
 
 function DueRow({
   row,
@@ -273,18 +394,11 @@ function DueRow({
   canManage: boolean;
   canAdminister: boolean;
 }) {
-  const { entry, animal, place } = row;
-  const bucket = dueBucket(entry.dueDate, today);
+  const { entry, animal } = row;
   const selectable = canAdminister ? selectableOf(row, names) : null;
   // A name another animal on the list shares is told apart by its details,
   // in the row and in every control that names it.
   const name = animalNameOf(row, names);
-  const where = [
-    names.get(animal.id) ?? animal.species,
-    place.type === "UNIT" ? place.unitName : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
 
   return (
     <li
@@ -295,32 +409,14 @@ function DueRow({
         <div className="flex min-w-0 items-start gap-3">
           {selectable && <DueRowCheckbox entry={selectable} />}
           <div className="min-w-0">
-          <p className="flex flex-wrap items-baseline gap-x-2">
-            <Link
-              href={`/dashboard/animals/${animal.id}/medical`}
-              className="font-semibold underline-offset-4 hover:underline"
-            >
-              {animal.name}
-            </Link>
-            <span className="text-sm text-muted-foreground">{where}</span>
-          </p>
-          <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium">{medicalEntryName(entry)}</span>
-            <Badge variant="outline">{MEDICAL_ENTRY_KIND_LABELS[entry.kind]}</Badge>
-          </p>
+            <RowAnimal row={row} names={names} />
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+              <span className="font-medium">{medicalEntryName(entry)}</span>
+              <Badge variant="outline">{MEDICAL_ENTRY_KIND_LABELS[entry.kind]}</Badge>
+            </p>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="text-muted-foreground">
-            Due {formatShelterDay(entry.dueDate)}
-          </span>
-          {bucket === "OVERDUE" && (
-            <Badge variant="destructive">
-              {overdueText(entry.dueDate, today)}
-            </Badge>
-          )}
-          {bucket === "TODAY" && <Badge>Due today</Badge>}
-        </div>
+        <RowDay label="Due" day={entry.dueDate} today={today} />
       </div>
       <ScheduledEntryActions
         animalId={animal.id}

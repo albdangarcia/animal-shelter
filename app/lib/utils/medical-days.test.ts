@@ -71,6 +71,10 @@ test("dueDateIssue: from today up to five years ahead", () => {
     dueDateIssue(day("2031-10-11"), today),
     "The due date can't be more than 5 years from today.",
   );
+  assert.equal(
+    dueDateIssue(day("2026-10-09"), today, "The review date"),
+    "The review date can't be in the past.",
+  );
 });
 
 test("nextDueDate: the day given plus the interval", () => {

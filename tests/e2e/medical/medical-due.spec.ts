@@ -44,6 +44,11 @@ type DayKey = string;
 const todayIn = (zone: string): DayKey =>
   new Intl.DateTimeFormat("en-CA", { timeZone: zone }).format(new Date());
 
+const shiftDay = (day: DayKey, days: number): DayKey =>
+  new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
 // The app prints a day as "Feb 1, 2026". Read at midnight UTC, so the key
 // cannot slip a day.
 const printedDay = (day: DayKey) =>
@@ -346,6 +351,73 @@ test("batch entry gives two animals in one unit a treatment, and two due rows ar
   await expect(
     page.getByRole("heading", { level: 1, name: "Medical Care Due" }),
   ).toBeFocused();
+});
+
+test("an exemption up for review is overdue on the list, and scheduling the spay from it takes it off", async ({
+  page,
+}, testInfo) => {
+  const today = todayIn(SHELTER_ZONE);
+  const note = `Spay planned from the review, attempt ${testInfo.retry}-${testInfo.repeatEachIndex}.`;
+
+  // The seed's lapsed exemption: a kitten too young to spay, whose review day
+  // was two days ago. Its animal is generated, and shares its name with
+  // others, so the row is found by what it is, not by the name.
+  await page.goto("/dashboard/medical/due");
+  const reviews = page
+    .getByRole("region", { name: "Overdue", exact: true })
+    .getByRole("listitem")
+    .filter({ hasText: "Spay/neuter exemption review" });
+  await expect(reviews).toHaveCount(1);
+  const review = reviews.first();
+  await expect(review).toContainText("Exempt from spay: too young or underweight");
+  await expect(review).toContainText(/\d+ days overdue/);
+  // Batched care only: a review has no checkbox.
+  await expect(review.getByRole("checkbox")).toHaveCount(0);
+  const medicalPath = await review.getByRole("link").first().getAttribute("href");
+  expect(medicalPath).toMatch(/^\/dashboard\/animals\/[^/]+\/medical$/);
+
+  try {
+    // Schedule the spay from it: the form starts on Surgery and Spay.
+    await review.getByRole("button", { name: /^Schedule spay\/neuter/ }).click();
+    const schedule = page.getByRole("dialog", { name: /^Schedule a spay/ });
+    await expect(schedule.getByRole("combobox", { name: /^Kind/ })).toHaveText("Surgery");
+    await expect(schedule.getByRole("combobox", { name: /^Procedure/ })).toHaveText("Spay");
+    await pickDay(page, schedule.getByRole("button", { name: /^Due date \*:/ }), shiftDay(today, 3));
+    await schedule.getByLabel("Notes").fill(note);
+    await schedule.getByRole("button", { name: "Schedule" }).click();
+    await expect(schedule).toBeHidden();
+
+    // The spay replaces the exemption under review, so the row leaves, and
+    // focus goes to the page heading.
+    await expect(reviews).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Medical Care Due" }),
+    ).toBeFocused();
+  } finally {
+    // Void the spay this attempt scheduled, so the fixture is up for review
+    // again for a retry, or the next run against this database.
+    await page.goto(medicalPath!);
+    const dueOnPage = page.getByRole("region", { name: "Due", exact: true });
+    // The page streams in: count only once its due list is there.
+    await expect(dueOnPage.getByRole("heading", { name: "Due" })).toBeVisible();
+    const planned = dueOnPage.locator("li[aria-label]").filter({ hasText: note });
+    if ((await planned.count()) > 0) {
+      await pickFromMenu(
+        page,
+        planned.first().getByRole("button", { name: /^Actions for Spay/ }),
+        /Void/,
+      );
+      const voidDialog = page.getByRole("alertdialog");
+      await voidDialog.getByLabel("Reason for voiding").fill("Scheduled by a test.");
+      await voidDialog.getByRole("button", { name: "Void Entry" }).click();
+      await expect(voidDialog).toBeHidden();
+      await expect(planned).toHaveCount(0);
+    }
+  }
+
+  // With the spay voided, the exemption is up for review again.
+  await page.goto("/dashboard/medical/due");
+  await expect(reviews).toHaveCount(1);
 });
 
 test("a volunteer reads the due list, but can't record it together or open batch entry", async ({

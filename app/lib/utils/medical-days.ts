@@ -76,15 +76,17 @@ export const latestDueDate = (today: CalendarDay): CalendarDay =>
 /**
  * Why `dueDate` can't be a due day when today is `today`, or null when it
  * can. Care is scheduled from today on: a day already past would be overdue
- * the moment it was saved.
+ * the moment it was saved. A spay/neuter exemption's review day follows the
+ * same rule, and passes its own `label`.
  */
 export const dueDateIssue = (
   dueDate: CalendarDay,
   today: CalendarDay,
+  label = "The due date",
 ): string | null => {
-  if (dueDate < today) return "The due date can't be in the past.";
+  if (dueDate < today) return `${label} can't be in the past.`;
   if (dueDate > latestDueDate(today)) {
-    return `The due date can't be more than ${MAX_SCHEDULE_AHEAD_YEARS} years from today.`;
+    return `${label} can't be more than ${MAX_SCHEDULE_AHEAD_YEARS} years from today.`;
   }
   return null;
 };

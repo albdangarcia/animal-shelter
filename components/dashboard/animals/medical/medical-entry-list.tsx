@@ -5,6 +5,7 @@ import { MedicalEntryItem } from "./medical-entry-item";
 import { MedicalEntryActions } from "./medical-entry-actions";
 import { MedicalEntryChanges } from "./medical-entry-changes";
 import { ScheduledEntryActions } from "./scheduled-entry-actions";
+import { ExemptionReviewActions } from "./exemption-review-actions";
 
 interface Props {
   entries: MedicalEntryDisplay[];
@@ -20,7 +21,8 @@ interface Props {
   due?: boolean;
   /**
    * On the due list, the spay/neuter exemption open for review: it is due on
-   * its review day, and isn't recorded, rescheduled or declined.
+   * its review day. It isn't recorded, rescheduled or declined: the spay or
+   * neuter is scheduled from it, or a new exemption recorded.
    */
   reviewId?: string | null;
   className?: string;
@@ -30,7 +32,8 @@ interface Props {
  * Entries with their change history, and the row actions menu on each one
  * that isn't voided when the viewer may manage them: Void on every entry,
  * and Edit on given care only. On the due list, each row of scheduled care
- * also gets Record, Reschedule and Decline.
+ * also gets Record, Reschedule and Decline, and the exemption open for
+ * review gets its own two actions.
  */
 export function MedicalEntryList({
   entries,
@@ -60,6 +63,20 @@ export function MedicalEntryList({
           }
           footer={
             <>
+              {due &&
+                controls?.canManage &&
+                entry.id === reviewId &&
+                entry.procedure &&
+                entry.exemptionReason && (
+                  <ExemptionReviewActions
+                    animalId={controls.animalId}
+                    exemption={{
+                      procedure: entry.procedure,
+                      exemptionReason: entry.exemptionReason,
+                    }}
+                    options={controls.options}
+                  />
+                )}
               {due && controls && entry.id !== reviewId && (
                 <ScheduledEntryActions
                   animalId={controls.animalId}
