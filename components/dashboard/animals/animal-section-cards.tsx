@@ -17,17 +17,20 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AnimalSectionCardPayload, IDParamType } from "@/app/lib/types";
 import { fetchSectionCardsAnimalData } from "@/app/lib/data/animals/animal.data";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { notFound } from "next/navigation";
 import {
   type AnimalHealthStatus,
   AnimalListingStatus,
-  Sex,
 } from "@/prisma/generated/enums";
 import { calculateAgeString, formatTimeAgo } from "@/app/lib/utils/date-utils";
 import {
   calendarDay,
+  formatShelterDay,
   startOfShelterDay,
 } from "@/app/lib/utils/shelter-day";
+import type { SpayNeuterStatus } from "@/app/lib/utils/spay-neuter";
+import { SURGERY_PROCEDURE_LABELS } from "@/app/lib/constants/medical";
 import {
   formatSingleEnumOption,
   formatAnimalSize,
@@ -68,6 +71,44 @@ const HEALTH_STATUS_ALERTS = {
   { variant: "default" | "destructive"; label: string }
 >;
 
+// "Yes (spay)", "Exempt until Nov 3, 2026", "Exempt" or "Not on record". The
+// Medical tab has the detail.
+const spayNeuterText = (status: SpayNeuterStatus) => {
+  switch (status.status) {
+    case "ALTERED":
+      return `Yes (${SURGERY_PROCEDURE_LABELS[status.procedure].toLowerCase()})`;
+    case "EXEMPT":
+      return status.reviewDate
+        ? `Exempt until ${formatShelterDay(status.reviewDate)}`
+        : "Exempt";
+    case "UNKNOWN":
+      return "Not on record";
+  }
+};
+
+// A fact from the medical record: it links to the Medical tab for someone who
+// can read it there, and is plain text otherwise.
+const MedicalValue = ({
+  href,
+  className,
+  children,
+}: {
+  href: string | null;
+  className?: string;
+  children: ReactNode;
+}) =>
+  href ? (
+    <Link
+      href={href}
+      className={cn(className, "underline-offset-4 hover:underline")}
+    >
+      {children}
+      <span className="sr-only"> (medical record)</span>
+    </Link>
+  ) : (
+    <span className={className}>{children}</span>
+  );
+
 interface Props {
   params: IDParamType;
 }
@@ -87,6 +128,9 @@ const AnimalSectionCards = async ({ params }: Props) => {
   const canManage = await hasPermission(AppPermissions.ANIMAL_INFO_MANAGE);
   const canReadFosters = await hasPermission(AppPermissions.FOSTERS_READ);
   const canManageFosters = await hasPermission(AppPermissions.FOSTERS_MANAGE);
+  const canReadMedical = await hasPermission(AppPermissions.MEDICAL_READ);
+  const medicalHref = `/dashboard/animals/${animal.id}/medical`;
+  const { spayNeuter, chips } = animal.medicalStatus;
 
   // "currently in foster" is derived from an open placement, never
   // stored as a flag. At most one open placement can exist per animal.
@@ -357,19 +401,19 @@ const AnimalSectionCards = async ({ params }: Props) => {
                     <span className="text-muted-foreground">
                       Spayed/Neutered
                     </span>
-                    <span className="font-medium text-foreground">
-                      {animal.sex !== Sex.UNKNOWN ? (
-                        animal.isSpayedNeutered ? (
-                          <span className="flex items-center gap-1 text-green-600">
-                            <CheckCircle2 className="h-4 w-4" /> Yes
-                          </span>
-                        ) : (
-                          <span>No</span>
-                        )
-                      ) : (
-                        <span>N/A</span>
+                    <MedicalValue
+                      href={canReadMedical ? medicalHref : null}
+                      className={cn(
+                        "font-medium text-foreground",
+                        spayNeuter.status === "ALTERED" &&
+                          "flex items-center gap-1 text-green-600",
                       )}
-                    </span>
+                    >
+                      {spayNeuter.status === "ALTERED" && (
+                        <CheckCircle2 className="h-4 w-4" />
+                      )}
+                      {spayNeuterText(spayNeuter)}
+                    </MedicalValue>
                   </div>
                   <div className="flex items-center justify-between border-b pb-2 text-sm">
                     <span className="text-muted-foreground">Health Status</span>
@@ -413,9 +457,18 @@ const AnimalSectionCards = async ({ params }: Props) => {
                   </div>
                   <div className="flex items-center justify-between border-b pb-2 text-sm">
                     <span className="text-muted-foreground">Microchip</span>
-                    <span className="font-mono text-xs font-medium">
-                      {animal.microchipNumber || "Not microchipped"}
-                    </span>
+                    <MedicalValue
+                      href={canReadMedical ? medicalHref : null}
+                      className="flex flex-col items-end font-medium"
+                    >
+                      {chips.length > 0
+                        ? chips.map((chip) => (
+                            <span key={chip.entryId} className="font-mono text-xs">
+                              {chip.chipNumber}
+                            </span>
+                          ))
+                        : "None on record"}
+                    </MedicalValue>
                   </div>
                   <div className="flex items-center justify-between border-b pb-2 text-sm">
                     <span className="text-muted-foreground">Primary Color</span>

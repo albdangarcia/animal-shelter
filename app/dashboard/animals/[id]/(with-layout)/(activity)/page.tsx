@@ -35,21 +35,28 @@ const PageContent = async ({ params, searchParams }: Props) => {
     canReadAnimalInfo,
     canReadAssessments,
     canReadCharacteristics,
+    canReadMedical,
     manageAssessments,
     manageAnimalInfo,
     managePhotos,
+    manageMedical,
   ] = await Promise.all([
     fetchAnimalActivityLogs(currentPage, animalId),
     hasPermission(AppPermissions.ANIMAL_INFO_READ),
     hasPermission(AppPermissions.ANIMAL_ASSESSMENT_READ),
     hasPermission(AppPermissions.ANIMAL_CHARACTERISTICS_READ),
+    hasPermission(AppPermissions.MEDICAL_READ),
     hasPermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE),
     hasPermission(AppPermissions.ANIMAL_INFO_MANAGE),
     hasPermission(AppPermissions.ANIMAL_PHOTO_MANAGE),
+    hasPermission(AppPermissions.MEDICAL_MANAGE),
   ]);
 
   const canReadReadiness =
-    canReadAnimalInfo && canReadAssessments && canReadCharacteristics;
+    canReadAnimalInfo &&
+    canReadAssessments &&
+    canReadCharacteristics &&
+    canReadMedical;
 
   return (
     <div className="flex flex-col gap-4">
@@ -57,7 +64,12 @@ const PageContent = async ({ params, searchParams }: Props) => {
         <AnimalReadinessPanel
           animalId={animalId}
           blockers={await fetchAnimalReadiness(animalId)}
-          can={{ manageAssessments, manageAnimalInfo, managePhotos }}
+          can={{
+            manageAssessments,
+            manageAnimalInfo,
+            managePhotos,
+            manageMedical,
+          }}
         />
       )}
       <ActivityFeed activityLogs={activityLogs} totalPages={totalPages} />

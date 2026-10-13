@@ -57,7 +57,7 @@ const SpotlightHero = ({
   // Never assert the negative: an animal that isn't neutered simply drops the
   // word, and an animal with neither flag renders no badge at all.
   const badges = [
-    animal.isSpayedNeutered && "Neutered",
+    animal.isAltered && "Neutered",
     animal.hasMicrochip && "Chipped",
   ].filter((badge): badge is string => Boolean(badge));
 

@@ -367,6 +367,7 @@ export interface ReadinessViewerCan {
   manageAssessments: boolean;
   manageAnimalInfo: boolean;
   managePhotos: boolean;
+  manageMedical: boolean;
 }
 
 /**
@@ -396,9 +397,10 @@ export function blockerAction(
     case "UNSUPPORTED_CHARACTERISTIC":
       return { label: "Review characteristics", href: `${animal}/characteristics` };
     case "NOT_SPAYED_NEUTERED":
-      return can.manageAnimalInfo
-        ? { label: "Update spay/neuter status", href: `${animal}/edit` }
-        : { label: "View profile", href: animal };
+      return {
+        label: can.manageMedical ? "Record spay/neuter" : "View medical record",
+        href: `${animal}/medical`,
+      };
     case "ACUTE_HEALTH":
       return can.manageAnimalInfo
         ? { label: "Update health status", href: `${animal}/edit` }

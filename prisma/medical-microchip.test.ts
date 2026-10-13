@@ -28,6 +28,7 @@ import {
   type RecordMedicalEntryInput,
 } from "@/app/lib/services/medical-entry";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
+import { animalSearchWhere } from "@/app/lib/data/search/global-search";
 
 // Random, not the time: the files run in parallel.
 const runId = randomUUID().slice(0, 8);
@@ -580,4 +581,58 @@ test("a chip never schedules a next one", async () => {
     /Only a catalog item can repeat/,
   );
   assert.equal(await prisma.medicalEntry.count({ where: { animalId } }), 0);
+});
+
+test("global search finds an animal by a chip it carries, typed however it was read", async () => {
+  const twoChips = await makeAnimal("Search two chips");
+  const voidedOnly = await makeAnimal("Search voided chip");
+  const scheduledOnly = await makeAnimal("Search scheduled chip");
+
+  const first = chipNumber();
+  const second = chipNumber();
+  await record(twoChips, microchip({ chipNumber: first }));
+  await record(
+    twoChips,
+    microchip({
+      chipNumber: second,
+      completedDate: null,
+      source: MedicalEntrySource.BEFORE_INTAKE,
+    }),
+  );
+
+  const voided = chipNumber();
+  const { entryId: voidedId } = await record(voidedOnly, microchip({ chipNumber: voided }));
+  await voidEntry(voidedId, "Mistyped.");
+
+  // A scheduled chip has no number until it is given. Force one onto it, so
+  // the search's own status filter is what leaves it out.
+  const planned = chipNumber();
+  const { entryId: scheduledId } = await prisma.$transaction((tx) =>
+    scheduleMedicalEntry(
+      tx,
+      { animalId: scheduledOnly, kind: MedicalEntryKind.MICROCHIP, dueDate: day("2026-10-20") },
+      staffId,
+      TODAY,
+    ),
+  );
+  await prisma.medicalEntry.update({
+    where: { id: scheduledId },
+    data: { chipNumber: planned },
+  });
+
+  const found = async (query: string) =>
+    (
+      await prisma.animal.findMany({
+        where: { AND: [animalSearchWhere(query), { speciesId }] },
+        select: { id: true },
+      })
+    ).map((animal) => animal.id);
+
+  assert.deepEqual(await found(first), [twoChips]);
+  assert.deepEqual(await found(second), [twoChips]);
+  // Lower case, with a space and a hyphen between groups.
+  const typed = `${first.slice(0, 5)} ${first.slice(5, 10)}-${first.slice(10)}`.toLowerCase();
+  assert.deepEqual(await found(typed), [twoChips]);
+  assert.deepEqual(await found(voided), []);
+  assert.deepEqual(await found(planned), []);
 });

@@ -7,12 +7,15 @@
  * Every blocker carries `since`: when the recorded evidence says it began.
  * Nothing about a blocker is stored, so this is read off dates the evidence
  * already has — the start of the current stay, an observation, a deletion,
- * an edit. `null` means nothing in the app dates the onset at all.
+ * an edit, the day after a spay/neuter exemption lapsed. `null` means
+ * nothing in the app dates the onset at all.
  */
 
 import type { AssessmentSignal, AnimalHealthStatus } from "@/prisma/generated/enums";
 import { ACUTE_HEALTH_STATUSES } from "../data/animals/attention-queue";
 import type { ReadinessRequirement } from "./requirements";
+import type { SpayNeuterStatus } from "../utils/spay-neuter";
+import { shiftDayKey, startOfShelterDay } from "../utils/shelter-day";
 
 export type CharacteristicClaimIssue =
   /** A live finding on the animal argues against the trait. */
@@ -47,7 +50,12 @@ export type ReadinessBlocker =
        *  can't be undermined before it was made. */
       since: Date;
     }
-  | { kind: "NOT_SPAYED_NEUTERED"; since: Date }
+  | {
+      kind: "NOT_SPAYED_NEUTERED";
+      /** The start of the current stay, or the day after an exemption
+       *  lapsed when that is later. */
+      since: Date;
+    }
   | {
       kind: "NO_PHOTO";
       /** The start of the current stay. Removing a photo isn't dated, so an
@@ -102,12 +110,16 @@ export interface ComputeReadinessInputs {
   assessments: ReadinessAssessment[];
   /** The animal's active characteristic assignments. */
   claims: ReadinessCharacteristicClaim[];
-  isSpayedNeutered: boolean;
+  /** From the medical record: no spay or neuter given and no exemption in
+   *  force reads as UNKNOWN, which blocks. */
+  spayNeuter: SpayNeuterStatus;
   hasPhoto: boolean;
   healthStatus: AnimalHealthStatus | null;
   /** When the animal's current stay began (its latest intake). What it needs
    *  from arrival — required checks, a photo, spay/neuter — is due from here. */
   inCareSince: Date;
+  /** The shelter's timezone, to read a lapsed exemption's day as an instant. */
+  timezone: string;
 }
 
 const laterOf = (a: Date, b: Date): Date => (a > b ? a : b);
@@ -202,8 +214,19 @@ export function computeReadiness(
     ...characteristicClaimBlockers(inputs.claims),
   ];
 
-  if (!inputs.isSpayedNeutered) {
-    blockers.push({ kind: "NOT_SPAYED_NEUTERED", since: inputs.inCareSince });
+  if (inputs.spayNeuter.status === "UNKNOWN") {
+    // An exemption covered the animal up to and including its review day, so
+    // the need starts the day after — unless that was before this stay.
+    const { lapsedOn } = inputs.spayNeuter;
+    blockers.push({
+      kind: "NOT_SPAYED_NEUTERED",
+      since: lapsedOn
+        ? laterOf(
+            inputs.inCareSince,
+            startOfShelterDay(shiftDayKey(lapsedOn, 1), inputs.timezone),
+          )
+        : inputs.inCareSince,
+    });
   }
   if (!inputs.hasPhoto) {
     blockers.push({ kind: "NO_PHOTO", since: inputs.inCareSince });

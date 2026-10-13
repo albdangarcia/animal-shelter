@@ -6,6 +6,7 @@ import {
   type ReadinessAssessment,
   type ReadinessCharacteristicClaim,
 } from "./compute-readiness";
+import type { CalendarDay } from "../utils/shelter-day";
 
 const NOW = new Date(2026, 8, 12, 12, 0);
 const DAY = 24 * 60 * 60 * 1000;
@@ -16,11 +17,20 @@ const baseInputs: ComputeReadinessInputs = {
   requirements: [],
   assessments: [],
   claims: [],
-  isSpayedNeutered: true,
+  spayNeuter: {
+    status: "ALTERED",
+    entryId: "e1",
+    procedure: "SPAY",
+    completedDate: null,
+  },
   hasPhoto: true,
   healthStatus: "HEALTHY",
   inCareSince: IN_CARE_SINCE,
+  timezone: "America/Los_Angeles",
 };
+
+const day = (value: string) => value as CalendarDay;
+const UNKNOWN = { status: "UNKNOWN", lapsedOn: null } as const;
 
 const assessment = (
   overrides: Partial<ReadinessAssessment> = {},
@@ -226,8 +236,43 @@ test("an unassigned, unproblematic claim is never passed in — no blocker from 
   assert.deepEqual(blockers, []);
 });
 
-test("not spayed or neutered blocks from the start of the stay", () => {
-  const blockers = computeReadiness({ ...baseInputs, isSpayedNeutered: false });
+test("no spay or neuter on record blocks from the start of the stay", () => {
+  const blockers = computeReadiness({ ...baseInputs, spayNeuter: UNKNOWN });
+  assert.deepEqual(blockers, [{ kind: "NOT_SPAYED_NEUTERED", since: IN_CARE_SINCE }]);
+});
+
+test("an exemption in force does not block, with or without a review day", () => {
+  for (const reviewDate of [day("2026-10-01"), null]) {
+    const blockers = computeReadiness({
+      ...baseInputs,
+      spayNeuter: {
+        status: "EXEMPT",
+        entryId: "e1",
+        reason: "TOO_YOUNG_OR_UNDERWEIGHT",
+        reviewDate,
+      },
+    });
+    assert.deepEqual(blockers, []);
+  }
+});
+
+test("a lapsed exemption blocks from the start of the day after its review day", () => {
+  // Reviewed Sep 5 in Los Angeles, so needed from midnight Sep 6 there
+  // (07:00 UTC, daylight time), well after this stay began.
+  const blockers = computeReadiness({
+    ...baseInputs,
+    spayNeuter: { status: "UNKNOWN", lapsedOn: day("2026-09-05") },
+  });
+  assert.deepEqual(blockers, [
+    { kind: "NOT_SPAYED_NEUTERED", since: new Date("2026-09-06T07:00:00Z") },
+  ]);
+});
+
+test("an exemption that lapsed before this stay began blocks from the stay", () => {
+  const blockers = computeReadiness({
+    ...baseInputs,
+    spayNeuter: { status: "UNKNOWN", lapsedOn: day("2026-01-10") },
+  });
   assert.deepEqual(blockers, [{ kind: "NOT_SPAYED_NEUTERED", since: IN_CARE_SINCE }]);
 });
 
@@ -275,10 +320,11 @@ test("every blocker kind can appear together on one animal", () => {
     requirements: [{ templateKey: "INTAKE_MEDICAL", templateName: "Intake Medical" }],
     assessments: [assessment({ signal: "ESCALATE", templateKey: "CAT_TEST", templateName: "Cat Test" })],
     claims: [claim({ contradictedAt: daysBefore(1) })],
-    isSpayedNeutered: false,
+    spayNeuter: UNKNOWN,
     hasPhoto: false,
     healthStatus: "UNDER_VET_CARE",
     inCareSince: IN_CARE_SINCE,
+    timezone: "America/Los_Angeles",
   });
   const kinds = blockers.map((b) => b.kind).sort();
   assert.deepEqual(kinds, [

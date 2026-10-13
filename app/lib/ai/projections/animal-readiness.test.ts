@@ -22,11 +22,13 @@ const STAFF: ReadinessViewerCan = {
   manageAssessments: true,
   manageAnimalInfo: true,
   managePhotos: true,
+  manageMedical: true,
 };
 const VOLUNTEER: ReadinessViewerCan = {
   manageAssessments: false,
   manageAnimalInfo: false,
   managePhotos: false,
+  manageMedical: false,
 };
 
 const buddy = (
@@ -196,7 +198,8 @@ test("an item's description is the board's wording", () => {
 });
 
 test("the next step is worded for what the viewer may change", () => {
-  const blockers = [missingBehavioral, noPhoto];
+  const notAltered: ReadinessBlocker = { kind: "NOT_SPAYED_NEUTERED", since: ARRIVED };
+  const blockers = [missingBehavioral, notAltered, noPhoto];
   const staff = toAnimalReadinessView(buddy(blockers), STAFF, NOW);
   const volunteer = toAnimalReadinessView(buddy(blockers), VOLUNTEER, NOW);
   assert.equal(staff.status, "NOT_READY");
@@ -204,11 +207,11 @@ test("the next step is worded for what the viewer may change", () => {
   if (staff.status !== "NOT_READY" || volunteer.status !== "NOT_READY") return;
   assert.deepEqual(
     staff.outstanding.map((b) => b.nextStep),
-    ["Record Intake Behavioral", "Add a photo"],
+    ["Record Intake Behavioral", "Record spay/neuter", "Add a photo"],
   );
   assert.deepEqual(
     volunteer.outstanding.map((b) => b.nextStep),
-    ["View assessments", "View photos"],
+    ["View assessments", "View medical record", "View photos"],
   );
 });
 

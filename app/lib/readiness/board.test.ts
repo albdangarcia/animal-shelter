@@ -333,8 +333,18 @@ test("filter options come from the animals present, in a stable order", () => {
   assert.deepEqual(options.stages.map((o) => o.value), ["DRAFT", "PUBLISHED", "PENDING_ADOPTION"]);
 });
 
-const EVERYTHING = { manageAssessments: true, manageAnimalInfo: true, managePhotos: true };
-const READ_ONLY = { manageAssessments: false, manageAnimalInfo: false, managePhotos: false };
+const EVERYTHING = {
+  manageAssessments: true,
+  manageAnimalInfo: true,
+  managePhotos: true,
+  manageMedical: true,
+};
+const READ_ONLY = {
+  manageAssessments: false,
+  manageAnimalInfo: false,
+  managePhotos: false,
+  manageMedical: false,
+};
 
 test("a missing check links to recording that template", () => {
   const missingBlocker: ReadinessBlocker = {
@@ -382,7 +392,7 @@ test("every other kind links to the page where it is cleared", () => {
       "/dashboard/animals/a1/characteristics",
       "/dashboard/animals/a1/characteristics",
     ],
-    [{ kind: "NOT_SPAYED_NEUTERED", since: at(1) }, "/dashboard/animals/a1/edit", "/dashboard/animals/a1"],
+    [{ kind: "NOT_SPAYED_NEUTERED", since: at(1) }, "/dashboard/animals/a1/medical", "/dashboard/animals/a1/medical"],
     [
       { kind: "ACUTE_HEALTH", healthStatus: "UNDER_VET_CARE", since: null },
       "/dashboard/animals/a1/edit",
@@ -394,4 +404,25 @@ test("every other kind links to the page where it is cleared", () => {
     assert.equal(blockerAction(blocker, "a1", EVERYTHING).href, manageHref, blocker.kind);
     assert.equal(blockerAction(blocker, "a1", READ_ONLY).href, readHref, blocker.kind);
   }
+});
+
+test("spay/neuter links to the medical record, worded for who may record it", () => {
+  const blocker: ReadinessBlocker = { kind: "NOT_SPAYED_NEUTERED", since: at(1) };
+  assert.deepEqual(blockerAction(blocker, "a1", EVERYTHING), {
+    label: "Record spay/neuter",
+    href: "/dashboard/animals/a1/medical",
+  });
+  assert.deepEqual(blockerAction(blocker, "a1", READ_ONLY), {
+    label: "View medical record",
+    href: "/dashboard/animals/a1/medical",
+  });
+  // Recording it takes the medical permission, not the profile's.
+  assert.equal(
+    blockerAction(blocker, "a1", { ...READ_ONLY, manageAnimalInfo: true }).label,
+    "View medical record",
+  );
+  assert.equal(
+    blockerAction(blocker, "a1", { ...EVERYTHING, manageAnimalInfo: false }).label,
+    "Record spay/neuter",
+  );
 });

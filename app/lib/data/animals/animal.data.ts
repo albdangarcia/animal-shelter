@@ -27,6 +27,8 @@ import {
   DERIVATION_APPLICATION_SELECT,
   effectiveApplicationStatuses,
 } from "../application-status.data";
+import { getShelterToday } from "../shelter-settings.data";
+import { findMedicalStatus } from "./medical-status";
 
 // data for the animals table in the dashboard
 const _fetchAnimals = async (
@@ -126,6 +128,9 @@ const _fetchAnimals = async (
 // gate each one's dedicated tab, not the overview. The weight/vitals-trend field
 // follows that same established pattern rather than requiring ANIMAL_VITALS_READ
 // — keep it consistent with the fields beside it if this ever gets re-examined.
+// So do the spay/neuter status and the chip numbers, read from the medical
+// record rather than behind MEDICAL_READ: they identify the animal, and were
+// fields on its profile before the record held them.
 const _fetchSectionCardsAnimalData = async (
   id: string,
 ): Promise<AnimalSectionCardPayload | null> => {
@@ -146,9 +151,7 @@ const _fetchSectionCardsAnimalData = async (
         birthDate: true,
         sex: true,
         size: true,
-        microchipNumber: true,
         listingStatus: true,
-        isSpayedNeutered: true,
         healthStatus: true,
         animalImages: {
           select: {
@@ -249,15 +252,19 @@ const _fetchSectionCardsAnimalData = async (
       return null;
     }
 
-    const statuses = await effectiveApplicationStatuses(
-      animal.adoptionApplications,
-    );
+    const [statuses, medicalStatus] = await Promise.all([
+      effectiveApplicationStatuses(animal.adoptionApplications),
+      getShelterToday().then((today) =>
+        findMedicalStatus(prisma, animal.id, today),
+      ),
+    ]);
     return {
       ...animal,
       adoptionApplications: animal.adoptionApplications.map((application) => ({
         id: application.id,
         status: statuses.get(application.id)!,
       })),
+      medicalStatus,
     };
   } catch (error) {
     console.error("Error fetching animal by ID.", error);

@@ -29,10 +29,18 @@ import {
   type RecordSpayNeuterExemptionInput,
 } from "@/app/lib/services/medical-entry";
 import {
+  ALTERED_ENTRY_WHERE,
+  ALTERED_OR_CHIPPED_SELECT,
+  CURRENT_CHIP_WHERE,
+  alteredAndChipped,
   findMedicalStatus,
   findSpayNeuterEntries,
 } from "@/app/lib/data/animals/medical-status";
 import { findMedicalHistoryPage } from "@/app/lib/data/animals/medical-entry";
+import {
+  findAnimalReadiness,
+  findReadinessForAnimals,
+} from "@/app/lib/data/animals/readiness";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
 // Random, not the time: the files run in parallel.
@@ -575,6 +583,140 @@ test("the medical status reads Altered, Exempt or Unknown, with the chips the an
     },
     { entryId: older, chipNumber: `${base}000001`, brand: null, completedDate: null },
   ]);
+});
+
+test("readiness reads each animal's spay/neuter status from its record, on the day it is given", async () => {
+  const nothing = await makeAnimal("Readiness nothing");
+  const altered = await makeAnimal("Readiness altered");
+  const exempt = await makeAnimal("Readiness exempt");
+  const lapsed = await makeAnimal("Readiness lapsed");
+  await spayGiven(altered);
+  await exemption(exempt, {
+    exemptionReason: SpayNeuterExemptionReason.MEDICAL_RISK,
+  });
+  // Recorded three weeks ago, to be reviewed five days ago.
+  await exemption(lapsed, { reviewDate: day("2026-10-05") }, day("2026-09-19"));
+  // Left care: frozen history, never on the board.
+  const archived = await makeAnimal("Readiness archived");
+  await prisma.animal.update({
+    where: { id: archived },
+    data: { listingStatus: AnimalListingStatus.ARCHIVED },
+  });
+
+  const timezone = "America/Los_Angeles";
+  const animalIds = [nothing, altered, exempt, lapsed];
+  // The spay/neuter blocker of each animal, as the single-animal read and
+  // the board's read give it. The board's read is narrowed to this test's
+  // animals, so other files deleting theirs mid-read can't reach it.
+  const blockerSince = async (today: CalendarDay) => {
+    const one = new Map<string, Date | null>();
+    for (const animalId of animalIds) {
+      const readiness = await findAnimalReadiness(prisma, animalId, {
+        timezone,
+        today,
+      });
+      const blocker = readiness?.blockers.find(
+        (b) => b.kind === "NOT_SPAYED_NEUTERED",
+      );
+      one.set(animalId, blocker?.since ?? null);
+    }
+    const board = new Map<string, Date | null>();
+    const boardRows = await findReadinessForAnimals(
+      prisma,
+      { timezone, today },
+      { animalIds: [...animalIds, archived] },
+    );
+    assert.deepEqual(
+      boardRows.map(({ animal }) => animal.id).sort(),
+      [...animalIds].sort(),
+      "the board lists exactly the animals in care it was asked for",
+    );
+    for (const { animal, blockers } of boardRows) {
+      const blocker = blockers.find((b) => b.kind === "NOT_SPAYED_NEUTERED");
+      board.set(animal.id, blocker?.since ?? null);
+    }
+    assert.deepEqual(board, one, "the board and the single read disagree");
+    return one;
+  };
+
+  // The stay began Aug 1 in Los Angeles (07:00 UTC, daylight time).
+  const stayBegan = new Date("2026-08-01T07:00:00Z");
+  const onToday = await blockerSince(TODAY);
+  assert.deepEqual(onToday.get(nothing), stayBegan);
+  assert.equal(onToday.get(altered), null);
+  assert.equal(onToday.get(exempt), null);
+  // Needed from the start of the day after the review day.
+  assert.deepEqual(onToday.get(lapsed), new Date("2026-10-06T07:00:00Z"));
+
+  // On its review day the exemption still holds: the day given is the one
+  // the status is read on, whatever the clock says.
+  const onReviewDay = await blockerSince(day("2026-10-05"));
+  assert.equal(onReviewDay.get(lapsed), null);
+  assert.deepEqual(onReviewDay.get(nothing), stayBegan);
+});
+
+test("the altered and chipped fragments count only a spay given and a chip carried", async () => {
+  const both = await makeAnimal("Fragments both");
+  const exemptVoidedChip = await makeAnimal("Fragments exempt");
+  const voidedSpayScheduledChip = await makeAnimal("Fragments voided spay");
+  const chipOnly = await makeAnimal("Fragments chip only");
+  const base = `${runId}`.toUpperCase();
+
+  await spayGiven(both);
+  await chip(both, `${base}000011`, day("2026-09-01"));
+  await chip(both, `${base}000012`, null);
+
+  await exemption(exemptVoidedChip);
+  const { entryId: mistyped } = await chip(exemptVoidedChip, `${base}000013`, null);
+  await voidEntry(mistyped, "Mistyped.");
+
+  const { entryId: wrongSpay } = await spayGiven(voidedSpayScheduledChip);
+  await voidEntry(wrongSpay, "Recorded on the wrong animal.");
+  await prisma.$transaction((tx) =>
+    scheduleMedicalEntry(
+      tx,
+      {
+        animalId: voidedSpayScheduledChip,
+        kind: MedicalEntryKind.MICROCHIP,
+        dueDate: day("2026-10-20"),
+      },
+      staffId,
+      TODAY,
+    ),
+  );
+
+  await chip(chipOnly, `${base}000014`, day("2026-09-02"));
+
+  const animalIds = [both, exemptVoidedChip, voidedSpayScheduledChip, chipOnly];
+  const matching = async (where: typeof ALTERED_ENTRY_WHERE | typeof CURRENT_CHIP_WHERE) =>
+    (
+      await prisma.animal.findMany({
+        where: { id: { in: animalIds }, medicalEntries: { some: where } },
+        select: { id: true },
+      })
+    )
+      .map((animal) => animal.id)
+      .sort();
+  assert.deepEqual(await matching(ALTERED_ENTRY_WHERE), [both]);
+  assert.deepEqual(await matching(CURRENT_CHIP_WHERE), [both, chipOnly].sort());
+
+  // As the public pages read them: one row at most per fact, whatever the
+  // animal carries, mapped to two booleans.
+  const rows = await prisma.animal.findMany({
+    where: { id: { in: animalIds } },
+    select: { id: true, medicalEntries: ALTERED_OR_CHIPPED_SELECT },
+  });
+  const facts = new Map(
+    rows.map((row) => [row.id, alteredAndChipped(row.medicalEntries)]),
+  );
+  assert.equal(rows.find((row) => row.id === both)?.medicalEntries.length, 2);
+  assert.deepEqual(facts.get(both), { isAltered: true, hasMicrochip: true });
+  assert.deepEqual(facts.get(exemptVoidedChip), { isAltered: false, hasMicrochip: false });
+  assert.deepEqual(facts.get(voidedSpayScheduledChip), {
+    isAltered: false,
+    hasMicrochip: false,
+  });
+  assert.deepEqual(facts.get(chipOnly), { isAltered: false, hasMicrochip: true });
 });
 
 test("History places an exemption recorded on its own by the shelter day it was recorded", async () => {

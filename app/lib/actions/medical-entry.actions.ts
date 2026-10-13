@@ -75,8 +75,10 @@ import type {
 
 type EntryResult = FormResult<MedicalEntryFormInput>;
 
-// The Medical pages, the animal's page for its activity feed, and the
-// shelter-wide due list.
+// The Medical pages, the animal's page for its activity feed and its card, the
+// shelter-wide due list, and the public pet pages, whose "Neutered" and
+// "Microchipped" pills are read from the record. The home page renders per
+// request (it reads the session), so it has no cached copy to refresh.
 const revalidateMedical = (animalId: string) => {
   const animalPath = `/dashboard/animals/${animalId}`;
   revalidatePath(animalPath);
@@ -84,6 +86,9 @@ const revalidateMedical = (animalId: string) => {
   revalidatePath(`${animalPath}/medical/history`);
   revalidatePath(`${animalPath}/medical/vaccines-tests`);
   revalidatePath("/dashboard/medical/due");
+  revalidatePath("/pets");
+  revalidatePath("/pets/favorites");
+  revalidatePath(`/pets/${animalId}`);
 };
 
 /** A refusal from the service, keyed to its field when it has one. */

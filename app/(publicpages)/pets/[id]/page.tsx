@@ -85,10 +85,12 @@ const Page = async ({ params }: Props) => {
 
   // Neutered and Microchipped are facts about the animal's body, but they read
   // as reassurances rather than measurements — so they join the characteristic
-  // pills instead of sitting in the facts list as Yes/No rows. Never assert the
-  // negative: an animal that isn't neutered simply drops the word.
+  // pills instead of sitting in the facts list as Yes/No rows. Both come from
+  // the medical record: "Neutered" only once a spay or neuter was done (an
+  // exemption isn't one), "Microchipped" while it carries a chip. Never assert
+  // the negative: an animal that isn't neutered simply drops the word.
   const pills = [
-    animal.isSpayedNeutered && "Neutered",
+    animal.isAltered && "Neutered",
     animal.hasMicrochip && "Microchipped",
     ...(animal.characteristics?.map((char) => char.name) ?? []),
   ].filter((pill): pill is string => Boolean(pill));

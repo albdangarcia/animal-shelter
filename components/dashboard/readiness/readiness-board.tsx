@@ -82,7 +82,8 @@ export const KIND_META: Record<
   },
   NOT_SPAYED_NEUTERED: {
     title: "Not spayed or neutered",
-    description: "The procedure isn't recorded on the profile yet.",
+    description:
+      "No spay or neuter on the medical record, and no exemption in force.",
     icon: IconMedicalCross,
   },
   NO_PHOTO: {

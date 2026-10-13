@@ -289,6 +289,17 @@ test.describe("as a volunteer", () => {
     await page.goto(`/dashboard/animals/${id}/medical`);
     await expect(statusLine(page, "Spay/neuter")).toHaveText("Exempt: other");
     await expect(statusLine(page, "Microchip")).toContainText("985141000100006");
+    // The card above the tabs reads the same record, and links each fact to
+    // the Medical tab, which a volunteer can read.
+    for (const name of [
+      "Exempt (medical record)",
+      "985141000100006 (medical record)",
+    ]) {
+      await expect(page.getByRole("link", { name, exact: true })).toHaveAttribute(
+        "href",
+        `/dashboard/animals/${id}/medical`,
+      );
+    }
 
     await expect(page.getByRole("button", { name: "Add entry" })).toHaveCount(0);
     for (const name of [

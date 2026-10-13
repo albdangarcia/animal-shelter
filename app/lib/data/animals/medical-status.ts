@@ -2,9 +2,12 @@
 // spayed or neutered, and which microchips it carries. No auth or `next/*`
 // imports, so database tests and the entry service can call them. Readiness,
 // global search, the public pages and the animal page all read these through
-// the fragments and functions here, so they can't disagree.
+// the fragments and functions here, so they can't disagree. The database
+// client is only a type here (callers pass theirs in), so the pure global
+// search module can take the where fragments without loading it.
 
-import prisma, { type TransactionClient } from "@/app/lib/prisma";
+import type prisma from "@/app/lib/prisma";
+import type { TransactionClient } from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import {
   MedicalEntryKind,
@@ -44,6 +47,24 @@ export const CURRENT_CHIP_WHERE = {
   status: MedicalEntryStatus.COMPLETED,
   voidedAt: null,
 } as const satisfies Prisma.MedicalEntryWhereInput;
+
+/**
+ * For an animal's select, as `medicalEntries`: at most one row for being
+ * altered and one for carrying a chip, which `alteredAndChipped` reads as two
+ * booleans. One relation can be selected only once, so the two fragments are
+ * read together, one row per kind.
+ */
+export const ALTERED_OR_CHIPPED_SELECT = {
+  where: { OR: [ALTERED_ENTRY_WHERE, CURRENT_CHIP_WHERE] },
+  distinct: "kind",
+  select: { kind: true },
+} satisfies Prisma.Animal$medicalEntriesArgs;
+
+/** What `ALTERED_OR_CHIPPED_SELECT` read, as the two facts it answers. */
+export const alteredAndChipped = (rows: { kind: MedicalEntryKind }[]) => ({
+  isAltered: rows.some((row) => row.kind === MedicalEntryKind.SURGERY),
+  hasMicrochip: rows.some((row) => row.kind === MedicalEntryKind.MICROCHIP),
+});
 
 /**
  * The spay and neuter entries that aren't voided, for each of `animalIds`,
