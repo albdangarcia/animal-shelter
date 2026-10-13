@@ -245,6 +245,7 @@ const FILLED_FIELDS = {
   // Not given from the catalog, so there is no item to fill anything in.
   [MedicalEntryKind.SURGERY]: [],
   [MedicalEntryKind.MICROCHIP]: [],
+  [MedicalEntryKind.EXAM]: [],
 } as const satisfies Record<MedicalEntryKind, readonly (keyof EntryFormState)[]>;
 
 type FilledField = (typeof FILLED_FIELDS)[MedicalEntryKind][number];

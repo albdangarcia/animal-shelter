@@ -834,6 +834,9 @@ model VitalsLog {
   recordedById String @map(name: "recorded_by_id")
   recordedBy   Person @relation(fields: [recordedById], references: [id])
 
+  /// The exam these were measured during, when they were recorded with one.
+  exam ExamDetails?
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map(name: "deleted_at")
@@ -854,8 +857,9 @@ enum MedicalItemKind {
 /// table, written once the care is given.
 ///
 /// Vaccines, tests and treatments are given from the catalog, so each entry
-/// points at a catalog item. Surgeries and microchips have no catalog item: a
-/// surgery says which procedure it is, and a microchip carries its number.
+/// points at a catalog item. Surgeries, microchips and exams have no catalog
+/// item: a surgery says which procedure it is, a microchip carries its
+/// number, and an exam names its type.
 /// New values go at the end (see `MedicalEntryStatus`).
 enum MedicalEntryKind {
   VACCINE
@@ -863,6 +867,7 @@ enum MedicalEntryKind {
   TREATMENT
   SURGERY
   MICROCHIP
+  EXAM
 }
 
 /// Which surgery an entry is. Defined here rather than in the catalog,
@@ -894,6 +899,42 @@ enum SpayNeuterExemptionReason {
   MEDICAL_RISK
   PARTNER_WILL_ALTER
   OTHER
+}
+
+/// Which exam an entry is. On the entry at every status, so scheduled care
+/// can say it is the intake exam before anything is recorded.
+enum ExamType {
+  /// The exam on arrival. It counts for the stay it is dated in.
+  INTAKE
+  VET
+  RECHECK
+  PRE_ADOPTION
+}
+
+/// What an exam concluded, as a whole.
+enum ExamResult {
+  NO_CONCERNS
+  /// Something to treat, recorded as care in its own right.
+  NEEDS_TREATMENT
+  /// A vet should look at the animal before anything else is decided.
+  NEEDS_VET_REVIEW
+}
+
+/// How one body system looked on an exam.
+enum ExamFindingStatus {
+  NORMAL
+  /// Something was found. The finding's note says what.
+  ABNORMAL
+  NOT_EXAMINED
+}
+
+/// Whether an exam found the animal intact or already spayed or neutered.
+/// Only a surgery entry makes an animal altered on its record: an exam that
+/// finds an animal altered records the surgery it found.
+enum ReproductiveStatus {
+  INTACT
+  ALTERED
+  UNDETERMINED
 }
 
 /// Where an entry stands. Every writer states it; there is no default.
@@ -1025,7 +1066,7 @@ model MedicalItemAnalyte {
   @@map("medical_item_analytes")
 }
 
-/// One vaccine, test, treatment, surgery or microchip for an animal:
+/// One vaccine, test, treatment, surgery, microchip or exam for an animal:
 /// scheduled, given, or declined. The lifecycle every kind shares lives here;
 /// what is particular to a kind lives in its details row. Neither `kind` nor
 /// `animalId` changes after the entry is written: a wrong one is voided and
@@ -1036,10 +1077,14 @@ model MedicalItemAnalyte {
 /// and the status rules below, since a check constraint can't be declared
 /// here):
 /// - VACCINE, TEST, TREATMENT: `itemId`, an item of the same kind; no
-///   `procedure` or `chipNumber`.
-/// - SURGERY: `procedure`; no `itemId` or `chipNumber`.
-/// - MICROCHIP: `chipNumber` once completed, null before; no `itemId` or
-///   `procedure`.
+///   `procedure`, `chipNumber` or `examType`.
+/// - SURGERY: `procedure`; no `itemId`, `chipNumber` or `examType`.
+/// - MICROCHIP: `chipNumber` once completed, null before; no `itemId`,
+///   `procedure` or `examType`.
+/// - EXAM: `examType`; no `itemId`, `procedure` or `chipNumber`. Completed,
+///   its details row holds a finding for each body system it was examined
+///   against. An exam is given in house or by an outside vet, never before
+///   intake, so its day is always known.
 ///
 /// What each status holds:
 /// - SCHEDULED: `dueDate`; no `completedDate`, `source`, `declineReason`,
@@ -1051,16 +1096,17 @@ model MedicalItemAnalyte {
 ///   spay or neuter is an exemption, with `exemptionReason` and maybe a
 ///   `reviewDate`. Any other declined entry has a `declineReason`.
 ///
-/// A details row exists only for care that happened: lot numbers, results
-/// and a surgery's findings are written when the care is recorded as given.
+/// A details row exists only for care that happened: lot numbers, results,
+/// a surgery's findings and an exam's findings are written when the care is
+/// recorded as given.
 model MedicalEntry {
   id       String           @id @default(cuid())
   animalId String           @map(name: "animal_id")
   animal   Animal           @relation(fields: [animalId], references: [id], onDelete: Cascade)
   kind     MedicalEntryKind
 
-  /// The catalog item, for a vaccine, test or treatment. Null for a surgery
-  /// or a microchip, which aren't given from the catalog.
+  /// The catalog item, for a vaccine, test or treatment. Null for a surgery,
+  /// a microchip or an exam, which aren't given from the catalog.
   itemId String?      @map(name: "item_id")
   item   MedicalItem? @relation(fields: [itemId], references: [id], onDelete: Restrict)
 
@@ -1074,6 +1120,11 @@ model MedicalEntry {
   /// entries that aren't voided hold the same number, so a voided entry's
   /// number can be used again.
   chipNumber String? @map(name: "chip_number")
+
+  /// Which exam, on an EXAM entry at every status: a scheduled exam has no
+  /// details row, but still says whether it is the intake exam. Null for
+  /// every other kind.
+  examType ExamType? @map(name: "exam_type")
 
   status MedicalEntryStatus
 
@@ -1146,7 +1197,11 @@ model MedicalEntry {
   treatment TreatmentDetails?
   surgery   SurgeryDetails?
   microchip MicrochipDetails?
+  exam      ExamDetails?
   events    MedicalEntryEvent[]
+
+  /// On an exam: the spay or neuter it found already done, recorded from it.
+  foundSurgery SurgeryDetails? @relation("SurgeryFoundOnExam")
 
   createdAt DateTime @default(now()) @map(name: "created_at")
   updatedAt DateTime @updatedAt @map(name: "updated_at")
@@ -1254,7 +1309,17 @@ model SurgeryDetails {
 
   /// What shows a surgery done before intake was done. Required when the
   /// entry's source is BEFORE_INTAKE, and null for any other source.
+  /// FOUND_ON_EXAM is set only on a surgery recorded from the exam that found
+  /// it, and always with `foundOnExamId`.
   evidence SurgeryEvidence?
+
+  /// The exam that found this spay or neuter already done. Set when the
+  /// surgery is recorded from the exam, and kept as long as the surgery is:
+  /// its source and evidence don't change while it is linked. Voiding the
+  /// exam leaves the surgery and the link as they are. At most one surgery
+  /// per exam.
+  foundOnExamId String?       @unique @map(name: "found_on_exam_id")
+  foundOnExam   MedicalEntry? @relation("SurgeryFoundOnExam", fields: [foundOnExamId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map(name: "created_at")
   updatedAt DateTime @updatedAt @map(name: "updated_at")
@@ -1279,6 +1344,56 @@ model MicrochipDetails {
   @@map("microchip_details")
 }
 
+/// How an exam went. Its type is on the entry, since a scheduled exam has no
+/// details row.
+model ExamDetails {
+  id      String       @id @default(cuid())
+  entryId String       @unique @map(name: "entry_id")
+  entry   MedicalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  overallResult ExamResult @map(name: "overall_result")
+
+  /// Optional: not every exam looks. An exam reading INTACT is what makes an
+  /// animal's spay/neuter status Intact; reading ALTERED, it records the
+  /// surgery it found, since only a surgery entry makes an animal altered.
+  reproductiveStatus ReproductiveStatus? @map(name: "reproductive_status")
+
+  /// The vitals measured during the exam, when any were. The log is a normal
+  /// vitals entry, written with the exam and from then on edited or deleted
+  /// on the Vitals page; editing the exam doesn't touch it. Vitals are
+  /// soft-deleted, so a deleted log still reads through this link.
+  vitalsLogId String?    @unique @map(name: "vitals_log_id")
+  vitalsLog   VitalsLog? @relation(fields: [vitalsLogId], references: [id], onDelete: SetNull)
+
+  /// One per body system the exam was held to: the systems the code listed
+  /// when it was recorded.
+  findings ExamFinding[]
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@map("exam_details")
+}
+
+/// How one body system looked on an exam. The systems are defined in code,
+/// and `bodySystem` holds a system's key: a string, not an enum, so a system
+/// can be added without a migration. A key is never reused or repurposed.
+model ExamFinding {
+  id            String            @id @default(cuid())
+  examDetailsId String            @map(name: "exam_details_id")
+  examDetails   ExamDetails       @relation(fields: [examDetailsId], references: [id], onDelete: Cascade)
+  bodySystem    String            @map(name: "body_system")
+  status        ExamFindingStatus
+  /// What was found. Required when the status is ABNORMAL.
+  notes         String?
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@unique([examDetailsId, bodySystem])
+  @@map("exam_findings")
+}
+
 /// Append-only audit trail for medical entries. `before` and `after` hold the
 /// raw stored values, keyed by field name, of only the fields that changed;
 /// detail fields use their own names (`lotNumber`) and test results use
@@ -1286,8 +1401,10 @@ model MicrochipDetails {
 /// (SCHEDULED or COMPLETED). COMPLETED stores `{ status }` in `before` and
 /// everything recording it wrote in `after`; RESCHEDULED stores `{ dueDate }`
 /// on both sides; DECLINED stores `{ status, declineReason }` in `after`; and
-/// VOIDED stores `{ voidReason }`. Each event is also written to
-/// AnimalActivityLog as readable text for the activity feed.
+/// VOIDED stores `{ voidReason }`. An exam recorded with vitals adds
+/// `vitalsLogId` to its CREATED or COMPLETED `after`; an edit never changes
+/// it. Each event is also written to AnimalActivityLog as readable text for
+/// the activity feed.
 model MedicalEntryEvent {
   id      String                  @id @default(cuid())
   entryId String                  @map(name: "entry_id")

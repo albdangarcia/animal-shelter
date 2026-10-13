@@ -30,6 +30,8 @@ export function CareEntryForm({ kind, ...props }: Props) {
       return <SurgeryEntryForm {...props} />;
     case MedicalEntryKind.MICROCHIP:
       return <MicrochipEntryForm {...props} />;
+    case MedicalEntryKind.EXAM:
+      throw new Error("Exams can't be recorded or edited here yet.");
     default:
       return <MedicalEntryForm kind={kind} {...props} />;
   }

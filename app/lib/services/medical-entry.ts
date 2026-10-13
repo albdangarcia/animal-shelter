@@ -4,6 +4,7 @@ import { lockAnimal } from "@/app/lib/data/application-status.data";
 import {
   AnimalActivityType,
   AnimalListingStatus,
+  ExamType,
   MedicalEntryEventAction,
   MedicalEntryKind,
   MedicalEntrySource,
@@ -28,18 +29,8 @@ import {
   spayNeuterStatus,
 } from "@/app/lib/utils/spay-neuter";
 import {
-  medicalEntryName,
-  type NameableMedicalEntry,
-} from "@/app/lib/utils/medical-entry-name";
-import {
-  DOSE_UNIT_LABELS,
   MEDICAL_REASON_MAX_LENGTH,
-  MEDICAL_ROUTE_LABELS,
-  SPAY_NEUTER_EXEMPTION_REASON_LABELS,
-  SURGERY_EVIDENCE_LABELS,
   SURGERY_PROCEDURE_LABELS,
-  TEST_RESULT_LABELS,
-  formatDose,
   isCatalogEntryKind,
   type CatalogEntryKind,
 } from "@/app/lib/constants/medical";
@@ -47,9 +38,12 @@ import {
   KIND_NOUN,
   MedicalEntryRefusal,
   catalogTerms,
+  currentBodySystems,
   detailsCreate,
   entryData,
+  examData,
   microchipData,
+  orderFindings,
   surgeryData,
   testData,
   tidy,
@@ -61,11 +55,22 @@ import {
   type EntryField,
   type EntryValues,
   type MedicalEntryInput,
-  type StoredResult,
 } from "@/app/lib/services/medical-entry-values";
+import {
+  batchText,
+  dayText,
+  describeChange,
+  exemptionText,
+  joinList,
+  readNames,
+  recordedSummary,
+  subjectText,
+  verbFor,
+} from "@/app/lib/services/medical-entry-text";
 
 export {
   MedicalEntryRefusal,
+  type ExamEntryInput,
   type MedicalEntryInput,
   type MicrochipEntryInput,
   type SurgeryEntryInput,
@@ -77,14 +82,16 @@ export {
 /**
  * Scheduling, recording, correcting and voiding a vaccine, test, treatment,
  * surgery or microchip for an animal. What each kind holds, and the rules
- * that need only the entry's own values, are in `medical-entry-values`.
+ * that need only the entry's own values, are in `medical-entry-values`; the
+ * activity text each change writes is in `medical-entry-text`.
  *
  * Vaccines, tests and treatments are given from the catalog, and the steps
  * that read the item (its lock, whether it can be picked, its defaults) run
  * for them alone. A surgery has no item: its procedure says what it is, and a
  * spay or neuter must suit the animal's sex. A microchip has no item either:
  * its number says which chip it is, and no two entries that aren't voided
- * hold the same number.
+ * hold the same number. An exam has no item either: its type says which exam
+ * it is, and an intake exam is dated in the stay it starts.
  *
  * Scheduled care is an entry with a due day and nothing else: no source, no
  * details row. Lot numbers and results are written only when it is given, so
@@ -133,18 +140,14 @@ export interface RecordedMedicalEntry {
 
 /**
  * Care to schedule: what, for whom, and the day it is due. Care from the
- * catalog names its item, and a surgery its procedure. A microchip needs
- * neither: its number is known once it is implanted.
+ * catalog names its item, a surgery its procedure and an exam its type. A
+ * microchip needs none of these: its number is known once it is implanted.
  */
 export type ScheduleMedicalEntryInput = {
   animalId: string;
   dueDate: CalendarDay;
   notes?: string | null;
-} & (
-  | { kind: CatalogEntryKind; itemId: string }
-  | { kind: typeof MedicalEntryKind.SURGERY; procedure: SurgeryProcedure }
-  | { kind: typeof MedicalEntryKind.MICROCHIP }
-);
+} & CareKind;
 
 /**
  * The batch an entry is written in, when one form wrote the same care for
@@ -221,6 +224,7 @@ const readStoredEntry = async (
       itemId: true,
       procedure: true,
       chipNumber: true,
+      examType: true,
       completedDate: true,
       source: true,
       vetPartnerId: true,
@@ -231,8 +235,17 @@ const readStoredEntry = async (
     },
   });
   if (!entry) return null;
-  const { kind, status, dueDate, voidedAt, source, procedure, chipNumber, ...rest } =
-    entry;
+  const {
+    kind,
+    status,
+    dueDate,
+    voidedAt,
+    source,
+    procedure,
+    chipNumber,
+    examType,
+    ...rest
+  } = entry;
   if (status !== MedicalEntryStatus.COMPLETED) {
     return { kind, status, dueDate, voidedAt, values: null };
   }
@@ -316,44 +329,38 @@ const readStoredEntry = async (
       const values: EntryValues = { ...common, chipNumber, brand: microchip.brand };
       return { ...stored, values };
     }
+    case MedicalEntryKind.EXAM: {
+      if (!examType) {
+        throw new Error(`Exam entry ${entryId} has no exam type.`);
+      }
+      const exam = await tx.examDetails.findUniqueOrThrow({
+        where: { entryId },
+      });
+      const findings = await tx.examFinding.findMany({
+        where: { examDetailsId: exam.id },
+        select: { bodySystem: true, status: true, notes: true },
+      });
+      const values: EntryValues = {
+        ...common,
+        examType,
+        overallResult: exam.overallResult,
+        reproductiveStatus: exam.reproductiveStatus,
+        examFindings: orderFindings(
+          findings.map(({ bodySystem, status, notes }) => ({
+            bodySystem,
+            status,
+            notes,
+          })),
+        ),
+      };
+      return { ...stored, values };
+    }
   }
 };
 
 // ---------------------------------------------------------------------------
 // The rules
 // ---------------------------------------------------------------------------
-
-// What the activity text calls the entry: "DHPP vaccine", "Spay surgery",
-// "Other surgery", "Microchip 985141000100003" (plain "Microchip" until its
-// number is known).
-const subjectText = (
-  entry: NameableMedicalEntry & { chipNumber?: string | null },
-) => {
-  const name = medicalEntryName(entry);
-  switch (entry.kind) {
-    case MedicalEntryKind.SURGERY:
-      return entry.procedure === SurgeryProcedure.OTHER ? name : `${name} surgery`;
-    case MedicalEntryKind.MICROCHIP:
-      return entry.chipNumber ? `${name} ${entry.chipNumber}` : name;
-    default:
-      return `${name} ${KIND_NOUN[entry.kind]}`;
-  }
-};
-
-// How the activity text says the care happened.
-const KIND_VERB: Record<MedicalEntryKind, string> = {
-  VACCINE: "given",
-  TEST: "run",
-  TREATMENT: "given",
-  SURGERY: "done",
-  MICROCHIP: "implanted",
-};
-
-// A chip on the animal when it arrived was found on a scan, not implanted.
-const verbFor = (kind: MedicalEntryKind, source: MedicalEntrySource | null) =>
-  kind === MedicalEntryKind.MICROCHIP && source === MedicalEntrySource.BEFORE_INTAKE
-    ? "found"
-    : KIND_VERB[kind];
 
 interface AnimalFacts {
   speciesId: string;
@@ -473,18 +480,22 @@ const checkProcedure = (
   }
 };
 
-/** What care is, by kind: its catalog item, its procedure, or neither. */
+/**
+ * What care is, by kind: its catalog item, its procedure, its exam type, or
+ * none of these.
+ */
 type CareKind =
   | { kind: CatalogEntryKind; itemId: string }
   | { kind: typeof MedicalEntryKind.SURGERY; procedure: SurgeryProcedure }
-  | { kind: typeof MedicalEntryKind.MICROCHIP };
+  | { kind: typeof MedicalEntryKind.MICROCHIP }
+  | { kind: typeof MedicalEntryKind.EXAM; examType: ExamType };
 
 /**
  * Checks what the care is against the animal, and returns its catalog item,
  * or null for care with none. A catalog item is locked until commit, so it
  * can't change kind or retire before the entry is written, and must be one
  * that can be picked for the animal. A surgery's procedure must suit the
- * animal's sex. A microchip names neither.
+ * animal's sex. An exam names its type. A microchip names none of these.
  *
  * With `stored` (what the entry already holds), the checks run only for what
  * changes: care already planned or given isn't refused because the catalog
@@ -504,6 +515,11 @@ const checkCare = async (
       return null;
     case MedicalEntryKind.MICROCHIP:
       return null;
+    case MedicalEntryKind.EXAM:
+      if (!care.examType) {
+        throw new MedicalEntryRefusal("Pick the exam type.", "examType");
+      }
+      return null;
     default: {
       await lockMedicalItemForUse(tx, care.itemId);
       const item = await readItem(tx, care.itemId);
@@ -516,12 +532,18 @@ const checkCare = async (
 };
 
 /** What a scheduled entry stores about what is planned. */
-const plannedData = (care: CareKind) =>
-  care.kind === MedicalEntryKind.SURGERY
-    ? { procedure: care.procedure }
-    : care.kind === MedicalEntryKind.MICROCHIP
-      ? {}
-      : { itemId: care.itemId };
+const plannedData = (care: CareKind) => {
+  switch (care.kind) {
+    case MedicalEntryKind.SURGERY:
+      return { procedure: care.procedure };
+    case MedicalEntryKind.MICROCHIP:
+      return {};
+    case MedicalEntryKind.EXAM:
+      return { examType: care.examType };
+    default:
+      return { itemId: care.itemId };
+  }
+};
 
 const checkDay = (
   completedDate: CalendarDay | null,
@@ -561,6 +583,29 @@ const checkDay = (
   ) {
     throw new MedicalEntryRefusal(
       `Care given before intake can't be dated after the animal's intake on ${formatShelterDay(animal.latestIntakeDate)}.`,
+      "completedDate",
+    );
+  }
+};
+
+/**
+ * An intake exam starts the stay it is dated in, so it is dated on or after
+ * the animal's latest intake. A returned animal is examined again. Other
+ * exams follow the day rules every care follows.
+ */
+const checkExamDay = (
+  examType: ExamType,
+  completedDate: CalendarDay | null,
+  animal: AnimalFacts,
+) => {
+  if (
+    examType === ExamType.INTAKE &&
+    completedDate !== null &&
+    animal.latestIntakeDate &&
+    completedDate < animal.latestIntakeDate
+  ) {
+    throw new MedicalEntryRefusal(
+      `An intake exam is dated on or after the animal's latest intake, on ${formatShelterDay(animal.latestIntakeDate)}.`,
       "completedDate",
     );
   }
@@ -738,180 +783,9 @@ const checkVet = async (
 
 const asJson = (value: object) => value as Prisma.InputJsonObject;
 
-// ---------------------------------------------------------------------------
-// Activity text
-// ---------------------------------------------------------------------------
-
-// "a", "a and b", "a, b and c".
-const joinList = (items: string[]) =>
-  items.length <= 1
-    ? items.join("")
-    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-
-const dayText = (day: string | null | undefined) =>
-  day ? formatShelterDay(calendarDay(day)) : "an unknown date";
-
-// Said on each animal's activity row when its entry came from a batch.
-const batchText = (batch: MedicalBatchTag | null | undefined) =>
-  batch ? ` Part of a batch of ${batch.size} animals.` : "";
-
 // What a batch adds to an entry and to the event that writes it.
 const batchData = (batch: MedicalBatchTag | null | undefined) =>
   batch ? { batchId: batch.batchId } : {};
-
-const describeResults = (results: StoredResult[] | undefined) =>
-  results && results.length > 0
-    ? results
-        .map((row) => `${row.analyteName} ${TEST_RESULT_LABELS[row.result].toLowerCase()}`)
-        .join(", ")
-    : null;
-
-// Free text that can run long: a change says it was added, edited or
-// removed, rather than quoting it.
-const PROSE_FIELDS = {
-  notes: "notes",
-  findings: "findings",
-  anesthesiaNotes: "anesthesia notes",
-} as const satisfies Partial<Record<EntryField, string>>;
-
-type ProseField = keyof typeof PROSE_FIELDS;
-
-const isProseField = (field: EntryField): field is ProseField =>
-  field in PROSE_FIELDS;
-
-const FIELD_LABELS: Record<Exclude<EntryField, ProseField>, string> = {
-  itemId: "item",
-  completedDate: "date given",
-  source: "source",
-  vetPartnerId: "vet clinic",
-  vetName: "vet",
-  administeredById: "person who gave it",
-  manufacturer: "manufacturer",
-  lotNumber: "lot number",
-  lotExpiryDate: "lot expiry",
-  route: "route",
-  site: "site",
-  rabiesTagNumber: "rabies tag",
-  durationMonths: "duration",
-  validUntilDate: "valid-until date",
-  results: "results",
-  doseAmount: "dose",
-  doseUnit: "dose unit",
-  procedure: "procedure",
-  surgeon: "surgeon",
-  evidence: "evidence",
-  chipNumber: "chip number",
-  brand: "brand",
-};
-
-const SOURCE_TEXT: Record<MedicalEntrySource, string> = {
-  IN_HOUSE: "in house",
-  OUTSIDE_VET: "by an outside vet",
-  BEFORE_INTAKE: "before intake",
-};
-
-interface Names {
-  items: Map<string, string>;
-  partners: Map<string, string>;
-  people: Map<string, string>;
-}
-
-const readNames = async (
-  tx: TransactionClient,
-  values: EntryValues[],
-): Promise<Names> => {
-  const ids = (pick: (v: EntryValues) => string | null) => [
-    ...new Set(values.map(pick).filter((id): id is string => !!id)),
-  ];
-  // One after another: a transaction is one connection.
-  const items = await tx.medicalItem.findMany({
-    where: { id: { in: ids((v) => v.itemId) } },
-    select: { id: true, name: true },
-  });
-  const partners = await tx.partner.findMany({
-    where: { id: { in: ids((v) => v.vetPartnerId) } },
-    select: { id: true, name: true },
-  });
-  const people = await tx.person.findMany({
-    where: { id: { in: ids((v) => v.administeredById) } },
-    select: { id: true, name: true },
-  });
-  const toMap = (rows: { id: string; name: string }[]) =>
-    new Map(rows.map((row) => [row.id, row.name]));
-  return { items: toMap(items), partners: toMap(partners), people: toMap(people) };
-};
-
-const displayValue = (
-  field: Exclude<EntryField, ProseField>,
-  values: EntryValues,
-  names: Names,
-): string | null => {
-  switch (field) {
-    case "itemId":
-      return values.itemId ? (names.items.get(values.itemId) ?? null) : null;
-    case "completedDate":
-      return values.completedDate ? dayText(values.completedDate) : "unknown";
-    case "lotExpiryDate":
-    case "validUntilDate":
-      return values[field] ? dayText(values[field]) : null;
-    case "source":
-      return SOURCE_TEXT[values.source];
-    case "vetPartnerId":
-      return values.vetPartnerId
-        ? (names.partners.get(values.vetPartnerId) ?? null)
-        : null;
-    case "administeredById":
-      return values.administeredById
-        ? (names.people.get(values.administeredById) ?? null)
-        : null;
-    case "route":
-      return values.route ? MEDICAL_ROUTE_LABELS[values.route] : null;
-    case "durationMonths":
-      return values.durationMonths ? `${values.durationMonths} months` : null;
-    case "results":
-      return describeResults(values.results);
-    case "doseAmount":
-      return values.doseAmount !== null && values.doseAmount !== undefined
-        ? values.doseUnit
-          ? formatDose(values.doseAmount, values.doseUnit)
-          : String(values.doseAmount)
-        : null;
-    case "doseUnit":
-      return values.doseUnit ? DOSE_UNIT_LABELS[values.doseUnit] : null;
-    case "procedure":
-      return values.procedure
-        ? SURGERY_PROCEDURE_LABELS[values.procedure].toLowerCase()
-        : null;
-    case "evidence":
-      return values.evidence
-        ? SURGERY_EVIDENCE_LABELS[values.evidence].toLowerCase()
-        : null;
-    default:
-      return (values[field] as string | null | undefined) ?? null;
-  }
-};
-
-const describeChange = (
-  field: EntryField,
-  before: EntryValues,
-  after: EntryValues,
-  names: Names,
-): string => {
-  if (isProseField(field)) {
-    const noun = PROSE_FIELDS[field];
-    return !before[field]
-      ? `${noun} were added`
-      : !after[field]
-        ? `${noun} were removed`
-        : `${noun} were edited`;
-  }
-  const from = displayValue(field, before, names);
-  const to = displayValue(field, after, names);
-  const label = FIELD_LABELS[field];
-  if (from === null) return `the ${label} was set to ${to}`;
-  if (to === null) return `the ${label} was cleared (was ${from})`;
-  return `the ${label} changed from ${from} to ${to}`;
-};
 
 // ---------------------------------------------------------------------------
 // The operations
@@ -1022,6 +896,7 @@ const lockScheduledEntry = async (
       status: true,
       itemId: true,
       procedure: true,
+      examType: true,
       dueDate: true,
       voidedAt: true,
       item: { select: { name: true } },
@@ -1161,16 +1036,6 @@ const refuseExemptionWhenAltered = async (
     );
   }
 };
-
-// "too young or underweight. Review on Nov 3, 2026. Note: …"
-const exemptionText = ({
-  exemptionReason,
-  declineReason,
-  reviewDate,
-}: ReturnType<typeof exemptionValues>) =>
-  `${SPAY_NEUTER_EXEMPTION_REASON_LABELS[exemptionReason].toLowerCase()}.${
-    reviewDate ? ` Review on ${dayText(reviewDate)}.` : ""
-  }${declineReason ? ` Note: ${declineReason}` : ""}`;
 
 /**
  * Declines scheduled care, with the reason it won't be given. The entry stays
@@ -1368,6 +1233,9 @@ const givenValues = async (
   today: CalendarDay,
 ): Promise<EntryValues> => {
   checkDay(input.completedDate, input.source, animal, today);
+  if (input.kind === MedicalEntryKind.EXAM) {
+    checkExamDay(input.examType, input.completedDate, animal);
+  }
 
   const vetPartnerId = input.vetPartnerId || null;
   const vetName = tidy(input.vetName);
@@ -1391,39 +1259,8 @@ const givenValues = async (
       administeredById,
       notes: tidy(input.notes),
     },
-    { itemDefaults: true, ...catalogTerms(item) },
+    { itemDefaults: true, ...catalogTerms(item), bodySystems: currentBodySystems() },
   );
-};
-
-/**
- * "DHPP vaccine recorded: given in house, on Oct 15, 2026 (due Oct 14,
- * 2026)." or "Neuter surgery recorded: done before intake, on an unknown
- * date. Evidence: tattoo."
- */
-const recordedSummary = async (
-  tx: TransactionClient,
-  item: CatalogItem | null,
-  kind: MedicalEntryKind,
-  values: EntryValues,
-  dueDate: CalendarDay | null,
-  batch: MedicalBatchTag | null | undefined,
-) => {
-  const partnerName = values.vetPartnerId
-    ? (await readNames(tx, [values])).partners.get(values.vetPartnerId)
-    : undefined;
-  const subject = subjectText({
-    kind,
-    item,
-    procedure: values.procedure,
-    chipNumber: values.chipNumber,
-  });
-  return `${subject} recorded: ${verbFor(kind, values.source)} ${SOURCE_TEXT[values.source]}${partnerName ? ` at ${partnerName}` : ""}, on ${dayText(values.completedDate)}${
-    dueDate ? ` (due ${dayText(dueDate)})` : ""
-  }.${values.results ? ` Results: ${describeResults(values.results)}.` : ""}${
-    values.evidence
-      ? ` Evidence: ${SURGERY_EVIDENCE_LABELS[values.evidence].toLowerCase()}.`
-      : ""
-  }${batchText(batch)}`;
 };
 
 /**
@@ -1734,8 +1571,8 @@ export async function editMedicalEntry(
   const animal = await readAnimal(tx, animalId);
   const item = await checkCare(tx, input, animal, before);
   // What the entry is held to: see `valuesFor`.
-  const terms =
-    !item || item.id !== before.itemId
+  const terms = {
+    ...(!item || item.id !== before.itemId
       ? catalogTerms(item)
       : {
           // Every rabies entry stores its duration.
@@ -1744,8 +1581,17 @@ export async function editMedicalEntry(
             id: row.analyteId,
             name: row.analyteName,
           })),
-        };
+        }),
+    bodySystems: (before.examFindings ?? []).map((row) => row.bodySystem),
+  };
   checkDay(input.completedDate, input.source, animal, today);
+  if (
+    input.kind === MedicalEntryKind.EXAM &&
+    (input.examType !== before.examType ||
+      input.completedDate !== before.completedDate)
+  ) {
+    checkExamDay(input.examType, input.completedDate, animal);
+  }
 
   const vetPartnerId = input.vetPartnerId || null;
   const vetName = tidy(input.vetName);
@@ -1837,6 +1683,23 @@ export async function editMedicalEntry(
         data: microchipData(after),
       });
       break;
+    case MedicalEntryKind.EXAM: {
+      const details = await tx.examDetails.update({
+        where: { entryId },
+        data: examData(after),
+        select: { id: true },
+      });
+      if (changed.includes("examFindings")) {
+        await tx.examFinding.deleteMany({ where: { examDetailsId: details.id } });
+        await tx.examFinding.createMany({
+          data: after.examFindings!.map((row) => ({
+            ...row,
+            examDetailsId: details.id,
+          })),
+        });
+      }
+      break;
+    }
   }
 
   const pick = (values: EntryValues) =>
@@ -1857,6 +1720,7 @@ export async function editMedicalEntry(
     item,
     procedure: after.procedure,
     chipNumber: after.chipNumber,
+    examType: after.examType,
   });
   const changeSummary = `${subject} was corrected: ${joinList(
     changed.map((field) => describeChange(field, before, after, names)),
@@ -1914,6 +1778,7 @@ export async function voidMedicalEntry(
       source: true,
       procedure: true,
       chipNumber: true,
+      examType: true,
       exemptionReason: true,
       item: { select: { name: true } },
     },

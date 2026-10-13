@@ -39,6 +39,7 @@ const row = (
     completedDate: null,
     itemId: `item-${options.item ?? "DHPP"}`,
     procedure: null,
+    examType: null,
     notes: null,
     item: { name: options.item ?? "DHPP" },
   },

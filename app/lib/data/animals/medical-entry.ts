@@ -69,6 +69,7 @@ export const MEDICAL_ENTRY_DISPLAY_SELECT = {
   declineReason: true,
   procedure: true,
   chipNumber: true,
+  examType: true,
   exemptionReason: true,
   reviewDate: true,
   vetName: true,

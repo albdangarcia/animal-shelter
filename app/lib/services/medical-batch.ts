@@ -124,7 +124,9 @@ const BATCH_KINDS: readonly MedicalEntryKind[] = [
 const checkKind = (kind: MedicalEntryKind) => {
   if (!BATCH_KINDS.includes(kind)) {
     throw new MedicalEntryRefusal(
-      "Tests aren't recorded in a batch, since each animal has its own results. Record them one at a time.",
+      kind === MedicalEntryKind.TEST
+        ? "Tests aren't recorded in a batch, since each animal has its own results. Record them one at a time."
+        : "Only vaccines and treatments are recorded in a batch. Record anything else one at a time.",
       "kind",
     );
   }
@@ -357,7 +359,7 @@ export async function recordScheduledMedicalBatch(
   const [itemId] = itemIds;
   if (!itemId) {
     throw new MedicalEntryRefusal(
-      "Surgeries and microchips aren't recorded in a batch. Record them one at a time.",
+      "Surgeries, microchips and exams aren't recorded in a batch. Record them one at a time.",
       "entries",
     );
   }

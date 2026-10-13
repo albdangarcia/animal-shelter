@@ -107,6 +107,7 @@ const DUE_ENTRY_SELECT = {
   completedDate: true,
   itemId: true,
   procedure: true,
+  examType: true,
   notes: true,
   item: { select: { name: true } },
 } as const satisfies Prisma.MedicalEntrySelect;
@@ -245,6 +246,7 @@ export const findMedicalDueForQueue = async (
       kind: true,
       dueDate: true,
       procedure: true,
+      examType: true,
       item: { select: { name: true } },
       animal: {
         select: {

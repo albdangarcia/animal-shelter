@@ -1,8 +1,12 @@
 import {
   DoseUnit,
+  ExamFindingStatus,
+  ExamResult,
+  ExamType,
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalRoute,
+  ReproductiveStatus,
   SurgeryEvidence,
   SurgeryProcedure,
   TestResult,
@@ -11,6 +15,11 @@ import { PreconditionFailedError } from "@/app/lib/utils/errors";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import { addCalendarMonths } from "@/app/lib/utils/medical-days";
 import { chipNumberIssue, normaliseChipNumber } from "@/app/lib/utils/microchip";
+import {
+  examFindingsIssue,
+  type ExamFindingInput,
+} from "@/app/lib/utils/exam-findings";
+import { EXAM_BODY_SYSTEM_KEYS } from "@/app/lib/constants/exam";
 
 /**
  * What a medical entry holds, kind by kind: the input each kind takes, the
@@ -103,17 +112,41 @@ export interface MicrochipEntryInput extends MedicalEntryCommonInput {
   brand?: string | null;
 }
 
+/**
+ * An exam. It has no catalog item: its type says which exam it was. It has
+ * a finding for every body system it looks at, and may say whether the
+ * animal is intact or altered. An exam is given in house or by an outside
+ * vet, never before intake.
+ */
+export interface ExamEntryInput extends MedicalEntryCommonInput {
+  kind: typeof MedicalEntryKind.EXAM;
+  examType: ExamType;
+  overallResult: ExamResult;
+  /** On an edit, left out keeps what is stored, and null clears it. */
+  reproductiveStatus?: ReproductiveStatus | null;
+  /** One per body system the exam is held to, always given in full. */
+  findings: ExamFindingInput[];
+}
+
 export type MedicalEntryInput =
   | VaccineEntryInput
   | TestEntryInput
   | TreatmentEntryInput
   | SurgeryEntryInput
-  | MicrochipEntryInput;
+  | MicrochipEntryInput
+  | ExamEntryInput;
 
 export interface StoredResult {
   analyteId: string;
   analyteName: string;
   result: TestResult;
+}
+
+/** One body system's finding, as stored. */
+export interface StoredFinding {
+  bodySystem: string;
+  status: ExamFindingStatus;
+  notes: string | null;
 }
 
 /**
@@ -155,6 +188,12 @@ export interface EntryValues {
   // Microchip. The number is on the entry; the brand is its details.
   chipNumber?: string;
   brand?: string | null;
+  // Exam. The type is on the entry; the rest are its details. The findings
+  // are `examFindings`, since a surgery's `findings` are its notes in words.
+  examType?: ExamType;
+  overallResult?: ExamResult;
+  reproductiveStatus?: ReproductiveStatus | null;
+  examFindings?: StoredFinding[];
 }
 
 export type EntryField = keyof EntryValues;
@@ -185,6 +224,7 @@ export const KIND_NOUN: Record<MedicalEntryKind, string> = {
   TREATMENT: "treatment",
   SURGERY: "surgery",
   MICROCHIP: "microchip",
+  EXAM: "exam",
 };
 
 const RABIES_MAX_MONTHS = 36;
@@ -203,6 +243,9 @@ export const catalogTerms = (item: CatalogItem | null) =>
       }
     : { isRabies: false, analytes: [] };
 
+/** The body systems a new exam is held to: those the code lists now. */
+export const currentBodySystems = (): readonly string[] => EXAM_BODY_SYSTEM_KEYS;
+
 /**
  * The values the input stores, after the per-kind rules. `itemDefaults` is
  * true for a new entry: blank defaults are filled in from the item then, and
@@ -212,7 +255,9 @@ export const catalogTerms = (item: CatalogItem | null) =>
  * catalog values when it is recorded or its item changes, and what it was
  * recorded with otherwise, so changing the catalog later (renaming an
  * analyte, turning the rabies flag on or off) neither rewrites the entry nor
- * blocks a correction to it.
+ * blocks a correction to it. `bodySystems` does the same for an exam: the
+ * systems the code lists when it is recorded, and the ones it was recorded
+ * with on an edit.
  */
 export const valuesFor = (
   input: MedicalEntryInput,
@@ -222,6 +267,7 @@ export const valuesFor = (
     itemDefaults: boolean;
     isRabies: boolean;
     analytes: { id: string; name: string }[];
+    bodySystems: readonly string[];
   },
 ): EntryValues => {
   if (input.kind === MedicalEntryKind.SURGERY) {
@@ -229,6 +275,9 @@ export const valuesFor = (
   }
   if (input.kind === MedicalEntryKind.MICROCHIP) {
     return microchipValues(input, common);
+  }
+  if (input.kind === MedicalEntryKind.EXAM) {
+    return examValues(input, common, options.bodySystems);
   }
   if (!item) {
     throw new Error(`A ${KIND_NOUN[input.kind]} entry needs its catalog item.`);
@@ -398,6 +447,64 @@ const microchipValues = (
   };
 };
 
+/**
+ * An exam's values. It is given in house or by an outside vet: paperwork
+ * from before intake isn't an exam the shelter can vouch for. Its findings
+ * cover exactly the systems it is held to, in the order the code lists
+ * them, with a note on each abnormal one. Who gave it follows the catalog
+ * kinds: the person recording an in-house exam, unless named.
+ */
+const examValues = (
+  input: ExamEntryInput,
+  common: Omit<EntryValues, "itemId">,
+  bodySystems: readonly string[],
+): EntryValues => {
+  if (common.source === MedicalEntrySource.BEFORE_INTAKE) {
+    throw new MedicalEntryRefusal(
+      "An exam is recorded in house or by an outside vet.",
+      "source",
+    );
+  }
+  if (!input.overallResult) {
+    throw new MedicalEntryRefusal("Pick the overall result.", "overallResult");
+  }
+  const findings = input.findings ?? [];
+  const issue = examFindingsIssue(findings, bodySystems);
+  if (issue) {
+    throw new MedicalEntryRefusal(issue, "findings");
+  }
+  return {
+    itemId: null,
+    ...common,
+    examType: input.examType,
+    overallResult: input.overallResult,
+    reproductiveStatus: input.reproductiveStatus ?? null,
+    examFindings: orderFindings(
+      findings.map(({ bodySystem, status, notes }) => ({
+        bodySystem,
+        status,
+        notes: tidy(notes),
+      })),
+    ),
+  };
+};
+
+/**
+ * Findings in the order the code lists the systems, any it no longer lists
+ * after them by key, so a stored exam and its correction compare row by row.
+ */
+export const orderFindings = (findings: StoredFinding[]): StoredFinding[] => {
+  const rank = (key: string) => {
+    const at = EXAM_BODY_SYSTEM_KEYS.indexOf(key);
+    return at === -1 ? EXAM_BODY_SYSTEM_KEYS.length : at;
+  };
+  return [...findings].sort(
+    (a, b) =>
+      rank(a.bodySystem) - rank(b.bodySystem) ||
+      a.bodySystem.localeCompare(b.bodySystem),
+  );
+};
+
 // The optional fields an edit may leave out. Left out (undefined) keeps what
 // is stored; null clears it.
 const KEPT_WHEN_LEFT_OUT = [
@@ -418,6 +525,7 @@ const KEPT_WHEN_LEFT_OUT = [
   "anesthesiaNotes",
   "evidence",
   "brand",
+  "reproductiveStatus",
 ] as const;
 
 export const withStoredValues = (
@@ -470,10 +578,16 @@ export const microchipData = (values: EntryValues) => ({
   brand: values.brand ?? null,
 });
 
+export const examData = (values: EntryValues) => ({
+  overallResult: values.overallResult!,
+  reproductiveStatus: values.reproductiveStatus ?? null,
+});
+
 export const entryData = (values: EntryValues) => ({
   itemId: values.itemId,
   procedure: values.procedure ?? null,
   chipNumber: values.chipNumber ?? null,
+  examType: values.examType ?? null,
   completedDate: values.completedDate,
   source: values.source,
   vetPartnerId: values.vetPartnerId,
@@ -503,6 +617,14 @@ export const detailsCreate = (kind: MedicalEntryKind, values: EntryValues) => ({
   }),
   ...(kind === MedicalEntryKind.MICROCHIP && {
     microchip: { create: microchipData(values) },
+  }),
+  ...(kind === MedicalEntryKind.EXAM && {
+    exam: {
+      create: {
+        ...examData(values),
+        findings: { createMany: { data: values.examFindings! } },
+      },
+    },
   }),
 });
 

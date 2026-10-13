@@ -1,10 +1,14 @@
 import type {
   DoseUnit,
+  ExamFindingStatus,
+  ExamResult,
+  ExamType,
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalEntryStatus,
   MedicalItemKind,
   MedicalRoute,
+  ReproductiveStatus,
   SpayNeuterExemptionReason,
   SurgeryEvidence,
   SurgeryProcedure,
@@ -37,6 +41,7 @@ export const MEDICAL_ENTRY_KIND_LABELS: Record<MedicalEntryKind, string> = {
   TREATMENT: "Treatment",
   SURGERY: "Surgery",
   MICROCHIP: "Microchip",
+  EXAM: "Exam",
 };
 
 export const SURGERY_PROCEDURE_LABELS: Record<SurgeryProcedure, string> = {
@@ -65,6 +70,32 @@ export const SPAY_NEUTER_EXEMPTION_REASON_LABELS: Record<
   MEDICAL_RISK: "Medical risk",
   PARTNER_WILL_ALTER: "Partner will alter",
   OTHER: "Other",
+};
+
+/** Which exam an entry is. Also what the entry is called. */
+export const EXAM_TYPE_LABELS: Record<ExamType, string> = {
+  INTAKE: "Intake exam",
+  VET: "Vet exam",
+  RECHECK: "Recheck exam",
+  PRE_ADOPTION: "Pre-adoption exam",
+};
+
+export const EXAM_RESULT_LABELS: Record<ExamResult, string> = {
+  NO_CONCERNS: "No concerns",
+  NEEDS_TREATMENT: "Needs treatment",
+  NEEDS_VET_REVIEW: "Needs vet review",
+};
+
+export const EXAM_FINDING_STATUS_LABELS: Record<ExamFindingStatus, string> = {
+  NORMAL: "Normal",
+  ABNORMAL: "Abnormal",
+  NOT_EXAMINED: "Not examined",
+};
+
+export const REPRODUCTIVE_STATUS_LABELS: Record<ReproductiveStatus, string> = {
+  INTACT: "Intact",
+  ALTERED: "Altered",
+  UNDETERMINED: "Undetermined",
 };
 
 /** What kind of product a catalog item is. */

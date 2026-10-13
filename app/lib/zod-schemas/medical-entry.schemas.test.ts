@@ -399,12 +399,123 @@ test("ScheduleMedicalEntrySchema: a surgery takes a procedure, other care an ite
   );
 });
 
+const exam: MedicalEntryFormInput = {
+  kind: "EXAM",
+  examType: "INTAKE",
+  overallResult: "NO_CONCERNS",
+  completedDate: "2026-09-01",
+  source: "IN_HOUSE",
+  findings: [
+    { bodySystem: "EYES", status: "NORMAL", notes: "" },
+    { bodySystem: "HEART", status: "ABNORMAL", notes: " Grade II/VI murmur. " },
+  ],
+};
+
+test("MedicalEntryFormSchema: an exam names its type and result, with findings and no item", () => {
+  const parsed = MedicalEntryFormSchema.parse({ ...exam, reproductiveStatus: "" });
+  assert.equal(parsed.kind, "EXAM");
+  if (parsed.kind !== "EXAM") throw new Error("unreachable");
+  assert.equal(parsed.examType, "INTAKE");
+  assert.equal(parsed.overallResult, "NO_CONCERNS");
+  // An empty choice is no reproductive status.
+  assert.equal(parsed.reproductiveStatus, null);
+  assert.deepEqual(parsed.findings, [
+    { bodySystem: "EYES", status: "NORMAL", notes: null },
+    { bodySystem: "HEART", status: "ABNORMAL", notes: "Grade II/VI murmur." },
+  ]);
+  assert.equal("itemId" in parsed, false);
+  const intact = MedicalEntryFormSchema.parse({ ...exam, reproductiveStatus: "INTACT" });
+  assert.equal(intact.kind === "EXAM" && intact.reproductiveStatus, "INTACT");
+
+  const errors = fieldErrorsOf({
+    ...exam,
+    examType: undefined,
+    overallResult: undefined,
+  } as unknown as MedicalEntryFormInput);
+  assert.deepEqual(errors.examType, ["Pick the exam type."]);
+  assert.deepEqual(errors.overallResult, ["Pick the overall result."]);
+});
+
+test("MedicalEntryFormSchema: an exam's findings name each system once, with a note on an abnormal one", () => {
+  assert.deepEqual(
+    fieldErrorsOf({
+      ...exam,
+      findings: [{ bodySystem: "HEART", status: "ABNORMAL", notes: " " }],
+    }).findings,
+    ["Heart is abnormal: say what was found."],
+  );
+  assert.deepEqual(
+    fieldErrorsOf({
+      ...exam,
+      findings: [
+        { bodySystem: "EYES", status: "NORMAL" },
+        { bodySystem: "EYES", status: "NOT_EXAMINED" },
+      ],
+    }).findings,
+    ["Eyes has more than one finding."],
+  );
+  // A row's own error is filed on the list too.
+  assert.deepEqual(
+    Object.keys(
+      fieldErrorsOf({
+        ...exam,
+        findings: [{ bodySystem: "EYES", status: "SEEN" }],
+      } as unknown as MedicalEntryFormInput),
+    ),
+    ["findings"],
+  );
+  // Which systems the exam must cover depends on the exam, so a list short of
+  // the code's twelve is the service's to judge.
+  assert.equal(MedicalEntryFormSchema.safeParse(exam).success, true);
+});
+
+test("MedicalEntryFormSchema: an exam is in house or by an outside vet, never before intake", () => {
+  assert.deepEqual(
+    fieldErrorsOf({ ...exam, source: "BEFORE_INTAKE", completedDate: null }).source,
+    ["An exam is recorded in house or by an outside vet."],
+  );
+  assert.equal(
+    MedicalEntryFormSchema.safeParse({ ...exam, source: "OUTSIDE_VET" }).success,
+    true,
+  );
+});
+
+test("ScheduleMedicalEntrySchema: an exam takes its type", () => {
+  const dueDate = "2026-10-14";
+  assert.deepEqual(
+    ScheduleMedicalEntrySchema.parse({
+      kind: "EXAM",
+      examType: "RECHECK",
+      itemId: "",
+      procedure: "",
+      dueDate,
+    }),
+    { kind: "EXAM", examType: "RECHECK", dueDate, notes: null },
+  );
+  const result = ScheduleMedicalEntrySchema.safeParse({
+    kind: "EXAM",
+    examType: "",
+    dueDate,
+  });
+  assert.equal(result.success, false);
+  assert.deepEqual(
+    (z.flattenError(result.error!).fieldErrors as Record<string, string[]>).examType,
+    ["Pick the exam type."],
+  );
+  // Other care takes no exam type.
+  assert.deepEqual(
+    ScheduleMedicalEntrySchema.parse({ kind: "VACCINE", itemId: "item", examType: "", dueDate }),
+    { kind: "VACCINE", itemId: "item", dueDate, notes: null },
+  );
+});
+
 test("medicalEntryKindsParam: a comma list or a repeated param, unknown kinds ignored", () => {
   const kinds = (value: unknown) => medicalEntryKindsParam.parse(value);
   assert.deepEqual(kinds(undefined), []);
   assert.deepEqual(kinds(""), []);
   assert.deepEqual(kinds("VACCINE,TREATMENT"), ["VACCINE", "TREATMENT"]);
   assert.deepEqual(kinds("VACCINE,SURGERY"), ["VACCINE", "SURGERY"]);
+  assert.deepEqual(kinds("EXAM"), ["EXAM"]);
   assert.deepEqual(kinds("VACCINE,GROOMING"), ["VACCINE"]);
   // `?kind=VACCINE&kind=TREATMENT,TEST&kind=VACCINE`
   assert.deepEqual(kinds(["VACCINE", "TREATMENT,TEST", "VACCINE"]), [

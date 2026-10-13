@@ -5152,6 +5152,8 @@ async function clearDatabase() {
   await prisma.treatmentDetails.deleteMany();
   await prisma.surgeryDetails.deleteMany();
   await prisma.microchipDetails.deleteMany();
+  await prisma.examFinding.deleteMany();
+  await prisma.examDetails.deleteMany();
   await prisma.medicalEntry.deleteMany();
   await prisma.medicalItemAnalyte.deleteMany();
   await prisma.medicalItem.deleteMany();

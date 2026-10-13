@@ -1,9 +1,13 @@
 import { z } from "zod";
 import {
   DoseUnit,
+  ExamFindingStatus,
+  ExamResult,
+  ExamType,
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalRoute,
+  ReproductiveStatus,
   SpayNeuterExemptionReason,
   SurgeryEvidence,
   SurgeryProcedure,
@@ -17,6 +21,7 @@ import {
   type CatalogEntryKind,
 } from "@/app/lib/constants/medical";
 import { chipNumberIssue, normaliseChipNumber } from "@/app/lib/utils/microchip";
+import { examFindingsIssue } from "@/app/lib/utils/exam-findings";
 import { cuidSchema } from "./common.schemas";
 
 // The entry forms' view of a medical entry, one shape per kind. The rules that
@@ -120,6 +125,15 @@ const route = z.enum(MedicalRoute).nullish().transform((v) => v ?? null);
 
 const procedure = z.enum(SurgeryProcedure, { error: "Pick the procedure." });
 
+const examType = z.enum(ExamType, { error: "Pick the exam type." });
+
+/** A choice that may be left empty: "" and null both read as none. */
+const optionalChoice = <T extends z.ZodType>(schema: T) =>
+  schema
+    .nullish()
+    .or(z.literal(""))
+    .transform((value) => (value || null) as z.output<T> | null);
+
 const VaccineEntrySchema = z.object({
   kind: z.literal(MedicalEntryKind.VACCINE),
   ...common,
@@ -199,6 +213,35 @@ const MicrochipEntrySchema = z.object({
   brand: optionalText(100),
 });
 
+// An exam has no catalog item: its type says which exam it was. Which body
+// systems it must have a finding for depends on the exam (a correction is
+// held to the systems it was recorded with), so the service checks that. The
+// form's own values are checked here: no system twice, and a note on every
+// abnormal finding.
+const ExamEntrySchema = z
+  .object({
+    kind: z.literal(MedicalEntryKind.EXAM),
+    ...given,
+    examType,
+    overallResult: z.enum(ExamResult, { error: "Pick the overall result." }),
+    reproductiveStatus: optionalChoice(z.enum(ReproductiveStatus)),
+    findings: z.array(
+      z.object({
+        bodySystem: z.string().min(1),
+        status: z.enum(ExamFindingStatus, { error: "Choose a finding." }),
+        notes: optionalText(2000),
+      }),
+    ),
+  })
+  .superRefine(({ findings }, ctx) => {
+    const issue = examFindingsIssue(findings, [
+      ...new Set(findings.map((finding) => finding.bodySystem)),
+    ]);
+    if (issue) {
+      ctx.addIssue({ code: "custom", path: ["findings"], message: issue });
+    }
+  });
+
 /** The rules for care given that need only the form's own values. */
 const givenCareRules = (
   entry: {
@@ -251,6 +294,16 @@ const givenCareRules = (
       message: "A dose needs a unit.",
     });
   }
+  if (
+    entry.kind === MedicalEntryKind.EXAM &&
+    entry.source === MedicalEntrySource.BEFORE_INTAKE
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["source"],
+      message: "An exam is recorded in house or by an outside vet.",
+    });
+  }
   if (entry.kind === MedicalEntryKind.SURGERY) {
     const beforeIntake = entry.source === MedicalEntrySource.BEFORE_INTAKE;
     if (beforeIntake && !entry.evidence) {
@@ -277,6 +330,7 @@ export const MedicalEntryFormSchema = z
     TreatmentEntrySchema,
     SurgeryEntrySchema,
     MicrochipEntrySchema,
+    ExamEntrySchema,
   ])
   .superRefine(givenCareRules);
 
@@ -320,29 +374,36 @@ const SCHEDULED_KINDS = [
   ...CATALOG_ENTRY_KINDS,
   MedicalEntryKind.SURGERY,
   MedicalEntryKind.MICROCHIP,
+  MedicalEntryKind.EXAM,
 ] as const;
 
 /**
  * Care to schedule: an item for care given from the catalog, a procedure for
- * a surgery, and neither for a microchip, whose number is known once it is
- * implanted. One object rather than a union, so a blank form shows each
- * field's own message.
+ * a surgery, a type for an exam, and none of these for a microchip, whose
+ * number is known once it is implanted. One object rather than a union, so a
+ * blank form shows each field's own message.
  */
 export const ScheduleMedicalEntrySchema = z
   .object({
     kind: z.enum(SCHEDULED_KINDS, { error: "Choose what to schedule." }),
     itemId: z.string().nullish(),
-    // A form's empty choice is no procedure, as it is no item.
-    procedure: procedure
-      .nullish()
-      .or(z.literal(""))
-      .transform((value) => value || null),
+    // A form's empty choice is no procedure or type, as it is no item.
+    procedure: optionalChoice(procedure),
+    examType: optionalChoice(examType),
     dueDate,
     notes: common.notes,
   })
   .superRefine((value, ctx) => {
     if (value.kind === MedicalEntryKind.MICROCHIP) return;
-    if (value.kind === MedicalEntryKind.SURGERY) {
+    if (value.kind === MedicalEntryKind.EXAM) {
+      if (!value.examType) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["examType"],
+          message: "Pick the exam type.",
+        });
+      }
+    } else if (value.kind === MedicalEntryKind.SURGERY) {
       if (!value.procedure) {
         ctx.addIssue({
           code: "custom",
@@ -359,25 +420,24 @@ export const ScheduleMedicalEntrySchema = z
     when: ({ value }) => typeof value === "object" && value !== null,
   })
   .transform(
-    ({ kind, itemId, procedure, dueDate, notes }):
-      | { kind: CatalogEntryKind; itemId: string; dueDate: CalendarDay; notes: string | null }
-      | {
-          kind: typeof MedicalEntryKind.SURGERY;
-          procedure: SurgeryProcedure;
-          dueDate: CalendarDay;
-          notes: string | null;
-        }
-      | {
-          kind: typeof MedicalEntryKind.MICROCHIP;
-          dueDate: CalendarDay;
-          notes: string | null;
-        } =>
+    ({ kind, itemId, procedure, examType, dueDate, notes }): { dueDate: CalendarDay; notes: string | null } & (
+      | { kind: CatalogEntryKind; itemId: string }
+      | { kind: typeof MedicalEntryKind.SURGERY; procedure: SurgeryProcedure }
+      | { kind: typeof MedicalEntryKind.MICROCHIP }
+      | { kind: typeof MedicalEntryKind.EXAM; examType: ExamType }
+    ) => {
       // The refinement has checked that the kind's own field is there.
-      kind === MedicalEntryKind.MICROCHIP
-        ? { kind, dueDate, notes }
-        : kind === MedicalEntryKind.SURGERY
-          ? { kind, procedure: procedure!, dueDate, notes }
-          : { kind, itemId: itemId!, dueDate, notes },
+      switch (kind) {
+        case MedicalEntryKind.MICROCHIP:
+          return { kind, dueDate, notes };
+        case MedicalEntryKind.SURGERY:
+          return { kind, procedure: procedure!, dueDate, notes };
+        case MedicalEntryKind.EXAM:
+          return { kind, examType: examType!, dueDate, notes };
+        default:
+          return { kind, itemId: itemId!, dueDate, notes };
+      }
+    },
   );
 
 export type ScheduleMedicalEntryFormInput = z.input<
