@@ -194,7 +194,9 @@ export const lockMedicalItemForUse = (tx: TransactionClient, itemId: string) =>
  * Names are unique per kind, retired items included, ignoring case. The
  * unique index only knows the exact spelling, so two writes of "DHPP" and
  * "dhpp" at once are serialised on a lock keyed by the kind and the name in
- * lower case, held until commit, and the second sees the first.
+ * lower case, held until commit, and the second sees the first. Names are
+ * compared with `lower()` on both sides: a case-insensitive `equals` is sent
+ * as ILIKE, which reads `_`, `%` and a backslash in the name as a pattern.
  */
 const refuseDuplicateName = async (
   tx: TransactionClient,
@@ -202,16 +204,21 @@ const refuseDuplicateName = async (
   name: string,
   excludeId?: string,
 ) => {
-  const key = `medical_item:${kind}:${name.toLowerCase()}`;
-  await tx.$queryRaw`SELECT 1 FROM pg_advisory_xact_lock(hashtext(${key}))`;
-  const existing = await tx.medicalItem.findFirst({
-    where: {
-      kind,
-      name: { equals: name, mode: "insensitive" },
-      ...(excludeId ? { NOT: { id: excludeId } } : {}),
-    },
-    select: { name: true, retiredAt: true },
-  });
+  // The key's lower case is the database's, the same `lower()` the check
+  // below compares with: JavaScript's can differ ("İ"), and two names the
+  // check counts as one would then take different locks.
+  await tx.$queryRaw`
+    SELECT 1 FROM pg_advisory_xact_lock(
+      hashtext('medical_item:' || ${kind}::text || ':' || lower(${name}))
+    )`;
+  const [existing] = await tx.$queryRaw<
+    { name: string; retiredAt: Date | null }[]
+  >`
+    SELECT name, retired_at AS "retiredAt" FROM medical_items
+    WHERE kind = ${kind}::"MedicalItemKind"
+      AND lower(name) = lower(${name})
+      AND id IS DISTINCT FROM ${excludeId ?? null}
+    LIMIT 1`;
   if (existing) {
     throw new ConflictError(
       existing.retiredAt

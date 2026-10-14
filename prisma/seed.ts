@@ -5153,6 +5153,13 @@ async function clearDatabase() {
   // result's analyte and an entry's item are Restrict. So: results before
   // analytes, events and details before entries, entries before items, and
   // all of it before the animal, partner, species and person deletes below.
+  // Conditions and care episodes cascade from Animal too, and their person
+  // FKs (created, opened, closed or voided by, event actor) aren't cascades
+  // either, so their events and then the rows go first.
+  await prisma.medicalConditionEvent.deleteMany();
+  await prisma.careEpisodeEvent.deleteMany();
+  await prisma.careEpisode.deleteMany();
+  await prisma.medicalCondition.deleteMany();
   await prisma.testAnalyteResult.deleteMany();
   await prisma.medicalEntryEvent.deleteMany();
   await prisma.vaccineDetails.deleteMany();

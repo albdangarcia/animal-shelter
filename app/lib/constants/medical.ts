@@ -1,10 +1,13 @@
 import type {
+  CareEpisodeType,
   DoseUnit,
   ExamFindingStatus,
   ExamResult,
   ExamType,
   MedicalEntryKind,
   MedicalEntrySource,
+  MedicalConditionStatus,
+  MedicalConditionType,
   MedicalEntryStatus,
   MedicalItemKind,
   MedicalRoute,
@@ -110,6 +113,24 @@ export const REPRODUCTIVE_STATUS_LABELS: Record<ReproductiveStatus, string> = {
   UNDETERMINED: "Undetermined",
 };
 
+/** What a problem-list row is. */
+export const MEDICAL_CONDITION_TYPE_LABELS: Record<MedicalConditionType, string> = {
+  CONDITION: "Condition",
+  ALLERGY: "Allergy",
+};
+
+export const MEDICAL_CONDITION_STATUS_LABELS: Record<MedicalConditionStatus, string> = {
+  ACTIVE: "Active",
+  CHRONIC: "Chronic",
+  RESOLVED: "Resolved",
+};
+
+export const CARE_EPISODE_TYPE_LABELS: Record<CareEpisodeType, string> = {
+  UNDER_VET_CARE: "Under vet care",
+  HOSPITALISED_IN_HOUSE: "Hospitalised in house",
+  HOSPITALISED_OFF_SITE: "Hospitalised off site",
+};
+
 /** What kind of product a catalog item is. */
 export const MEDICAL_ITEM_KIND_LABELS: Record<MedicalItemKind, string> = {
   VACCINE: "Vaccine",
@@ -188,3 +209,13 @@ export const MEDICAL_REASON_MAX_LENGTH = 1000;
  * past it, a mistake in the shared values reaches too many records at once.
  */
 export const MAX_BATCH_SIZE = 50;
+
+/** The longest name a problem-list row can carry. */
+export const MEDICAL_CONDITION_NAME_MAX_LENGTH = 120;
+
+/**
+ * How many days after a surgery an animal reads as recovering from it: from
+ * the surgery's day through this many days after. Any procedure counts, a
+ * routine spay included, since the animal is recovering either way.
+ */
+export const RECOVERY_DAYS = 14;

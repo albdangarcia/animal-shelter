@@ -35,7 +35,7 @@ import {
 
 export const RABIES_MAX_MONTHS = 36;
 
-const optionalText = (max: number) =>
+export const optionalText = (max: number) =>
   z
     .string()
     .trim()
@@ -44,7 +44,7 @@ const optionalText = (max: number) =>
     .transform((value) => (value ? value : null));
 
 /** A day that may be left empty: "" and null both read as no day. */
-const optionalDay = (label: string) =>
+export const optionalDay = (label: string) =>
   z
     .string()
     .nullish()
@@ -59,7 +59,7 @@ const optionalDay = (label: string) =>
     });
 
 /** A day that must be given. */
-const requiredDay = (label: string) =>
+export const requiredDay = (label: string) =>
   z
     .string({ error: `${label} is required.` })
     .min(1, `${label} is required.`)
@@ -98,7 +98,7 @@ export const medicalEntryKindsParam = z
     ),
   ]);
 
-const optionalId = cuidSchema
+export const optionalId = cuidSchema
   .nullish()
   .or(z.literal(""))
   .transform((value) => value || null);
@@ -132,7 +132,7 @@ const procedure = z.enum(SurgeryProcedure, { error: "Pick the procedure." });
 const examType = z.enum(ExamType, { error: "Pick the exam type." });
 
 /** A choice that may be left empty: "" and null both read as none. */
-const optionalChoice = <T extends z.ZodType>(schema: T) =>
+export const optionalChoice = <T extends z.ZodType>(schema: T) =>
   schema
     .nullish()
     .or(z.literal(""))
@@ -497,7 +497,8 @@ export type RescheduleMedicalEntryInput = z.input<
   typeof RescheduleMedicalEntrySchema
 >;
 
-const reason = (required: string) =>
+/** A reason that must be given, as a void needs. */
+export const requiredReason = (required: string) =>
   z
     .string()
     .trim()
@@ -507,7 +508,7 @@ const reason = (required: string) =>
     });
 
 export const VoidMedicalEntrySchema = z.object({
-  reason: reason("A reason for voiding this entry is required."),
+  reason: requiredReason("A reason for voiding this entry is required."),
 });
 
 export type VoidMedicalEntryInput = z.input<typeof VoidMedicalEntrySchema>;

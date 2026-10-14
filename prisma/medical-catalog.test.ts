@@ -210,6 +210,44 @@ test("a name is unique within its kind, ignoring case, and free in another kind"
   });
 });
 
+test("a name holding _, % or a backslash matches only itself", async () => {
+  const named = (label: string) => `${label} ${runId}`;
+  await create(vaccine({ name: named("T4 low") }));
+  await create(vaccine({ name: named("100 blind") }));
+  await create(vaccine({ name: named("Ab") }));
+
+  // Each would match an existing name if read as a pattern.
+  await create(vaccine({ name: named("T4_low") }));
+  await create(vaccine({ name: named("100% blind") }));
+  await create(vaccine({ name: named("A\\b") }));
+
+  // Each is still refused against itself, in another case, and adds nothing.
+  const itemsOfThisRun = () =>
+    prisma.medicalItem.count({ where: { name: { endsWith: runId } } });
+  const countBefore = await itemsOfThisRun();
+  for (const label of ["t4_LOW", "100% BLIND", "a\\B"]) {
+    await assert.rejects(create(vaccine({ name: named(label) })), ConflictError);
+  }
+  assert.equal(await itemsOfThisRun(), countBefore);
+
+  // The same holds for a rename, which leaves the item as it was.
+  const other = await create(vaccine());
+  await update(other.id, vaccine({ name: named("T_ low") }));
+  const readOther = () =>
+    prisma.medicalItem.findUniqueOrThrow({
+      where: { id: other.id },
+      include: { species: { select: { id: true } }, analytes: true },
+    });
+  const otherBefore = await readOther();
+  await assert.rejects(
+    update(other.id, vaccine({ name: named("T4_LOW"), manufacturer: "Changed" })),
+    (error: Error) =>
+      error instanceof ConflictError &&
+      error.message === `A vaccine named "${named("T4_low")}" already exists.`,
+  );
+  assert.deepEqual(await readOther(), otherBefore);
+});
+
 const backendPid = async (tx: TransactionClient) =>
   (await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`)[0]
     .pid;
@@ -230,8 +268,13 @@ const waitForSessionBlockedBy = async (holderPid: number) => {
   throw new Error(`No session was seen waiting on backend ${holderPid}.`);
 };
 
-test("two creates of one name in different case at once: the second waits, then is refused", async () => {
-  const name = uniqueName("Raced");
+/**
+ * Creates `first` and holds its transaction open, uncommitted, so the second
+ * can't see its row: only the name lock stops a second row. Then creates
+ * `second`, which must be seen waiting on that lock. Returns the second's
+ * outcome once both have finished.
+ */
+const createTwoAtOnce = async (first: string, second: string) => {
   // Both transactions are given longer than the five seconds the wait below
   // may take, so a slow machine fails on the wait, not on a timeout.
   const timeout = 20_000;
@@ -239,11 +282,9 @@ test("two creates of one name in different case at once: the second waits, then 
   const released = new Promise<void>((resolve) => (release = resolve));
   let created!: (pid: number) => void;
   const isCreated = new Promise<number>((resolve) => (created = resolve));
-  // The first create has written its row but not committed, so the second
-  // can't see it: only the name lock stops a second row.
   const holder = prisma.$transaction(
     async (tx) => {
-      await createMedicalItem(tx, vaccine({ name }));
+      await createMedicalItem(tx, vaccine({ name: first }));
       created(await backendPid(tx));
       await released;
     },
@@ -252,27 +293,45 @@ test("two creates of one name in different case at once: the second waits, then 
   // `holder` settles first only when it threw before handing back its pid.
   const holderPid = await Promise.race([isCreated, holder as Promise<never>]);
 
-  const second = prisma.$transaction(
-    (tx) => createMedicalItem(tx, vaccine({ name: name.toLowerCase() })),
+  const later = prisma.$transaction(
+    (tx) => createMedicalItem(tx, vaccine({ name: second })),
     { timeout },
   );
   // Observed as soon as it starts, so a failed wait is not followed by an
   // unhandled rejection. Awaiting it below still sees any rejection.
-  void second.catch(() => {});
+  void later.catch(() => {});
   try {
     await waitForSessionBlockedBy(holderPid);
   } finally {
     // Released even when the wait fails, and both seen to their end, so
     // neither transaction outlives the test.
     release();
-    await Promise.allSettled([holder, second]);
+    await Promise.allSettled([holder, later]);
   }
   await holder;
-  await assert.rejects(second, ConflictError);
+  return later;
+};
+
+test("two creates of one name in different case at once: the second waits, then is refused", async () => {
+  const name = uniqueName("Raced");
+  await assert.rejects(createTwoAtOnce(name, name.toLowerCase()), ConflictError);
   assert.equal(
     await prisma.medicalItem.count({
-      where: { name: { equals: name, mode: "insensitive" } },
+      where: { name: { in: [name, name.toLowerCase()] } },
     }),
+    1,
+  );
+});
+
+// JavaScript lowercases a dotted capital I to "i" and a combining dot, but
+// Postgres to a plain "i", so the database counts these two as one name. The
+// name lock has to agree with it.
+test("two creates of names only the database counts as one: the second waits, then is refused", async () => {
+  const first = `İvermektin ${runId}`;
+  const second = `ivermektin ${runId}`;
+  await assert.rejects(createTwoAtOnce(first, second), ConflictError);
+  assert.equal(
+    await prisma.medicalItem.count({ where: { name: { in: [first, second] } } }),
     1,
   );
 });

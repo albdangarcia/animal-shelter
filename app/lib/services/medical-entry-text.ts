@@ -281,6 +281,36 @@ const displayValue = (
   }
 };
 
+/**
+ * How a change to free text reads: "notes were added", "… were edited" or
+ * "… were removed". Prose can run long, so it isn't quoted.
+ */
+export const describeProseChange = (
+  noun: string,
+  before: string | null | undefined,
+  after: string | null | undefined,
+) =>
+  !before
+    ? `${noun} were added`
+    : !after
+      ? `${noun} were removed`
+      : `${noun} were edited`;
+
+/**
+ * How a change to one value reads, each side as the text names it, or null
+ * for none: "the lot number changed from A123 to B456", "the route was set
+ * to oral", "the site was cleared (was left shoulder)".
+ */
+export const describeValueChange = (
+  label: string,
+  from: string | null,
+  to: string | null,
+) => {
+  if (from === null) return `the ${label} was set to ${to}`;
+  if (to === null) return `the ${label} was cleared (was ${from})`;
+  return `the ${label} changed from ${from} to ${to}`;
+};
+
 export const describeChange = (
   field: EntryField,
   before: EntryValues,
@@ -288,12 +318,7 @@ export const describeChange = (
   names: Names,
 ): string => {
   if (isProseField(field)) {
-    const noun = PROSE_FIELDS[field];
-    return !before[field]
-      ? `${noun} were added`
-      : !after[field]
-        ? `${noun} were removed`
-        : `${noun} were edited`;
+    return describeProseChange(PROSE_FIELDS[field], before[field], after[field]);
   }
   if (field === "examFindings") {
     return `the findings changed (${describeFindings(
@@ -301,12 +326,11 @@ export const describeChange = (
       after.examFindings ?? [],
     ).join("; ")})`;
   }
-  const from = displayValue(field, before, names);
-  const to = displayValue(field, after, names);
-  const label = FIELD_LABELS[field];
-  if (from === null) return `the ${label} was set to ${to}`;
-  if (to === null) return `the ${label} was cleared (was ${from})`;
-  return `the ${label} changed from ${from} to ${to}`;
+  return describeValueChange(
+    FIELD_LABELS[field],
+    displayValue(field, before, names),
+    displayValue(field, after, names),
+  );
 };
 
 // "too young or underweight. Review on Nov 3, 2026. Note: …"

@@ -22,7 +22,11 @@ import {
   formatShelterDay,
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
-import { dueDateIssue } from "@/app/lib/utils/medical-days";
+import {
+  beforeIntakeIssue,
+  dueDateIssue,
+  futureDayIssue,
+} from "@/app/lib/utils/medical-days";
 import { stampedAfter } from "@/app/lib/utils/activity-stamp";
 import { orderFindings } from "@/app/lib/utils/exam-findings";
 import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
@@ -400,7 +404,7 @@ const readStoredEntry = async (
 // The rules
 // ---------------------------------------------------------------------------
 
-interface AnimalFacts {
+export interface AnimalFacts {
   speciesId: string;
   sex: Sex;
   /** Out of the shelter's care: its listing is archived. */
@@ -409,7 +413,12 @@ interface AnimalFacts {
   latestIntakeDate: CalendarDay | null;
 }
 
-const readAnimal = async (
+/**
+ * What the medical record's rules need to know about an animal: its species
+ * and sex, whether it has left the shelter's care, and its first and latest
+ * intake days. Read behind the animal's lock by every medical write.
+ */
+export const readAnimal = async (
   tx: TransactionClient,
   animalId: string,
 ): Promise<AnimalFacts> => {
@@ -599,20 +608,17 @@ const checkDay = (
     }
     return;
   }
-  if (completedDate > today) {
-    throw new MedicalEntryRefusal(
-      "The date given can't be in the future.",
-      "completedDate",
-    );
+  const future = futureDayIssue(completedDate, today, "The date given");
+  if (future) {
+    throw new MedicalEntryRefusal(future, "completedDate");
   }
-  if (
+  const beforeIntake =
     source !== MedicalEntrySource.BEFORE_INTAKE &&
-    animal.firstIntakeDate &&
-    completedDate < animal.firstIntakeDate
-  ) {
+    beforeIntakeIssue(completedDate, animal.firstIntakeDate, "The date given");
+  if (beforeIntake) {
     // An exam can't be recorded as before intake, so it isn't pointed there.
     throw new MedicalEntryRefusal(
-      `The date given can't be before the animal's intake on ${formatShelterDay(animal.firstIntakeDate)}.${
+      `${beforeIntake}${
         kind === MedicalEntryKind.EXAM
           ? ""
           : " Care given before the animal arrived is recorded as before intake."
@@ -813,14 +819,27 @@ const checkVet = async (
     return;
   }
   if (!vetPartnerId || !partnerChanged) return;
+  await checkVetClinic(tx, vetPartnerId, "vetPartnerId");
+};
+
+/**
+ * Refuses a partner that isn't an active vet clinic, on `field`. Run only
+ * when the clinic is picked or changed, so care keeps a clinic made inactive
+ * after it was given.
+ */
+export const checkVetClinic = async (
+  tx: TransactionClient,
+  partnerId: string,
+  field: string,
+) => {
   const partner = await tx.partner.findUnique({
-    where: { id: vetPartnerId },
+    where: { id: partnerId },
     select: { type: true, isActive: true },
   });
   if (!partner || partner.type !== PartnerType.VET_CLINIC || !partner.isActive) {
     throw new MedicalEntryRefusal(
       "Pick a vet clinic from the partner directory.",
-      "vetPartnerId",
+      field,
     );
   }
 };

@@ -1,7 +1,11 @@
 // Day arithmetic and derived facts for medical entries. Pure: no Prisma and no
 // clock, so the unit tests can pin every branch.
 
-import { shiftDayKey, type CalendarDay } from "@/app/lib/utils/shelter-day";
+import {
+  formatShelterDay,
+  shiftDayKey,
+  type CalendarDay,
+} from "@/app/lib/utils/shelter-day";
 
 const pad = (value: number) => String(value).padStart(2, "0");
 
@@ -104,3 +108,26 @@ export const nextDueDate = (
   const next = shiftDayKey(completedDate, intervalDays);
   return next < today ? today : next;
 };
+
+/**
+ * Why `day`, a day something happened, can't be: it's after today. `label`
+ * names the day: "The date given", "The onset date".
+ */
+export const futureDayIssue = (
+  day: CalendarDay,
+  today: CalendarDay,
+  label: string,
+): string | null => (day > today ? `${label} can't be in the future.` : null);
+
+/**
+ * Why `day` can't be: it's before the animal's intake on `intakeDate`. An
+ * animal with no intake on record has nothing to be before.
+ */
+export const beforeIntakeIssue = (
+  day: CalendarDay,
+  intakeDate: CalendarDay | null,
+  label: string,
+): string | null =>
+  intakeDate && day < intakeDate
+    ? `${label} can't be before the animal's intake on ${formatShelterDay(intakeDate)}.`
+    : null;

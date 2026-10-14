@@ -22,6 +22,9 @@ import {
   CalendarPlus,
   CalendarClock,
   CircleSlash,
+  Stethoscope,
+  Hospital,
+  CalendarCheck,
   LucideProps,
 } from "lucide-react";
 import { AnimalActivityType } from "@/prisma/generated/enums";
@@ -125,6 +128,34 @@ const activityConfig: Record<
   [AnimalActivityType.MEDICAL_ENTRY_DECLINED]: {
     icon: CircleSlash,
     text: "declined a medical entry",
+  },
+  [AnimalActivityType.MEDICAL_CONDITION_ADDED]: {
+    icon: Stethoscope,
+    text: "added to the problem list",
+  },
+  [AnimalActivityType.MEDICAL_CONDITION_EDITED]: {
+    icon: Pencil,
+    text: "edited the problem list",
+  },
+  [AnimalActivityType.MEDICAL_CONDITION_VOIDED]: {
+    icon: Ban,
+    text: "voided a problem-list entry",
+  },
+  [AnimalActivityType.CARE_EPISODE_OPENED]: {
+    icon: Hospital,
+    text: "opened a care episode",
+  },
+  [AnimalActivityType.CARE_EPISODE_CLOSED]: {
+    icon: CalendarCheck,
+    text: "closed a care episode",
+  },
+  [AnimalActivityType.CARE_EPISODE_EDITED]: {
+    icon: Pencil,
+    text: "edited a care episode",
+  },
+  [AnimalActivityType.CARE_EPISODE_VOIDED]: {
+    icon: Ban,
+    text: "voided a care episode",
   },
   [AnimalActivityType.TASK_CREATED]: {
     icon: ClipboardList,

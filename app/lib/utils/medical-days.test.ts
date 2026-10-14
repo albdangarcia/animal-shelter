@@ -2,7 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   addCalendarMonths,
+  beforeIntakeIssue,
   dueDateIssue,
+  futureDayIssue,
   latestDueDate,
   nextDueDate,
   rabiesStatus,
@@ -92,4 +94,21 @@ test("nextDueDate: never before today", () => {
   // Falling exactly on today.
   assert.equal(nextDueDate(calendarDay("2026-09-26"), 14, today), "2026-10-10");
   assert.equal(nextDueDate(calendarDay("2026-09-27"), 14, today), "2026-10-11");
+});
+
+test("futureDayIssue: today is allowed, tomorrow isn't", () => {
+  assert.equal(futureDayIssue(day("2026-10-10"), day("2026-10-10"), "The onset date"), null);
+  assert.equal(
+    futureDayIssue(day("2026-10-11"), day("2026-10-10"), "The onset date"),
+    "The onset date can't be in the future.",
+  );
+});
+
+test("beforeIntakeIssue: the intake day is allowed, the day before isn't, and no intake allows any", () => {
+  assert.equal(beforeIntakeIssue(day("2026-08-01"), day("2026-08-01"), "The start date"), null);
+  assert.equal(
+    beforeIntakeIssue(day("2026-07-31"), day("2026-08-01"), "The start date"),
+    "The start date can't be before the animal's intake on Aug 1, 2026.",
+  );
+  assert.equal(beforeIntakeIssue(day("2020-01-01"), null, "The start date"), null);
 });

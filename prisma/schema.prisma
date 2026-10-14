@@ -87,6 +87,13 @@ model Person {
   medicalEntriesAdministered MedicalEntry[]      @relation("MedicalEntryAdministeredBy")
   medicalEntriesVoided       MedicalEntry[]      @relation("MedicalEntryVoidedBy")
   medicalEntryEvents         MedicalEntryEvent[] @relation("MedicalEntryEventActor")
+  medicalConditionsCreated   MedicalCondition[]      @relation("MedicalConditionCreatedBy")
+  medicalConditionsVoided    MedicalCondition[]      @relation("MedicalConditionVoidedBy")
+  medicalConditionEvents     MedicalConditionEvent[] @relation("MedicalConditionEventActor")
+  careEpisodesOpened         CareEpisode[]           @relation("CareEpisodeOpenedBy")
+  careEpisodesClosed         CareEpisode[]           @relation("CareEpisodeClosedBy")
+  careEpisodesVoided         CareEpisode[]           @relation("CareEpisodeVoidedBy")
+  careEpisodeEvents          CareEpisodeEvent[]      @relation("CareEpisodeEventActor")
 
   @@index([phoneNormalized])
   @@map("persons")
@@ -320,6 +327,7 @@ model Partner {
   transferredInAnimals  Intake[]
   transferredOutAnimals Outcome[]
   medicalEntries        MedicalEntry[]
+  careEpisodes          CareEpisode[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -496,6 +504,8 @@ model Animal {
   animalImages         AnimalImage[]
   vitalsLogs           VitalsLog[]
   medicalEntries       MedicalEntry[]
+  medicalConditions    MedicalCondition[]
+  careEpisodes         CareEpisode[]
   notes                AnimalNote[]
   tasks                Task[]
   favorites            Favorite[]
@@ -584,6 +594,9 @@ model Characteristic {
   // Template fields whose findings propose this trait for staff confirmation.
   proposedByFields AssessmentTemplateField[] @relation("CharacteristicProposedByFields")
 
+  // Problem-list conditions that stand for this trait.
+  medicalConditions MedicalCondition[]
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime? @map(name: "deleted_at")
@@ -593,7 +606,8 @@ model Characteristic {
 
 /// Explicit animal ↔ characteristic join carrying provenance. Every
 /// assignment records who made it and when; an assessment-sourced assignment
-/// additionally links the observation via `sourceAssessmentId`.
+/// additionally links the observation via `sourceAssessmentId`, and one added
+/// from a problem-list condition links the condition via `sourceConditionId`.
 ///
 /// Soft-removed via `removedAt` rather than deleted, so "removed by X on date Y"
 /// survives. The unique key is `(animalId, characteristicId)` — one row per pair
@@ -618,6 +632,12 @@ model AnimalCharacteristic {
   sourceAssessmentId String?
   sourceAssessment   Assessment? @relation(fields: [sourceAssessmentId], references: [id], onDelete: SetNull)
 
+  /// Set when this assignment was added from a problem-list condition that
+  /// stands for the trait; null otherwise. At most one of the two sources is
+  /// set. SetNull, as for an assessment.
+  sourceConditionId String?
+  sourceCondition   MedicalCondition? @relation(fields: [sourceConditionId], references: [id], onDelete: SetNull)
+
   /// Free-text note on the assignment. Predates the findings-sourcing work
   /// (added for general use); nothing currently writes to it.
   note String?
@@ -634,6 +654,7 @@ model AnimalCharacteristic {
   @@unique([animalId, characteristicId])
   @@index([characteristicId])
   @@index([sourceAssessmentId])
+  @@index([sourceConditionId])
   @@map("animal_characteristics")
 }
 
@@ -1203,6 +1224,9 @@ model MedicalEntry {
   /// On an exam: the spay or neuter it found already done, recorded from it.
   foundSurgery SurgeryDetails? @relation("SurgeryFoundOnExam")
 
+  /// On a test or an exam: the problem-list conditions it found.
+  conditionsFound MedicalCondition[] @relation("ConditionSourceEntry")
+
   createdAt DateTime @default(now()) @map(name: "created_at")
   updatedAt DateTime @updatedAt @map(name: "updated_at")
 
@@ -1421,6 +1445,210 @@ model MedicalEntryEvent {
 
   @@index([entryId])
   @@map("medical_entry_events")
+}
+
+/// What a row of an animal's problem list is: a condition, or an allergy.
+enum MedicalConditionType {
+  CONDITION
+  ALLERGY
+}
+
+/// Where a problem-list row stands. Resolving one, or making it active
+/// again, is a correction of its status: RESOLVED carries the day it
+/// resolved, and ACTIVE and CHRONIC carry none.
+enum MedicalConditionStatus {
+  ACTIVE
+  /// Lasting: managed rather than expected to resolve.
+  CHRONIC
+  RESOLVED
+}
+
+/// What a problem-list event records. Resolving and reactivating are edits.
+enum MedicalConditionEventAction {
+  CREATED
+  EDITED
+  VOIDED
+}
+
+/// What kind of care an episode is.
+enum CareEpisodeType {
+  /// Under a vet's care, wherever the animal is housed.
+  UNDER_VET_CARE
+  /// Hospitalised at the shelter.
+  HOSPITALISED_IN_HOUSE
+  /// Hospitalised at a vet clinic, which the episode names.
+  HOSPITALISED_OFF_SITE
+}
+
+/// What a care-episode event records.
+enum CareEpisodeEventAction {
+  OPENED
+  CLOSED
+  EDITED
+  VOIDED
+}
+
+/// One row of an animal's problem list: a condition or an allergy, active,
+/// chronic or resolved. Its name is free text. It may name the test or exam
+/// that found it, and the MEDICAL characteristic it stands for, which staff
+/// can then add to the animal citing it.
+///
+/// A row is corrected in place, each change kept in its events, and resolving
+/// or reactivating it is such a correction. A row recorded in error is
+/// voided, as a medical entry is: kept, counting for nothing, and never
+/// un-voided.
+model MedicalCondition {
+  id       String                 @id @default(cuid())
+  animalId String                 @map(name: "animal_id")
+  animal   Animal                 @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  type     MedicalConditionType
+  name     String
+  status   MedicalConditionStatus
+
+  /// The calendar day it began, as `yyyy-MM-dd`, when known. It may be
+  /// before intake: a condition the animal arrived with.
+  onsetDate    String? @map(name: "onset_date")
+  /// The calendar day it resolved, as `yyyy-MM-dd`. Set when the status is
+  /// RESOLVED, and only then.
+  resolvedDate String? @map(name: "resolved_date")
+  /// Free text: whoever diagnosed it is rarely a person in the system.
+  diagnosedBy  String? @map(name: "diagnosed_by")
+  notes        String?
+
+  /// The test or exam of this animal that found it: completed and not voided
+  /// when the condition was written. Voiding that entry later leaves the
+  /// link, so the condition still says where it came from.
+  sourceEntryId String?       @map(name: "source_entry_id")
+  sourceEntry   MedicalEntry? @relation("ConditionSourceEntry", fields: [sourceEntryId], references: [id], onDelete: SetNull)
+
+  /// The MEDICAL characteristic it stands for, such as Heartworm Positive.
+  /// While the condition is active or chronic, the trait can be added to the
+  /// animal citing it.
+  characteristicId String?         @map(name: "characteristic_id")
+  characteristic   Characteristic? @relation(fields: [characteristicId], references: [id], onDelete: SetNull)
+
+  /// Traits on the animal that cite this condition.
+  citedBy AnimalCharacteristic[]
+
+  /// Write-once, as on a medical entry: a voided row is kept but counts for
+  /// nothing, and the reason is required whenever `voidedAt` is set.
+  voidedAt   DateTime? @map(name: "voided_at")
+  voidedById String?   @map(name: "voided_by_id")
+  voidedBy   Person?   @relation("MedicalConditionVoidedBy", fields: [voidedById], references: [id])
+  voidReason String?   @map(name: "void_reason")
+
+  createdById String @map(name: "created_by_id")
+  createdBy   Person @relation("MedicalConditionCreatedBy", fields: [createdById], references: [id])
+
+  events MedicalConditionEvent[]
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@index([animalId])
+  @@index([sourceEntryId])
+  @@map("medical_conditions")
+}
+
+/// Append-only audit trail for the problem list, shaped as
+/// `MedicalEntryEvent` is: `before` and `after` hold the raw stored values,
+/// keyed by field name, of only the fields that changed. CREATED stores the
+/// whole row in `after`, and VOIDED stores `{ voidReason }`. Each event is
+/// also written to AnimalActivityLog as readable text.
+model MedicalConditionEvent {
+  id          String                      @id @default(cuid())
+  conditionId String                      @map(name: "condition_id")
+  condition   MedicalCondition            @relation(fields: [conditionId], references: [id], onDelete: Cascade)
+  action      MedicalConditionEventAction
+
+  actorId String @map(name: "actor_id")
+  actor   Person @relation("MedicalConditionEventActor", fields: [actorId], references: [id])
+
+  before Json?
+  after  Json?
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+
+  @@index([conditionId])
+  @@map("medical_condition_events")
+}
+
+/// A stretch of days an animal was under care: under a vet's care,
+/// hospitalised at the shelter, or hospitalised at a clinic. Always recorded,
+/// never inferred from where the animal is housed: moving it into or out of a
+/// medical unit only offers to open or close one.
+///
+/// Open while `endDate` is null. An animal has at most one open episode,
+/// which the partial unique index backs, and its episodes don't overlap,
+/// though one may start on the day the last one ended. A change of type
+/// closes one episode and opens another. Corrected in place, each change kept
+/// in its events, and voided (write-once) when recorded in error, as a
+/// medical entry is.
+model CareEpisode {
+  id       String          @id @default(cuid())
+  animalId String          @map(name: "animal_id")
+  animal   Animal          @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  type     CareEpisodeType
+
+  /// The calendar day it began, as `yyyy-MM-dd`: on or after the animal's
+  /// latest intake, and not in the future.
+  startDate String  @map(name: "start_date")
+  /// The calendar day it ended, as `yyyy-MM-dd`, on or after `startDate`.
+  /// Null while the episode is open.
+  endDate   String? @map(name: "end_date")
+  reason    String
+  notes     String?
+
+  /// The vet clinic: required for HOSPITALISED_OFF_SITE, optional for
+  /// UNDER_VET_CARE (an outside vet's care), and never set for
+  /// HOSPITALISED_IN_HOUSE.
+  partnerId String?  @map(name: "partner_id")
+  partner   Partner? @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+
+  openedById String  @map(name: "opened_by_id")
+  openedBy   Person  @relation("CareEpisodeOpenedBy", fields: [openedById], references: [id])
+  /// Who ended it: whoever last set `endDate`, and cleared when a correction
+  /// reopens the episode.
+  closedById String? @map(name: "closed_by_id")
+  closedBy   Person? @relation("CareEpisodeClosedBy", fields: [closedById], references: [id])
+
+  /// Write-once, as on a medical entry: a voided episode is kept but counts
+  /// for nothing, and the reason is required whenever `voidedAt` is set.
+  voidedAt   DateTime? @map(name: "voided_at")
+  voidedById String?   @map(name: "voided_by_id")
+  voidedBy   Person?   @relation("CareEpisodeVoidedBy", fields: [voidedById], references: [id])
+  voidReason String?   @map(name: "void_reason")
+
+  events CareEpisodeEvent[]
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@unique([animalId], where: { endDate: null, voidedAt: null })
+  @@index([animalId])
+  @@map("care_episodes")
+}
+
+/// Append-only audit trail for care episodes, shaped as `MedicalEntryEvent`
+/// is. OPENED stores the whole episode in `after`; CLOSED stores `{ endDate }`
+/// on both sides; VOIDED stores `{ voidReason }`. Each event is also written
+/// to AnimalActivityLog as readable text.
+model CareEpisodeEvent {
+  id        String                 @id @default(cuid())
+  episodeId String                 @map(name: "episode_id")
+  episode   CareEpisode            @relation(fields: [episodeId], references: [id], onDelete: Cascade)
+  action    CareEpisodeEventAction
+
+  actorId String @map(name: "actor_id")
+  actor   Person @relation("CareEpisodeEventActor", fields: [actorId], references: [id])
+
+  before Json?
+  after  Json?
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+
+  @@index([episodeId])
+  @@map("care_episode_events")
 }
 
 // ═══════════════════════════════════════════════════
@@ -2076,6 +2304,13 @@ enum AnimalActivityType {
   MEDICAL_ENTRY_SCHEDULED // Medical care was scheduled for a due day
   MEDICAL_ENTRY_RESCHEDULED // A scheduled medical entry's due day moved
   MEDICAL_ENTRY_DECLINED // A scheduled medical entry was declined, with a reason
+  MEDICAL_CONDITION_ADDED // A condition or allergy was added to the problem list
+  MEDICAL_CONDITION_EDITED // A problem-list row was corrected, resolved or made active again
+  MEDICAL_CONDITION_VOIDED // A problem-list row was voided as recorded in error
+  CARE_EPISODE_OPENED // A care episode was opened (or recorded already ended)
+  CARE_EPISODE_CLOSED // An open care episode was closed
+  CARE_EPISODE_EDITED // A care episode was corrected
+  CARE_EPISODE_VOIDED // A care episode was voided as recorded in error
 }
 
 model AnimalActivityLog {
