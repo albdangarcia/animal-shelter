@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import {
   ATTENTION_QUEUE_CAP,
   buildAttentionQueue,
-  type AcuteHealthRow,
   type AttentionAnimal,
+  type CareUnplannedRow,
   type FosterOverdueRow,
   type MedicalDueRow,
   type TaskDueRow,
@@ -31,12 +31,14 @@ const taskRow = (
   ...overrides,
 });
 
-const acuteRow = (
+const careRow = (
   a: AttentionAnimal,
-  overrides: Partial<Omit<AcuteHealthRow, "animal">> = {},
-): AcuteHealthRow => ({
+  overrides: Partial<Omit<CareUnplannedRow, "animal">> = {},
+): CareUnplannedRow => ({
   animal: a,
-  healthStatus: "UNDER_VET_CARE",
+  episodeId: `episode-${a.id}`,
+  episodeType: "UNDER_VET_CARE",
+  startDate: calendarDay("2026-08-10"),
   ...overrides,
 });
 
@@ -66,7 +68,7 @@ const medicalRow = (
 const empty = {
   tasksDue: [],
   medicalDue: [],
-  acuteHealth: [],
+  careUnplanned: [],
   fostersOverdue: [],
 };
 
@@ -90,20 +92,20 @@ test("an animal with multiple signals appears once, with every reason attached",
   );
 });
 
-test("acute health with an open task never reaches signal 2 — but the pure merge still dedupes if handed both", () => {
-  // The query layer excludes tasked animals from `acuteHealth`; this asserts the
-  // merge is not the thing that would double-list an animal if it didn't.
+test("care with an open task never reaches signal 3 — but the pure merge still dedupes if handed both", () => {
+  // The query layer excludes tasked animals from `careUnplanned`; this asserts
+  // the merge is not the thing that would double-list an animal if it didn't.
   const luna = animal("luna");
   const queue = buildAttentionQueue({
     ...empty,
     tasksDue: [taskRow(luna)],
-    acuteHealth: [acuteRow(luna)],
+    careUnplanned: [careRow(luna)],
   });
 
   assert.equal(queue.length, 1);
   assert.deepEqual(
     queue[0].reasons.map((r) => r.kind),
-    ["TASK_DUE", "UNTASKED_ACUTE_HEALTH"],
+    ["TASK_DUE", "CARE_UNPLANNED"],
   );
 });
 
@@ -124,17 +126,33 @@ test("multiple overdue tasks on one animal each contribute a reason, ordered by 
   );
 });
 
-test("tiers order the queue: overdue task, then medical care due, then untasked acute health, then overdue foster", () => {
+test("tiers order the queue: overdue task, then medical care due, then care with nothing planned, then overdue foster", () => {
   const queue = buildAttentionQueue({
     tasksDue: [taskRow(animal("has-task"))],
     medicalDue: [medicalRow(animal("medical-only"))],
-    acuteHealth: [acuteRow(animal("acute-only"))],
+    careUnplanned: [careRow(animal("care-only"))],
     fostersOverdue: [fosterRow(animal("foster-only"))],
   });
 
   assert.deepEqual(
     queue.map((item) => item.animalId),
-    ["has-task", "medical-only", "acute-only", "foster-only"],
+    ["has-task", "medical-only", "care-only", "foster-only"],
+  );
+});
+
+test("animals under care with nothing planned sort by the episode's start, then name", () => {
+  const queue = buildAttentionQueue({
+    ...empty,
+    careUnplanned: [
+      careRow(animal("late", { name: "Abe" }), { startDate: calendarDay("2026-08-12") }),
+      careRow(animal("zoe", { name: "Zoe" }), { startDate: calendarDay("2026-08-03") }),
+      careRow(animal("bea", { name: "Bea" }), { startDate: calendarDay("2026-08-03") }),
+    ],
+  });
+
+  assert.deepEqual(
+    queue.map((item) => item.animalId),
+    ["bea", "zoe", "late"],
   );
 });
 
@@ -192,15 +210,15 @@ test("an animal in more than one tier sorts by its highest tier", () => {
   const queue = buildAttentionQueue({
     ...empty,
     tasksDue: [taskRow(animal("multi"))],
-    acuteHealth: [acuteRow(animal("acute-only"))],
+    careUnplanned: [careRow(animal("care-only"))],
     fostersOverdue: [fosterRow(animal("multi"))],
   });
 
   // `multi` has a foster reason too, but its task puts it in tier 1, ahead of
-  // the acute-only animal.
+  // the care-only animal.
   assert.deepEqual(
     queue.map((item) => item.animalId),
-    ["multi", "acute-only"],
+    ["multi", "care-only"],
   );
 });
 
@@ -275,7 +293,13 @@ test("reason payloads carry the fields each consumer needs, and no more", () => 
     medicalDue: [
       medicalRow(bruno, { entryId: "entry-4", itemName: "Rabies 1-year", kind: "VACCINE", dueDate: calendarDay("2026-08-18") }),
     ],
-    acuteHealth: [acuteRow(bruno, { healthStatus: "HOSPITALISED" })],
+    careUnplanned: [
+      careRow(bruno, {
+        episodeId: "episode-2",
+        episodeType: "HOSPITALISED_IN_HOUSE",
+        startDate: calendarDay("2026-08-14"),
+      }),
+    ],
     fostersOverdue: [
       fosterRow(bruno, { placementId: "fp-3", fosterName: "Sam Rivera", expectedEndDate: calendarDay("2026-08-12") }),
     ],
@@ -301,7 +325,12 @@ test("reason payloads carry the fields each consumer needs, and no more", () => 
         entryKind: "VACCINE",
         dueDate: calendarDay("2026-08-18"),
       },
-      { kind: "UNTASKED_ACUTE_HEALTH", healthStatus: "HOSPITALISED" },
+      {
+        kind: "CARE_UNPLANNED",
+        episodeId: "episode-2",
+        episodeType: "HOSPITALISED_IN_HOUSE",
+        startDate: calendarDay("2026-08-14"),
+      },
       {
         kind: "FOSTER_OVERDUE",
         placementId: "fp-3",

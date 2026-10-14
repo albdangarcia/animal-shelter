@@ -98,10 +98,22 @@ test("non-task reasons are unaffected", () => {
         name: "Fern",
         species: "Rabbit",
         currentUnit: "Isolation · ISO-2",
-        reasons: [{ kind: "UNTASKED_ACUTE_HEALTH", healthStatus: "AWAITING_TRIAGE" }],
-      } as AttentionQueueItem,
+        reasons: [
+          {
+            kind: "CARE_UNPLANNED",
+            episodeId: "episode-1",
+            episodeType: "HOSPITALISED_OFF_SITE",
+            startDate: calendarDay("2026-08-20"),
+          },
+        ],
+      },
     ],
     TODAY,
   );
-  assert.equal(view[0].reasons[0].kind, "UNTASKED_ACUTE_HEALTH");
+  // The episode's id stays on the server; the model gets what and since when.
+  assert.deepEqual(view[0].reasons[0], {
+    kind: "CARE_UNPLANNED",
+    episodeType: "HOSPITALISED_OFF_SITE",
+    startDate: "2026-08-20",
+  });
 });

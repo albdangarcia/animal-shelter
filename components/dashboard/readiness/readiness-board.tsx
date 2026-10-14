@@ -71,10 +71,10 @@ export const KIND_META: Record<
     icon: IconHeartbeat,
     urgent: true,
   },
-  ACUTE_HEALTH: {
-    title: "Acute health",
+  UNDER_CARE: {
+    title: "Under care",
     description:
-      "Under or awaiting veterinary care. Clears when the health status is updated.",
+      "An open care episode on the medical record. Closing the episode clears it.",
     icon: IconStethoscope,
     urgent: true,
   },
@@ -132,6 +132,8 @@ export const blockerKey = (blocker: ReadinessBlocker): string => {
       return blocker.assessmentId;
     case "NEEDS_VET_REVIEW":
       return blocker.entryId;
+    case "UNDER_CARE":
+      return blocker.episodeId;
     case "UNSUPPORTED_CHARACTERISTIC":
       return `${blocker.characteristicId}-${blocker.issue}`;
     default:

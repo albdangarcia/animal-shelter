@@ -1,5 +1,5 @@
 import type {
-  AnimalHealthStatus,
+  CareEpisodeType,
   MedicalEntryKind,
   TaskPriority,
 } from "@/prisma/generated/enums";
@@ -36,7 +36,13 @@ export type AttentionReasonView =
       /** Stated, not implied, for the reason given on a task's `overdue`. */
       overdue: boolean;
     }
-  | { kind: "UNTASKED_ACUTE_HEALTH"; healthStatus: AnimalHealthStatus }
+  | {
+      kind: "CARE_UNPLANNED";
+      /** Under vet care, or hospitalised in house or at a clinic. */
+      episodeType: CareEpisodeType;
+      /** The day the open care episode started. */
+      startDate: string;
+    }
   | {
       kind: "FOSTER_OVERDUE";
       placementId: string;
@@ -97,10 +103,11 @@ function toReasonView(
         // Care due at any point today is today's work, as for tasks.
         overdue: reason.dueDate < today,
       };
-    case "UNTASKED_ACUTE_HEALTH":
+    case "CARE_UNPLANNED":
       return {
-        kind: "UNTASKED_ACUTE_HEALTH",
-        healthStatus: reason.healthStatus,
+        kind: "CARE_UNPLANNED",
+        episodeType: reason.episodeType,
+        startDate: reason.startDate,
       };
     case "FOSTER_OVERDUE":
       return {

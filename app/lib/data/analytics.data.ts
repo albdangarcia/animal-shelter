@@ -5,20 +5,21 @@ import {
 import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import {
-  AnimalHealthStatus,
   AnimalListingStatus,
   OutcomeType,
 } from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { RequirePermission } from "../auth/protected-actions";
-import { Prettify } from "../utils/type-utils";
+import {
+  RequireAllPermissions,
+  RequirePermission,
+} from "../auth/protected-actions";
 import {
   calendarDay,
   countByShelterDay,
   shiftDayKey,
-  type CalendarDay,
 } from "../utils/shelter-day";
 import { resolveDashboardMonthBoundaries } from "./dashboard-month-boundaries";
+import { findOpenCareEpisodes, type UnderCareRow } from "./care-episodes";
 
 export type PetCardDataType = {
   totalPets: number;
@@ -308,71 +309,18 @@ const _fetchAnalyticsTaskTableData = async (): Promise<
   }
 };
 
-type AnimalForAttentionQueryPayload = Prisma.AnimalGetPayload<{
-  select: {
-    id: true;
-    name: true;
-    healthStatus: true;
-    intake: {
-      select: {
-        intakeDate: true;
-      };
-      take: 1;
-    };
-  };
-}>;
+export type AnimalUnderCarePayload = UnderCareRow;
 
-export type AnimalsRequiringAttentionPayload = Prettify<
-  Omit<AnimalForAttentionQueryPayload, "intake"> & {
-    intakeDate: CalendarDay;
-  }
->;
-
-// Health-status-only; backs the dashboard health table. Not dead code and not
-// superseded by `fetchAttentionQueue` in `animals/attention-queue.data.ts` —
-// that one is a work queue (task/health/foster signals, each clears when acted
-// on) and a different shape. The two are deliberate siblings (D14).
-const _fetchAnimalsRequiringAttention = async (): Promise<
-  AnimalsRequiringAttentionPayload[]
-> => {
+// The dashboard's "Animal Health" tab: animals in care under an open care
+// episode, the latest start first. Not the attention queue's care signal
+// (`findUnplannedCareForQueue`), which keeps only the animals with nothing
+// planned and clears when someone plans something.
+const _fetchAnimalsUnderCare = async (): Promise<AnimalUnderCarePayload[]> => {
   try {
-    const animals = await prisma.animal.findMany({
-      where: {
-        healthStatus: {
-          not: AnimalHealthStatus.HEALTHY,
-        },
-      },
-      take: 10,
-      orderBy: {
-        createdAt: "desc",
-      },
-      select: {
-        id: true,
-        name: true,
-        healthStatus: true,
-        intake: {
-          select: {
-            intakeDate: true,
-          },
-          // Two intakes on one day tie on the date alone, so `createdAt`
-          // settles which of them is the earlier one.
-          orderBy: [{ intakeDate: "asc" }, { createdAt: "asc" }],
-          take: 1,
-        },
-      },
-    });
-
-    return animals
-      .filter((animal) => animal.intake.length > 0)
-      .map((animal) => ({
-        id: animal.id,
-        name: animal.name,
-        healthStatus: animal.healthStatus,
-        intakeDate: calendarDay(animal.intake[0].intakeDate),
-      }));
+    return await findOpenCareEpisodes(prisma, { take: 10 });
   } catch (error) {
-    console.error("Error fetching animals requiring attention data.", error);
-    throw new Error("Error fetching animals requiring attention data.");
+    console.error("Error fetching animals under care.", error);
+    throw new Error("Error fetching animals under care.");
   }
 };
 
@@ -388,6 +336,9 @@ export const fetchChartData = RequirePermission(
   AppPermissions.ANIMAL_READ_ANALYTICS,
 )(_fetchChartData);
 
-export const fetchAnimalsRequiringAttention = RequirePermission(
+/** `ANIMAL_READ_ANALYTICS` for the dashboard, and `MEDICAL_READ`: the rows
+ *  are read from the medical record. */
+export const fetchAnimalsUnderCare = RequireAllPermissions(
   AppPermissions.ANIMAL_READ_ANALYTICS,
-)(_fetchAnimalsRequiringAttention);
+  AppPermissions.MEDICAL_READ,
+)(_fetchAnimalsUnderCare);

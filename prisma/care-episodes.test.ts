@@ -25,6 +25,10 @@ import {
   type CareEpisodeInput,
 } from "@/app/lib/services/care-episode";
 import { MedicalEntryRefusal } from "@/app/lib/services/medical-entry";
+import {
+  findAnimalReadiness,
+  findReadinessForAnimals,
+} from "@/app/lib/data/animals/readiness";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import { ConflictError } from "@/app/lib/utils/errors";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
@@ -677,6 +681,76 @@ test("no episode opens for an animal that has left, but an open one is still clo
   );
   await edit(episodeId, { notes: "Left with the episode open; closed after." });
   await voidIt(episodeId, "Wrong animal.");
+});
+
+// ---------------------------------------------------------------------------
+// Readiness
+// ---------------------------------------------------------------------------
+
+test("readiness holds an animal under care from the open episode's start, and not for a closed or voided one", async () => {
+  const inHouse = await makeAnimal("Readiness in house");
+  const inHouseEpisode = await open(inHouse);
+  const offSite = await makeAnimal("Readiness off site");
+  const offSiteEpisode = await open(
+    offSite,
+    episode({ type: HOSPITALISED_OFF_SITE, startDate: day("2026-10-08"), partnerId: clinicId }),
+  );
+  const closed = await makeAnimal("Readiness closed");
+  await close((await open(closed)).episodeId, day("2026-10-06"));
+  const voided = await makeAnimal("Readiness voided");
+  await voidIt((await open(voided)).episodeId, "Wrong animal.");
+
+  const shelterDay = { timezone: "America/Los_Angeles", today: TODAY };
+  const animalIds = [inHouse, offSite, closed, voided];
+  const underCareOf = (blockers: { kind: string }[]) =>
+    blockers.filter((blocker) => blocker.kind === "UNDER_CARE");
+  const one = new Map<string, unknown>();
+  for (const animalId of animalIds) {
+    const readiness = await findAnimalReadiness(prisma, animalId, shelterDay);
+    one.set(animalId, underCareOf(readiness!.blockers));
+  }
+  // Narrowed to this test's animals, so other files deleting theirs mid-read
+  // can't reach it.
+  const board = new Map<string, unknown>();
+  for (const readiness of await findReadinessForAnimals(prisma, shelterDay, {
+    animalIds,
+  })) {
+    board.set(readiness.animal.id, underCareOf(readiness.blockers));
+  }
+
+  // Midnight in Los Angeles, on daylight time.
+  const expected = new Map<string, unknown>([
+    [
+      inHouse,
+      [
+        {
+          kind: "UNDER_CARE",
+          episodeId: inHouseEpisode.episodeId,
+          episodeType: HOSPITALISED_IN_HOUSE,
+          startDate: "2026-10-03",
+          partnerName: null,
+          since: new Date("2026-10-03T07:00:00Z"),
+        },
+      ],
+    ],
+    [
+      offSite,
+      [
+        {
+          kind: "UNDER_CARE",
+          episodeId: offSiteEpisode.episodeId,
+          episodeType: HOSPITALISED_OFF_SITE,
+          startDate: "2026-10-08",
+          partnerName: name("Downtown Clinic"),
+          since: new Date("2026-10-08T07:00:00Z"),
+        },
+      ],
+    ],
+    [closed, []],
+    [voided, []],
+  ]);
+  assert.deepEqual(one, expected);
+  assert.deepEqual(board, expected);
 });
 
 // ---------------------------------------------------------------------------

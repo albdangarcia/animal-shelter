@@ -104,6 +104,68 @@ test("across a DST change, a day begins at the offset in force", inNewYork, () =
   assert.equal(shelterDayKey(utc("2026-11-02T05:00:00Z")), "2026-11-02");
 });
 
+test("where the clocks spring forward at midnight, the day begins when the jump lands", () => {
+  // Each of these days has no 00:00: the clocks go from 23:59 to 01:00. Read
+  // at the old offset, 00:00 would be 23:00 the evening before.
+  const cases: [string, string, string][] = [
+    // Santiago, Sep 6, 2026: from UTC-4 to UTC-3.
+    ["America/Santiago", "2026-09-06", "2026-09-06T04:00:00Z"],
+    // Havana, Mar 8, 2026: from UTC-5 to UTC-4.
+    ["America/Havana", "2026-03-08", "2026-03-08T05:00:00Z"],
+    // Beirut, Mar 29, 2026: from UTC+2 to UTC+3.
+    ["Asia/Beirut", "2026-03-29", "2026-03-28T22:00:00Z"],
+  ];
+  for (const [timezone, value, expected] of cases) {
+    const start = rawStartOfShelterDay(day(value), timezone);
+    assert.deepEqual(start, utc(expected), timezone);
+    assert.equal(rawShelterDayKey(start, timezone), value, timezone);
+    // A minute earlier is still the day before.
+    assert.equal(
+      rawShelterDayKey(new Date(start.getTime() - 60_000), timezone),
+      shiftDayKey(day(value), -1),
+      timezone,
+    );
+  }
+});
+
+test("a day begins at its first instant, however the clock changed around midnight", () => {
+  const cases: [string, string, string][] = [
+    // Colombo, Apr 15, 2006: at 00:30 the clocks went back to 00:00, so the
+    // day's 00:00 came twice; it begins at the first.
+    ["Asia/Colombo", "2006-04-15", "2006-04-14T18:00:00Z"],
+    // Goose Bay, Nov 4, 2007: at 00:01 the clocks went back to 23:01 on the
+    // day before, so the day's first minute came an hour before its second.
+    ["America/Goose_Bay", "2007-11-04", "2007-11-04T03:00:00Z"],
+    // Vostok, Nov 1, 1994: a jump of seven hours.
+    ["Antarctica/Vostok", "1994-11-01", "1994-11-01T00:00:00Z"],
+    // Monrovia, Jan 7, 1972: an offset of 44 minutes 30 seconds ended.
+    ["Africa/Monrovia", "1972-01-07", "1972-01-07T00:44:30Z"],
+  ];
+  for (const [timezone, value, expected] of cases) {
+    const start = rawStartOfShelterDay(day(value), timezone);
+    assert.deepEqual(start, utc(expected), timezone);
+    assert.equal(rawShelterDayKey(start, timezone), value, timezone);
+    assert.equal(
+      rawShelterDayKey(new Date(start.getTime() - 1), timezone),
+      shiftDayKey(day(value), -1),
+      timezone,
+    );
+  }
+  // The first day there is: the day before it is year zero, 1 BC.
+  const yearOne = new Date(0);
+  yearOne.setUTCFullYear(1, 0, 1);
+  assert.deepEqual(rawStartOfShelterDay(day("0001-01-01"), "UTC"), yearOne);
+  // Apia skipped Dec 30, 2011 whole: it reads as the start of Dec 31.
+  assert.deepEqual(
+    rawStartOfShelterDay(day("2011-12-30"), "Pacific/Apia"),
+    utc("2011-12-30T10:00:00Z"),
+  );
+  assert.equal(
+    rawShelterDayKey(utc("2011-12-30T10:00:00Z"), "Pacific/Apia"),
+    "2011-12-31",
+  );
+});
+
 test("a report of one day counts that day, and no other", () => {
   // Both ends of a range are inclusive, so a stored day compares against them
   // as plain strings.

@@ -4,7 +4,10 @@ import { z } from "zod";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { requireFor } from "@/app/lib/auth/actor";
 import { can } from "@/app/lib/auth/can";
-import { _fetchAnimalSummary } from "@/app/lib/data/animals/animal.data";
+import {
+  _fetchAnimalCareStatus,
+  _fetchAnimalSummary,
+} from "@/app/lib/data/animals/animal.data";
 import { _fetchAnimalReadinessForAssistant } from "@/app/lib/data/animals/readiness.data";
 import { actorContextSchema } from "../context";
 import { toReadinessLine } from "../projections/animal-readiness";
@@ -21,9 +24,9 @@ export const GET_ANIMAL_SUMMARY_PERMISSIONS = [AppPermissions.ANIMAL_INFO_READ];
 export const getAnimalSummaryTool = tool({
   description:
     "Get a detailed summary of one animal by id: species, breed, color, " +
-    "sex, birth date, size, health status, listing status, current unit, " +
-    "current foster placement (if any), open tasks, most recent intake, and " +
-    "a one-line readiness status. Requires an animal id — resolve a name " +
+    "sex, birth date, size, listing status, current unit, current foster " +
+    "placement (if any), open tasks, most recent intake, a one-line " +
+    "readiness status, and the care it is under. Requires an animal id — resolve a name " +
     "with findAnimals first. Returns a structured failure if no animal has " +
     "that id. `readiness.status` is READY, NOT_READY (with how many items " +
     "are outstanding, their kinds, and `daysOutstanding` — whole days, " +
@@ -33,7 +36,13 @@ export const getAnimalSummaryTool = tool({
     "being listed or adopted; do not call the animal blocked. For what each " +
     "item is and how to clear it, call getAnimalReadiness. " +
     "`readiness` is null when the user cannot see readiness — then leave it " +
-    "out of the answer.",
+    "out of the answer. `care` is from the medical record: an open care " +
+    "episode (under vet care, or hospitalised in house or at a clinic, " +
+    "since its start day), a surgery it is recovering from, the exams and " +
+    "surgery it is waiting for (`overdue` is already worked out; state it " +
+    "as given), and its allergies and conditions. An empty `care` means " +
+    "nothing is on record, not that the animal is healthy. `care` is null " +
+    "when the user cannot see the medical record — then leave it out.",
   inputSchema: z.object({
     animalId: z
       .string()
@@ -54,9 +63,12 @@ export const getAnimalSummaryTool = tool({
       const canReadReadiness = GET_ANIMAL_READINESS_PERMISSIONS.every(
         (permission) => can(context.role, permission),
       );
-      const [row, readiness] = await Promise.all([
+      // The same for its care, which comes from the medical record.
+      const canReadMedical = can(context.role, AppPermissions.MEDICAL_READ);
+      const [row, readiness, care] = await Promise.all([
         _fetchAnimalSummary(animalId),
         canReadReadiness ? _fetchAnimalReadinessForAssistant(animalId) : null,
+        canReadMedical ? _fetchAnimalCareStatus(animalId) : null,
       ]);
       if (!row) {
         return toolFailure(
@@ -68,6 +80,7 @@ export const getAnimalSummaryTool = tool({
         animal: toAnimalSummary(
           row,
           readiness ? toReadinessLine(readiness, new Date(), (await getShelterSettings()).timezone) : null,
+          care,
         ),
       };
     } catch (error) {

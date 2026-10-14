@@ -31,12 +31,16 @@ import {
   FosterPlacementType,
   FosterReturnReason,
   AssessmentSignal,
+  CareEpisodeType,
   DoseUnit,
   ExamFindingStatus,
   ExamResult,
   ExamType,
+  MedicalConditionStatus,
+  MedicalConditionType,
   MedicalEntryKind,
   MedicalEntrySource,
+  MedicalEntryStatus,
   MedicalItemKind,
   MedicalRoute,
   ReproductiveStatus,
@@ -85,6 +89,12 @@ import { examVitalsInstant } from "@/app/lib/utils/exam-vitals";
 import { nextDueDate } from "@/app/lib/utils/medical-days";
 import type { CatalogEntryKind } from "@/app/lib/constants/medical";
 import { recordMedicalBatch } from "@/app/lib/services/medical-batch";
+import {
+  addMedicalCondition,
+  editMedicalCondition,
+  voidMedicalCondition,
+} from "@/app/lib/services/medical-condition";
+import { openCareEpisode } from "@/app/lib/services/care-episode";
 import { ALTERED_ENTRY_WHERE } from "@/app/lib/data/animals/medical-status";
 import { recordOutcome } from "@/app/lib/services/outcome-recording";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
@@ -807,11 +817,12 @@ interface AnimalBlueprint {
   longStay?: boolean;
   // Suppresses the automatic "Schedule Vet Examination" follow-up task that
   // intake creates for any non-healthy in-care animal. That auto-task is
-  // realistic — staff really do open one at triage — but it means an acute
-  // animal is never *untasked*, so signal 2 of the attention queue
-  // (acute health + no open task) would have nothing to match. A few
-  // blueprints set this to deliberately model the shelter dropping the ball:
-  // an animal that needs care and nobody has planned anything.
+  // realistic — staff really do open one at triage — but it means such an
+  // animal is never *untasked*, so the attention queue's care signal (an open
+  // care episode with no open task and no scheduled care) would have nothing
+  // to match. A few blueprints set this to deliberately model the shelter
+  // dropping the ball: an animal that needs care and nobody has planned
+  // anything. seedCareFixtures opens the episodes.
   skipIntakeFollowUpTask?: boolean;
   // Pins the birth date. When absent, `resolveBlueprintDerivedFields` fills it
   // before creation (a random spread for most animals, an adult range for
@@ -1055,13 +1066,15 @@ const animalSeedData: AnimalBlueprint[] = [
       "Daisy is deaf and does not appear to consider it a problem. She watches faces instead of listening, and learns hand signals fast.",
   },
 
-  // --- Attention-queue signal 2: acute health, nobody has planned anything ---
-  // These animals are in an acute health status but carry NO open task
-  // (skipIntakeFollowUpTask suppresses the usual triage follow-up). They model
-  // the gap the queue exists to surface — an animal needing care that has
-  // fallen through the cracks. The auto-task the other acute animals get
-  // (Flash, Fido, Godzilla, Daisy) is the realistic norm; these are the
-  // exceptions, and there are only a few on purpose.
+  // --- Attention queue: under care, nobody has planned anything -----------
+  // These animals carry NO open task (skipIntakeFollowUpTask suppresses the
+  // usual triage follow-up). seedCareFixtures puts Rocket and Marigold under
+  // a care episode with no scheduled care either: the gap the queue exists
+  // to surface, an animal needing care that has fallen through the cracks.
+  // Fern gets her triage exam scheduled and Rusty a recent surgery instead.
+  // The follow-up task the other animals needing a vet get (Flash, Fido,
+  // Godzilla, Daisy) is the realistic norm; these are the exceptions, and
+  // there are only a few on purpose.
   {
     name: "Marigold",
     sex: Sex.FEMALE,
@@ -1143,9 +1156,8 @@ const animalSeedData: AnimalBlueprint[] = [
     skipIntakeFollowUpTask: true,
   },
   {
-    // AWAITING_SPAY_NEUTER is deliberately NOT in the acute set — spay/neuter is
-    // routine and sticky, and would dominate the queue. Nutmeg is untasked and
-    // acute-adjacent, and must still never appear via signal 2.
+    // Untasked, but under no care episode: her scheduled spay is routine care,
+    // so she never appears as care with nothing planned.
     name: "Nutmeg",
     sex: Sex.FEMALE,
     size: AnimalSize.SMALL,
@@ -1362,8 +1374,9 @@ const overdueTaskSeedData: {
     daysOverdue: 10,
   },
   {
-    // Daisy is UNDER_VET_CARE and already has the intake follow-up task, so she
-    // never qualifies for signal 2 — this overdue task keeps her in signal 1.
+    // Daisy is under care but already has the intake follow-up task, so she
+    // never reaches the queue's care signal — this overdue task keeps her in
+    // its task tier.
     animalName: "Daisy",
     title: "Post-op wound recheck",
     details: "Recheck incision site; overdue by several days.",
@@ -2998,7 +3011,8 @@ async function seedAnimalsAndRelations() {
 
       // Only in-care animals get an open follow-up — an archived
       // animal has already left the shelter's care. `skipIntakeFollowUpTask`
-      // blueprints opt out so they stay untasked for attention-queue signal 2.
+      // blueprints opt out so they stay untasked for the attention queue's
+      // care signal.
       if (
         isInCare &&
         blueprint.healthStatus !== AnimalHealthStatus.HEALTHY &&
@@ -7413,6 +7427,322 @@ async function seedExamFixtures() {
   );
 }
 
+// The problem list and care episodes, through the condition and care-episode
+// services, one transaction per animal, by Olivia unless noted. Days are fixed
+// offsets from the animal's latest intake or from today, kept inside the
+// stay, with no random draws:
+// - Fido (MED-1): hospitalised in house since three days ago for heartworm
+//   treatment. A positive heartworm test at Downtown Veterinary Clinic two
+//   weeks into his stay found "Heartworm disease", which stands for the
+//   Heartworm Positive trait he doesn't carry yet.
+// - Daisy (MED-2): a stay at Downtown Veterinary Clinic early in her stay,
+//   closed, and under vet care since five days ago after her dental.
+//   "Congenital deafness", chronic, stands for the Deaf trait she already
+//   carries, assigned by hand.
+// - Rocket and Marigold: under care with nothing planned for them, no task
+//   and no scheduled care, which the attention queue surfaces. Rocket is
+//   under vet care from his intake exam; Marigold is hospitalised at
+//   Downtown Veterinary Clinic. Marigold also has a ringworm entry recorded
+//   on her by mistake, voided by Benjamin.
+// - Fern and Godzilla: their triage, as vet exams scheduled today and in two
+//   days.
+// - Rusty: recovering from a mass removal four days ago.
+// - Leo: an allergy to penicillin.
+// - Whiskers: a flea infestation found on her intake exam, resolved two weeks
+//   later.
+async function seedCareFixtures() {
+  console.log("Seeding conditions and care episodes...");
+
+  const today = shelterToday(seedTimezone);
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  const downtownVet = await prisma.partner.findFirst({
+    where: { name: "Downtown Veterinary Clinic" },
+  });
+  const [heartwormTest, heartwormPositive, deaf] = await Promise.all([
+    prisma.medicalItem.findFirst({
+      where: { name: "Heartworm antigen" },
+      select: { id: true, analytes: { select: { id: true } } },
+    }),
+    prisma.characteristic.findFirst({ where: { name: "Heartworm Positive" } }),
+    prisma.characteristic.findFirst({ where: { name: "Deaf" } }),
+  ]);
+  if (!olivia || !benjamin || !downtownVet || !heartwormTest || !heartwormPositive || !deaf) {
+    throw new Error(
+      "seedCareFixtures: staff, Downtown Veterinary Clinic, the heartworm test or the medical traits not found.",
+    );
+  }
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, intake: { select: { intakeDate: true } } },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(`seedCareFixtures: ${name} was not seeded with an intake.`);
+    }
+    const latestIntake = row.intake.map((intake) => calendarDay(intake.intakeDate)).sort().at(-1)!;
+    return { id: row.id, latestIntake };
+  };
+  // A day `offset` days into the current stay, never after today.
+  const inStay = (subject: { latestIntake: CalendarDay }, offset: number) => {
+    const day = shiftDayKey(subject.latestIntake, offset);
+    return day > today ? today : day;
+  };
+  // A day `daysAgo` days before today, never before the current stay.
+  const sinceDaysAgo = (subject: { latestIntake: CalendarDay }, daysAgo: number) => {
+    const day = shiftDayKey(today, -daysAgo);
+    return day < subject.latestIntake ? subject.latestIntake : day;
+  };
+  const intakeExamOf = async (animalId: string) => {
+    const exam = await prisma.medicalEntry.findFirst({
+      where: {
+        animalId,
+        kind: MedicalEntryKind.EXAM,
+        examType: ExamType.INTAKE,
+        status: MedicalEntryStatus.COMPLETED,
+        voidedAt: null,
+      },
+      orderBy: [{ completedDate: "desc" }, { id: "asc" }],
+      select: { id: true, completedDate: true },
+    });
+    if (!exam?.completedDate) {
+      throw new Error("seedCareFixtures: an intake exam the fixtures cite was not seeded.");
+    }
+    return { id: exam.id, day: calendarDay(exam.completedDate) };
+  };
+
+  // --- Fido: heartworm, and hospitalised in house for its treatment --------
+  const fido = await animal("Fido");
+  await prisma.$transaction(async (tx) => {
+    const testDay = inStay(fido, 14);
+    const { entryId } = await recordMedicalEntry(
+      tx,
+      {
+        animalId: fido.id,
+        kind: MedicalEntryKind.TEST,
+        itemId: heartwormTest.id,
+        completedDate: testDay,
+        source: MedicalEntrySource.OUTSIDE_VET,
+        vetPartnerId: downtownVet.id,
+        results: heartwormTest.analytes.map((analyte) => ({
+          analyteId: analyte.id,
+          result: TestResult.POSITIVE,
+        })),
+      },
+      olivia.id,
+      today,
+    );
+    await addMedicalCondition(
+      tx,
+      {
+        animalId: fido.id,
+        type: MedicalConditionType.CONDITION,
+        name: "Heartworm disease",
+        status: MedicalConditionStatus.ACTIVE,
+        onsetDate: testDay,
+        diagnosedBy: "Downtown Veterinary Clinic",
+        sourceEntryId: entryId,
+        // Left off the animal, so the condition offers to add it.
+        characteristicId: heartwormPositive.id,
+      },
+      olivia.id,
+      today,
+    );
+    await openCareEpisode(
+      tx,
+      {
+        animalId: fido.id,
+        type: CareEpisodeType.HOSPITALISED_IN_HOUSE,
+        startDate: sinceDaysAgo(fido, 3),
+        reason: "Heartworm treatment: adulticide injections and cage rest.",
+      },
+      olivia.id,
+      today,
+    );
+  });
+
+  // --- Daisy: a clinic stay, closed, and vet care after her dental ---------
+  const daisy = await animal("Daisy");
+  await prisma.$transaction(async (tx) => {
+    await openCareEpisode(
+      tx,
+      {
+        animalId: daisy.id,
+        type: CareEpisodeType.HOSPITALISED_OFF_SITE,
+        startDate: inStay(daisy, 2),
+        endDate: inStay(daisy, 4),
+        partnerId: downtownVet.id,
+        reason: "Dehydrated on arrival; fluids and monitoring.",
+      },
+      olivia.id,
+      today,
+    );
+    await openCareEpisode(
+      tx,
+      {
+        animalId: daisy.id,
+        type: CareEpisodeType.UNDER_VET_CARE,
+        startDate: sinceDaysAgo(daisy, 5),
+        reason: "Post-op dental recheck and pain management.",
+      },
+      olivia.id,
+      today,
+    );
+    // Her Deaf trait was assigned by hand, so the condition offers to cite it.
+    await addMedicalCondition(
+      tx,
+      {
+        animalId: daisy.id,
+        type: MedicalConditionType.CONDITION,
+        name: "Congenital deafness",
+        status: MedicalConditionStatus.CHRONIC,
+        characteristicId: deaf.id,
+      },
+      olivia.id,
+      today,
+    );
+  });
+
+  // --- Rocket and Marigold: under care, with nothing planned ---------------
+  const rocket = await animal("Rocket");
+  const rocketExam = await intakeExamOf(rocket.id);
+  await prisma.$transaction((tx) =>
+    openCareEpisode(
+      tx,
+      {
+        animalId: rocket.id,
+        type: CareEpisodeType.UNDER_VET_CARE,
+        startDate: rocketExam.day,
+        reason: "Cough under investigation.",
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  const marigold = await animal("Marigold");
+  await prisma.$transaction(async (tx) => {
+    await openCareEpisode(
+      tx,
+      {
+        animalId: marigold.id,
+        type: CareEpisodeType.HOSPITALISED_OFF_SITE,
+        startDate: sinceDaysAgo(marigold, 2),
+        partnerId: downtownVet.id,
+        reason: "Not eating; on IV fluids.",
+      },
+      olivia.id,
+      today,
+    );
+    const { conditionId } = await addMedicalCondition(
+      tx,
+      {
+        animalId: marigold.id,
+        type: MedicalConditionType.CONDITION,
+        name: "Ringworm",
+        status: MedicalConditionStatus.ACTIVE,
+      },
+      olivia.id,
+      today,
+    );
+    await voidMedicalCondition(tx, conditionId, "Recorded on the wrong animal.", benjamin.id);
+  });
+
+  // --- Fern and Godzilla: triage, as vet exams scheduled -------------------
+  for (const [name, inDays] of [
+    ["Fern", 0],
+    ["Godzilla", 2],
+  ] as const) {
+    const subject = await animal(name);
+    await prisma.$transaction((tx) =>
+      scheduleMedicalEntry(
+        tx,
+        {
+          animalId: subject.id,
+          kind: MedicalEntryKind.EXAM,
+          examType: ExamType.VET,
+          dueDate: shiftDayKey(today, inDays),
+          notes: "Triage on arrival.",
+        },
+        olivia.id,
+        today,
+      ),
+    );
+  }
+
+  // --- Rusty: recovering from a mass removal -------------------------------
+  const rusty = await animal("Rusty");
+  await prisma.$transaction((tx) =>
+    recordMedicalEntry(
+      tx,
+      {
+        animalId: rusty.id,
+        kind: MedicalEntryKind.SURGERY,
+        procedure: SurgeryProcedure.MASS_REMOVAL,
+        completedDate: sinceDaysAgo(rusty, 4),
+        source: MedicalEntrySource.IN_HOUSE,
+        findings: "Benign lipoma, left flank, removed whole.",
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- Leo: an allergy ------------------------------------------------------
+  const leo = await animal("Leo");
+  await prisma.$transaction((tx) =>
+    addMedicalCondition(
+      tx,
+      {
+        animalId: leo.id,
+        type: MedicalConditionType.ALLERGY,
+        name: "Penicillin",
+        status: MedicalConditionStatus.ACTIVE,
+        notes: "Hives after a dose before intake, per his previous owner.",
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- Whiskers: fleas found on her intake exam, since resolved ------------
+  const whiskers = await animal("Whiskers");
+  const whiskersExam = await intakeExamOf(whiskers.id);
+  await prisma.$transaction(async (tx) => {
+    const { conditionId } = await addMedicalCondition(
+      tx,
+      {
+        animalId: whiskers.id,
+        type: MedicalConditionType.CONDITION,
+        name: "Flea infestation",
+        status: MedicalConditionStatus.ACTIVE,
+        onsetDate: whiskersExam.day,
+        sourceEntryId: whiskersExam.id,
+      },
+      olivia.id,
+      today,
+    );
+    await editMedicalCondition(
+      tx,
+      conditionId,
+      {
+        status: MedicalConditionStatus.RESOLVED,
+        resolvedDate: inStay(whiskers, 14),
+      },
+      olivia.id,
+      today,
+    );
+  });
+
+  console.log(
+    "Seeded care episodes for Fido, Daisy, Rocket and Marigold, triage exams for Fern and Godzilla, Rusty's surgery, and conditions for Fido, Daisy, Marigold, Leo and Whiskers.",
+  );
+}
+
 let seedTimezone = fallbackShelterSettings().timezone;
 
 export async function main() {
@@ -7480,6 +7810,7 @@ async function seedAll() {
   await seedMedicalFacts();
   await seedSurgeryAndMicrochipFixtures();
   await seedExamFixtures();
+  await seedCareFixtures();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

@@ -6,8 +6,8 @@ import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
 import { RequireAllPermissions } from "../../auth/protected-actions";
 import { findMedicalDueForQueue } from "../medical-due";
+import { findUnplannedCareForQueue } from "../care-episodes";
 import {
-  ACUTE_HEALTH_STATUSES,
   attentionUnitLabel,
   buildAttentionQueue,
   type AttentionAnimal,
@@ -16,17 +16,17 @@ import {
 
 export type { AttentionQueueItem, AttentionReason } from "./attention-queue";
 
-// Deliberate sibling of `fetchAnimalsRequiringAttention` in `analytics.data.ts`.
-// That one is health-status-only and backs the dashboard health table; this one
-// answers "what needs attention *today*" as a work queue whose every item clears
-// when someone acts on it. Both
-// exist on purpose — changing either would break the other's consumer.
+// Not the dashboard's list of animals under care (`fetchAnimalsUnderCare` in
+// `analytics.data.ts`), which shows every open care episode whatever is
+// planned for it. This one answers "what needs attention *today*" as a work
+// queue whose every item clears when someone acts on it.
 //
 // Signals:
 //   1. Task overdue or due today (status TODO/IN_PROGRESS, dueDate <= today)
 //   2. Scheduled medical care overdue or due today (status SCHEDULED, not
 //      voided, dueDate <= today), read by `findMedicalDueForQueue`
-//   3. Acute health status (see ACUTE_HEALTH_STATUSES) with no open task
+//   3. An open care episode with nothing planned: no open task and no
+//      scheduled care, read by `findUnplannedCareForQueue`
 //   4. Open foster placement past its expectedEndDate
 //
 // Queue-wide precondition: ARCHIVED animals (adopted / transferred / deceased)
@@ -37,8 +37,8 @@ export type { AttentionQueueItem, AttentionReason } from "./attention-queue";
 
 const OPEN_TASK_STATUSES = [TaskStatus.TODO, TaskStatus.IN_PROGRESS];
 
-// Flattened animal-identity select, shared by the task, health and foster
-// queries. The medical query has its own, in an auth-free module.
+// Flattened animal-identity select, shared by the task and foster queries.
+// The medical and care queries have their own, in auth-free modules.
 const attentionAnimalSelect = {
   id: true,
   name: true,
@@ -79,7 +79,7 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
       listingStatus: { not: AnimalListingStatus.ARCHIVED },
     } satisfies Prisma.AnimalWhereInput;
 
-    const [tasksDue, medicalDue, acuteHealth, fostersOverdue] = await Promise.all([
+    const [tasksDue, medicalDue, careUnplanned, fostersOverdue] = await Promise.all([
       // Signal 1. A null dueDate never satisfies `lte`, so undated backlog
       // tasks are excluded without an explicit filter.
       prisma.task.findMany({
@@ -98,16 +98,10 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
       }),
       // Signal 2. Archived animals are left out there too.
       findMedicalDueForQueue(prisma, today),
-      // Signal 3. Acute health AND zero open tasks — an animal that needs care
-      // and nobody has planned anything. Creating any task clears it.
-      prisma.animal.findMany({
-        where: {
-          ...notArchived,
-          healthStatus: { in: [...ACUTE_HEALTH_STATUSES] },
-          tasks: { none: { status: { in: OPEN_TASK_STATUSES } } },
-        },
-        select: { ...attentionAnimalSelect, healthStatus: true },
-      }),
+      // Signal 3. Under care AND nothing planned — an animal that needs care
+      // and nobody has planned anything. Creating a task or scheduling care
+      // clears it. Archived animals are left out there too.
+      findUnplannedCareForQueue(prisma),
       // Signal 4. Open placement (endDate == null) past its expected end.
       // One open placement per animal is an action-layer rule, not a DB
       // constraint — do not assume at most one row per animal.
@@ -138,11 +132,7 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
         priority: task.priority,
       })),
       medicalDue,
-      acuteHealth: acuteHealth.map((animal) => ({
-        animal: toAttentionAnimal(animal),
-        // `in: ACUTE_HEALTH_STATUSES` guarantees a non-null healthStatus here.
-        healthStatus: animal.healthStatus!,
-      })),
+      careUnplanned,
       fostersOverdue: fostersOverdue.map((placement) => ({
         animal: toAttentionAnimal(placement.animal),
         placementId: placement.id,

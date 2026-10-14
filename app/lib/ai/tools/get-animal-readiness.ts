@@ -56,7 +56,9 @@ export const getAnimalReadinessTool = tool({
     "`kind` is one of: ESCALATED_FINDING (the latest check of that " +
     "assessment was escalated), NEEDS_VET_REVIEW (the latest exam this stay " +
     "asked for a vet's review; a later exam with another result clears it), " +
-    "ACUTE_HEALTH, UNSUPPORTED_CHARACTERISTIC (a " +
+    "UNDER_CARE (an open care episode on the medical record: under vet " +
+    "care or hospitalised; closing the episode clears it), " +
+    "UNSUPPORTED_CHARACTERISTIC (a " +
     "trait on the profile that the assessments contradict or no longer back " +
     "up), MISSING_ASSESSMENT (a required check with nothing on file), " +
     "NO_INTAKE_EXAM (no intake exam on the medical record for the current " +

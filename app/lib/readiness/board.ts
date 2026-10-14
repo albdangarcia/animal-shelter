@@ -10,8 +10,8 @@
  */
 
 import type { AnimalListingStatus } from "@/prisma/generated/enums";
-import { formatSingleEnumOption } from "../utils/enum-formatter";
 import { EXAM_TYPE_LABELS } from "../constants/medical";
+import { openEpisodeText } from "../utils/care-status";
 import {
   formatShelterDay,
   shelterDayKey,
@@ -48,7 +48,7 @@ export type ReadinessBlockerKind = ReadinessBlocker["kind"];
 export const BLOCKER_KIND_ORDER: readonly ReadinessBlockerKind[] = [
   "ESCALATED_FINDING",
   "NEEDS_VET_REVIEW",
-  "ACUTE_HEALTH",
+  "UNDER_CARE",
   "UNSUPPORTED_CHARACTERISTIC",
   "MISSING_ASSESSMENT",
   "NO_INTAKE_EXAM",
@@ -358,8 +358,12 @@ export const describeBlocker = (blocker: ReadinessBlocker, timezone: string): st
       return "Not spayed or neutered";
     case "NO_PHOTO":
       return "No photo on the profile";
-    case "ACUTE_HEALTH":
-      return formatSingleEnumOption(blocker.healthStatus);
+    case "UNDER_CARE":
+      return openEpisodeText({
+        type: blocker.episodeType,
+        startDate: blocker.startDate,
+        clinicName: blocker.partnerName,
+      });
   }
 };
 
@@ -418,10 +422,11 @@ export function blockerAction(
         label: can.manageMedical ? "Record spay/neuter" : "View medical record",
         href: `${animal}/medical`,
       };
-    case "ACUTE_HEALTH":
-      return can.manageAnimalInfo
-        ? { label: "Update health status", href: `${animal}/edit` }
-        : { label: "View profile", href: animal };
+    case "UNDER_CARE":
+      return {
+        label: "View care episode",
+        href: `${animal}/medical/conditions`,
+      };
     case "NO_PHOTO":
       return {
         label: can.managePhotos ? "Add a photo" : "View photos",

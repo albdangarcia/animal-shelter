@@ -63,6 +63,21 @@ const missing = (templateName: string, since: Date): ReadinessBlocker => ({
   since,
 });
 
+// An open care episode that started on `day` of September.
+const underCareSince = (
+  episodeId: string,
+  day: number,
+  overrides: Partial<Extract<ReadinessBlocker, { kind: "UNDER_CARE" }>> = {},
+): ReadinessBlocker => ({
+  kind: "UNDER_CARE",
+  episodeId,
+  episodeType: "HOSPITALISED_IN_HOUSE",
+  startDate: `2026-09-${String(day).padStart(2, "0")}` as CalendarDay,
+  partnerName: null,
+  since: at(day, "00:00"),
+  ...overrides,
+});
+
 const entry = (
   a: ReadinessAnimal,
   blockers: ReadinessBlocker[],
@@ -148,22 +163,20 @@ test("a row is as old as its oldest blocker of the kind", () => {
   assert.equal(row.blockedDays, 10);
 });
 
-test("undated rows sort after dated ones, then by name, then id", () => {
-  const acute = (id: string, name: string) =>
-    entry(animal({ id, name }), [
-      { kind: "ACUTE_HEALTH", healthStatus: "HOSPITALISED", since: null },
-    ]);
+test("rows blocked since the same moment sort by name, then id", () => {
+  const underCare = (id: string, name: string) =>
+    entry(animal({ id, name }), [underCareSince(`episode-${id}`, 3)]);
   const board = buildReadinessBoard(
-    [acute("thor-2", "Thor"), acute("bailey", "Bailey"), acute("thor-1", "Thor")],
+    [underCare("thor-2", "Thor"), underCare("bailey", "Bailey"), underCare("thor-1", "Thor")],
     NO_FILTERS,
     NOW,
   );
-  const rows = groupOf(board, "ACUTE_HEALTH").rows;
+  const rows = groupOf(board, "UNDER_CARE").rows;
   assert.deepEqual(
     rows.map((r) => r.animal.id),
     ["bailey", "thor-1", "thor-2"],
   );
-  assert.ok(rows.every((r) => r.since === null && r.blockedDays === null));
+  assert.ok(rows.every((r) => r.blockedDays === 9));
 });
 
 test("days blocked are counted on the shelter's calendar", () => {
@@ -396,11 +409,6 @@ test("every other kind links to the page where it is cleared", () => {
       "/dashboard/animals/a1/characteristics",
     ],
     [{ kind: "NOT_SPAYED_NEUTERED", since: at(1) }, "/dashboard/animals/a1/medical", "/dashboard/animals/a1/medical"],
-    [
-      { kind: "ACUTE_HEALTH", healthStatus: "UNDER_VET_CARE", since: null },
-      "/dashboard/animals/a1/edit",
-      "/dashboard/animals/a1",
-    ],
     [{ kind: "NO_PHOTO", since: at(1) }, "/dashboard/animals/a1/photos", "/dashboard/animals/a1/photos"],
   ];
   for (const [blocker, manageHref, readHref] of cases) {
@@ -446,7 +454,7 @@ test("a vet review comes with the urgent groups, and a missing intake exam after
       { kind: "NOT_SPAYED_NEUTERED", since: at(1) },
       noIntakeExam,
       missing("Intake Behavioral", at(1)),
-      { kind: "ACUTE_HEALTH", healthStatus: "UNDER_VET_CARE", since: null },
+      underCareSince("episode-1", 1),
       needsVetReview,
       {
         kind: "ESCALATED_FINDING",
@@ -459,7 +467,7 @@ test("a vet review comes with the urgent groups, and a missing intake exam after
     [
       "ESCALATED_FINDING",
       "NEEDS_VET_REVIEW",
-      "ACUTE_HEALTH",
+      "UNDER_CARE",
       "MISSING_ASSESSMENT",
       "NO_INTAKE_EXAM",
       "NOT_SPAYED_NEUTERED",
@@ -501,6 +509,33 @@ test("a vet review links every viewer to the animal's exams", () => {
     assert.deepEqual(blockerAction(needsVetReview, "a1", can), {
       label: "Review the exam",
       href: "/dashboard/animals/a1/medical/history?kind=EXAM",
+    });
+  }
+});
+
+test("an open care episode reads as the banner does, and links every viewer to it", () => {
+  assert.equal(
+    describeBlocker(underCareSince("ep", 3), SHELTER_TIMEZONE),
+    "Hospitalised in house since Sep 3, 2026",
+  );
+  assert.equal(
+    describeBlocker(
+      underCareSince("ep", 3, {
+        episodeType: "HOSPITALISED_OFF_SITE",
+        partnerName: "Downtown Veterinary Clinic",
+      }),
+      SHELTER_TIMEZONE,
+    ),
+    "Hospitalised at Downtown Veterinary Clinic since Sep 3, 2026",
+  );
+  assert.equal(
+    describeBlocker(underCareSince("ep", 3, { episodeType: "UNDER_VET_CARE" }), SHELTER_TIMEZONE),
+    "Under vet care since Sep 3, 2026",
+  );
+  for (const can of [EVERYTHING, READ_ONLY]) {
+    assert.deepEqual(blockerAction(underCareSince("ep", 3), "a1", can), {
+      label: "View care episode",
+      href: "/dashboard/animals/a1/medical/conditions",
     });
   }
 });

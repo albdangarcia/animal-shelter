@@ -1,8 +1,10 @@
 import {
-  fetchAnimalsRequiringAttention,
+  fetchAnimalsUnderCare,
   fetchAnalyticsTaskTableData,
 } from "@/app/lib/data/analytics.data";
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 import { getRecentTasksColumns } from "@/components/dashboard/analytics/tables/tasks/recent-tasks-columns";
 import { healthColumns } from "@/components/dashboard/analytics/tables/animal-health/recent-health-columns";
@@ -19,9 +21,12 @@ import {
 } from "@/components/ui/card";
 
 const AnalyticsTables = async () => {
-  const [tasks, animalHealth, today] = await Promise.all([
+  // The Health tab lists care episodes from the medical record, so it is left
+  // out for a viewer who can't read the record.
+  const canReadMedical = await hasPermission(AppPermissions.MEDICAL_READ);
+  const [tasks, underCare, today] = await Promise.all([
     fetchAnalyticsTaskTableData(),
-    fetchAnimalsRequiringAttention(),
+    canReadMedical ? fetchAnimalsUnderCare() : null,
     getShelterToday(),
   ]);
 
@@ -29,7 +34,7 @@ const AnalyticsTables = async () => {
     <Tabs defaultValue="animal-tasks">
       <TabsList>
         <TabsTrigger value="animal-tasks">Tasks</TabsTrigger>
-        <TabsTrigger value="health">Health</TabsTrigger>
+        {underCare && <TabsTrigger value="health">Health</TabsTrigger>}
       </TabsList>
       <TabsContent value="animal-tasks">
         <Card>
@@ -49,24 +54,23 @@ const AnalyticsTables = async () => {
           </CardContent>
         </Card>
       </TabsContent>
-      <TabsContent value="health">
-        <Card>
-          <CardHeader>
-            <CardTitle>Animal Health</CardTitle>
-            <CardDescription>
-              This tab flags animals that are in a special state requiring
-              administrative or medical oversight.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DataTable
-              data={animalHealth}
-              columns={healthColumns}
-              ToolbarComponent={DataTableViewToolbarClient}
-            />
-          </CardContent>
-        </Card>
-      </TabsContent>
+      {underCare && (
+        <TabsContent value="health">
+          <Card>
+            <CardHeader>
+              <CardTitle>Animal Health</CardTitle>
+              <CardDescription>Animals with an open care episode.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DataTable
+                data={underCare}
+                columns={healthColumns}
+                ToolbarComponent={DataTableViewToolbarClient}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      )}
     </Tabs>
   );
 };

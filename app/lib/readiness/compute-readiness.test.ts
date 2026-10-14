@@ -9,6 +9,7 @@ import {
 } from "./compute-readiness";
 import {
   shelterDayKey,
+  shelterDaysBetween,
   shiftDayKey,
   type CalendarDay,
 } from "../utils/shelter-day";
@@ -46,7 +47,7 @@ const baseInputs: ComputeReadinessInputs = {
   },
   exams: [exam()],
   hasPhoto: true,
-  healthStatus: "HEALTHY",
+  openEpisode: null,
   inCareSince: IN_CARE_SINCE,
   timezone: "America/Los_Angeles",
 };
@@ -420,38 +421,53 @@ test("no photo blocks from the start of the stay", () => {
   assert.deepEqual(blockers, [{ kind: "NO_PHOTO", since: IN_CARE_SINCE }]);
 });
 
-test("an acute health status blocks, with no onset date to report", () => {
-  const blockers = computeReadiness({ ...baseInputs, healthStatus: "HOSPITALISED" });
+test("an open care episode blocks from the start of its first day on the shelter's calendar", () => {
+  const blockers = computeReadiness({
+    ...baseInputs,
+    openEpisode: {
+      id: "episode-1",
+      type: "HOSPITALISED_OFF_SITE",
+      startDate: day("2026-09-05"),
+      clinicName: "Downtown Veterinary Clinic",
+    },
+  });
   assert.deepEqual(blockers, [
-    { kind: "ACUTE_HEALTH", healthStatus: "HOSPITALISED", since: null },
+    {
+      kind: "UNDER_CARE",
+      episodeId: "episode-1",
+      episodeType: "HOSPITALISED_OFF_SITE",
+      startDate: "2026-09-05",
+      partnerName: "Downtown Veterinary Clinic",
+      // Midnight in Los Angeles, on daylight time.
+      since: new Date("2026-09-05T07:00:00Z"),
+    },
   ]);
 });
 
-test("a null health status does not block", () => {
-  const blockers = computeReadiness({ ...baseInputs, healthStatus: null });
-  assert.deepEqual(blockers, []);
+test("an episode starting on a day whose midnight the clocks skip is dated on that day", () => {
+  // Santiago springs forward at midnight on Sep 6, 2026: that day begins at
+  // 01:00, and read at the old offset its 00:00 is 23:00 on Sep 5.
+  const timezone = "America/Santiago";
+  const [blocker] = computeReadiness({
+    ...baseInputs,
+    timezone,
+    openEpisode: {
+      id: "episode-1",
+      type: "HOSPITALISED_IN_HOUSE",
+      startDate: day("2026-09-06"),
+      clinicName: null,
+    },
+  });
+  assert.equal(blocker.kind, "UNDER_CARE");
+  assert.equal(shelterDayKey(blocker.since, timezone), "2026-09-06");
+  assert.equal(
+    shelterDaysBetween(blocker.since, new Date("2026-09-06T12:00:00Z"), timezone),
+    0,
+  );
 });
 
-test("HEALTHY and AWAITING_SPAY_NEUTER are not acute", () => {
-  for (const healthStatus of ["HEALTHY", "AWAITING_SPAY_NEUTER"] as const) {
-    const blockers = computeReadiness({ ...baseInputs, healthStatus });
-    assert.deepEqual(blockers, []);
-  }
-});
-
-test("every acute health status blocks", () => {
-  const acute = [
-    "AWAITING_TRIAGE",
-    "AWAITING_VET_EXAM",
-    "UNDER_VET_CARE",
-    "HOSPITALISED",
-    "AWAITING_OTHER_SURGERY",
-    "RECOVERING_FROM_SURGERY",
-  ] as const;
-  for (const healthStatus of acute) {
-    const blockers = computeReadiness({ ...baseInputs, healthStatus });
-    assert.deepEqual(blockers, [{ kind: "ACUTE_HEALTH", healthStatus, since: null }]);
-  }
+test("no open care episode blocks nothing", () => {
+  assert.deepEqual(computeReadiness({ ...baseInputs, openEpisode: null }), []);
 });
 
 test("every blocker kind can appear together on one animal", () => {
@@ -463,19 +479,24 @@ test("every blocker kind can appear together on one animal", () => {
     // A vet exam asked for review, and there is no intake exam this stay.
     exams: [exam({ examType: "VET", overallResult: "NEEDS_VET_REVIEW" })],
     hasPhoto: false,
-    healthStatus: "UNDER_VET_CARE",
+    openEpisode: {
+      id: "episode-1",
+      type: "UNDER_VET_CARE",
+      startDate: STAY_DAY,
+      clinicName: null,
+    },
     inCareSince: IN_CARE_SINCE,
     timezone: "America/Los_Angeles",
   });
   const kinds = blockers.map((b) => b.kind).sort();
   assert.deepEqual(kinds, [
-    "ACUTE_HEALTH",
     "ESCALATED_FINDING",
     "MISSING_ASSESSMENT",
     "NEEDS_VET_REVIEW",
     "NOT_SPAYED_NEUTERED",
     "NO_INTAKE_EXAM",
     "NO_PHOTO",
+    "UNDER_CARE",
     "UNSUPPORTED_CHARACTERISTIC",
   ]);
 });

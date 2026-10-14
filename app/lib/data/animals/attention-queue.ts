@@ -5,28 +5,11 @@
 // `docs/specs/ai-chat/03-attention-queue.md` §Acceptance.
 
 import type {
-  AnimalHealthStatus,
+  CareEpisodeType,
   MedicalEntryKind,
   TaskPriority,
 } from "@/prisma/generated/enums";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
-
-/**
- * Health statuses that count as "acute" for signal 2. Named constant, not
- * inline, so it can be tuned once there is output against real data.
- *
- * Deliberately excluded: `HEALTHY` (not a concern) and `AWAITING_SPAY_NEUTER`
- * (spay/neuter is routine and sticky — it would dominate the queue). Do not
- * read the omission as an oversight.
- */
-export const ACUTE_HEALTH_STATUSES = [
-  "AWAITING_TRIAGE",
-  "AWAITING_VET_EXAM",
-  "UNDER_VET_CARE",
-  "HOSPITALISED",
-  "AWAITING_OTHER_SURGERY",
-  "RECOVERING_FROM_SURGERY",
-] as const satisfies readonly AnimalHealthStatus[];
 
 /** The queue is capped so it stays a scannable worklist, not a report. */
 export const ATTENTION_QUEUE_CAP = 20;
@@ -74,9 +57,13 @@ export type MedicalDueRow = {
   dueDate: CalendarDay;
 };
 
-export type AcuteHealthRow = {
+/** An open care episode on an animal with nothing planned for it: no open
+ * task and no scheduled care. */
+export type CareUnplannedRow = {
   animal: AttentionAnimal;
-  healthStatus: AnimalHealthStatus;
+  episodeId: string;
+  episodeType: CareEpisodeType;
+  startDate: CalendarDay;
 };
 
 export type FosterOverdueRow = {
@@ -103,7 +90,12 @@ export type AttentionReason =
       entryKind: MedicalEntryKind;
       dueDate: CalendarDay;
     }
-  | { kind: "UNTASKED_ACUTE_HEALTH"; healthStatus: AnimalHealthStatus }
+  | {
+      kind: "CARE_UNPLANNED";
+      episodeId: string;
+      episodeType: CareEpisodeType;
+      startDate: CalendarDay;
+    }
   | {
       kind: "FOSTER_OVERDUE";
       placementId: string;
@@ -123,7 +115,7 @@ export type AttentionQueueItem = {
 const TIER = {
   TASK_DUE: 1,
   MEDICAL_DUE: 2,
-  UNTASKED_ACUTE_HEALTH: 3,
+  CARE_UNPLANNED: 3,
   FOSTER_OVERDUE: 4,
 } as const;
 
@@ -132,7 +124,8 @@ function reasonTier(reason: AttentionReason): number {
 }
 
 // Order reasons within a single animal: overdue tasks first (earliest due, then
-// priority), then medical care (earliest due), then acute health, then foster.
+// priority), then medical care (earliest due), then care with nothing
+// planned (an animal has at most one open episode), then foster.
 // Deterministic.
 function compareReasons(a: AttentionReason, b: AttentionReason): number {
   const byTier = reasonTier(a) - reasonTier(b);
@@ -161,14 +154,15 @@ function compareReasons(a: AttentionReason, b: AttentionReason): number {
  * medical care added after tasks):
  *   1. has an overdue/due-today task — by earliest due date, then priority
  *   2. has scheduled medical care overdue or due today — by earliest due date
- *   3. untasked acute health
+ *   3. is under an open care episode with nothing planned (no open task, no
+ *      scheduled care) — by the episode's start
  *   4. overdue foster placement — by earliest expected end date
  * An animal in more than one tier sorts by its highest (lowest-numbered) tier.
  */
 export function buildAttentionQueue(input: {
   tasksDue: TaskDueRow[];
   medicalDue: MedicalDueRow[];
-  acuteHealth: AcuteHealthRow[];
+  careUnplanned: CareUnplannedRow[];
   fostersOverdue: FosterOverdueRow[];
 }): AttentionQueueItem[] {
   const byAnimal = new Map<
@@ -203,10 +197,12 @@ export function buildAttentionQueue(input: {
       dueDate: row.dueDate,
     });
   }
-  for (const row of input.acuteHealth) {
+  for (const row of input.careUnplanned) {
     ensure(row.animal).reasons.push({
-      kind: "UNTASKED_ACUTE_HEALTH",
-      healthStatus: row.healthStatus,
+      kind: "CARE_UNPLANNED",
+      episodeId: row.episodeId,
+      episodeType: row.episodeType,
+      startDate: row.startDate,
     });
   }
   for (const row of input.fostersOverdue) {
@@ -232,6 +228,7 @@ export function buildAttentionQueue(input: {
       tier: Math.min(...sortedReasons.map(reasonTier)),
       firstTask: sortedReasons.find((r) => r.kind === "TASK_DUE"),
       firstMedical: sortedReasons.find((r) => r.kind === "MEDICAL_DUE"),
+      firstCare: sortedReasons.find((r) => r.kind === "CARE_UNPLANNED"),
       firstFoster: sortedReasons.find((r) => r.kind === "FOSTER_OVERDUE"),
     };
   });
@@ -250,6 +247,11 @@ export function buildAttentionQueue(input: {
     if (a.tier === TIER.MEDICAL_DUE && a.firstMedical && b.firstMedical) {
       const byDue = a.firstMedical.dueDate.localeCompare(b.firstMedical.dueDate);
       if (byDue !== 0) return byDue;
+    }
+
+    if (a.tier === TIER.CARE_UNPLANNED && a.firstCare && b.firstCare) {
+      const byStart = a.firstCare.startDate.localeCompare(b.firstCare.startDate);
+      if (byStart !== 0) return byStart;
     }
 
     if (a.tier === TIER.FOSTER_OVERDUE && a.firstFoster && b.firstFoster) {

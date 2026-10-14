@@ -12,17 +12,18 @@
  *
  * The medical record's exams count for the stay they were done in: an
  * intake exam from an earlier stay doesn't stand for this one, and an
- * earlier stay's call for a vet's review doesn't hold this one up.
+ * earlier stay's call for a vet's review doesn't hold this one up. An open
+ * care episode holds the animal up from the day it started.
  */
 
 import type {
   AssessmentSignal,
-  AnimalHealthStatus,
+  CareEpisodeType,
   ExamType,
 } from "@/prisma/generated/enums";
-import { ACUTE_HEALTH_STATUSES } from "../data/animals/attention-queue";
 import type { ReadinessRequirement } from "./requirements";
 import type { SpayNeuterStatus } from "../utils/spay-neuter";
+import type { OpenCareEpisode } from "../utils/care-status";
 import { stayExams, type ExamFact } from "../utils/exams";
 import {
   shelterDayKey,
@@ -92,11 +93,15 @@ export type ReadinessBlocker =
       since: Date;
     }
   | {
-      kind: "ACUTE_HEALTH";
-      healthStatus: AnimalHealthStatus;
-      /** Health status changes aren't dated anywhere, so there is no honest
-       *  onset to report. */
-      since: null;
+      kind: "UNDER_CARE";
+      /** The open care episode. */
+      episodeId: string;
+      episodeType: CareEpisodeType;
+      startDate: CalendarDay;
+      /** The clinic, for a stay off site or vet care that names one. */
+      partnerName: string | null;
+      /** The start of the episode's first day on the shelter's calendar. */
+      since: Date;
     };
 
 /** One of the animal's completed, unvoided exams, from any stay. */
@@ -150,7 +155,8 @@ export interface ComputeReadinessInputs {
    *  shelter's calendar) count. */
   exams: ReadinessExam[];
   hasPhoto: boolean;
-  healthStatus: AnimalHealthStatus | null;
+  /** The animal's open care episode, if it is under care. */
+  openEpisode: OpenCareEpisode | null;
   /** When the animal's current stay began (its latest intake). What it needs
    *  from arrival — required checks, a photo, spay/neuter — is due from here. */
   inCareSince: Date;
@@ -300,16 +306,15 @@ export function computeReadiness(
   if (!inputs.hasPhoto) {
     blockers.push({ kind: "NO_PHOTO", since: inputs.inCareSince });
   }
-  if (
-    inputs.healthStatus &&
-    (ACUTE_HEALTH_STATUSES as readonly AnimalHealthStatus[]).includes(
-      inputs.healthStatus,
-    )
-  ) {
+  if (inputs.openEpisode) {
+    const { id, type, startDate, clinicName } = inputs.openEpisode;
     blockers.push({
-      kind: "ACUTE_HEALTH",
-      healthStatus: inputs.healthStatus,
-      since: null,
+      kind: "UNDER_CARE",
+      episodeId: id,
+      episodeType: type,
+      startDate,
+      partnerName: clinicName,
+      since: startOfShelterDay(startDate, inputs.timezone),
     });
   }
 

@@ -29,6 +29,8 @@ import {
 } from "../application-status.data";
 import { getShelterToday } from "../shelter-settings.data";
 import { findMedicalStatus } from "./medical-status";
+import { findCareStatus } from "./care-status";
+import type { CareStatus } from "@/app/lib/utils/care-status";
 
 // data for the animals table in the dashboard
 const _fetchAnimals = async (
@@ -626,7 +628,6 @@ const aiAnimalSummarySelect = {
   sex: true,
   birthDate: true,
   size: true,
-  healthStatus: true,
   listingStatus: true,
   species: { select: { name: true } },
   breeds: { where: { deletedAt: null }, select: { name: true } },
@@ -676,7 +677,8 @@ export type AiAnimalSummaryRow = Prisma.AnimalGetPayload<{
 
 /**
  * Single-animal summary for the assistant: identity, current housing/foster
- * state, health, and open tasks. Returns `null` for an unknown or malformed
+ * state, and open tasks (its care is read by `_fetchAnimalCareStatus`, for a
+ * viewer who can see the medical record). Returns `null` for an unknown or malformed
  * id — the tool turns that into a structured failure the model can explain.
  * Deliberately NOT `_fetchSectionCardsAnimalData`: that surfaces
  * microchip number, foster contact, and application statuses under
@@ -696,6 +698,27 @@ export const _fetchAnimalSummary = async (
   } catch (error) {
     console.error("Error fetching animal summary for the AI assistant.", error);
     throw new Error("Error fetching animal summary.");
+  }
+};
+
+/**
+ * One animal's care status on the shelter's today, for the assistant's
+ * summary. Exported unwrapped, as `_fetchAnimalSummary` is: the tool checks
+ * `MEDICAL_READ` itself and leaves the care out for a viewer without it.
+ * Null for an unknown or malformed id.
+ */
+export const _fetchAnimalCareStatus = async (
+  animalId: string,
+): Promise<CareStatus | null> => {
+  const parsedId = cuidSchema.safeParse(animalId);
+  if (!parsedId.success) return null;
+
+  try {
+    const today = await getShelterToday();
+    return (await findCareStatus(prisma, [parsedId.data], today)).get(parsedId.data) ?? null;
+  } catch (error) {
+    console.error("Error fetching the care status for the AI assistant.", error);
+    throw new Error("Error fetching the care status.");
   }
 };
 

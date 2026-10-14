@@ -10,6 +10,7 @@ import {
 import { ConflictError, NotFoundError } from "@/app/lib/utils/errors";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import { beforeIntakeIssue, futureDayIssue } from "@/app/lib/utils/medical-days";
+import { careEpisodeText } from "@/app/lib/utils/care-status";
 import {
   CARE_EPISODE_TYPE_LABELS,
   MEDICAL_REASON_MAX_LENGTH,
@@ -124,21 +125,6 @@ const asJson = (value: object) => value as Prisma.InputJsonObject;
 // The text
 // ---------------------------------------------------------------------------
 
-/**
- * What the text calls the care: "hospitalised in house", "hospitalised at
- * Downtown Veterinary Clinic", "under vet care" or "under vet care at …".
- */
-const careText = (type: CareEpisodeType, clinicName: string | null) => {
-  switch (type) {
-    case CareEpisodeType.HOSPITALISED_IN_HOUSE:
-      return "hospitalised in house";
-    case CareEpisodeType.HOSPITALISED_OFF_SITE:
-      return `hospitalised at ${clinicName ?? "a vet clinic"}`;
-    case CareEpisodeType.UNDER_VET_CARE:
-      return clinicName ? `under vet care at ${clinicName}` : "under vet care";
-  }
-};
-
 // "Oct 3 to Oct 9, 2026", "Sep 28, 2026 to Jan 2, 2027" or "on Oct 3, 2026".
 const spanText = (start: CalendarDay, end: CalendarDay) =>
   start === end
@@ -165,7 +151,7 @@ const episodeText = async (
   values: Pick<EpisodeValues, "type" | "startDate" | "endDate" | "partnerId">,
   open: "since" | "from" = "since",
 ) => {
-  const care = careText(values.type, await readClinicName(tx, values.partnerId));
+  const care = careEpisodeText(values.type, await readClinicName(tx, values.partnerId));
   return values.endDate
     ? `${care}, ${spanText(values.startDate, values.endDate)}`
     : `${care} ${open} ${dayText(values.startDate)}`;

@@ -6,8 +6,8 @@ import type { AiToolName } from "./tool-names";
  * Nobody arrives at a chat box in a shelter app knowing what it can do, so the
  * empty state has to teach the tool set. These are drawn from what the seed can
  * actually answer, which makes the empty state double as the demo path: the
- * attention queue, the deliberate two-Bruno collision, an animal in an acute
- * health status, what's still outstanding before an animal is ready for
+ * attention queue, the deliberate two-Bruno collision, an animal under care
+ * with nothing planned for it, what's still outstanding before an animal is ready for
  * adoption, a summary with open tasks attached, and — staff only — a task
  * status change behind the approval card (Daisy's overdue post-op recheck).
  *
@@ -39,8 +39,8 @@ const CHAT_EXAMPLES: readonly ChatExample[] = [
     requiresTools: ["findAnimals", "getAnimalSummary"],
   },
   {
-    label: "What's going on with Fern?",
-    prompt: "What's going on with Fern? Is anyone looking after her?",
+    label: "What's going on with Rocket?",
+    prompt: "What's going on with Rocket? Is anyone looking after him?",
     requiresTools: ["findAnimals", "getAnimalSummary"],
   },
   {
