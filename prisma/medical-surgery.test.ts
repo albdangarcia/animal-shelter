@@ -38,11 +38,18 @@ import {
   findMedicalHistoryPage,
   findRecentMedicalEntries,
   findVaccinesAndTests,
+  type MedicalHistoryItem,
 } from "@/app/lib/data/animals/medical-entry";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
 // Random, not the time: the files run in parallel, and each cleans up the
 // catalog items whose names end in its own runId.
+
+// History's entries: the animals here have no conditions or care episodes,
+// so every row of a page is an entry.
+const historyEntries = (page: { items: MedicalHistoryItem[] }) =>
+  page.items.flatMap((item) => (item.source === "ENTRY" ? [item.entry] : []));
+
 const runId = randomUUID().slice(0, 8);
 const TODAY = calendarDay("2026-10-10");
 const INTAKE_DAY = calendarDay("2026-08-01");
@@ -613,7 +620,7 @@ test("history lists surgeries and filters to them; the vaccine reads leave them 
     timeZone: "UTC",
   });
   assert.deepEqual(
-    all.entries.map((entry) => entry.id),
+    historyEntries(all).map((entry) => entry.id),
     [dentalId, spayId, rabiesEntryId],
   );
   const surgeries = await findMedicalHistoryPage(prisma, animalId, {
@@ -623,13 +630,13 @@ test("history lists surgeries and filters to them; the vaccine reads leave them 
     timeZone: "UTC",
   });
   assert.deepEqual(
-    surgeries.entries.map((entry) => [entry.id, entry.procedure, entry.item]),
+    historyEntries(surgeries).map((entry) => [entry.id, entry.procedure, entry.item]),
     [
       [dentalId, SurgeryProcedure.DENTAL, null],
       [spayId, SurgeryProcedure.SPAY, null],
     ],
   );
-  assert.equal(surgeries.entries[1].surgery?.evidence, null);
+  assert.equal(historyEntries(surgeries)[1].surgery?.evidence, null);
 
   // Still the rabies vaccine, and Vaccines & Tests holds only it.
   assert.equal((await findLatestRabiesVaccine(prisma, animalId))?.entryId, rabiesEntryId);

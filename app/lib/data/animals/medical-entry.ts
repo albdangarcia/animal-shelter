@@ -5,12 +5,19 @@
 // current) counts only completed entries that aren't voided: scheduled care
 // hasn't happened, declined care never will, and a voided entry counts for
 // nothing. The due list reads scheduled entries that aren't voided. Only the
-// history reads every entry.
+// history reads every entry, beside the problem list and care episodes.
 
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import { Prisma } from "@/prisma/generated/client";
 import { MedicalEntryKind, MedicalEntryStatus } from "@/prisma/generated/enums";
 import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
+import type { MedicalHistoryKind } from "@/app/lib/zod-schemas/medical-entry.schemas";
+import {
+  CARE_EPISODE_DISPLAY_SELECT,
+  MEDICAL_CONDITION_DISPLAY_SELECT,
+  type CareEpisodeDisplay,
+  type MedicalConditionDisplay,
+} from "./medical-condition";
 
 type Db = TransactionClient | typeof prisma;
 
@@ -237,59 +244,117 @@ export const findOpenScheduledEntryIdsByItem = async (
   return byItem;
 };
 
+/** One row of History: an entry, a problem-list row or a care episode. */
+export type MedicalHistoryItem =
+  | { source: "ENTRY"; id: string; entry: MedicalEntryDisplay }
+  | { source: "CONDITION"; id: string; condition: MedicalConditionDisplay }
+  | { source: "EPISODE"; id: string; episode: CareEpisodeDisplay };
+
 /**
- * One page of the animal's entries, whatever their status, voided ones
- * included: the history is the only read that shows them all. `kinds` empty
- * means every kind.
+ * One page of the animal's history: its entries, whatever their status, its
+ * problem-list rows and its care episodes, voided ones included. History is
+ * the only read that shows them all. `kinds` filters by entry kind and by
+ * CONDITION and CARE_EPISODE; empty means everything.
  *
- * Newest first by the day given or, for care not given, the day due, so
- * upcoming care comes first and care given on an unknown day before intake
- * comes last. A spay/neuter exemption recorded on its own was never due, so
- * it goes by the day it was recorded, on the shelter's calendar
- * (`timeZone`). Prisma can't order by that, so the page's ids are picked in
- * SQL and the entries read by id.
+ * Newest first by the day each is about. An entry goes by the day given or,
+ * for care not given, the day due, so upcoming care comes first and care
+ * given on an unknown day before intake comes last. A spay/neuter exemption
+ * recorded on its own was never due, so it goes by the day it was recorded,
+ * on the shelter's calendar (`timeZone`). A condition goes by its onset, or
+ * the day it was recorded when it has none; an episode by its start. Prisma
+ * can't order across tables, so the page's ids are picked in SQL and the rows
+ * read by id.
+ *
+ * The root client only: the rows select sibling relations, which Prisma
+ * fetches at once.
  */
 export const findMedicalHistoryPage = async (
-  db: Db,
+  db: typeof prisma,
   animalId: string,
   options: {
-    kinds: MedicalEntryKind[];
+    kinds: MedicalHistoryKind[];
     page: number;
     perPage: number;
     timeZone: string;
   },
-) => {
-  const where: Prisma.MedicalEntryWhereInput = {
-    animalId,
-    ...(options.kinds.length > 0 && { kind: { in: options.kinds } }),
-  };
-  const kindFilter =
-    options.kinds.length > 0
-      ? Prisma.sql`AND kind::text IN (${Prisma.join(options.kinds)})`
-      : Prisma.empty;
-  // The shelter day a declined entry with no due day was recorded on.
-  // `created_at` is stored as UTC with no zone, so it is read as UTC first,
-  // then as the shelter's wall clock.
-  const declinedUndueDay = Prisma.sql`CASE WHEN status::text = ${MedicalEntryStatus.DECLINED}
-    THEN to_char((created_at AT TIME ZONE 'UTC') AT TIME ZONE ${options.timeZone}, 'YYYY-MM-DD')
-    END`;
-  const [total, page] = await Promise.all([
-    db.medicalEntry.count({ where }),
-    db.$queryRaw<{ id: string }[]>`
-      SELECT id FROM medical_entries
-      WHERE animal_id = ${animalId} ${kindFilter}
-      ORDER BY coalesce(completed_date, due_date, ${declinedUndueDay}) DESC NULLS LAST,
-        created_at DESC, id DESC
+): Promise<{ items: MedicalHistoryItem[]; totalPages: number }> => {
+  const all = options.kinds.length === 0;
+  const entryKinds = options.kinds.filter(
+    (kind): kind is MedicalEntryKind => kind !== "CONDITION" && kind !== "CARE_EPISODE",
+  );
+  const withEntries = all || entryKinds.length > 0;
+  const withConditions = all || options.kinds.includes("CONDITION");
+  const withEpisodes = all || options.kinds.includes("CARE_EPISODE");
+
+  // The shelter day a row was recorded on. `created_at` is stored as UTC with
+  // no zone, so it is read as UTC first, then as the shelter's wall clock.
+  const recordedDay = Prisma.sql`to_char((created_at AT TIME ZONE 'UTC') AT TIME ZONE ${options.timeZone}, 'YYYY-MM-DD')`;
+  const branches: Prisma.Sql[] = [];
+  if (withEntries) {
+    const kindFilter = all
+      ? Prisma.empty
+      : Prisma.sql`AND kind::text IN (${Prisma.join(entryKinds)})`;
+    branches.push(Prisma.sql`
+      SELECT 'ENTRY' AS source, id, created_at,
+        coalesce(completed_date, due_date,
+          CASE WHEN status::text = ${MedicalEntryStatus.DECLINED} THEN ${recordedDay} END) AS day
+      FROM medical_entries WHERE animal_id = ${animalId} ${kindFilter}`);
+  }
+  if (withConditions) {
+    branches.push(Prisma.sql`
+      SELECT 'CONDITION' AS source, id, created_at, coalesce(onset_date, ${recordedDay}) AS day
+      FROM medical_conditions WHERE animal_id = ${animalId}`);
+  }
+  if (withEpisodes) {
+    branches.push(Prisma.sql`
+      SELECT 'EPISODE' AS source, id, created_at, start_date AS day
+      FROM care_episodes WHERE animal_id = ${animalId}`);
+  }
+
+  const [entryCount, conditionCount, episodeCount, page] = await Promise.all([
+    withEntries
+      ? db.medicalEntry.count({
+          where: { animalId, ...(!all && { kind: { in: entryKinds } }) },
+        })
+      : 0,
+    withConditions ? db.medicalCondition.count({ where: { animalId } }) : 0,
+    withEpisodes ? db.careEpisode.count({ where: { animalId } }) : 0,
+    db.$queryRaw<{ source: MedicalHistoryItem["source"]; id: string }[]>`
+      SELECT source, id FROM (${Prisma.join(branches, " UNION ALL ")}) AS history
+      ORDER BY day DESC NULLS LAST, created_at DESC, id DESC
       LIMIT ${options.perPage} OFFSET ${(options.page - 1) * options.perPage}`,
   ]);
-  const ids = page.map((row) => row.id);
-  const rows = await db.medicalEntry.findMany({
-    where: { id: { in: ids } },
-    select: MEDICAL_ENTRY_DISPLAY_SELECT,
-  });
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  const entries = ids.flatMap((id) => byId.get(id) ?? []);
-  return { entries, totalPages: Math.max(1, Math.ceil(total / options.perPage)) };
+  const idsOf = (source: MedicalHistoryItem["source"]) =>
+    page.filter((row) => row.source === source).map((row) => row.id);
+  const [entries, conditions, episodes] = await Promise.all([
+    db.medicalEntry.findMany({
+      where: { id: { in: idsOf("ENTRY") } },
+      select: MEDICAL_ENTRY_DISPLAY_SELECT,
+    }),
+    db.medicalCondition.findMany({
+      where: { id: { in: idsOf("CONDITION") } },
+      select: MEDICAL_CONDITION_DISPLAY_SELECT,
+    }),
+    db.careEpisode.findMany({
+      where: { id: { in: idsOf("EPISODE") } },
+      select: CARE_EPISODE_DISPLAY_SELECT,
+    }),
+  ]);
+  const byId = new Map<string, MedicalHistoryItem>([
+    ...entries.map((entry) => [entry.id, { source: "ENTRY", id: entry.id, entry }] as const),
+    ...conditions.map(
+      (condition) =>
+        [condition.id, { source: "CONDITION", id: condition.id, condition }] as const,
+    ),
+    ...episodes.map(
+      (episode) => [episode.id, { source: "EPISODE", id: episode.id, episode }] as const,
+    ),
+  ]);
+  const total = entryCount + conditionCount + episodeCount;
+  return {
+    items: page.flatMap((row) => byId.get(row.id) ?? []),
+    totalPages: Math.max(1, Math.ceil(total / options.perPage)),
+  };
 };
 
 /** The animal's completed vaccines and tests that aren't voided, newest

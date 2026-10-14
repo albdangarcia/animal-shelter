@@ -339,6 +339,8 @@ const CLAIM_ISSUE_TEXT = {
   CONTRADICTED: "contradicted by a live finding",
   SOURCE_DELETED: "cites a deleted assessment",
   NO_LONGER_SUPPORTED: "its assessment no longer supports it",
+  CONDITION_RESOLVED: "its condition was resolved",
+  CONDITION_VOIDED: "cites a voided condition",
 } as const;
 
 /** What a blocker is, in the words the board and the panel show it in. */

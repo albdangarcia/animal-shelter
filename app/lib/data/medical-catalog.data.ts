@@ -16,6 +16,10 @@ import type { CalendarDay } from "../utils/shelter-day";
 import type { WeightUnitSystem } from "../utils/shelter-settings";
 import { spayNeuterStatus } from "../utils/spay-neuter";
 import { findSpayNeuterEntries } from "./animals/medical-status";
+import {
+  fetchConditionFormChoices,
+  type ConditionFormChoices,
+} from "./animals/medical-condition.data";
 
 export type {
   MedicalBatchItem,
@@ -141,13 +145,19 @@ export const fetchMedicalEntryFormOptions = RequirePermission(
  * options, and which of the two medical write permissions they hold.
  * `canAdminister` gives scheduled care (records or declines it); `canManage`
  * plans and corrects care (schedules, reschedules, records ad hoc, edits,
- * voids).
+ * voids), and keeps the problem list and care episodes.
  */
 export interface MedicalControls {
   animalId: string;
   options: MedicalEntryFormOptions;
+  /** What the problem-list and care-episode forms offer; null without
+   * `canManage`. */
+  conditionChoices: ConditionFormChoices | null;
   canManage: boolean;
   canAdminister: boolean;
+  /** Whether they may also change the animal's traits, as adding one from a
+   * condition does. */
+  canManageCharacteristics: boolean;
 }
 
 /**
@@ -158,15 +168,22 @@ export interface MedicalControls {
 export const fetchMedicalControls = async (
   animalId: string,
 ): Promise<MedicalControls | null> => {
-  const [canManage, canAdminister] = await Promise.all([
+  const [canManage, canAdminister, canManageCharacteristics] = await Promise.all([
     hasPermission(AppPermissions.MEDICAL_MANAGE),
     hasPermission(AppPermissions.MEDICAL_ADMINISTER),
+    hasPermission(AppPermissions.ANIMAL_CHARACTERISTICS_MANAGE),
   ]);
   if (!canAdminister) return null;
+  const [options, conditionChoices] = await Promise.all([
+    fetchMedicalEntryFormOptions(animalId),
+    canManage ? fetchConditionFormChoices(animalId) : null,
+  ]);
   return {
     animalId,
-    options: await fetchMedicalEntryFormOptions(animalId),
+    options,
+    conditionChoices,
     canManage,
     canAdminister,
+    canManageCharacteristics,
   };
 };

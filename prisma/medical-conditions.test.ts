@@ -21,10 +21,13 @@ import {
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalItemKind,
+  CareEpisodeType,
+  PartnerType,
   Sex,
   TestResult,
 } from "@/prisma/generated/enums";
 import {
+  addCharacteristicFromCondition,
   addMedicalCondition,
   editMedicalCondition,
   voidMedicalCondition,
@@ -38,6 +41,24 @@ import {
   voidMedicalEntry,
 } from "@/app/lib/services/medical-entry";
 import { createMedicalItem } from "@/app/lib/services/medical-catalog";
+import {
+  closeCareEpisode,
+  openCareEpisode,
+  voidCareEpisode,
+} from "@/app/lib/services/care-episode";
+import {
+  findCareEpisodes,
+  findConditionEventNames,
+  findConditionFormChoices,
+  findProblemList,
+} from "@/app/lib/data/animals/medical-condition";
+import { findMedicalHistoryPage } from "@/app/lib/data/animals/medical-entry";
+import {
+  findAnimalReadiness,
+  findReadinessForAnimals,
+} from "@/app/lib/data/animals/readiness";
+import { reconcileAnimalCharacteristics } from "@/app/lib/services/animal-characteristics";
+import type { MedicalHistoryKind } from "@/app/lib/zod-schemas/medical-entry.schemas";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import { EXAM_BODY_SYSTEM_KEYS } from "@/app/lib/constants/exam";
 import { ConflictError } from "@/app/lib/utils/errors";
@@ -139,6 +160,7 @@ after(async () => {
   await prisma.animal.deleteMany({ where: { speciesId } });
   await prisma.medicalItem.deleteMany({ where: { name: { endsWith: runId } } });
   await prisma.characteristic.deleteMany({ where: { name: { endsWith: runId } } });
+  await prisma.partner.deleteMany({ where: { name: { endsWith: runId } } });
   await prisma.person.deleteMany({ where: { id: { in: [staffId, editorId] } } });
   await prisma.color.deleteMany({ where: { id: colorId } });
   await prisma.species.deleteMany({ where: { id: speciesId } });
@@ -852,6 +874,440 @@ test("nothing is added for an animal that has left, but its rows are still resol
   await edit(conditionId, { status: RESOLVED, resolvedDate: TODAY });
   assert.equal((await stored(conditionId)).status, RESOLVED);
   await voidIt(otherId, "Wrong animal.");
+});
+
+// ---------------------------------------------------------------------------
+// What the Conditions page reads
+// ---------------------------------------------------------------------------
+
+test("the Conditions page reads the problem list and episodes in order, with names for their changes", async () => {
+  const animalId = await makeAnimal("Page");
+  const testId = await recordHeartwormTest(animalId);
+  const examId = await recordIntakeExam(animalId);
+  const voidedTestId = await recordHeartwormTest(animalId, day("2026-09-10"));
+  await prisma.$transaction((tx) =>
+    voidMedicalEntry(tx, voidedTestId, "Wrong animal.", staffId),
+  );
+  const clinicId = (
+    await prisma.partner.create({
+      data: { name: name("Page Clinic"), type: PartnerType.VET_CLINIC },
+      select: { id: true },
+    })
+  ).id;
+
+  const { conditionId: heartwormId } = await add(
+    animalId,
+    condition({ sourceEntryId: testId, characteristicId: heartwormTraitId }),
+  );
+  await edit(heartwormId, { characteristicId: deafTraitId });
+  const { conditionId: fleasId } = await add(
+    animalId,
+    condition({ name: "flea infestation", sourceEntryId: examId }),
+  );
+  await edit(fleasId, { status: RESOLVED, resolvedDate: day("2026-08-20") });
+  const { conditionId: ringwormId } = await add(animalId, condition({ name: "Ringworm" }));
+  await voidIt(ringwormId, "Wrong animal.");
+  const { conditionId: penicillinId } = await add(
+    animalId,
+    condition({ type: ALLERGY, name: "Penicillin" }),
+  );
+  const { conditionId: deafnessId } = await add(
+    animalId,
+    condition({ name: "Congenital deafness", status: CHRONIC }),
+  );
+
+  const run = <T>(write: (tx: TransactionClient) => Promise<T>) =>
+    prisma.$transaction(write);
+  const { episodeId: clinicStayId } = await run((tx) =>
+    openCareEpisode(
+      tx,
+      {
+        animalId,
+        type: CareEpisodeType.HOSPITALISED_OFF_SITE,
+        partnerId: clinicId,
+        startDate: day("2026-08-03"),
+        reason: "Dehydrated.",
+      },
+      staffId,
+      TODAY,
+    ),
+  );
+  await run((tx) => closeCareEpisode(tx, clinicStayId, day("2026-08-05"), editorId, TODAY));
+  const { episodeId: voidedId } = await run((tx) =>
+    openCareEpisode(
+      tx,
+      { animalId, type: CareEpisodeType.UNDER_VET_CARE, startDate: day("2026-09-01"), endDate: day("2026-09-02"), reason: "Wrong." },
+      staffId,
+      TODAY,
+    ),
+  );
+  await run((tx) => voidCareEpisode(tx, voidedId, "Wrong animal.", editorId));
+  const { episodeId: openId } = await run((tx) =>
+    openCareEpisode(
+      tx,
+      {
+        animalId,
+        type: CareEpisodeType.HOSPITALISED_IN_HOUSE,
+        startDate: day("2026-08-10"),
+        reason: "Heartworm treatment.",
+      },
+      staffId,
+      TODAY,
+    ),
+  );
+
+  // Allergies, then live conditions, then resolved, then voided.
+  const problems = await findProblemList(prisma, animalId);
+  assert.deepEqual(
+    problems.map((row) => row.id),
+    [penicillinId, deafnessId, heartwormId, fleasId, ringwormId],
+  );
+  const heartworm = problems[2];
+  assert.equal(heartworm.sourceEntry?.id, testId);
+  assert.equal(heartworm.characteristic?.name, name("Deaf"));
+  assert.deepEqual(
+    heartworm.events.map((event) => event.action),
+    [MedicalConditionEventAction.CREATED, MedicalConditionEventAction.EDITED],
+  );
+
+  // The open episode first, then the rest by start day, newest first.
+  const episodes = await findCareEpisodes(prisma, animalId);
+  assert.deepEqual(
+    episodes.map((episode) => episode.id),
+    [openId, voidedId, clinicStayId],
+  );
+  assert.equal(episodes[2].partner?.name, name("Page Clinic"));
+  assert.equal(episodes[2].closedBy?.name, name("Condition editor"));
+
+  // Every id the events hold reads as a name.
+  const names = await findConditionEventNames(prisma, problems, episodes);
+  assert.equal(names[testId], `${name("Heartworm antigen")} test of Sep 3, 2026`);
+  assert.equal(names[examId], "intake exam of Aug 1, 2026");
+  assert.equal(names[heartwormTraitId], name("Heartworm Positive"));
+  assert.equal(names[deafTraitId], name("Deaf"));
+  assert.equal(names[clinicId], name("Page Clinic"));
+
+  // What the forms offer: live medical traits, and this animal's completed,
+  // live tests and exams, newest first.
+  const choices = await findConditionFormChoices(prisma, animalId);
+  const traitIds = choices.characteristics.map((trait) => trait.id);
+  assert.ok(traitIds.includes(heartwormTraitId) && traitIds.includes(deafTraitId));
+  assert.ok(!traitIds.includes(behaviourTraitId) && !traitIds.includes(retiredTraitId));
+  assert.deepEqual(choices.sources, [
+    { id: testId, label: `${name("Heartworm antigen")} test of Sep 3, 2026` },
+    { id: examId, label: "intake exam of Aug 1, 2026" },
+  ]);
+  assert.ok(choices.vetClinics.some((clinic) => clinic.id === clinicId));
+});
+
+test("History pages entries, conditions and care episodes together, newest first, with the kind filter", async () => {
+  const animalId = await makeAnimal("History");
+  const examId = await recordIntakeExam(animalId); // Aug 1
+  const testId = await recordHeartwormTest(animalId); // Sep 3
+  const { conditionId: undatedId } = await add(animalId, condition({ name: "Otitis" }));
+  const { conditionId: heartwormId } = await add(
+    animalId,
+    condition({ onsetDate: day("2026-09-10") }),
+  );
+  const { conditionId: voidedConditionId } = await add(
+    animalId,
+    condition({ name: "Ringworm", onsetDate: day("2026-08-20") }),
+  );
+  await voidIt(voidedConditionId, "Wrong animal.");
+  const run = <T>(write: (tx: TransactionClient) => Promise<T>) =>
+    prisma.$transaction(write);
+  const { episodeId: closedId } = await run((tx) =>
+    openCareEpisode(
+      tx,
+      {
+        animalId,
+        type: CareEpisodeType.UNDER_VET_CARE,
+        startDate: day("2026-08-15"),
+        endDate: day("2026-08-18"),
+        reason: "Cough.",
+      },
+      staffId,
+      TODAY,
+    ),
+  );
+  const { episodeId: voidedEpisodeId } = await run((tx) =>
+    openCareEpisode(
+      tx,
+      { animalId, type: CareEpisodeType.HOSPITALISED_IN_HOUSE, startDate: day("2026-09-20"), reason: "Wrong." },
+      staffId,
+      TODAY,
+    ),
+  );
+  await run((tx) => voidCareEpisode(tx, voidedEpisodeId, "Wrong animal.", editorId));
+
+  const page = (kinds: MedicalHistoryKind[], pageNumber = 1, perPage = 10) =>
+    findMedicalHistoryPage(prisma, animalId, {
+      kinds,
+      page: pageNumber,
+      perPage,
+      timeZone: "UTC",
+    });
+  const ids = (result: Awaited<ReturnType<typeof page>>) =>
+    result.items.map((item) => [item.source, item.id]);
+
+  // A condition with no onset goes by the day it was recorded (today, after
+  // every other day here); voided rows are listed.
+  const everything: [string, string][] = [
+    ["CONDITION", undatedId],
+    ["EPISODE", voidedEpisodeId],
+    ["CONDITION", heartwormId],
+    ["ENTRY", testId],
+    ["CONDITION", voidedConditionId],
+    ["EPISODE", closedId],
+    ["ENTRY", examId],
+  ];
+  assert.deepEqual(ids(await page([])), everything);
+
+  // Paged across all three tables.
+  const first = await page([], 1, 3);
+  assert.deepEqual(ids(first), everything.slice(0, 3));
+  assert.equal(first.totalPages, 3);
+  assert.deepEqual(ids(await page([], 3, 3)), everything.slice(6));
+
+  // The kind filter: conditions alone; episodes with one entry kind.
+  assert.deepEqual(
+    ids(await page(["CONDITION"])),
+    everything.filter(([source]) => source === "CONDITION"),
+  );
+  const mixed = await page(["CARE_EPISODE", MedicalEntryKind.TEST]);
+  assert.deepEqual(ids(mixed), [
+    ["EPISODE", voidedEpisodeId],
+    ["ENTRY", testId],
+    ["EPISODE", closedId],
+  ]);
+  assert.equal(mixed.totalPages, 1);
+
+  // Each row carries what its own row component shows.
+  const rows = (await page([])).items;
+  const voidedCondition = rows.find((item) => item.id === voidedConditionId);
+  assert.ok(voidedCondition?.source === "CONDITION" && voidedCondition.condition.voidedAt);
+  const voidedEpisode = rows.find((item) => item.id === voidedEpisodeId);
+  assert.ok(voidedEpisode?.source === "EPISODE" && voidedEpisode.episode.voidedAt);
+});
+
+// ---------------------------------------------------------------------------
+// A condition's trait
+// ---------------------------------------------------------------------------
+
+const NOW = new Date("2026-10-10T18:00:00Z");
+
+const addTrait = (
+  animalId: string,
+  conditionId: string,
+  actorId = editorId,
+  at = NOW,
+) =>
+  prisma.$transaction((tx) =>
+    addCharacteristicFromCondition(tx, { animalId, conditionId }, actorId, at),
+  );
+
+const assignmentOf = (animalId: string, characteristicId: string) =>
+  prisma.animalCharacteristic.findUnique({
+    where: { animalId_characteristicId: { animalId, characteristicId } },
+    select: {
+      assignedById: true,
+      assignedAt: true,
+      sourceConditionId: true,
+      sourceAssessmentId: true,
+      removedAt: true,
+    },
+  });
+
+test("a live condition adds its trait citing it, re-cites one already there, and leaves one citing it", async () => {
+  const animalId = await makeAnimal("Trait");
+  const { conditionId } = await add(
+    animalId,
+    condition({ characteristicId: heartwormTraitId }),
+  );
+
+  // Not on the animal: added, citing the condition.
+  assert.deepEqual(await addTrait(animalId, conditionId), {
+    status: "added",
+    message: `${name("Heartworm Positive")} added to the animal.`,
+  });
+  assert.deepEqual(await assignmentOf(animalId, heartwormTraitId), {
+    assignedById: editorId,
+    assignedAt: NOW,
+    sourceConditionId: conditionId,
+    sourceAssessmentId: null,
+    removedAt: null,
+  });
+  // Already citing it: nothing written.
+  const feedBefore = await prisma.animalActivityLog.count({ where: { animalId } });
+  assert.equal((await addTrait(animalId, conditionId, staffId)).status, "unchanged");
+  assert.equal((await assignmentOf(animalId, heartwormTraitId))?.assignedById, editorId);
+  assert.equal(await prisma.animalActivityLog.count({ where: { animalId } }), feedBefore);
+
+  // On the animal by hand: the condition is cited instead.
+  const { conditionId: deafnessId } = await add(
+    animalId,
+    condition({ name: "Congenital deafness", status: CHRONIC, characteristicId: deafTraitId }),
+  );
+  await prisma.$transaction((tx) =>
+    reconcileAnimalCharacteristics(
+      tx,
+      { animalId, characteristicIds: [heartwormTraitId, deafTraitId] },
+      staffId,
+      NOW,
+    ),
+  );
+  assert.equal((await assignmentOf(animalId, deafTraitId))?.sourceConditionId, null);
+  assert.equal((await addTrait(animalId, deafnessId)).status, "cited");
+  assert.equal((await assignmentOf(animalId, deafTraitId))?.sourceConditionId, deafnessId);
+
+  const feed = (await feedOf(animalId)).filter(
+    (row) => row.activityType === AnimalActivityType.FIELD_UPDATE,
+  );
+  assert.deepEqual(
+    feed.map((row) => [row.changedById, row.changeSummary]),
+    [
+      [editorId, `${name("Heartworm Positive")} added, citing the condition Heartworm disease.`],
+      [staffId, `Characteristics updated: added ${name("Deaf")}.`],
+      [editorId, `${name("Deaf")} re-cited to the condition Congenital deafness.`],
+    ],
+  );
+
+  // A trait removed since is added again, citing the condition.
+  await prisma.animalCharacteristic.update({
+    where: { animalId_characteristicId: { animalId, characteristicId: heartwormTraitId } },
+    data: { removedAt: NOW, removedById: staffId },
+  });
+  assert.equal((await addTrait(animalId, conditionId)).status, "added");
+  assert.equal((await assignmentOf(animalId, heartwormTraitId))?.removedAt, null);
+});
+
+test("a resolved, voided or trait-less condition, another animal's, or a retired trait adds nothing", async () => {
+  const animalId = await makeAnimal("No trait");
+  const otherId = await makeAnimal("Other trait");
+  const refusedWith = async (conditionId: string, message: RegExp, on = animalId) => {
+    const traitsBefore = await prisma.animalCharacteristic.count({ where: { animalId: on } });
+    const feedBefore = await prisma.animalActivityLog.count({ where: { animalId: on } });
+    await assert.rejects(addTrait(on, conditionId), (error: unknown) => {
+      assert.ok(error instanceof MedicalEntryRefusal, String(error));
+      assert.match(error.message, message);
+      return true;
+    });
+    assert.equal(await prisma.animalCharacteristic.count({ where: { animalId: on } }), traitsBefore);
+    assert.equal(await prisma.animalActivityLog.count({ where: { animalId: on } }), feedBefore);
+  };
+
+  const { conditionId: resolvedId } = await add(
+    animalId,
+    condition({ characteristicId: heartwormTraitId }),
+  );
+  await edit(resolvedId, { status: RESOLVED, resolvedDate: TODAY });
+  await refusedWith(resolvedId, /is resolved/);
+
+  const { conditionId: voidedId } = await add(
+    animalId,
+    condition({ name: "Deafness", characteristicId: deafTraitId }),
+  );
+  await voidIt(voidedId, "Wrong animal.");
+  await refusedWith(voidedId, /was voided/);
+
+  const { conditionId: plainId } = await add(animalId, condition({ name: "Otitis" }));
+  await refusedWith(plainId, /doesn't name a trait/);
+
+  const { conditionId: othersId } = await add(
+    otherId,
+    condition({ characteristicId: heartwormTraitId }),
+  );
+  await refusedWith(othersId, /isn't on this animal's record/);
+
+  // A trait retired after the condition named it.
+  const laterRetiredId = (
+    await prisma.characteristic.create({
+      data: { name: name("Later Retired"), category: CharacteristicCategory.MEDICAL },
+      select: { id: true },
+    })
+  ).id;
+  const { conditionId: namingRetiredId } = await add(
+    animalId,
+    condition({ name: "Mange", characteristicId: laterRetiredId }),
+  );
+  await prisma.characteristic.update({
+    where: { id: laterRetiredId },
+    data: { deletedAt: NOW },
+  });
+  await refusedWith(namingRetiredId, /has been retired/);
+});
+
+test("the manual path clears a condition's citation when it puts a trait back", async () => {
+  const animalId = await makeAnimal("Manual");
+  const { conditionId } = await add(
+    animalId,
+    condition({ characteristicId: heartwormTraitId }),
+  );
+  await addTrait(animalId, conditionId);
+  const reconcile = (characteristicIds: string[]) =>
+    prisma.$transaction((tx) =>
+      reconcileAnimalCharacteristics(tx, { animalId, characteristicIds }, staffId, NOW),
+    );
+  // Kept by a save that doesn't touch it, so it still cites the condition.
+  await reconcile([heartwormTraitId]);
+  assert.equal((await assignmentOf(animalId, heartwormTraitId))?.sourceConditionId, conditionId);
+  // Removed, then put back by hand: no source.
+  await reconcile([]);
+  await reconcile([heartwormTraitId]);
+  const assignment = await assignmentOf(animalId, heartwormTraitId);
+  assert.equal(assignment?.removedAt, null);
+  assert.equal(assignment?.sourceConditionId, null);
+  assert.equal(assignment?.sourceAssessmentId, null);
+});
+
+test("readiness flags a trait whose condition was resolved or voided, through both reads", async () => {
+  const live = await makeAnimal("Readiness live");
+  const resolved = await makeAnimal("Readiness resolved");
+  const voided = await makeAnimal("Readiness voided");
+  const traitFrom = async (animalId: string) => {
+    const { conditionId } = await add(
+      animalId,
+      condition({ characteristicId: heartwormTraitId }),
+    );
+    await addTrait(animalId, conditionId, editorId, new Date("2026-09-01T12:00:00Z"));
+    return conditionId;
+  };
+  await traitFrom(live);
+  await edit(await traitFrom(resolved), { status: RESOLVED, resolvedDate: day("2026-10-09") });
+  const voidedId = await traitFrom(voided);
+  await voidIt(voidedId, "Wrong animal.");
+  const { voidedAt } = await stored(voidedId);
+
+  const shelterDay = { timezone: "America/Los_Angeles", today: day("2026-10-14") };
+  const animalIds = [live, resolved, voided];
+  const flagsOf = (blockers: { kind: string }[]) =>
+    blockers.filter((blocker) => blocker.kind === "UNSUPPORTED_CHARACTERISTIC");
+  const one = new Map<string, unknown>();
+  for (const animalId of animalIds) {
+    one.set(animalId, flagsOf((await findAnimalReadiness(prisma, animalId, shelterDay))!.blockers));
+  }
+  const board = new Map<string, unknown>();
+  for (const readiness of await findReadinessForAnimals(prisma, shelterDay, { animalIds })) {
+    board.set(readiness.animal.id, flagsOf(readiness.blockers));
+  }
+  const flag = (issue: string, since: Date) => [
+    {
+      kind: "UNSUPPORTED_CHARACTERISTIC",
+      characteristicId: heartwormTraitId,
+      characteristicName: name("Heartworm Positive"),
+      issue,
+      since,
+    },
+  ];
+  // The trait was added on Sep 1; the condition resolved on Oct 9, from
+  // midnight in Los Angeles, and was voided when it was.
+  const expected = new Map<string, unknown>([
+    [live, []],
+    [resolved, flag("CONDITION_RESOLVED", new Date("2026-10-09T07:00:00Z"))],
+    [voided, flag("CONDITION_VOIDED", voidedAt!)],
+  ]);
+  assert.deepEqual(one, expected);
+  assert.deepEqual(board, expected);
 });
 
 // ---------------------------------------------------------------------------

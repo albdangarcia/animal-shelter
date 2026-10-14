@@ -3,7 +3,7 @@ import { z } from "zod";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { cuidSchema, currentPageSchema } from "../../zod-schemas/common.schemas";
-import { medicalEntryKindsParam } from "../../zod-schemas/medical-entry.schemas";
+import { medicalHistoryKindsParam } from "../../zod-schemas/medical-entry.schemas";
 import { getShelterSettings, getShelterToday } from "../shelter-settings.data";
 import { rabiesStatus, type RabiesStatus } from "../../utils/medical-days";
 import type { CalendarDay } from "../../utils/shelter-day";
@@ -16,15 +16,19 @@ import {
   findRecentMedicalEntries,
   findVaccinesAndTests,
   type MedicalEntryDisplay,
+  type MedicalHistoryItem,
 } from "./medical-entry";
+import { findConditionEventNames } from "./medical-condition";
 import {
   findMedicalStatus,
   type CurrentChip,
 } from "./medical-status";
 import type { SpayNeuterStatus } from "../../utils/spay-neuter";
 import type { ExamFact } from "../../utils/exams";
+import type { CareStatus } from "../../utils/care-status";
+import { findCareStatus } from "./care-status";
 
-export type { MedicalEntryDisplay } from "./medical-entry";
+export type { MedicalEntryDisplay, MedicalHistoryItem } from "./medical-entry";
 
 const RECENT_ENTRIES = 5;
 const HISTORY_PER_PAGE = 10;
@@ -47,6 +51,8 @@ export interface MedicalOverview {
   chips: CurrentChip[];
   /** The latest exam done that isn't voided, of any type. */
   lastExam: ExamFact | null;
+  /** The open care episode, allergies and live conditions, for the alerts. */
+  care: CareStatus;
   currentWeightGrams: number | null;
   /** Scheduled care not given yet, soonest due first, overdue included. */
   dueEntries: MedicalEntryDisplay[];
@@ -67,10 +73,11 @@ const _fetchMedicalOverview = async (
   const id = parseAnimalId(animalId);
   try {
     const today = await getShelterToday();
-    const [latestRabies, status, animal, dueEntries, recentEntries] =
+    const [latestRabies, status, care, animal, dueEntries, recentEntries] =
       await Promise.all([
         findLatestRabiesVaccine(prisma, id),
         findMedicalStatus(prisma, id, today),
+        findCareStatus(prisma, [id], today),
         prisma.animal.findUnique({
           where: { id },
           select: { currentWeightGrams: true },
@@ -89,6 +96,7 @@ const _fetchMedicalOverview = async (
       spayNeuter: status.spayNeuter,
       chips: status.chips,
       lastExam: status.lastExam,
+      care: care.get(id)!,
       currentWeightGrams: animal?.currentWeightGrams ?? null,
       dueEntries,
       reviewEntry,
@@ -112,7 +120,7 @@ export const fetchMedicalOverview = RequirePermission(
 
 const HistoryArgsSchema = z.object({
   currentPage: currentPageSchema,
-  kinds: medicalEntryKindsParam,
+  kinds: medicalHistoryKindsParam,
 });
 
 const _fetchMedicalHistory = async (
@@ -121,7 +129,8 @@ const _fetchMedicalHistory = async (
   // A list when the URL repeats `kind`.
   kindInput: string | string[] | undefined,
 ): Promise<{
-  entries: MedicalEntryDisplay[];
+  animalName: string;
+  items: MedicalHistoryItem[];
   totalPages: number;
   names: EventNames;
   today: CalendarDay;
@@ -139,13 +148,35 @@ const _fetchMedicalHistory = async (
       getShelterSettings(),
       getShelterToday(),
     ]);
-    const page = await findMedicalHistoryPage(prisma, id, {
-      kinds: args.data.kinds,
-      page: args.data.currentPage,
-      perPage: HISTORY_PER_PAGE,
-      timeZone: timezone,
-    });
-    return { ...page, names: await findEventNames(prisma, page.entries), today };
+    const [animal, page] = await Promise.all([
+      prisma.animal.findUniqueOrThrow({ where: { id }, select: { name: true } }),
+      findMedicalHistoryPage(prisma, id, {
+        kinds: args.data.kinds,
+        page: args.data.currentPage,
+        perPage: HISTORY_PER_PAGE,
+        timeZone: timezone,
+      }),
+    ]);
+    const pick = <S extends MedicalHistoryItem["source"]>(source: S) =>
+      page.items.filter(
+        (item): item is Extract<MedicalHistoryItem, { source: S }> =>
+          item.source === source,
+      );
+    // Each table's events name their own kinds of record.
+    const [entryNames, recordNames] = await Promise.all([
+      findEventNames(prisma, pick("ENTRY").map((item) => item.entry)),
+      findConditionEventNames(
+        prisma,
+        pick("CONDITION").map((item) => item.condition),
+        pick("EPISODE").map((item) => item.episode),
+      ),
+    ]);
+    return {
+      animalName: animal.name,
+      ...page,
+      names: { ...entryNames, ...recordNames },
+      today,
+    };
   } catch (error) {
     console.error("Failed to fetch medical history:", error);
     throw new Error("Could not fetch the medical history.");

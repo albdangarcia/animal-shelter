@@ -10,21 +10,29 @@ import {
 import { SimplePagination } from "@/components/simple-pagination";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { MedicalEntryKind } from "@/prisma/generated/enums";
-import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry.data";
+import type { MedicalHistoryItem } from "@/app/lib/data/animals/medical-entry.data";
 import { MEDICAL_ENTRY_KIND_LABELS } from "@/app/lib/constants/medical";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
-import { MedicalEntryList } from "./medical-entry-list";
+import { MedicalEntryRow } from "./medical-entry-list";
+import { CareEpisodeRow, ConditionRow } from "./condition-list";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
 
-const kindOptions = Object.values(MedicalEntryKind).map((kind) => ({
-  value: kind,
-  label: MEDICAL_ENTRY_KIND_LABELS[kind],
-}));
+// Every entry kind, then the records History lists beside entries.
+const kindOptions = [
+  ...Object.values(MedicalEntryKind).map((kind) => ({
+    value: kind,
+    label: MEDICAL_ENTRY_KIND_LABELS[kind],
+  })),
+  { value: "CONDITION", label: "Condition" },
+  { value: "CARE_EPISODE", label: "Care episode" },
+];
 
 interface Props {
-  entries: MedicalEntryDisplay[];
+  animalName: string;
+  /** Entries, problem-list rows and care episodes, newest first. */
+  items: MedicalHistoryItem[];
   totalPages: number;
   names: Record<string, string>;
   today: CalendarDay;
@@ -34,7 +42,8 @@ interface Props {
 }
 
 const MedicalHistory = ({
-  entries,
+  animalName,
+  items,
   totalPages,
   names,
   today,
@@ -46,9 +55,10 @@ const MedicalHistory = ({
       <CardHeader>
         <CardTitle className="@[650px]/card:text-xl">History</CardTitle>
         <CardDescription>
-          Every entry, newest first by the day given or due, so care still
-          to come is at the top. Voided entries stay here, struck through,
-          with who voided them and why.
+          Every entry, condition and care episode, newest first by the day
+          given or due, the onset or the start, so care still to come is at
+          the top. Voided ones stay here, struck through, with who voided
+          them and why.
         </CardDescription>
         {controls?.canManage && (
           <CardAction>
@@ -67,14 +77,43 @@ const MedicalHistory = ({
         </div>
       </CardHeader>
       <CardContent>
-        {entries.length > 0 ? (
-          <MedicalEntryList
-            entries={entries}
-            names={names}
-            today={today}
-            unitSystem={unitSystem}
-            controls={controls}
-          />
+        {items.length > 0 ? (
+          <ul className="space-y-3">
+            {items.map((item) => {
+              switch (item.source) {
+                case "ENTRY":
+                  return (
+                    <MedicalEntryRow
+                      key={item.id}
+                      entry={item.entry}
+                      names={names}
+                      today={today}
+                      unitSystem={unitSystem}
+                      controls={controls}
+                    />
+                  );
+                case "CONDITION":
+                  return (
+                    <ConditionRow
+                      key={item.id}
+                      condition={item.condition}
+                      names={names}
+                      controls={controls}
+                    />
+                  );
+                case "EPISODE":
+                  return (
+                    <CareEpisodeRow
+                      key={item.id}
+                      episode={item.episode}
+                      names={names}
+                      controls={controls}
+                      animalName={animalName}
+                    />
+                  );
+              }
+            })}
+          </ul>
         ) : (
           <div className="text-center py-12 px-6 border-2 border-dashed rounded-lg">
             <p className="font-semibold text-lg">No Entries Found</p>

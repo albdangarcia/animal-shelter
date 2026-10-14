@@ -851,7 +851,7 @@ test("History places an exemption recorded on its own by the shelter day it was 
         perPage: 10,
         timeZone,
       })
-    ).entries.map((entry) => entry.id);
+    ).items.map((item) => item.id);
 
   // On Oct 10, after the dental given the day before. The chip found before
   // intake on an unknown day stays last.

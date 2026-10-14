@@ -29,7 +29,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
   const { page, kind } = await searchParams;
   // One page is shown: of a repeated `page`, the first. Every `kind` counts.
   const pageNumber = Number([page ?? "1"].flat()[0]);
-  const [{ entries, totalPages, names, today }, settings, controls] =
+  const [{ animalName, items, totalPages, names, today }, settings, controls] =
     await Promise.all([
       fetchMedicalHistory(animalId, pageNumber, kind),
       getShelterSettings(),
@@ -38,7 +38,8 @@ const PageContent = async ({ params, searchParams }: Props) => {
 
   return (
     <MedicalHistory
-      entries={entries}
+      animalName={animalName}
+      items={items}
       totalPages={totalPages}
       names={names}
       today={today}

@@ -35,7 +35,8 @@ export const MedicalOverviewSkeleton = () => (
       <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
       <CardDescription>
         Vaccines, tests, treatments, surgeries, microchips and exams: what
-        is due, and what this animal has been given.
+        is due, and what this animal has been given. Its conditions and
+        care episodes are on Conditions.
       </CardDescription>
     </CardHeader>
     <CardContent className="space-y-6">
@@ -64,9 +65,10 @@ export const MedicalHistorySkeleton = () => (
     <CardHeader>
       <CardTitle className="@[650px]/card:text-xl">History</CardTitle>
       <CardDescription>
-        Every entry, newest first by the day given or due, so care still to
-        come is at the top. Voided entries stay here, struck through, with
-        who voided them and why.
+        Every entry, condition and care episode, newest first by the day
+        given or due, the onset or the start, so care still to come is at the
+        top. Voided ones stay here, struck through, with who voided them and
+        why.
       </CardDescription>
       <div className="mt-4">
         <Skeleton className="h-8 w-24" />
@@ -99,4 +101,34 @@ export const VaccinesAndTestsSkeleton = () => (
       ))}
     </CardContent>
   </Card>
+);
+
+export const MedicalConditionsSkeleton = () => (
+  <div className="flex flex-col gap-4">
+    <Card className="@container/card">
+      <CardHeader>
+        <CardTitle className="@[650px]/card:text-xl">Problem list</CardTitle>
+        <CardDescription>
+          Allergies, then the conditions the animal lives with, then those
+          resolved. Voided rows stay here, struck through, with who voided
+          them and why.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <EntryRowsSkeleton rows={2} />
+      </CardContent>
+    </Card>
+    <Card className="@container/card">
+      <CardHeader>
+        <CardTitle className="@[650px]/card:text-xl">Care episodes</CardTitle>
+        <CardDescription>
+          When the animal was under vet care or hospitalised, here or at a
+          clinic. The open episode comes first.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <EntryRowsSkeleton rows={1} />
+      </CardContent>
+    </Card>
+  </div>
 );

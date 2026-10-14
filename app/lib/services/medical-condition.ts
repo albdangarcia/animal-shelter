@@ -43,6 +43,9 @@ import {
  * entry's do, and a line in the animal's activity feed. A void is written
  * once and never undone; a voided row is kept and counts for nothing.
  *
+ * A live condition that names a trait can put that trait on the animal, the
+ * assignment citing the condition as its source.
+ *
  * Every write takes the animal's lock first, so two people changing one
  * animal's problem list at once are applied one after the other. Like the
  * entry service, this module has **no `next/*` and no auth imports**, so the
@@ -653,4 +656,94 @@ export async function voidMedicalCondition(
   });
 
   return { conditionId, animalId };
+}
+
+export type CharacteristicFromCondition =
+  | { status: "added" | "cited"; message: string }
+  | { status: "unchanged"; message: string };
+
+/**
+ * Puts the trait a condition stands for on the animal, citing the condition:
+ * assigned if it isn't on the animal, or its citation moved here if it is
+ * assigned from anywhere else. Re-derives, inside the transaction, that the
+ * condition belongs to the animal, isn't voided, is active or chronic, and
+ * names a trait still in use: the request is only a selection.
+ */
+export async function addCharacteristicFromCondition(
+  tx: TransactionClient,
+  { animalId, conditionId }: { animalId: string; conditionId: string },
+  actorId: string,
+  now: Date,
+): Promise<CharacteristicFromCondition> {
+  await lockAnimal(tx, animalId);
+  const condition = await tx.medicalCondition.findUnique({
+    where: { id: conditionId },
+    select: {
+      animalId: true,
+      name: true,
+      status: true,
+      voidedAt: true,
+      characteristicId: true,
+    },
+  });
+  if (!condition || condition.animalId !== animalId) {
+    throw new MedicalEntryRefusal("That condition isn't on this animal's record.");
+  }
+  if (condition.voidedAt) {
+    throw new MedicalEntryRefusal("This condition was voided, so it can't add a trait.");
+  }
+  if (condition.status === MedicalConditionStatus.RESOLVED) {
+    throw new MedicalEntryRefusal(
+      "This condition is resolved, so it no longer stands for a trait. Make it active again first.",
+    );
+  }
+  if (!condition.characteristicId) {
+    throw new MedicalEntryRefusal("This condition doesn't name a trait it stands for.");
+  }
+  const { characteristicId } = condition;
+  // One read after another: a transaction is one connection.
+  const characteristic = await tx.characteristic.findUniqueOrThrow({
+    where: { id: characteristicId },
+    select: { name: true, deletedAt: true },
+  });
+  if (characteristic.deletedAt) {
+    throw new MedicalEntryRefusal("That characteristic has been retired.");
+  }
+  const existing = await tx.animalCharacteristic.findUnique({
+    where: { animalId_characteristicId: { animalId, characteristicId } },
+    select: { removedAt: true, sourceConditionId: true },
+  });
+  const onAnimal = existing !== null && existing.removedAt === null;
+  if (onAnimal && existing.sourceConditionId === conditionId) {
+    return {
+      status: "unchanged",
+      message: `${characteristic.name} already cites this condition.`,
+    };
+  }
+
+  // A trait has one source: citing the condition drops an assessment's.
+  const assignment = {
+    assignedById: actorId,
+    assignedAt: now,
+    sourceConditionId: conditionId,
+    sourceAssessmentId: null,
+  };
+  await tx.animalCharacteristic.upsert({
+    where: { animalId_characteristicId: { animalId, characteristicId } },
+    create: { animalId, characteristicId, ...assignment },
+    update: { ...assignment, removedAt: null, removedById: null },
+  });
+  await tx.animalActivityLog.create({
+    data: {
+      animalId,
+      activityType: AnimalActivityType.FIELD_UPDATE,
+      changedById: actorId,
+      changeSummary: onAnimal
+        ? `${characteristic.name} re-cited to the condition ${condition.name}.`
+        : `${characteristic.name} added, citing the condition ${condition.name}.`,
+    },
+  });
+  return onAnimal
+    ? { status: "cited", message: `${characteristic.name} now cites this condition.` }
+    : { status: "added", message: `${characteristic.name} added to the animal.` };
 }

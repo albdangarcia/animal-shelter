@@ -7,7 +7,8 @@
  * Every blocker carries `since`: when the recorded evidence says it began.
  * Nothing about a blocker is stored, so this is read off dates the evidence
  * already has — the start of the current stay, an observation, a deletion,
- * an edit, the day after a spay/neuter exemption lapsed, the day of an exam.
+ * an edit, the day after a spay/neuter exemption lapsed, the day of an exam,
+ * the day a condition resolved or the moment it was voided.
  * `null` means nothing in the app dates the onset at all.
  *
  * The medical record's exams count for the stay they were done in: an
@@ -39,7 +40,11 @@ export type CharacteristicClaimIssue =
   | "SOURCE_DELETED"
   /** The sourcing assessment's current answers no longer propose the trait
    *  (an edit took it away). */
-  | "NO_LONGER_SUPPORTED";
+  | "NO_LONGER_SUPPORTED"
+  /** The problem-list condition that sourced the trait has been resolved. */
+  | "CONDITION_RESOLVED"
+  /** The problem-list condition that sourced the trait has been voided. */
+  | "CONDITION_VOIDED";
 
 export type ReadinessBlocker =
   | {
@@ -137,6 +142,12 @@ export interface ReadinessCharacteristicClaim {
    *  later than that. Ignored when `sourceDeletedAt` is set: a deleted
    *  source's current answers aren't a separate thing to report. */
   supportLostAt: Date | null;
+  /** When the citing condition was voided. */
+  conditionVoidedAt: Date | null;
+  /** The start of the day the citing condition resolved, on the shelter's
+   *  calendar. Ignored when `conditionVoidedAt` is set: a voided condition
+   *  counts for nothing, resolved or not. */
+  conditionResolvedAt: Date | null;
 }
 
 export interface ComputeReadinessInputs {
@@ -235,6 +246,11 @@ function characteristicClaimBlockers(
       blocker("SOURCE_DELETED", claim.sourceDeletedAt);
     } else if (claim.supportLostAt) {
       blocker("NO_LONGER_SUPPORTED", claim.supportLostAt);
+    }
+    if (claim.conditionVoidedAt) {
+      blocker("CONDITION_VOIDED", claim.conditionVoidedAt);
+    } else if (claim.conditionResolvedAt) {
+      blocker("CONDITION_RESOLVED", claim.conditionResolvedAt);
     }
     if (claim.contradictedAt) {
       blocker("CONTRADICTED", claim.contradictedAt);

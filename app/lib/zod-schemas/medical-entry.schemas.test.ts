@@ -11,6 +11,7 @@ import {
   SpayNeuterExemptionTermsSchema,
   VoidMedicalEntrySchema,
   medicalEntryKindsParam,
+  medicalHistoryKindsParam,
   medicalEntryFieldErrors,
   rabiesDurationIssue,
   type MedicalEntryFormInput,
@@ -581,6 +582,15 @@ test("medicalEntryKindsParam: a comma list or a repeated param, unknown kinds ig
     "TREATMENT",
     "TEST",
   ]);
+});
+
+test("medicalHistoryKindsParam: entry kinds plus conditions and care episodes", () => {
+  const kinds = (value: unknown) => medicalHistoryKindsParam.parse(value);
+  assert.deepEqual(kinds(undefined), []);
+  assert.deepEqual(kinds("CONDITION,CARE_EPISODE"), ["CONDITION", "CARE_EPISODE"]);
+  assert.deepEqual(kinds(["TEST,CONDITION", "GROOMING", "TEST"]), ["TEST", "CONDITION"]);
+  // The Due page's filter lists entries only.
+  assert.deepEqual(medicalEntryKindsParam.parse("CONDITION,EXAM"), ["EXAM"]);
 });
 
 // Batches. Ids are checked as cuids, so these are shaped like one.

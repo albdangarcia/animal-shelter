@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import prisma from "@/app/lib/prisma";
 import {
+  RequireAllPermissions,
   RequirePermission,
   SessionUser,
   withAuthenticatedUser,
@@ -17,6 +18,7 @@ import {
   type VoidMedicalConditionInput,
 } from "../zod-schemas/medical-condition.schemas";
 import {
+  addCharacteristicFromCondition as addTraitFromCondition,
   addMedicalCondition as addCondition,
   editMedicalCondition as editCondition,
   voidMedicalCondition as voidCondition,
@@ -178,6 +180,50 @@ const _voidMedicalCondition = async (
   return { ok: true, message: "Condition voided." };
 };
 
+const _addCharacteristicFromCondition = async (
+  user: SessionUser,
+  conditionId: string,
+): Promise<FormResult<Record<string, never>>> => {
+  const parsedId = cuidSchema.safeParse(conditionId);
+  if (!parsedId.success) {
+    return { ok: false, message: "Invalid condition ID format." };
+  }
+  const located = await prisma.medicalCondition.findUnique({
+    where: { id: parsedId.data },
+    select: { animalId: true },
+  });
+  if (!located) {
+    return { ok: false, message: "Condition not found." };
+  }
+
+  let message: string;
+  try {
+    ({ message } = await prisma.$transaction((tx) =>
+      addTraitFromCondition(
+        tx,
+        { animalId: located.animalId, conditionId: parsedId.data },
+        user.personId,
+        new Date(),
+      ),
+    ));
+  } catch (error) {
+    const refusal = refused<Record<string, never>>(error);
+    if (refusal) return refusal;
+    console.error("Database error adding a trait from a condition:", error);
+    return { ok: false, message: "Database Error: Failed to add the trait." };
+  }
+
+  revalidateProblemList(located.animalId);
+  const animalPath = `/dashboard/animals/${located.animalId}`;
+  revalidatePath(`${animalPath}/characteristics`);
+  // What each assessment's page suggests depends on the animal's traits, and
+  // the public profile lists them.
+  revalidatePath(`${animalPath}/assessments`);
+  revalidatePath("/dashboard/animals/[id]/assessments/[assessmentId]", "page");
+  revalidatePath(`/pets/${located.animalId}`);
+  return { ok: true, message };
+};
+
 export const addMedicalCondition = withAuthenticatedUser(
   RequirePermission(AppPermissions.MEDICAL_MANAGE)(_addMedicalCondition),
 );
@@ -189,4 +235,13 @@ export const editMedicalCondition = withAuthenticatedUser(
 
 export const voidMedicalCondition = withAuthenticatedUser(
   RequirePermission(AppPermissions.MEDICAL_MANAGE)(_voidMedicalCondition),
+);
+
+// Puts a trait on the animal, so it needs the characteristics permission as
+// well as the medical one.
+export const addCharacteristicFromCondition = withAuthenticatedUser(
+  RequireAllPermissions(
+    AppPermissions.MEDICAL_MANAGE,
+    AppPermissions.ANIMAL_CHARACTERISTICS_MANAGE,
+  )(_addCharacteristicFromCondition),
 );

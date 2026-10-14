@@ -4,6 +4,7 @@ import type {
   WithEffectiveStatus,
 } from "@/app/lib/utils/derive-application-status";
 import type { MedicalStatus } from "@/app/lib/data/animals/medical-status";
+import type { CareStatus } from "@/app/lib/utils/care-status";
 
 export type SearchParamsType = Promise<{ [key: string]: string | undefined }>;
 export type IDParamType = Promise<{ id: string }>;
@@ -52,7 +53,6 @@ export type AnimalSectionCardPayload = Omit<
       sex: true;
       size: true;
       listingStatus: true;
-      healthStatus: true;
       animalImages: {
         select: {
           url: true;
@@ -132,6 +132,10 @@ export type AnimalSectionCardPayload = Omit<
   // Spay/neuter status and the chips it carries, worked out from the medical
   // record on the shelter's today.
   medicalStatus: MedicalStatus;
+  // The care the animal is under, read from the medical record on the
+  // shelter's today: its open episode, a recent surgery, the exam or surgery
+  // it awaits, and its allergies.
+  careStatus: CareStatus;
 };
 
 export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{

@@ -7,6 +7,35 @@ import { MedicalEntryActions } from "./medical-entry-actions";
 import { MedicalEntryChanges } from "./medical-entry-changes";
 import { ScheduledEntryActions } from "./scheduled-entry-actions";
 import { ExemptionReviewActions } from "./exemption-review-actions";
+import { AddConditionButton } from "./add-condition-buttons";
+import {
+  MedicalConditionType,
+  MedicalEntryKind,
+  MedicalEntryStatus,
+  TestResult,
+} from "@/prisma/generated/enums";
+
+/**
+ * What given care offers the problem list: a test with a positive result,
+ * a condition named for that result; an exam, a condition found on it. Each
+ * opens the condition form with the entry as its source and its day as the
+ * onset. Null for anything else.
+ */
+const conditionOffer = (entry: MedicalEntryDisplay) => {
+  if (entry.status !== MedicalEntryStatus.COMPLETED || entry.voidedAt) return null;
+  const onset = { sourceEntryId: entry.id, onsetDate: entry.completedDate };
+  if (entry.kind === MedicalEntryKind.EXAM) {
+    return { label: "Add a condition found on this exam", add: onset };
+  }
+  const positive = entry.test?.results.find((row) => row.result === TestResult.POSITIVE);
+  if (entry.kind === MedicalEntryKind.TEST && positive) {
+    return {
+      label: "Add to problem list",
+      add: { ...onset, name: `${positive.analyteName} positive` },
+    };
+  }
+  return null;
+};
 
 interface Props {
   entries: MedicalEntryDisplay[];
@@ -31,71 +60,91 @@ interface Props {
   className?: string;
 }
 
+type RowProps = Omit<Props, "entries" | "className"> & {
+  entry: MedicalEntryDisplay;
+};
+
 /**
- * Entries with their change history, and the row actions menu on each one
- * that isn't voided when the viewer may manage them: Void on every entry,
- * and Edit on given care only. On the due list, each row of scheduled care
- * also gets Record, Reschedule and Decline, and the exemption open for
- * review gets its own two actions.
+ * One entry with its change history, and the row actions menu when it isn't
+ * voided and the viewer may manage it: Void, and Edit on given care only. On
+ * the due list, scheduled care also gets Record, Reschedule and Decline, and
+ * the exemption open for review gets its own two actions.
  */
-export function MedicalEntryList({
-  entries,
+export function MedicalEntryRow({
+  entry,
   names,
   today,
   unitSystem,
   controls,
   due = false,
   reviewId = null,
-  className,
-}: Props) {
+}: RowProps) {
+  const offer = conditionOffer(entry);
+  return (
+    <MedicalEntryItem
+      entry={entry}
+      today={today}
+      unitSystem={unitSystem}
+      review={due && entry.id === reviewId}
+      actions={
+        controls?.canManage && !entry.voidedAt ? (
+          <MedicalEntryActions
+            animalId={controls.animalId}
+            entry={entry}
+            options={controls.options}
+          />
+        ) : undefined
+      }
+      footer={
+        <>
+          {due &&
+            controls?.canManage &&
+            entry.id === reviewId &&
+            entry.procedure &&
+            entry.exemptionReason && (
+              <ExemptionReviewActions
+                animalId={controls.animalId}
+                exemption={{
+                  procedure: entry.procedure,
+                  exemptionReason: entry.exemptionReason,
+                }}
+                options={controls.options}
+              />
+            )}
+          {due && controls && entry.id !== reviewId && (
+            <ScheduledEntryActions
+              animalId={controls.animalId}
+              entry={entry}
+              options={controls.options}
+              today={today}
+              canManage={controls.canManage}
+              canAdminister={controls.canAdminister}
+            />
+          )}
+          {controls?.canManage && controls.conditionChoices && offer && (
+            <div className="mt-3">
+              <AddConditionButton
+                animalId={controls.animalId}
+                choices={controls.conditionChoices}
+                today={controls.options.today}
+                mode={{ add: { type: MedicalConditionType.CONDITION, ...offer.add } }}
+                label={offer.label}
+              />
+            </div>
+          )}
+          <MedicalEntryChanges events={entry.events} names={names} />
+        </>
+      }
+    />
+  );
+}
+
+/** Entries, each a `MedicalEntryRow`. */
+export function MedicalEntryList({ entries, className, ...rest }: Props) {
   return (
     <ul className={className ?? "space-y-3"}>
       {entries.map((entry) => (
-        <MedicalEntryItem
-          key={entry.id}
-          entry={entry}
-          today={today}
-          unitSystem={unitSystem}
-          review={due && entry.id === reviewId}
-          actions={
-            controls?.canManage && !entry.voidedAt ? (
-              <MedicalEntryActions
-                animalId={controls.animalId}
-                entry={entry}
-                options={controls.options}
-              />
-            ) : undefined
-          }
-          footer={
-            <>
-              {due &&
-                controls?.canManage &&
-                entry.id === reviewId &&
-                entry.procedure &&
-                entry.exemptionReason && (
-                  <ExemptionReviewActions
-                    animalId={controls.animalId}
-                    exemption={{
-                      procedure: entry.procedure,
-                      exemptionReason: entry.exemptionReason,
-                    }}
-                    options={controls.options}
-                  />
-                )}
-              {due && controls && entry.id !== reviewId && (
-                <ScheduledEntryActions
-                  animalId={controls.animalId}
-                  entry={entry}
-                  options={controls.options}
-                  today={today}
-                  canManage={controls.canManage}
-                  canAdminister={controls.canAdminister}
-                />
-              )}
-              <MedicalEntryChanges events={entry.events} names={names} />
-            </>
-          }
-        />
+        <MedicalEntryRow key={entry.id} entry={entry} {...rest} />
       ))}
     </ul>
   );

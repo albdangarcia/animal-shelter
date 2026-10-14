@@ -5,6 +5,7 @@
 import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
+import { MedicalConditionStatus } from "@/prisma/generated/enums";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import {
   contradictionsByCharacteristic,
@@ -36,6 +37,14 @@ export type CharacteristicAssignment = {
      * edit can take that away.
      */
     stillSupports: boolean;
+  } | null;
+  /** The problem-list condition the trait was added from, which may since
+   *  have been resolved or voided. */
+  sourceCondition: {
+    id: string;
+    name: string;
+    resolvedDate: string | null;
+    voidedAt: Date | null;
   } | null;
 };
 
@@ -82,6 +91,15 @@ export const _fetchAnimalCharacteristics = async (
               sourceAssessment: {
                 select: { ...RECORDED_FINDINGS_SELECT, deletedAt: true },
               },
+              sourceCondition: {
+                select: {
+                  id: true,
+                  name: true,
+                  status: true,
+                  resolvedDate: true,
+                  voidedAt: true,
+                },
+              },
             },
           },
         },
@@ -115,6 +133,17 @@ export const _fetchAnimalCharacteristics = async (
                 stillSupports: proposalsOf(
                   toRecordedAssessment(ac.sourceAssessment),
                 ).some((p) => p.characteristicId === ac.characteristicId),
+              }
+            : null,
+          sourceCondition: ac.sourceCondition
+            ? {
+                id: ac.sourceCondition.id,
+                name: ac.sourceCondition.name,
+                resolvedDate:
+                  ac.sourceCondition.status === MedicalConditionStatus.RESOLVED
+                    ? ac.sourceCondition.resolvedDate
+                    : null,
+                voidedAt: ac.sourceCondition.voidedAt,
               }
             : null,
         } satisfies CharacteristicAssignment,

@@ -73,6 +73,8 @@ const claim = (
   contradictedAt: null,
   sourceDeletedAt: null,
   supportLostAt: null,
+  conditionVoidedAt: null,
+  conditionResolvedAt: null,
   ...overrides,
 });
 
@@ -217,6 +219,29 @@ test("a trait whose source no longer supports it blocks with NO_LONGER_SUPPORTED
       since: daysBefore(2),
     },
   ]);
+});
+
+test("a trait whose condition was resolved or voided blocks, dated by the condition", () => {
+  const issueOf = (overrides: Partial<ReadinessCharacteristicClaim>) =>
+    computeReadiness({ ...baseInputs, claims: [claim(overrides)] }).map((b) =>
+      b.kind === "UNSUPPORTED_CHARACTERISTIC" ? [b.issue, b.since] : null,
+    );
+  assert.deepEqual(issueOf({ conditionResolvedAt: daysBefore(4) }), [
+    ["CONDITION_RESOLVED", daysBefore(4)],
+  ]);
+  assert.deepEqual(issueOf({ conditionVoidedAt: daysBefore(1) }), [
+    ["CONDITION_VOIDED", daysBefore(1)],
+  ]);
+  // A voided condition counts for nothing, resolved or not.
+  assert.deepEqual(
+    issueOf({ conditionVoidedAt: daysBefore(1), conditionResolvedAt: daysBefore(4) }),
+    [["CONDITION_VOIDED", daysBefore(1)]],
+  );
+  // Undermined no earlier than the trait was added.
+  assert.deepEqual(
+    issueOf({ assignedAt: daysBefore(2), conditionResolvedAt: daysBefore(4) }),
+    [["CONDITION_RESOLVED", daysBefore(2)]],
+  );
 });
 
 test("a claim made over older evidence is undermined only from when it was made", () => {

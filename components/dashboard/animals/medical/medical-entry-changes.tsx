@@ -1,10 +1,5 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown } from "lucide-react";
-import { clsx } from "clsx";
-import { Button } from "@/components/ui/button";
-import { TimeAgo } from "@/components/common/time-ago";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
 import {
   declineText,
@@ -14,6 +9,7 @@ import {
   MedicalEntryEventAction,
   MedicalEntryStatus,
 } from "@/prisma/generated/enums";
+import { ChangeHistory } from "./change-history";
 
 type EntryEvent = MedicalEntryDisplay["events"][number];
 
@@ -48,7 +44,6 @@ interface Props {
  * voided or declined.
  */
 export function MedicalEntryChanges({ events, names }: Props) {
-  const [open, setOpen] = useState(false);
   const created = events.find(
     (event) => event.action === MedicalEntryEventAction.CREATED,
   );
@@ -65,62 +60,33 @@ export function MedicalEntryChanges({ events, names }: Props) {
         : "Recorded";
 
   return (
-    <div className="mt-3 border-t pt-2 text-sm text-muted-foreground">
-      <div className="flex flex-wrap items-center gap-x-2">
-        {created && (
-          <span>
-            {createdVerb} by {created.actor.name}{" "}
-            <TimeAgo date={created.createdAt} />
-          </span>
-        )}
-        {later.length > 0 && (
-          <Button
-            type="button"
-            variant="link"
-            size="sm"
-            className="h-auto p-0 text-muted-foreground"
-            aria-expanded={open}
-            onClick={() => setOpen(!open)}
-          >
-            {open ? "Hide" : "Show"} {later.length}{" "}
-            {later.length === 1 ? "change" : "changes"}
-            <ChevronDown
-              className={clsx("ml-1 size-4 transition-transform", open && "rotate-180")}
-            />
-          </Button>
-        )}
-      </div>
-      {open && (
-        <ol className="mt-2 space-y-2" aria-label="Change history">
-          {later.map((event) => (
-            <li key={event.id}>
-              <p>
-                {isExemptionEvent(event) &&
-                event.action === MedicalEntryEventAction.DECLINED
-                  ? "Declined as an exemption"
-                  : EVENT_VERB[event.action as keyof typeof EVENT_VERB]}{" "}
-                by{" "}
-                {event.actor.name} <TimeAgo date={event.createdAt} />
-                {(event.action === MedicalEntryEventAction.VOIDED ||
-                  event.action === MedicalEntryEventAction.DECLINED) &&
-                  `: ${reasonOf(event) ?? ""}`}
-              </p>
-              {(event.action === MedicalEntryEventAction.EDITED ||
-                event.action === MedicalEntryEventAction.RESCHEDULED) && (
-                <ul className="ml-4 list-disc">
-                  {describeEntryChanges(event.before, event.after, names).map(
-                    (change) => (
-                      <li key={change.field}>
-                        {change.label}: {change.from} → {change.to}
-                      </li>
-                    ),
-                  )}
-                </ul>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
-    </div>
+    <ChangeHistory
+      created={
+        created && {
+          verb: createdVerb,
+          actorName: created.actor.name,
+          createdAt: created.createdAt,
+        }
+      }
+      later={later.map((event) => ({
+        id: event.id,
+        verb:
+          isExemptionEvent(event) && event.action === MedicalEntryEventAction.DECLINED
+            ? "Declined as an exemption"
+            : EVENT_VERB[event.action as keyof typeof EVENT_VERB],
+        actorName: event.actor.name,
+        createdAt: event.createdAt,
+        reason:
+          event.action === MedicalEntryEventAction.VOIDED ||
+          event.action === MedicalEntryEventAction.DECLINED
+            ? (reasonOf(event) ?? "")
+            : null,
+        changes:
+          event.action === MedicalEntryEventAction.EDITED ||
+          event.action === MedicalEntryEventAction.RESCHEDULED
+            ? describeEntryChanges(event.before, event.after, names)
+            : [],
+      }))}
+    />
   );
 }

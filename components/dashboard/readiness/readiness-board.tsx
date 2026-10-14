@@ -81,7 +81,7 @@ export const KIND_META: Record<
   UNSUPPORTED_CHARACTERISTIC: {
     title: "Unsupported characteristics",
     description:
-      "A trait on the profile that a live finding contradicts, or whose citing assessment was deleted or no longer supports it.",
+      "A trait on the profile that a live finding contradicts, whose citing assessment was deleted or no longer supports it, or whose citing condition was resolved or voided.",
     icon: IconTagOff,
   },
   MISSING_ASSESSMENT: {

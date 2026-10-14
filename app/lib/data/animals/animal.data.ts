@@ -132,7 +132,10 @@ const _fetchAnimals = async (
 // — keep it consistent with the fields beside it if this ever gets re-examined.
 // So do the spay/neuter status and the chip numbers, read from the medical
 // record rather than behind MEDICAL_READ: they identify the animal, and were
-// fields on its profile before the record held them.
+// fields on its profile before the record held them. The care status (an open
+// episode, a recent surgery, care awaited, allergies) is read here too, but
+// the card shows it only to a viewer holding MEDICAL_READ: it says what the
+// animal is being treated for.
 const _fetchSectionCardsAnimalData = async (
   id: string,
 ): Promise<AnimalSectionCardPayload | null> => {
@@ -154,7 +157,6 @@ const _fetchSectionCardsAnimalData = async (
         sex: true,
         size: true,
         listingStatus: true,
-        healthStatus: true,
         animalImages: {
           select: {
             url: true,
@@ -254,11 +256,11 @@ const _fetchSectionCardsAnimalData = async (
       return null;
     }
 
-    const [statuses, medicalStatus] = await Promise.all([
+    const today = await getShelterToday();
+    const [statuses, medicalStatus, careStatus] = await Promise.all([
       effectiveApplicationStatuses(animal.adoptionApplications),
-      getShelterToday().then((today) =>
-        findMedicalStatus(prisma, animal.id, today),
-      ),
+      findMedicalStatus(prisma, animal.id, today),
+      findCareStatus(prisma, [animal.id], today),
     ]);
     return {
       ...animal,
@@ -267,6 +269,7 @@ const _fetchSectionCardsAnimalData = async (
         status: statuses.get(application.id)!,
       })),
       medicalStatus,
+      careStatus: careStatus.get(animal.id)!,
     };
   } catch (error) {
     console.error("Error fetching animal by ID.", error);

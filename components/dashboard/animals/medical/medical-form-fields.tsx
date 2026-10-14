@@ -256,18 +256,21 @@ export const vetClinicChoices = (
     : vetClinics;
 
 /** One of a fixed list, or nothing. */
-function OptionalSelectField<TValues extends FieldValues>({
+export function OptionalSelectField<TValues extends FieldValues>({
   control,
   name,
   label,
   noneLabel,
   options,
+  required = false,
 }: {
   control: Control<TValues>;
   name: Path<TValues>;
   label: string;
   noneLabel: string;
   options: { value: string; label: string }[];
+  /** Marks the label required; the schema still decides. */
+  required?: boolean;
 }) {
   return (
     <FormField
@@ -275,7 +278,9 @@ function OptionalSelectField<TValues extends FieldValues>({
       name={name}
       render={({ field }) => (
         <FormItem>
-          <FormLabel htmlFor={name}>{label}</FormLabel>
+          <FormLabel htmlFor={name} required={required}>
+            {label}
+          </FormLabel>
           <Select
             onValueChange={(value) => field.onChange(value === NONE ? null : value)}
             value={field.value ?? NONE}

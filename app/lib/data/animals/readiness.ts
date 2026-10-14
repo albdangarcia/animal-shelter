@@ -5,7 +5,10 @@
 // shelter's day.
 import type prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
-import { AnimalListingStatus } from "@/prisma/generated/enums";
+import {
+  AnimalListingStatus,
+  MedicalConditionStatus,
+} from "@/prisma/generated/enums";
 import type {
   AnimalReadiness,
   ReadinessAnimal,
@@ -76,6 +79,10 @@ const READINESS_CLAIM_SELECT = {
   characteristic: { select: { name: true } },
   sourceAssessment: {
     select: { ...RECORDED_FINDINGS_SELECT, deletedAt: true, updatedAt: true },
+  },
+  // A trait added from the problem list stands while its condition is live.
+  sourceCondition: {
+    select: { status: true, resolvedDate: true, voidedAt: true },
   },
 } satisfies Prisma.AnimalCharacteristicSelect;
 
@@ -196,6 +203,12 @@ function readinessFor(
       contradictedAt,
       sourceDeletedAt,
       supportLostAt: noLongerSupports ? source.updatedAt : null,
+      conditionVoidedAt: row.sourceCondition?.voidedAt ?? null,
+      conditionResolvedAt:
+        row.sourceCondition?.status === MedicalConditionStatus.RESOLVED &&
+        row.sourceCondition.resolvedDate
+          ? startOfShelterDay(calendarDay(row.sourceCondition.resolvedDate), timezone)
+          : null,
     };
   });
 

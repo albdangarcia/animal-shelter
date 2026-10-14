@@ -98,6 +98,37 @@ export const medicalEntryKindsParam = z
     ),
   ]);
 
+/** What History lists besides entries: problem-list rows and care episodes. */
+export const MEDICAL_HISTORY_RECORD_KINDS = ["CONDITION", "CARE_EPISODE"] as const;
+
+/** A value of History's kind filter: an entry kind, or one of the records
+ * History lists beside entries. */
+export type MedicalHistoryKind =
+  | MedicalEntryKind
+  | (typeof MEDICAL_HISTORY_RECORD_KINDS)[number];
+
+const MEDICAL_HISTORY_KINDS: readonly string[] = [
+  ...Object.values(MedicalEntryKind),
+  ...MEDICAL_HISTORY_RECORD_KINDS,
+];
+
+/**
+ * History's kind filter, read from the URL as `medicalEntryKindsParam` reads
+ * it: the entry kinds, plus CONDITION and CARE_EPISODE. None means every
+ * kind of record.
+ */
+export const medicalHistoryKindsParam = z
+  .union([z.string(), z.array(z.string())])
+  .optional()
+  .transform((value) => [
+    ...new Set(
+      [value ?? []]
+        .flat()
+        .flatMap((part) => part.split(","))
+        .filter((kind): kind is MedicalHistoryKind => MEDICAL_HISTORY_KINDS.includes(kind)),
+    ),
+  ]);
+
 export const optionalId = cuidSchema
   .nullish()
   .or(z.literal(""))

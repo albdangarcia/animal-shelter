@@ -46,6 +46,7 @@ import {
   findMedicalHistoryPage,
   findRecentMedicalEntries,
   findVaccinesAndTests,
+  type MedicalHistoryItem,
 } from "@/app/lib/data/animals/medical-entry";
 import { findMedicalEntryFormItems } from "@/app/lib/data/medical-catalog";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
@@ -55,6 +56,12 @@ import type { CatalogEntryKind } from "@/app/lib/constants/medical";
 
 // Random, not the time: the files run in parallel, and each cleans up the
 // catalog items whose names end in its own runId.
+
+// History's entries: the animals here have no conditions or care episodes,
+// so every row of a page is an entry.
+const historyEntries = (page: { items: MedicalHistoryItem[] }) =>
+  page.items.flatMap((item) => (item.source === "ENTRY" ? [item.entry] : []));
+
 const runId = randomUUID().slice(0, 8);
 const TODAY = calendarDay("2026-10-10");
 const INTAKE_DAY = calendarDay("2026-08-01");
@@ -1327,7 +1334,7 @@ test("history shows every entry, newest first by the day given or due", async ()
 
   const all = await page(10);
   assert.deepEqual(
-    all.entries.map((entry) => entry.id),
+    historyEntries(all).map((entry) => entry.id),
     [
       voided.entryId,
       later.entryId,
@@ -1343,7 +1350,7 @@ test("history shows every entry, newest first by the day given or due", async ()
 
   const second = await page(3, 2);
   assert.deepEqual(
-    second.entries.map((entry) => entry.id),
+    historyEntries(second).map((entry) => entry.id),
     [soon.entryId, today.entryId, dueToday.entryId],
   );
   assert.equal(second.totalPages, 3);
@@ -1351,13 +1358,13 @@ test("history shows every entry, newest first by the day given or due", async ()
   // The page count follows the filter too: 7 vaccines make 3 pages of 3.
   const vaccines = await page(3, 3, [MedicalEntryKind.VACCINE]);
   assert.deepEqual(
-    vaccines.entries.map((entry) => entry.id),
+    historyEntries(vaccines).map((entry) => entry.id),
     [unknownDay.entryId],
   );
   assert.equal(vaccines.totalPages, 3);
   const treatments = await page(1, 1, [MedicalEntryKind.TREATMENT]);
   assert.deepEqual(
-    treatments.entries.map((entry) => entry.id),
+    historyEntries(treatments).map((entry) => entry.id),
     [treatment.entryId],
   );
   assert.equal(treatments.totalPages, 1);

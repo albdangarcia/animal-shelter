@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { clsx } from "clsx";
+import { AlertCircle } from "lucide-react";
 import {
   Card,
   CardAction,
@@ -15,10 +17,12 @@ import { ExamResult } from "@/prisma/generated/enums";
 import {
   EXAM_RESULT_LABELS,
   EXAM_TYPE_LABELS,
+  MEDICAL_CONDITION_STATUS_LABELS,
   SPAY_NEUTER_EXEMPTION_REASON_LABELS,
   SURGERY_PROCEDURE_LABELS,
 } from "@/app/lib/constants/medical";
 import { formatShelterDay } from "@/app/lib/utils/shelter-day";
+import { openEpisodeText, type CareStatus } from "@/app/lib/utils/care-status";
 import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { formatWeight } from "@/app/lib/utils/weight-format";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
@@ -69,6 +73,50 @@ const lastExamText = (exam: ExamFact | null) =>
     : "None on record";
 
 /**
+ * What anyone handling or treating the animal must not miss: its allergies,
+ * the conditions it lives with, and the care episode it is under. Each links
+ * to the Conditions page. Nothing is shown when there is none.
+ */
+function CareAlerts({ care, href }: { care: CareStatus; href: string }) {
+  const alerts = [
+    ...care.allergies.map((allergy) => ({
+      key: allergy.id,
+      text: `Allergy: ${allergy.name}`,
+      destructive: true,
+    })),
+    ...care.conditions.map((condition) => ({
+      key: condition.id,
+      text: `${condition.name} (${MEDICAL_CONDITION_STATUS_LABELS[condition.status].toLowerCase()})`,
+      destructive: false,
+    })),
+    ...(care.episode
+      ? [{ key: care.episode.id, text: openEpisodeText(care.episode), destructive: true }]
+      : []),
+  ];
+  if (alerts.length === 0) return null;
+  return (
+    <section aria-label="Alerts" className="rounded-lg border p-4">
+      <ul className="space-y-1">
+        {alerts.map((alert) => (
+          <li
+            key={alert.key}
+            className={clsx(
+              "flex items-start gap-2 text-sm font-medium",
+              alert.destructive && "text-destructive",
+            )}
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+            <Link href={href} className="underline-offset-4 hover:underline">
+              {alert.text}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
  * The due rows in the order they fall due: scheduled care by its due day, and
  * the exemption open for review by its review day.
  */
@@ -96,6 +144,7 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
     spayNeuter,
     chips,
     lastExam,
+    care,
     currentWeightGrams,
     reviewEntry,
     recentEntries,
@@ -110,7 +159,8 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
         <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
         <CardDescription>
           Vaccines, tests, treatments, surgeries, microchips and exams: what
-          is due, and what this animal has been given.
+          is due, and what this animal has been given. Its conditions and
+          care episodes are on Conditions.
         </CardDescription>
         {controls?.canManage && (
           <CardAction>
@@ -122,6 +172,8 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
         )}
       </CardHeader>
       <CardContent className="space-y-6">
+        <CareAlerts care={care} href={`${base}/conditions`} />
+
         <dl
           aria-label="Medical status"
           className="grid grid-cols-1 gap-4 rounded-lg border p-4 sm:grid-cols-2"

@@ -48,6 +48,7 @@ import {
   findMedicalHistoryPage,
   findRecentMedicalEntries,
   findVaccinesAndTests,
+  type MedicalHistoryItem,
 } from "@/app/lib/data/animals/medical-entry";
 import { findMedicalStatus } from "@/app/lib/data/animals/medical-status";
 import {
@@ -59,6 +60,12 @@ import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
 // Random, not the time: the files run in parallel, and each cleans up the
 // catalog items whose names end in its own runId.
+
+// History's entries: the animals here have no conditions or care episodes,
+// so every row of a page is an entry.
+const historyEntries = (page: { items: MedicalHistoryItem[] }) =>
+  page.items.flatMap((item) => (item.source === "ENTRY" ? [item.entry] : []));
+
 const runId = randomUUID().slice(0, 8);
 const TODAY = calendarDay("2026-10-10");
 const INTAKE_DAY = calendarDay("2026-08-01");
@@ -747,11 +754,11 @@ test("history lists exams and filters to them; the vaccine reads leave them out"
       timeZone: "UTC",
     });
   assert.deepEqual(
-    (await page([])).entries.map((entry) => entry.id),
+    historyEntries(await page([])).map((entry) => entry.id),
     [vetId, intakeId, rabiesEntryId],
   );
   assert.deepEqual(
-    (await page([MedicalEntryKind.EXAM])).entries.map((entry) => [
+    historyEntries(await page([MedicalEntryKind.EXAM])).map((entry) => [
       entry.id,
       entry.examType,
       entry.item,

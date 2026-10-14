@@ -476,6 +476,25 @@ test("a vet review comes with the urgent groups, and a missing intake exam after
   );
 });
 
+test("a trait whose condition was resolved or voided reads as the board shows it", () => {
+  const unsupported = (issue: "CONDITION_RESOLVED" | "CONDITION_VOIDED") =>
+    describeBlocker(
+      {
+        kind: "UNSUPPORTED_CHARACTERISTIC",
+        characteristicId: "c1",
+        characteristicName: "Heartworm Positive",
+        issue,
+        since: at(3),
+      },
+      SHELTER_TIMEZONE,
+    );
+  assert.equal(
+    unsupported("CONDITION_RESOLVED"),
+    "Heartworm Positive — its condition was resolved",
+  );
+  assert.equal(unsupported("CONDITION_VOIDED"), "Heartworm Positive — cites a voided condition");
+});
+
 test("the exam blockers read as the board shows them", () => {
   assert.equal(describeBlocker(noIntakeExam, SHELTER_TIMEZONE), "No intake exam");
   assert.equal(
