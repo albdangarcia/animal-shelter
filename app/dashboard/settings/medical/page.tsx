@@ -1,4 +1,5 @@
 import MedicalCatalog from "@/components/dashboard/settings/medical/medical-catalog";
+import { MedicalSettingsNav } from "@/components/dashboard/settings/medical/medical-settings-nav";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -24,7 +25,12 @@ const PageContent = async () => {
     fetchMedicalCatalogSpecies(),
   ]);
 
-  return <MedicalCatalog items={items} species={species} />;
+  return (
+    <div className="flex flex-col gap-4">
+      <MedicalSettingsNav />
+      <MedicalCatalog items={items} species={species} />
+    </div>
+  );
 };
 
 export default Page;

@@ -242,6 +242,22 @@ export const protocolStepLabel = (
 };
 
 /**
+ * Why a catalog step's item can't be scheduled for a species any more:
+ * retired, or narrowed to other species, since the protocol was saved. Null
+ * when it still fits. The editor flags such a step with the same reason.
+ */
+export const stepItemSkipReason = (
+  item: NonNullable<ProtocolPlanStep["item"]>,
+  speciesId: string,
+): "ITEM_RETIRED" | "ITEM_NOT_FOR_SPECIES" | null => {
+  if (item.retired) return "ITEM_RETIRED";
+  if (item.speciesIds.length > 0 && !item.speciesIds.includes(speciesId)) {
+    return "ITEM_NOT_FOR_SPECIES";
+  }
+  return null;
+};
+
+/**
  * What a step schedules for this animal, or why it schedules nothing that
  * doesn't depend on the days.
  */
@@ -278,10 +294,8 @@ const stepCare = (
       if (!item) {
         throw new Error(`Protocol step ${step.id} has no catalog item.`);
       }
-      if (item.retired) return { reason: "ITEM_RETIRED" };
-      if (item.speciesIds.length > 0 && !item.speciesIds.includes(facts.speciesId)) {
-        return { reason: "ITEM_NOT_FOR_SPECIES" };
-      }
+      const itemReason = stepItemSkipReason(item, facts.speciesId);
+      if (itemReason) return { reason: itemReason };
       if (facts.openScheduled.itemIds.includes(item.id)) {
         return { reason: "ALREADY_SCHEDULED" };
       }

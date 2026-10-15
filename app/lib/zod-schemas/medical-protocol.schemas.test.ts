@@ -58,6 +58,19 @@ test("MedicalProtocolFormSchema: name, ages and steps", () => {
   assert.deepEqual(issuePaths(base({ maxAgeDays: 0 })), ["maxAgeDays"]);
   assert.deepEqual(issuePaths(base({ minAgeDays: 1.5 })), ["minAgeDays"]);
   assert.deepEqual(issuePaths(base({ steps: [] })), ["steps"]);
+  const blankSpecies = MedicalProtocolFormSchema.safeParse(base({ speciesId: "" }));
+  assert.deepEqual(
+    blankSpecies.error?.issues.map((issue) => [issue.path.join("."), issue.message]),
+    [["speciesId", "Pick a species."]],
+  );
+  // A cleared number field holds null.
+  const noOffset = MedicalProtocolFormSchema.safeParse(
+    base({ steps: [step({ offsetDays: null as unknown as number })] }),
+  );
+  assert.deepEqual(
+    noOffset.error?.issues.map((issue) => [issue.path.join("."), issue.message]),
+    [["steps.0.offsetDays", "Give the days after intake."]],
+  );
   assert.equal(
     MedicalProtocolFormSchema.safeParse(base({ minAgeDays: null, maxAgeDays: null })).success,
     true,

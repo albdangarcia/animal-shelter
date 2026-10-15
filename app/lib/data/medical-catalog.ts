@@ -178,7 +178,7 @@ export const findMedicalCatalog = (db: Db) =>
         orderBy: { sortOrder: "asc" },
         select: { id: true, name: true, retiredAt: true },
       },
-      _count: { select: { entries: true } },
+      _count: { select: { entries: true, protocolSteps: true } },
     },
   });
 

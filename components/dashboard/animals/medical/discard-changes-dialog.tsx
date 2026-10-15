@@ -16,6 +16,8 @@ interface Props {
   open: boolean;
   onConfirm: () => void;
   onCancel: () => void;
+  /** What the form saves, as the prompt names it. */
+  subject?: string;
 }
 
 // What can take focus in a form.
@@ -35,8 +37,13 @@ const firstControlInOpenDialog = () => {
   return dialog?.querySelector<HTMLElement>(FOCUSABLE) ?? dialog ?? null;
 };
 
-/** Asks before an entry form with unsaved changes is closed. */
-export function DiscardChangesDialog({ open, onConfirm, onCancel }: Props) {
+/** Asks before a form with unsaved changes is closed. */
+export function DiscardChangesDialog({
+  open,
+  onConfirm,
+  onCancel,
+  subject = "entry",
+}: Props) {
   // The prompt has no trigger of its own, so on Cancel focus goes back to
   // where it was in the form, or to the form's first control when it was on
   // the page. On Discard the form is gone, and its dialog sends focus on.
@@ -62,7 +69,7 @@ export function DiscardChangesDialog({ open, onConfirm, onCancel }: Props) {
         }}
       >
         <AlertDialogHeader>
-          <AlertDialogTitle>Discard unsaved entry?</AlertDialogTitle>
+          <AlertDialogTitle>Discard unsaved {subject}?</AlertDialogTitle>
           <AlertDialogDescription>
             Your changes will be lost if you leave without saving.
           </AlertDialogDescription>

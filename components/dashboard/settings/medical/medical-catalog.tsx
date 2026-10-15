@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { clsx } from "clsx";
 import { PlusCircle } from "lucide-react";
 import {
@@ -28,7 +28,7 @@ import {
   MEDICAL_ROUTE_LABELS,
   formatDose,
 } from "@/app/lib/constants/medical";
-import { MedicalItemForm } from "./medical-item-form";
+import { MedicalItemForm, type MedicalItemFormHandle } from "./medical-item-form";
 import { MedicalItemActions } from "./medical-item-actions";
 
 interface Props {
@@ -60,6 +60,7 @@ const describe = (item: MedicalCatalogItem): string[] => {
 
 const MedicalCatalog = ({ items, species }: Props) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const addFormRef = useRef<MedicalItemFormHandle>(null);
 
   // An item may be limited to a species that has since been retired; it
   // stays tickable on that item so saving the item doesn't drop it.
@@ -80,7 +81,14 @@ const MedicalCatalog = ({ items, species }: Props) => {
           that already use them keep them.
         </CardDescription>
         <CardAction>
-          <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          {/* Not closed under a save: its result closes the dialog, which
+              would otherwise be a new item opened since. */}
+          <Dialog
+            open={isAddDialogOpen}
+            onOpenChange={(open) =>
+              !addFormRef.current?.isPending() && setIsAddDialogOpen(open)
+            }
+          >
             <DialogTrigger asChild>
               <Button size="sm">
                 <PlusCircle className="size-4 mr-2" />
@@ -95,6 +103,7 @@ const MedicalCatalog = ({ items, species }: Props) => {
                 </DialogDescription>
               </DialogHeader>
               <MedicalItemForm
+                ref={addFormRef}
                 species={speciesFor()}
                 onFormSubmit={() => setIsAddDialogOpen(false)}
               />

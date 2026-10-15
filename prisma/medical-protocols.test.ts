@@ -28,6 +28,12 @@ import {
   type MedicalProtocolStepInput,
 } from "@/app/lib/services/medical-protocol";
 import { ConflictError, NotFoundError } from "@/app/lib/utils/errors";
+import {
+  findIntakeProtocols,
+  findMedicalProtocols,
+  findProtocolStepItems,
+} from "@/app/lib/data/medical-protocol";
+import { findMedicalCatalog } from "@/app/lib/data/medical-catalog";
 
 // Random, not the time: the files run in parallel, and each cleans up the
 // species, items and protocols whose names end in its own runId.
@@ -829,4 +835,223 @@ test("retire and unretire; a retired protocol can't be edited", async () => {
     await assert.rejects(call("ckq1a2b3c4d5e6f7g8h9i0j1k"), NotFoundError);
   }
   await assert.rejects(update("ckq1a2b3c4d5e6f7g8h9i0j1k", values), NotFoundError);
+});
+
+// --- Reads ---------------------------------------------------------------
+
+/**
+ * Two species of this file's own, so the reads' order can be checked among
+ * protocols no other file writes: on the first, a protocol from birth, one
+ * from 50 days (retired, after an edit retired one of its steps) and one
+ * from 200 days; on the second, one from birth. One step names an item
+ * retired since, and one an item narrowed to another species since.
+ */
+const readFixtures = async () => {
+  const first = await newSpecies("Read A");
+  const second = await newSpecies("Read B");
+  const retiredItem = await newItem(MedicalItemKind.VACCINE, [first], "Retired since");
+  const narrowedItem = await newItem(MedicalItemKind.TREATMENT, [], "Narrowed since");
+  const named = (label: string) => uniqueName(`Read ${label}`);
+
+  const fromBirth = await create(
+    input({
+      name: named("from birth"),
+      speciesId: first,
+      minAgeDays: null,
+      maxAgeDays: 50,
+      steps: [
+        examStep(),
+        vaccineStep({ itemId: retiredItem, notBeforeAgeDays: 42, notes: "Left shoulder." }),
+        { kind: MedicalProtocolStepKind.TREATMENT, itemId: narrowedItem, offsetDays: 3 },
+      ],
+    }),
+  );
+  const fromFifty = await create(
+    input({
+      name: named("from fifty"),
+      speciesId: first,
+      minAgeDays: 50,
+      maxAgeDays: 200,
+      steps: [examStep(), { kind: MedicalProtocolStepKind.MICROCHIP, offsetDays: 0 }],
+    }),
+  );
+  // The microchip step changes, so it is retired and added anew.
+  const edited = await update(
+    fromFifty.id,
+    input({
+      name: named("from fifty, edited"),
+      speciesId: first,
+      minAgeDays: 50,
+      maxAgeDays: 200,
+      steps: [
+        { kind: MedicalProtocolStepKind.MICROCHIP, offsetDays: 2 },
+        examStep({ id: fromFifty.stepIds[0] }),
+      ],
+    }),
+  );
+  await retire(fromFifty.id);
+  const fromTwoHundred = await create(
+    input({ name: named("from 200"), speciesId: first, minAgeDays: 200, maxAgeDays: null }),
+  );
+  const secondFromBirth = await create(
+    input({ name: named("second species"), speciesId: second, minAgeDays: null, maxAgeDays: null }),
+  );
+
+  await prisma.$transaction((tx) => retireMedicalItem(tx, retiredItem));
+  const narrowed = await prisma.medicalItem.findUniqueOrThrow({
+    where: { id: narrowedItem },
+    select: { name: true },
+  });
+  await prisma.$transaction((tx) =>
+    updateMedicalItem(tx, narrowedItem, {
+      kind: MedicalItemKind.TREATMENT,
+      name: narrowed.name,
+      speciesIds: [second],
+      analytes: [],
+    }),
+  );
+
+  return {
+    first,
+    second,
+    retiredItem,
+    narrowedItem,
+    fromBirth,
+    fromFifty: { id: fromFifty.id, stepIds: edited.stepIds },
+    fromTwoHundred,
+    secondFromBirth,
+  };
+};
+
+test("reads: the settings page lists every protocol by species, youngest first, with live steps and their items as they are now", async () => {
+  const f = await readFixtures();
+  const ours = new Set([f.fromBirth.id, f.fromFifty.id, f.fromTwoHundred.id, f.secondFromBirth.id]);
+  const listed = (await findMedicalProtocols(prisma)).filter((protocol) => ours.has(protocol.id));
+
+  assert.deepEqual(
+    listed.map((protocol) => [protocol.id, protocol.speciesId, protocol.retired]),
+    [
+      [f.fromBirth.id, f.first, false],
+      [f.fromFifty.id, f.first, true],
+      [f.fromTwoHundred.id, f.first, false],
+      [f.secondFromBirth.id, f.second, false],
+    ],
+  );
+  assert.match(listed[0].speciesName, /^Read A /);
+
+  const [fromBirth, fromFifty] = listed;
+  assert.deepEqual(fromBirth.steps, [
+    {
+      id: f.fromBirth.stepIds[0],
+      kind: MedicalProtocolStepKind.EXAM,
+      examType: ExamType.INTAKE,
+      offsetDays: 0,
+      notBeforeAgeDays: null,
+      repeatIntervalDays: null,
+      repeatCount: null,
+      untilAgeDays: null,
+      notes: null,
+      sortOrder: 0,
+      item: null,
+    },
+    {
+      id: f.fromBirth.stepIds[1],
+      kind: MedicalProtocolStepKind.VACCINE,
+      examType: null,
+      offsetDays: 0,
+      notBeforeAgeDays: 42,
+      repeatIntervalDays: null,
+      repeatCount: null,
+      untilAgeDays: null,
+      notes: "Left shoulder.",
+      sortOrder: 1,
+      item: {
+        id: f.retiredItem,
+        name: fromBirth.steps[1].item!.name,
+        retired: true,
+        speciesIds: [f.first],
+      },
+    },
+    {
+      id: f.fromBirth.stepIds[2],
+      kind: MedicalProtocolStepKind.TREATMENT,
+      examType: null,
+      offsetDays: 3,
+      notBeforeAgeDays: null,
+      repeatIntervalDays: null,
+      repeatCount: null,
+      untilAgeDays: null,
+      notes: null,
+      sortOrder: 2,
+      item: {
+        id: f.narrowedItem,
+        name: fromBirth.steps[2].item!.name,
+        retired: false,
+        speciesIds: [f.second],
+      },
+    },
+  ]);
+
+  // A retired protocol is listed with its live steps; the step its edit
+  // retired is not.
+  assert.deepEqual(
+    fromFifty.steps.map((step) => [step.id, step.kind, step.sortOrder]),
+    [
+      [f.fromFifty.stepIds[0], MedicalProtocolStepKind.MICROCHIP, 0],
+      [f.fromFifty.stepIds[1], MedicalProtocolStepKind.EXAM, 1],
+    ],
+  );
+  assert.equal(
+    await prisma.medicalProtocolStep.count({ where: { protocolId: f.fromFifty.id } }),
+    3,
+  );
+});
+
+test("reads: the intake forms get the live protocols only, with live steps, as the plan takes them", async () => {
+  const f = await readFixtures();
+  const ours = new Set([f.fromBirth.id, f.fromFifty.id, f.fromTwoHundred.id, f.secondFromBirth.id]);
+  const live = (await findIntakeProtocols(prisma)).filter((protocol) => ours.has(protocol.id));
+
+  assert.deepEqual(
+    live.map((protocol) => protocol.id).sort(),
+    [f.fromBirth.id, f.fromTwoHundred.id, f.secondFromBirth.id].sort(),
+  );
+  const fromBirth = live.find((protocol) => protocol.id === f.fromBirth.id)!;
+  assert.deepEqual(
+    { ...fromBirth, steps: fromBirth.steps.map((step) => [step.id, step.item?.retired ?? null]) },
+    {
+      id: f.fromBirth.id,
+      name: fromBirth.name,
+      speciesId: f.first,
+      minAgeDays: null,
+      maxAgeDays: 50,
+      retired: false,
+      steps: [
+        [f.fromBirth.stepIds[0], null],
+        [f.fromBirth.stepIds[1], true],
+        [f.fromBirth.stepIds[2], false],
+      ],
+    },
+  );
+
+  // It reads inside a transaction too, as an intake will.
+  const inTx = await prisma.$transaction((tx) => findIntakeProtocols(tx));
+  assert.ok(inTx.some((protocol) => protocol.id === f.fromBirth.id));
+  assert.ok(!inTx.some((protocol) => protocol.id === f.fromFifty.id));
+});
+
+test("reads: a step can name live vaccines, tests and treatments, and the catalog counts the steps that name an item", async () => {
+  const f = await readFixtures();
+  const items = await findProtocolStepItems(prisma);
+  const byId = new Map(items.map((item) => [item.id, item]));
+
+  assert.ok(!byId.has(f.retiredItem));
+  assert.deepEqual(byId.get(f.narrowedItem)?.speciesIds, [f.second]);
+  assert.deepEqual(byId.get(fecalId)?.speciesIds, []);
+  assert.equal(byId.get(dhppId)?.kind, MedicalItemKind.VACCINE);
+
+  // The catalog's form locks an item's kind while any step names it.
+  const catalog = new Map((await findMedicalCatalog(prisma)).map((item) => [item.id, item]));
+  assert.equal(catalog.get(f.retiredItem)?._count.protocolSteps, 1);
+  assert.equal(catalog.get(f.retiredItem)?._count.entries, 0);
 });

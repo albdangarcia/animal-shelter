@@ -1,6 +1,6 @@
 "use client";
 
-import { useTransition } from "react";
+import { useImperativeHandle, useTransition } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { ArrowDown, ArrowUp, Loader2, Plus, X } from "lucide-react";
@@ -54,10 +54,17 @@ const KINDS = Object.values(MedicalItemKind);
 const ROUTES = Object.values(MedicalRoute);
 const UNITS = Object.values(DoseUnit);
 
+/** The form's handle: whether it is saving (its dialog doesn't close under a
+ * save). */
+export interface MedicalItemFormHandle {
+  isPending: () => boolean;
+}
+
 interface Props {
   onFormSubmit: () => void;
   species: { id: string; name: string }[];
   item?: MedicalCatalogItem;
+  ref?: React.Ref<MedicalItemFormHandle>;
 }
 
 const defaultValues = (item?: MedicalCatalogItem): MedicalItemFormInput =>
@@ -89,10 +96,14 @@ const defaultValues = (item?: MedicalCatalogItem): MedicalItemFormInput =>
         analytes: [],
       };
 
-export function MedicalItemForm({ onFormSubmit, species, item }: Props) {
+export function MedicalItemForm({ onFormSubmit, species, item, ref }: Props) {
   const [isPending, startSubmitTransition] = useTransition();
-  // An entry's kind must match its item's, so an item in use keeps its kind.
-  const kindLocked = (item?._count.entries ?? 0) > 0;
+  useImperativeHandle(ref, () => ({ isPending: () => isPending }), [isPending]);
+  // An entry's kind must match its item's, and so must a protocol step's
+  // (retired steps included), so an item in use keeps its kind.
+  const recorded = (item?._count.entries ?? 0) > 0;
+  const inProtocol = (item?._count.protocolSteps ?? 0) > 0;
+  const kindLocked = recorded || inProtocol;
 
   const form = useForm<MedicalItemFormInput, unknown, MedicalItemFormValues>({
     resolver: standardSchemaResolver(MedicalItemFormSchema),
@@ -151,137 +162,104 @@ export function MedicalItemForm({ onFormSubmit, species, item }: Props) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <FormField
-            control={form.control}
-            name="kind"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel htmlFor="kind" required>
-                  Kind
-                </FormLabel>
-                <Select
-                  onValueChange={(value) => changeKind(value as MedicalItemKind)}
-                  value={field.value}
-                  name={field.name}
-                  disabled={kindLocked}
-                >
-                  <FormControl>
-                    <SelectTrigger className="w-full" id="kind">
-                      <SelectValue />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    {KINDS.map((value) => (
-                      <SelectItem key={value} value={value}>
-                        {MEDICAL_ITEM_KIND_LABELS[value]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {kindLocked && (
-                  <FormDescription>
-                    Recorded on animals, so its kind can&apos;t change.
-                  </FormDescription>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="name"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel htmlFor="name" required>
-                  Name
-                </FormLabel>
-                <FormControl>
-                  <Input id="name" placeholder="e.g. DHPP" {...field} />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="manufacturer"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel htmlFor="manufacturer">Manufacturer</FormLabel>
-                <FormControl>
-                  <Input
-                    id="manufacturer"
-                    {...field}
-                    value={field.value ?? ""}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <NumberField
-            control={form.control}
-            name="repeatIntervalDays"
-            label="Repeat every (days)"
-            min={1}
-            max={MAX_REPEAT_INTERVAL_DAYS}
-            placeholder="e.g. 14"
-          />
-
-          {kind !== MedicalItemKind.TEST && (
+        {/* Nothing changes while a save is out: the dialog closes when it
+            succeeds, so an edit made meanwhile would be lost unsaved. A
+            disabled fieldset doesn't stop a Radix select from opening, so
+            each select is disabled too. */}
+        <fieldset disabled={isPending} className="m-0 min-w-0 border-0 p-0">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <FormField
               control={form.control}
-              name="defaultRoute"
+              name="kind"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel htmlFor="defaultRoute">Default route</FormLabel>
+                  <FormLabel htmlFor="kind" required>
+                    Kind
+                  </FormLabel>
                   <Select
-                    onValueChange={(value) =>
-                      field.onChange(value === "none" ? null : value)
-                    }
-                    value={field.value ?? "none"}
+                    onValueChange={(value) => changeKind(value as MedicalItemKind)}
+                    value={field.value}
                     name={field.name}
+                    disabled={kindLocked || isPending}
                   >
                     <FormControl>
-                      <SelectTrigger className="w-full" id="defaultRoute">
+                      <SelectTrigger className="w-full" id="kind">
                         <SelectValue />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="none">No default</SelectItem>
-                      {ROUTES.map((value) => (
+                      {KINDS.map((value) => (
                         <SelectItem key={value} value={value}>
-                          {MEDICAL_ROUTE_LABELS[value]}
+                          {MEDICAL_ITEM_KIND_LABELS[value]}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {kindLocked && (
+                    <FormDescription>
+                      {recorded
+                        ? "Recorded on animals"
+                        : "A step of a medical protocol"}
+                      , so its kind can&apos;t change.
+                    </FormDescription>
+                  )}
                   <FormMessage />
                 </FormItem>
               )}
             />
-          )}
 
-          {kind === MedicalItemKind.TREATMENT && (
-            <div className="grid grid-cols-2 gap-2">
-              <NumberField
-                control={form.control}
-                name="defaultDoseAmount"
-                label="Default dose"
-                decimal
-                min={0}
-              />
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel htmlFor="name" required>
+                    Name
+                  </FormLabel>
+                  <FormControl>
+                    <Input id="name" placeholder="e.g. DHPP" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="manufacturer"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel htmlFor="manufacturer">Manufacturer</FormLabel>
+                  <FormControl>
+                    <Input
+                      id="manufacturer"
+                      {...field}
+                      value={field.value ?? ""}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <NumberField
+              control={form.control}
+              name="repeatIntervalDays"
+              label="Repeat every (days)"
+              min={1}
+              max={MAX_REPEAT_INTERVAL_DAYS}
+              placeholder="e.g. 14"
+            />
+
+            {kind !== MedicalItemKind.TEST && (
               <FormField
                 control={form.control}
-                name="defaultDoseUnit"
+                name="defaultRoute"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel htmlFor="defaultDoseUnit">Unit</FormLabel>
+                    <FormLabel htmlFor="defaultRoute">Default route</FormLabel>
                     <Select
+                      disabled={isPending}
                       onValueChange={(value) =>
                         field.onChange(value === "none" ? null : value)
                       }
@@ -289,15 +267,15 @@ export function MedicalItemForm({ onFormSubmit, species, item }: Props) {
                       name={field.name}
                     >
                       <FormControl>
-                        <SelectTrigger className="w-full" id="defaultDoseUnit">
+                        <SelectTrigger className="w-full" id="defaultRoute">
                           <SelectValue />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-                        {UNITS.map((value) => (
+                        <SelectItem value="none">No default</SelectItem>
+                        {ROUTES.map((value) => (
                           <SelectItem key={value} value={value}>
-                            {DOSE_UNIT_LABELS[value]}
+                            {MEDICAL_ROUTE_LABELS[value]}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -306,158 +284,202 @@ export function MedicalItemForm({ onFormSubmit, species, item }: Props) {
                   </FormItem>
                 )}
               />
-            </div>
-          )}
+            )}
 
-          {kind === MedicalItemKind.VACCINE && (
+            {kind === MedicalItemKind.TREATMENT && (
+              <div className="grid grid-cols-2 gap-2">
+                <NumberField
+                  control={form.control}
+                  name="defaultDoseAmount"
+                  label="Default dose"
+                  decimal
+                  min={0}
+                />
+                <FormField
+                  control={form.control}
+                  name="defaultDoseUnit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel htmlFor="defaultDoseUnit">Unit</FormLabel>
+                      <Select
+                        disabled={isPending}
+                        onValueChange={(value) =>
+                          field.onChange(value === "none" ? null : value)
+                        }
+                        value={field.value ?? "none"}
+                        name={field.name}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full" id="defaultDoseUnit">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">None</SelectItem>
+                          {UNITS.map((value) => (
+                            <SelectItem key={value} value={value}>
+                              {DOSE_UNIT_LABELS[value]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {kind === MedicalItemKind.VACCINE && (
+              <FormField
+                control={form.control}
+                name="isRabies"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center gap-3 md:col-span-2">
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                    <div>
+                      <FormLabel>Rabies vaccine</FormLabel>
+                      <FormDescription>
+                        Asks for a tag number and duration, and works out the
+                        day it&apos;s valid until.
+                      </FormDescription>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
-              name="isRabies"
+              name="speciesIds"
               render={({ field }) => (
-                <FormItem className="flex flex-row items-center gap-3 md:col-span-2">
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                  <div>
-                    <FormLabel>Rabies vaccine</FormLabel>
-                    <FormDescription>
-                      Asks for a tag number and duration, and works out the
-                      day it&apos;s valid until.
-                    </FormDescription>
+                <FormItem className="md:col-span-2">
+                  <FormLabel>Species</FormLabel>
+                  <FormDescription>
+                    Leave all unticked for an item that applies to every species.
+                  </FormDescription>
+                  <div className="flex flex-wrap gap-x-6 gap-y-2">
+                    {species.map((option) => {
+                      const checked = field.value.includes(option.id);
+                      return (
+                        <label
+                          key={option.id}
+                          className="flex items-center gap-2 text-sm"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(next) =>
+                              field.onChange(
+                                next
+                                  ? [...field.value, option.id]
+                                  : field.value.filter((id) => id !== option.id),
+                              )
+                            }
+                          />
+                          {option.name}
+                        </label>
+                      );
+                    })}
                   </div>
                   <FormMessage />
                 </FormItem>
               )}
             />
-          )}
 
-          <FormField
-            control={form.control}
-            name="speciesIds"
-            render={({ field }) => (
-              <FormItem className="md:col-span-2">
-                <FormLabel>Species</FormLabel>
-                <FormDescription>
-                  Leave all unticked for an item that applies to every species.
-                </FormDescription>
-                <div className="flex flex-wrap gap-x-6 gap-y-2">
-                  {species.map((option) => {
-                    const checked = field.value.includes(option.id);
-                    return (
-                      <label
-                        key={option.id}
-                        className="flex items-center gap-2 text-sm"
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(next) =>
-                            field.onChange(
-                              next
-                                ? [...field.value, option.id]
-                                : field.value.filter((id) => id !== option.id),
-                            )
-                          }
-                        />
-                        {option.name}
-                      </label>
-                    );
-                  })}
-                </div>
-                <FormMessage />
-              </FormItem>
+            {kind === MedicalItemKind.TEST && (
+              <div className="space-y-2 md:col-span-2">
+                <p className="text-sm font-medium">
+                  Analytes <span className="text-destructive">*</span>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  What the test reports a result for, in the order staff enter
+                  them. A combination test has one per result.
+                </p>
+                {analytes.fields.map((row, index) => (
+                  <div key={row.key} className="flex items-center gap-1">
+                    <FormField
+                      control={form.control}
+                      name={`analytes.${index}.name`}
+                      render={({ field }) => (
+                        <FormItem className="flex-1">
+                          <FormControl>
+                            <Input
+                              aria-label={`Analyte ${index + 1}`}
+                              placeholder="e.g. FeLV antigen"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Move analyte ${index + 1} up`}
+                      disabled={index === 0}
+                      onClick={() => analytes.move(index, index - 1)}
+                    >
+                      <ArrowUp className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Move analyte ${index + 1} down`}
+                      disabled={index === analytes.fields.length - 1}
+                      onClick={() => analytes.move(index, index + 1)}
+                    >
+                      <ArrowDown className="size-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Remove analyte ${index + 1}`}
+                      onClick={() => analytes.remove(index)}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+                {analytesErrorMessage && (
+                  <p className="text-sm text-destructive">
+                    {analytesErrorMessage}
+                  </p>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => analytes.append({ id: null, name: "" })}
+                >
+                  <Plus className="mr-2 size-4" />
+                  Add analyte
+                </Button>
+                {retiredAnalytes.length > 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    Retired: {retiredAnalytes.map((a) => a.name).join(", ")}.
+                    Add one back under the same name to restore it.
+                  </p>
+                )}
+                {item && (
+                  <p className="text-sm text-muted-foreground">
+                    Removing an analyte retires it. Results already recorded
+                    keep it.
+                  </p>
+                )}
+              </div>
             )}
-          />
-
-          {kind === MedicalItemKind.TEST && (
-            <div className="space-y-2 md:col-span-2">
-              <p className="text-sm font-medium">
-                Analytes <span className="text-destructive">*</span>
-              </p>
-              <p className="text-sm text-muted-foreground">
-                What the test reports a result for, in the order staff enter
-                them. A combination test has one per result.
-              </p>
-              {analytes.fields.map((row, index) => (
-                <div key={row.key} className="flex items-center gap-1">
-                  <FormField
-                    control={form.control}
-                    name={`analytes.${index}.name`}
-                    render={({ field }) => (
-                      <FormItem className="flex-1">
-                        <FormControl>
-                          <Input
-                            aria-label={`Analyte ${index + 1}`}
-                            placeholder="e.g. FeLV antigen"
-                            {...field}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Move analyte ${index + 1} up`}
-                    disabled={index === 0}
-                    onClick={() => analytes.move(index, index - 1)}
-                  >
-                    <ArrowUp className="size-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Move analyte ${index + 1} down`}
-                    disabled={index === analytes.fields.length - 1}
-                    onClick={() => analytes.move(index, index + 1)}
-                  >
-                    <ArrowDown className="size-4" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Remove analyte ${index + 1}`}
-                    onClick={() => analytes.remove(index)}
-                  >
-                    <X className="size-4" />
-                  </Button>
-                </div>
-              ))}
-              {analytesErrorMessage && (
-                <p className="text-sm text-destructive">
-                  {analytesErrorMessage}
-                </p>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => analytes.append({ id: null, name: "" })}
-              >
-                <Plus className="mr-2 size-4" />
-                Add analyte
-              </Button>
-              {retiredAnalytes.length > 0 && (
-                <p className="text-sm text-muted-foreground">
-                  Retired: {retiredAnalytes.map((a) => a.name).join(", ")}.
-                  Add one back under the same name to restore it.
-                </p>
-              )}
-              {item && (
-                <p className="text-sm text-muted-foreground">
-                  Removing an analyte retires it. Results already recorded
-                  keep it.
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+          </div>
+        </fieldset>
 
         <DialogFooter>
           <DialogClose asChild>

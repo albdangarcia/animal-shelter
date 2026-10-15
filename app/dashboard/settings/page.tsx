@@ -38,7 +38,7 @@ const settingsCards: readonly SettingsCard[] = [
     {
         title: "Medical",
         description:
-            "Manage the vaccines, tests and treatments staff record on animals.",
+            "Manage the vaccines, tests and treatments staff record on animals, and the protocols that schedule care at intake.",
         url: "/dashboard/settings/medical",
         permission: AppPermissions.MEDICAL_SETTINGS_MANAGE,
     },

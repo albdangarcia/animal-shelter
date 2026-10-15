@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,7 +25,7 @@ import {
   unretireMedicalItem,
 } from "@/app/lib/actions/medical-catalog.actions";
 import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
-import { MedicalItemForm } from "./medical-item-form";
+import { MedicalItemForm, type MedicalItemFormHandle } from "./medical-item-form";
 
 interface Props {
   item: MedicalCatalogItem;
@@ -33,6 +34,8 @@ interface Props {
 
 export function MedicalItemActions({ item, species }: Props) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const formRef = useRef<MedicalItemFormHandle>(null);
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { triggerRef, returnFocus } = useMenuDialogFocus();
 
@@ -45,12 +48,19 @@ export function MedicalItemActions({ item, species }: Props) {
         toast.success(result.message);
       } else {
         toast.error(result.message);
+        // Most likely someone else retired or unretired it first; refreshing
+        // shows the row, and the actions it now offers, as they are.
+        router.refresh();
       }
     });
   };
 
   return (
-    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+    // Not closed under a save, whose result closes the dialog.
+    <Dialog
+      open={isDialogOpen}
+      onOpenChange={(open) => !formRef.current?.isPending() && setIsDialogOpen(open)}
+    >
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
@@ -98,6 +108,7 @@ export function MedicalItemActions({ item, species }: Props) {
           </DialogDescription>
         </DialogHeader>
         <MedicalItemForm
+          ref={formRef}
           item={item}
           species={species}
           onFormSubmit={() => setIsDialogOpen(false)}

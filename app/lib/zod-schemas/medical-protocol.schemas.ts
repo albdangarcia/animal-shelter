@@ -26,7 +26,10 @@ const MedicalProtocolStepFormSchema = z.object({
   kind: z.enum(MedicalProtocolStepKind),
   itemId: cuidSchema.nullable(),
   examType: z.enum(ExamType).nullable(),
-  offsetDays: wholeDays
+  // Required: a cleared number field holds null.
+  offsetDays: z
+    .number({ error: "Give the days after intake." })
+    .int("Use a whole number of days.")
     .min(0, "Can't be before intake.")
     .max(MAX_PROTOCOL_OFFSET_DAYS, `At most ${MAX_PROTOCOL_OFFSET_DAYS} days after intake.`),
   notBeforeAgeDays: wholeDays
@@ -65,7 +68,8 @@ export const MedicalProtocolFormSchema = z
           .min(1, "Name is required.")
           .max(MEDICAL_PROTOCOL_NAME_MAX_LENGTH, "Name is too long."),
       ),
-    speciesId: cuidSchema,
+    // A new protocol's form starts with no species picked.
+    speciesId: z.string().min(1, "Pick a species.").pipe(cuidSchema),
     minAgeDays: wholeDays.min(0, "Can't be negative.").nullable(),
     maxAgeDays: wholeDays.min(1, "At least one day.").nullable(),
     steps: z
