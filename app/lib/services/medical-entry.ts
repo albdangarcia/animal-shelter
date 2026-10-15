@@ -531,7 +531,7 @@ const checkProcedure = (
  * What care is, by kind: its catalog item, its procedure, its exam type, or
  * none of these.
  */
-type CareKind =
+export type CareKind =
   | { kind: CatalogEntryKind; itemId: string }
   | { kind: typeof MedicalEntryKind.SURGERY; procedure: SurgeryProcedure }
   | { kind: typeof MedicalEntryKind.MICROCHIP }

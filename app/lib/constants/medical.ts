@@ -10,6 +10,7 @@ import type {
   MedicalConditionType,
   MedicalEntryStatus,
   MedicalItemKind,
+  MedicalProtocolStepKind,
   MedicalRoute,
   ReproductiveStatus,
   SpayNeuterExemptionReason,
@@ -219,3 +220,32 @@ export const MEDICAL_CONDITION_NAME_MAX_LENGTH = 120;
  * routine spay included, since the animal is recovering either way.
  */
 export const RECOVERY_DAYS = 14;
+
+/** What a protocol step schedules, in the order the editor lists them. */
+export const MEDICAL_PROTOCOL_STEP_KIND_LABELS: Record<MedicalProtocolStepKind, string> = {
+  VACCINE: "Vaccine",
+  TEST: "Test",
+  TREATMENT: "Treatment",
+  SPAY_NEUTER: "Spay/neuter",
+  EXAM: "Exam",
+  MICROCHIP: "Microchip",
+};
+
+/** The longest name a medical protocol can carry. */
+export const MEDICAL_PROTOCOL_NAME_MAX_LENGTH = 80;
+
+/**
+ * The most doses one protocol step schedules. Weekly boosters through a
+ * puppy's first months fit; past it, a mistyped interval would fill the due
+ * list.
+ */
+export const MAX_PROTOCOL_STEP_DOSES = 12;
+
+/** The furthest after intake a protocol step's first dose can be planned. */
+export const MAX_PROTOCOL_OFFSET_DAYS = 365;
+
+/**
+ * The oldest age a protocol step can wait for before its first dose: five
+ * years of 365 days.
+ */
+export const MAX_PROTOCOL_NOT_BEFORE_AGE_DAYS = 1825;

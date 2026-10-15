@@ -157,6 +157,10 @@ const activityConfig: Record<
     icon: Ban,
     text: "voided a care episode",
   },
+  [AnimalActivityType.MEDICAL_PROTOCOL_APPLIED]: {
+    icon: CalendarPlus,
+    text: "applied a medical protocol",
+  },
   [AnimalActivityType.TASK_CREATED]: {
     icon: ClipboardList,
     text: "created a task",

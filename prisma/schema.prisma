@@ -530,6 +530,7 @@ model Species {
   fosterProfiles     FosterProfile[]     @relation("FosterProfileSpeciesCapability")
   fosterApplications FosterApplication[] @relation("FosterApplicationSpeciesCapability")
   medicalItems       MedicalItem[]       @relation("MedicalItemSpecies")
+  medicalProtocols   MedicalProtocol[]
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1044,8 +1045,9 @@ model MedicalItem {
   isRabies Boolean @default(false) @map(name: "is_rabies")
 
   /// What a test reports, one result per analyte. Only tests have analytes.
-  analytes MedicalItemAnalyte[]
-  entries  MedicalEntry[]
+  analytes      MedicalItemAnalyte[]
+  entries       MedicalEntry[]
+  protocolSteps MedicalProtocolStep[]
 
   retiredAt DateTime? @map(name: "retired_at")
   createdAt DateTime  @default(now()) @map(name: "created_at")
@@ -1186,6 +1188,14 @@ model MedicalEntry {
   /// for an entry written by itself.
   batchId String? @map(name: "batch_id")
 
+  /// The protocol step that scheduled this entry when the animal arrived.
+  /// Provenance only, as `batchId` is: the entry stands on its own and is
+  /// recorded, rescheduled, declined or voided like any other. A saved step's
+  /// care never changes, so this always points at what was applied. Null for
+  /// care scheduled by hand.
+  protocolStepId String?              @map(name: "protocol_step_id")
+  protocolStep   MedicalProtocolStep? @relation(fields: [protocolStepId], references: [id], onDelete: Restrict)
+
   /// Voiding marks an entry that should never have been recorded: it is kept,
   /// but counts for nothing (it is left out of every derived fact, such as
   /// whether rabies is current). Write-once, as `Outcome.reversedAt` is:
@@ -1224,6 +1234,7 @@ model MedicalEntry {
   @@index([itemId])
   @@index([status, dueDate])
   @@index([batchId])
+  @@index([protocolStepId])
   @@map("medical_entries")
 }
 
@@ -1637,6 +1648,93 @@ model CareEpisodeEvent {
 
   @@index([episodeId])
   @@map("care_episode_events")
+}
+
+/// What a protocol step schedules. A vaccine, test or treatment names its
+/// catalog item, and only these repeat. A spay/neuter becomes a spay or a
+/// neuter by the animal's sex when the protocol is applied. An exam names its
+/// type.
+enum MedicalProtocolStepKind {
+  VACCINE
+  TEST
+  TREATMENT
+  SPAY_NEUTER
+  EXAM
+  MICROCHIP
+}
+
+/// The care an animal of one species, in an age range on its intake day, is
+/// scheduled when it arrives. Managed by admins; applied once, at intake,
+/// where it writes scheduled entries that then stand on their own: changing
+/// or retiring a protocol never touches care it already scheduled.
+///
+/// Live protocols of one species never cover the same age, so at most one
+/// fits an animal. The range is `[minAgeDays, maxAgeDays)` in whole days from
+/// the birth day to the intake day; a null end is open. Retired, never
+/// deleted, and retiring can be undone. Names are unique ignoring case, which
+/// the service checks; the index only knows the exact spelling.
+model MedicalProtocol {
+  id         String  @id @default(cuid())
+  name       String
+  speciesId  String  @map(name: "species_id")
+  species    Species @relation(fields: [speciesId], references: [id], onDelete: Restrict)
+  minAgeDays Int?    @map(name: "min_age_days")
+  maxAgeDays Int?    @map(name: "max_age_days")
+
+  steps MedicalProtocolStep[]
+
+  retiredAt DateTime? @map(name: "retired_at")
+  createdAt DateTime  @default(now()) @map(name: "created_at")
+  updatedAt DateTime  @updatedAt @map(name: "updated_at")
+
+  @@unique([name])
+  @@index([speciesId])
+  @@map("medical_protocols")
+}
+
+/// One piece of care a protocol schedules, due `offsetDays` after intake and
+/// not before the animal is `notBeforeAgeDays` old (nor before the day it is
+/// applied). A repeating step schedules a dose every `repeatIntervalDays`,
+/// `repeatCount` more times, or while the animal is under `untilAgeDays` on
+/// the due day, or both; `untilAgeDays` alone keeps a single dose for the
+/// young.
+///
+/// A saved step's care fields never change, so the entries that point at it
+/// always show what was applied: an edit retires the step and adds a new one,
+/// and only `sortOrder` is ever updated. Retired, never deleted.
+model MedicalProtocolStep {
+  id         String                  @id @default(cuid())
+  protocolId String                  @map(name: "protocol_id")
+  protocol   MedicalProtocol         @relation(fields: [protocolId], references: [id], onDelete: Restrict)
+  kind       MedicalProtocolStepKind
+
+  /// The catalog item, for a vaccine, test or treatment step. Null otherwise.
+  itemId String?      @map(name: "item_id")
+  item   MedicalItem? @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  /// Which exam, on an EXAM step. Null otherwise.
+  examType ExamType? @map(name: "exam_type")
+
+  offsetDays         Int  @map(name: "offset_days")
+  notBeforeAgeDays   Int? @map(name: "not_before_age_days")
+  repeatIntervalDays Int? @map(name: "repeat_interval_days")
+  repeatCount        Int? @map(name: "repeat_count")
+  untilAgeDays       Int? @map(name: "until_age_days")
+
+  /// Copied onto every entry the step schedules.
+  notes String?
+
+  sortOrder Int @map(name: "sort_order")
+
+  entries MedicalEntry[]
+
+  retiredAt DateTime? @map(name: "retired_at")
+  createdAt DateTime  @default(now()) @map(name: "created_at")
+  updatedAt DateTime  @updatedAt @map(name: "updated_at")
+
+  @@index([protocolId])
+  @@index([itemId])
+  @@map("medical_protocol_steps")
 }
 
 // ═══════════════════════════════════════════════════
@@ -2299,6 +2397,7 @@ enum AnimalActivityType {
   CARE_EPISODE_CLOSED // An open care episode was closed
   CARE_EPISODE_EDITED // A care episode was corrected
   CARE_EPISODE_VOIDED // A care episode was voided as recorded in error
+  MEDICAL_PROTOCOL_APPLIED // A medical protocol scheduled care at intake: one row for every entry it wrote
 }
 
 model AnimalActivityLog {

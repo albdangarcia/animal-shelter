@@ -317,6 +317,19 @@ export const updateMedicalItem = async (
         `This ${KIND_NOUN[current.kind]} has been used on animals, so it can't become a ${KIND_NOUN[item.kind]}. Retire it and add a new item instead.`,
       );
     }
+    // A protocol step's kind is its item's, checked when the step is saved
+    // behind this item's lock, and a saved step never changes: retired steps
+    // count too, so the entries that cite one still read right.
+    const step = await tx.medicalProtocolStep.findFirst({
+      where: { itemId },
+      orderBy: [{ retiredAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }],
+      select: { protocol: { select: { name: true } } },
+    });
+    if (step) {
+      throw new ConflictError(
+        `This ${KIND_NOUN[current.kind]} is a step of the ${step.protocol.name} protocol, so it can't become a ${KIND_NOUN[item.kind]}. Retire it and add a new item instead.`,
+      );
+    }
   }
 
   await refuseDuplicateName(tx, item.kind, item.name, itemId);
