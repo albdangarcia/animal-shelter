@@ -49,7 +49,7 @@ export const recordReIntake = async (
   { animalId, values }: ReIntakeToRecord,
   actorId: string,
 ): Promise<void> => {
-  const { intakeDate, intakeType, healthStatus } = values;
+  const { intakeDate, intakeType } = values;
   const mapped = toReIntakeData(values);
 
   // Held until commit, so the animal's intakes and outcomes are still as the
@@ -89,7 +89,6 @@ export const recordReIntake = async (
     data: {
       listingStatus: AnimalListingStatus.DRAFT,
       archiveReason: null,
-      healthStatus: healthStatus,
     },
   });
 

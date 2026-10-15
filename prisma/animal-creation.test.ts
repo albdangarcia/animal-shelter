@@ -12,7 +12,6 @@ import assert from "node:assert/strict";
 import prisma from "@/app/lib/prisma";
 import {
   AnimalActivityType,
-  AnimalHealthStatus,
   AnimalListingStatus,
   IntakeType,
   MedicalEntryEventAction,
@@ -93,7 +92,6 @@ const submission = (
     additionalColors: [],
     sex: Sex.FEMALE,
     estimatedBirthDate: "2024-01-01",
-    healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
     listingStatus: AnimalListingStatus.DRAFT,
     heightCm: null,
     weightGrams: null,

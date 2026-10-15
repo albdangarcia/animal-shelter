@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useImperativeHandle, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
@@ -164,10 +164,103 @@ export function CareEpisodeActions({
 
 type CloseFormState = { endDate: string | null };
 
+/** The close form's handle: whether its day was changed, and whether it is
+ * saving (a dialog doesn't close under a save). */
+export interface CloseCareEpisodeFormHandle extends DirtyFormHandle {
+  isPending: () => boolean;
+}
+
 /**
- * Closes an open care episode on the day it ended, today unless another is
- * picked. Shown on the open episode only. A day picked and not saved is
- * asked about before the dialog closes, as the other forms' changes are.
+ * The day an open care episode ended, today unless another is picked, and
+ * the button that closes it. It starts on the day it was opened on: `today`
+ * can move on under an open dialog (a refresh after midnight), and the form
+ * still holds the day it began with, which is no change.
+ */
+export function CloseCareEpisodeForm({
+  episodeId,
+  startDate,
+  today,
+  cancelLabel = "Cancel",
+  onClosed,
+  ref,
+}: {
+  episodeId: string;
+  /** The episode's start: it can't end before it. */
+  startDate: string;
+  today: CalendarDay;
+  /** The button that leaves it open: "Cancel" unless given. */
+  cancelLabel?: string;
+  onClosed: () => void;
+  ref?: React.Ref<CloseCareEpisodeFormHandle>;
+}) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
+  const form = useForm<CloseFormState>({
+    resolver: standardSchemaResolver(CloseCareEpisodeSchema) as never,
+    defaultValues: { endDate: today },
+  });
+  const openedOn = useRef<string>(today);
+  useImperativeHandle(
+    ref,
+    () => ({
+      isDirty: () => form.getValues().endDate !== openedOn.current,
+      isPending: () => isPending,
+    }),
+    [form, isPending],
+  );
+
+  const onSubmit = (state: CloseFormState) => {
+    startTransition(async () => {
+      const result = await closeCareEpisode(
+        episodeId,
+        state as CloseCareEpisodeInput,
+      );
+      if (result.ok) {
+        toast.success(result.message);
+        onClosed();
+        return;
+      }
+      applyFieldErrors(form, result.fieldErrors);
+      toast.error(result.message);
+      // Someone closed or voided it first: show it as it now is.
+      if (!result.fieldErrors) router.refresh();
+    });
+  };
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <DayField
+          control={form.control}
+          name="endDate"
+          label="End date"
+          required
+          triggerClassName="w-full sm:w-64"
+          disabledDates={(date) => {
+            const day = format(date, "yyyy-MM-dd");
+            return day > today || day < startDate;
+          }}
+        />
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button type="button" variant="outline" disabled={isPending}>
+              {cancelLabel}
+            </Button>
+          </DialogClose>
+          <Button type="submit" disabled={isPending}>
+            {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Close Episode
+          </Button>
+        </DialogFooter>
+      </form>
+    </Form>
+  );
+}
+
+/**
+ * Closes an open care episode on the day it ended. Shown on the open episode
+ * only. A day picked and not saved is asked about before the dialog closes,
+ * as the other forms' changes are.
  */
 export function CloseCareEpisodeButton({
   episode,
@@ -180,42 +273,15 @@ export function CloseCareEpisodeButton({
   today: CalendarDay;
   fallbackId?: string;
 }) {
-  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const formRef = useRef<CloseCareEpisodeFormHandle>(null);
   const { triggerRef, returnFocus } = useEntryDialogFocus(fallbackId);
-  const form = useForm<CloseFormState>({
-    resolver: standardSchemaResolver(CloseCareEpisodeSchema) as never,
-    defaultValues: { endDate: today },
-  });
-  // The day the form opened on: `today` can move on under an open dialog
-  // (a refresh after midnight), and the form still holds the day it began
-  // with, which is no change.
-  const openedOn = useRef<string>(today);
   const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
     useConfirmedOpenChange(
-      () => form.getValues().endDate !== openedOn.current,
+      () => formRef.current?.isDirty() ?? false,
       setIsOpen,
     );
   const what = careEpisodeLabel(episode).replace(/^./, (c) => c.toLowerCase());
-
-  const onSubmit = (state: CloseFormState) => {
-    startTransition(async () => {
-      const result = await closeCareEpisode(
-        episode.id,
-        state as CloseCareEpisodeInput,
-      );
-      if (result.ok) {
-        toast.success(result.message);
-        setIsOpen(false);
-        return;
-      }
-      applyFieldErrors(form, result.fieldErrors);
-      toast.error(result.message);
-      // Someone closed or voided it first: show it as it now is.
-      if (!result.fieldErrors) router.refresh();
-    });
-  };
 
   return (
     <>
@@ -224,17 +290,15 @@ export function CloseCareEpisodeButton({
         type="button"
         variant="outline"
         size="sm"
-        onClick={() => {
-          openedOn.current = today;
-          form.reset({ endDate: today });
-          setIsOpen(true);
-        }}
+        onClick={() => setIsOpen(true)}
       >
         Close episode
       </Button>
       <Dialog
         open={isOpen}
-        onOpenChange={(open) => !isPending && guardedOnOpenChange(open)}
+        onOpenChange={(open) =>
+          !formRef.current?.isPending() && guardedOnOpenChange(open)
+        }
       >
         <DialogContent onCloseAutoFocus={returnFocus}>
           <DialogHeader>
@@ -246,32 +310,13 @@ export function CloseCareEpisodeButton({
               closed.
             </DialogDescription>
           </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <DayField
-                control={form.control}
-                name="endDate"
-                label="End date"
-                required
-                triggerClassName="w-full sm:w-64"
-                disabledDates={(date) => {
-                  const day = format(date, "yyyy-MM-dd");
-                  return day > today || day < episode.startDate;
-                }}
-              />
-              <DialogFooter>
-                <DialogClose asChild>
-                  <Button type="button" variant="outline" disabled={isPending}>
-                    Cancel
-                  </Button>
-                </DialogClose>
-                <Button type="submit" disabled={isPending}>
-                  {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Close Episode
-                </Button>
-              </DialogFooter>
-            </form>
-          </Form>
+          <CloseCareEpisodeForm
+            episodeId={episode.id}
+            startDate={episode.startDate}
+            today={today}
+            onClosed={() => setIsOpen(false)}
+            ref={formRef}
+          />
         </DialogContent>
       </Dialog>
       <DiscardChangesDialog

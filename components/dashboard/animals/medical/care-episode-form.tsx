@@ -67,6 +67,8 @@ interface Props {
   today: CalendarDay;
   /** The submit button's text. */
   submitLabel: string;
+  /** The button that closes the form unsaved: "Cancel" unless given. */
+  cancelLabel?: string;
   onFormSubmit: () => void;
   ref?: React.Ref<DirtyFormHandle>;
 }
@@ -89,6 +91,7 @@ export function CareEpisodeForm({
   vetClinics,
   today,
   submitLabel,
+  cancelLabel = "Cancel",
   onFormSubmit,
   ref,
 }: Props) {
@@ -127,8 +130,10 @@ export function CareEpisodeForm({
     () => ({
       isDirty: () =>
         haveFormValuesChanged(form.getValues(), initialValuesRef.current),
+      // For a dialog that shouldn't close under a save.
+      isPending: () => isPending,
     }),
-    [form],
+    [form, isPending],
   );
 
   // A correction keeps a clinic made inactive since.
@@ -269,7 +274,7 @@ export function CareEpisodeForm({
         <DialogFooter>
           <DialogClose asChild>
             <Button type="button" variant="outline" disabled={isPending}>
-              Cancel
+              {cancelLabel}
             </Button>
           </DialogClose>
           <Button type="submit" disabled={isPending}>

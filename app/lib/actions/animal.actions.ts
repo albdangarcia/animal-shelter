@@ -29,6 +29,14 @@ import { ConflictError, NotFoundError } from "../utils/errors";
 import { findLiveUnitForPlacement } from "../services/unit-housing";
 import { createAnimalFromForm } from "../services/animal-creation";
 import {
+  careEpisodeOfferInMove,
+  type CareEpisodeOffer,
+} from "../services/care-episode";
+import {
+  careEpisodeOfferPrompt,
+  type CareEpisodeOfferPrompt,
+} from "../data/care-episode-offer.data";
+import {
   MedicalEntryRefusal,
   nameChipNumberHolder,
 } from "../services/medical-entry";
@@ -153,11 +161,18 @@ const _createAnimal = async (
   };
 };
 
+/**
+ * A changed unit into or out of a medical one offers a holder of
+ * MEDICAL_MANAGE to open or close a care episode, which the form asks about
+ * before it leaves. Only an offer: the save is the same either way.
+ */
+export type UpdateAnimalData = { careEpisodeOffer: CareEpisodeOfferPrompt | null };
+
 const _updateAnimal = async (
   user: SessionUser,
   animalId: string,
   values: AnimalEditFormInput,
-): Promise<FormResult<AnimalEditFormInput>> => {
+): Promise<FormResult<AnimalEditFormInput, UpdateAnimalData>> => {
   const parsedId = cuidSchema.safeParse(animalId);
   if (!parsedId.success) {
     return { ok: false, message: "Invalid Animal ID." };
@@ -180,7 +195,6 @@ const _updateAnimal = async (
     animalName,
     estimatedBirthDate,
     sex,
-    healthStatus,
     listingStatus,
     species: speciesId,
     breed: breedId,
@@ -204,6 +218,8 @@ const _updateAnimal = async (
     new Set([primaryColorId, ...additionalColorIds]),
   );
 
+  const offersCare = can(user.role, AppPermissions.MEDICAL_MANAGE);
+  let offer: CareEpisodeOffer | null = null;
   try {
     await prisma.$transaction(async (tx) => {
       // The update below writes the listing status back whether or not it
@@ -345,7 +361,6 @@ const _updateAnimal = async (
           // as null (never ""), so no more "" ? undefined : heightCm guard
           // that silently left a stale value in place.
           heightCm,
-          healthStatus: healthStatus,
           listingStatus: listingStatus,
           publishedAt: publishedAt,
           currentUnit: resolvedUnitId
@@ -383,6 +398,15 @@ const _updateAnimal = async (
             ),
           },
         });
+        // A failed read gives no offer and leaves the save be.
+        if (offersCare) {
+          offer = await careEpisodeOfferInMove(
+            tx,
+            validatedAnimalId,
+            currentAnimal.currentUnitId,
+            resolvedUnitId,
+          );
+        }
       }
     });
   } catch (error) {
@@ -399,9 +423,18 @@ const _updateAnimal = async (
   revalidatePath("/dashboard/animals");
   revalidatePath(`/dashboard/animals/${validatedAnimalId}`);
 
+  let careEpisodeOffer: CareEpisodeOfferPrompt | null = null;
+  try {
+    careEpisodeOffer = await careEpisodeOfferPrompt(offer);
+  } catch (error) {
+    // The save already succeeded; the offer is a convenience, so don't fail.
+    console.error("Database Error reading the care episode offer:", error);
+  }
+
   return {
     ok: true,
     message: "Animal updated successfully.",
+    data: { careEpisodeOffer },
     redirectTo: `/dashboard/animals/${validatedAnimalId}`,
   };
 };

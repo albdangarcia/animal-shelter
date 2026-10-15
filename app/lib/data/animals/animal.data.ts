@@ -308,7 +308,6 @@ const _fetchAnimalById = async (
         heightCm: true,
         description: true,
         listingStatus: true,
-        healthStatus: true,
         speciesId: true,
         primaryColorId: true,
         currentUnitId: true,

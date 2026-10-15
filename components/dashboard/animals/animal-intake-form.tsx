@@ -54,7 +54,6 @@ import {
 import { DayField } from "@/components/forms/day-field";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import {
-  AnimalHealthStatus,
   AnimalListingStatus,
   Sex,
   SurgeryProcedure,
@@ -67,7 +66,6 @@ import {
 import { normaliseChipNumber } from "@/app/lib/utils/microchip";
 import { proceduresFor } from "@/app/lib/utils/spay-neuter";
 import {
-  animalHealthStatusOptions,
   animalListingStatusOptions,
   animalSexOptions,
 } from "@/app/lib/utils/enum-formatter";
@@ -94,6 +92,8 @@ import { WeightInput } from "@/components/forms/weight-input";
 import { NumberField } from "@/components/forms/number-field";
 import { FieldInfo } from "@/components/forms/field-info";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
+import type { CareEpisodeOfferPrompt } from "@/app/lib/data/care-episode-offer.data";
+import { CareEpisodeOfferDialog } from "./medical/care-episode-offer-dialog";
 
 // Sentinel for the "Unplaced" option — Radix Select forbids empty-string item
 // values, so we map this back to "" (currentUnitId = null) on change.
@@ -182,6 +182,12 @@ const AnimalForm = ({
       : defaultStatusOptions;
 
   const [isPending, startSubmitTransition] = useTransition();
+  // A changed unit into or out of a medical one asks about the animal's care
+  // episode before the form leaves for the animal's page.
+  const [careEpisodeOffer, setCareEpisodeOffer] = useState<{
+    offer: CareEpisodeOfferPrompt;
+    redirectTo: string | undefined;
+  } | null>(null);
   const [currentSpeciesId, setCurrentSpeciesId] = useState(
     animal?.speciesId || "",
   );
@@ -222,7 +228,6 @@ const AnimalForm = ({
           size: animal.size ?? "",
           estimatedBirthDate: animal.birthDate,
           heightCm: animal.heightCm ?? null,
-          healthStatus: animal.healthStatus ?? AnimalHealthStatus.HEALTHY,
           listingStatus: animal.listingStatus,
           description: animal.description || "",
           currentUnitId: animal.currentUnitId || "",
@@ -250,7 +255,6 @@ const AnimalForm = ({
           listingStatus: AnimalListingStatus.DRAFT,
           currentUnitId: "",
           notes: "",
-          healthStatus: AnimalHealthStatus.HEALTHY,
           sourcePartnerId: "",
           foundAddress: "",
           foundCity: "",
@@ -267,6 +271,11 @@ const AnimalForm = ({
 
       if (result.ok) {
         toast.success(result.message);
+        const offer = result.data?.careEpisodeOffer;
+        if (offer) {
+          setCareEpisodeOffer({ offer, redirectTo: result.redirectTo });
+          return;
+        }
         if (result.redirectTo) {
           router.push(result.redirectTo);
         }
@@ -646,34 +655,6 @@ const AnimalForm = ({
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="healthStatus"
-                  render={({ field }) => (
-                    <FormItem className="col-span-2">
-                      <FormLabel required>Health Status</FormLabel>
-                      <Select
-                        name={field.name}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select health status" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {animalHealthStatusOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 {isEditMode ? (
                   // Weight becomes read-only on edit: it's a dated observation
                   // now, not a plain field. Editing it here (with no "when was
@@ -909,8 +890,10 @@ const AnimalForm = ({
                 />
                 {/* Kennel placement (Location -> Unit cascade). Optional:
                     "Unplaced" leaves currentUnitId null. Location is a UI-only
-                    helper; only the chosen unit is persisted. */}
-                <FormItem className="col-span-3">
+                    helper; only the chosen unit is persisted. Location and
+                    Unit share a row of their own, whatever fields come
+                    before them. */}
+                <FormItem className="col-span-3 @[662px]:col-start-1">
                   <div className="flex items-center gap-1.5">
                     <Label htmlFor="animal-location">Location</Label>
                     <FieldInfo label="About location">
@@ -1048,6 +1031,14 @@ const AnimalForm = ({
           </CardFooter>
         </Card>
       </form>
+      <CareEpisodeOfferDialog
+        offer={careEpisodeOffer?.offer ?? null}
+        onDone={() => {
+          const redirectTo = careEpisodeOffer?.redirectTo;
+          setCareEpisodeOffer(null);
+          if (redirectTo) router.push(redirectTo);
+        }}
+      />
     </Form>
   );
 };

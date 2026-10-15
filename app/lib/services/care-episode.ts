@@ -4,13 +4,16 @@ import type { Prisma } from "@/prisma/generated/client";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import {
   AnimalActivityType,
+  AnimalListingStatus,
   CareEpisodeEventAction,
   CareEpisodeType,
+  LocationType,
 } from "@/prisma/generated/enums";
 import { ConflictError, NotFoundError } from "@/app/lib/utils/errors";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import { beforeIntakeIssue, futureDayIssue } from "@/app/lib/utils/medical-days";
-import { careEpisodeText } from "@/app/lib/utils/care-status";
+import { careEpisodeText, type OpenCareEpisode } from "@/app/lib/utils/care-status";
+import { findOpenEpisodes } from "@/app/lib/data/animals/care-status";
 import {
   CARE_EPISODE_TYPE_LABELS,
   MEDICAL_REASON_MAX_LENGTH,
@@ -41,6 +44,9 @@ import {
  * Every change writes an event holding the values it changed, as a medical
  * entry's do, and a line in the animal's activity feed. A void is written
  * once and never undone; a voided episode is kept and counts for nothing.
+ *
+ * Moving an animal into or out of a medical unit only offers to open or
+ * close an episode (`careEpisodeOfferAfterMove`); whoever moved it answers.
  *
  * Every write takes the animal's lock first, so the one-open and no-overlap
  * rules are checked against what any other write to the animal committed; a
@@ -608,4 +614,108 @@ export async function voidCareEpisode(
   });
 
   return { episodeId, animalId };
+}
+
+// ---------------------------------------------------------------------------
+// After a move
+// ---------------------------------------------------------------------------
+
+/**
+ * What a move into or out of a medical unit offers to do with the animal's
+ * care episodes: open a stay in house, or close one. Only an offer: the move
+ * is the same either way, and whoever moved the animal answers it.
+ */
+export type CareEpisodeOffer =
+  | { kind: "OPEN"; animalId: string; animalName: string; placeName: string }
+  | {
+      kind: "CLOSE";
+      animalId: string;
+      animalName: string;
+      episode: OpenCareEpisode;
+    };
+
+type OfferDb = Parameters<typeof findOpenEpisodes>[0];
+
+const readUnitPlace = (db: OfferDb, unitId: string | null) =>
+  unitId
+    ? db.unit.findUnique({
+        where: { id: unitId },
+        select: { name: true, location: { select: { name: true, type: true } } },
+      })
+    : null;
+
+/**
+ * Read after an animal moved from the unit `fromUnitId` to `toUnitId` (null
+ * for none), in the move's transaction. Where an animal is housed never
+ * opens or closes an episode by itself, so the answer is only an offer:
+ *
+ * - Into a unit of a medical location, from one that isn't or from none,
+ *   with no episode open: open a stay in house.
+ * - Out of one, to a unit that isn't medical or to none, with a stay in
+ *   house open: close it. A stay at a clinic, or vet care, isn't ended by
+ *   where the animal is housed.
+ * - Between two medical units, or anything else: nothing.
+ *
+ * Its reads run one after another, so it is safe on a transaction client.
+ */
+export async function careEpisodeOfferAfterMove(
+  db: OfferDb,
+  animalId: string,
+  fromUnitId: string | null,
+  toUnitId: string | null,
+): Promise<CareEpisodeOffer | null> {
+  if (fromUnitId === toUnitId) return null;
+  const from = await readUnitPlace(db, fromUnitId);
+  const to = await readUnitPlace(db, toUnitId);
+  const fromMedical = from?.location.type === LocationType.MEDICAL;
+  const toMedical = to?.location.type === LocationType.MEDICAL;
+  if (fromMedical === toMedical) return null;
+
+  const animal = await db.animal.findUnique({
+    where: { id: animalId },
+    select: { name: true, listingStatus: true },
+  });
+  if (!animal) return null;
+  const episode = (await findOpenEpisodes(db, [animalId])).get(animalId) ?? null;
+
+  if (to && toMedical) {
+    // No episode is opened for an animal that has left the shelter.
+    if (episode || animal.listingStatus === AnimalListingStatus.ARCHIVED) {
+      return null;
+    }
+    return {
+      kind: "OPEN",
+      animalId,
+      animalName: animal.name,
+      placeName: `${to.location.name} · ${to.name}`,
+    };
+  }
+  if (episode?.type !== CareEpisodeType.HOSPITALISED_IN_HOUSE) return null;
+  return { kind: "CLOSE", animalId, animalName: animal.name, episode };
+}
+
+/**
+ * `careEpisodeOfferAfterMove`, read inside the move's transaction without
+ * putting the move at risk. The offer is only a convenience, so a read that
+ * fails is rolled back to a savepoint, logged, and gives no offer: the move
+ * and its activity row commit either way. Catching the error alone isn't
+ * enough: a statement that fails aborts the whole Postgres transaction
+ * unless it is rolled back to a savepoint, and the commit would then fail.
+ */
+export async function careEpisodeOfferInMove(
+  tx: TransactionClient,
+  animalId: string,
+  fromUnitId: string | null,
+  toUnitId: string | null,
+): Promise<CareEpisodeOffer | null> {
+  await tx.$executeRaw`SAVEPOINT care_episode_offer`;
+  try {
+    const offer = await careEpisodeOfferAfterMove(tx, animalId, fromUnitId, toUnitId);
+    await tx.$executeRaw`RELEASE SAVEPOINT care_episode_offer`;
+    return offer;
+  } catch (error) {
+    await tx.$executeRaw`ROLLBACK TO SAVEPOINT care_episode_offer`;
+    console.error("Failed to read the care episode offer after a move:", error);
+    return null;
+  }
 }

@@ -15,7 +15,6 @@ import assert from "node:assert/strict";
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import {
   AnimalActivityType,
-  AnimalHealthStatus,
   AnimalListingStatus,
   IntakeType,
   OutcomeType,
@@ -132,7 +131,6 @@ const seized = (intakeDate: string): ReIntakeFormOutput =>
     intakeType: IntakeType.SEIZE,
     intakeDate,
     notes: "",
-    healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
   });
 
 const reIntake = (

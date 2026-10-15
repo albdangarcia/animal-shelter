@@ -48,7 +48,6 @@ export const recordAnimalCreation = async (
     animalName,
     estimatedBirthDate,
     sex,
-    healthStatus,
     listingStatus,
     species: speciesId,
     breed: breedId,
@@ -119,7 +118,6 @@ export const recordAnimalCreation = async (
       // nullable numbers rather than strings needing a truthy guard.
       currentWeightGrams: weightGrams,
       heightCm,
-      healthStatus: healthStatus,
       listingStatus: listingStatus,
       publishedAt: publishedAt,
       currentUnit: resolvedUnitId

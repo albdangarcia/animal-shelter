@@ -4,7 +4,6 @@ import type { CalendarDay } from "../utils/shelter-day";
 import {
   Sex,
   AnimalSize,
-  AnimalHealthStatus,
   TaskStatus,
   TaskCategory,
   TaskPriority,
@@ -125,10 +124,6 @@ const animalFieldsShape = {
   // schema boundary and mapped to null in toAnimalData().
   size: z.enum(AnimalSize).optional().or(z.literal("")),
   estimatedBirthDate: calendarDaySchema("Estimated birth date"),
-  healthStatus: z.enum(AnimalHealthStatus, {
-    error: (issue) =>
-      issue.input === undefined ? "Health status is required." : undefined,
-  }),
   listingStatus: z.enum(AnimalListingStatus, {
     error: (issue) =>
       issue.input === undefined ? "Listing status is required." : undefined,

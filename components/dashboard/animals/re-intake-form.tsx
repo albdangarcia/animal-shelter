@@ -16,23 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { animalHealthStatusOptions } from "@/app/lib/utils/enum-formatter";
-import { AnimalHealthStatus } from "@/prisma/generated/enums";
+import { Form } from "@/components/ui/form";
 import { AnimalReIntakeFormPayload, PartnerPayload } from "@/app/lib/types";
 import Link from "next/link";
 import { IntakeFormFields } from "./intake-form-fields";
@@ -72,7 +56,6 @@ const ReIntakeForm = ({
       // now is filed under.
       intakeDate: today,
       intakeType: undefined,
-      healthStatus: AnimalHealthStatus.HEALTHY,
       notes: "",
       sourcePartnerId: "",
       foundAddress: "",
@@ -112,43 +95,6 @@ const ReIntakeForm = ({
           </CardHeader>
 
           <CardContent className="space-y-10">
-            {/* Health Status Selection */}
-            <div className="space-y-6">
-              <h3 className="font-semibold border-b pb-2">
-                Current Health Status
-              </h3>
-              <div className="grid grid-cols-1 @[662px]:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="healthStatus"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel required>Health Status</FormLabel>
-                      <Select
-                        name={field.name}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select health status" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {animalHealthStatusOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
             {/* Intake Fields Component */}
             <IntakeFormFields
               control={form.control}

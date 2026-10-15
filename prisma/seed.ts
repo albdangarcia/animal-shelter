@@ -12,7 +12,6 @@ import {
   PartnerType,
   AnimalListingStatus,
   IntakeType,
-  AnimalHealthStatus,
   NoteCategory,
   TaskCategory,
   TaskPriority,
@@ -791,6 +790,22 @@ type Archetype =
   | "ADOPTED"
   | "RETURN_READOPT";
 
+// How an animal arrived, as its blueprint says or the seed draws it, in the
+// words of the old health-status field. Seed-only: nothing writes it to the
+// animal. It words the intake note and decides whether intake opens a
+// "Schedule Vet Examination" task, and it is still drawn for every generated
+// animal so the random stream after it doesn't move. The care itself is
+// recorded on the medical record (seedCareFixtures).
+type ArrivalHealth =
+  | "HEALTHY"
+  | "AWAITING_VET_EXAM"
+  | "AWAITING_TRIAGE"
+  | "UNDER_VET_CARE"
+  | "HOSPITALISED"
+  | "AWAITING_SPAY_NEUTER"
+  | "AWAITING_OTHER_SURGERY"
+  | "RECOVERING_FROM_SURGERY";
+
 interface AnimalBlueprint {
   name: string;
   sex: Sex;
@@ -810,13 +825,13 @@ interface AnimalBlueprint {
   unitName: string | null;
   archetype: Archetype;
   intakeType: IntakeType;
-  healthStatus: AnimalHealthStatus;
+  arrivalHealth: ArrivalHealth;
   listingStatus: AnimalListingStatus;
   // A minority of open stays run long (90-160 days) so the length-of-stay
   // report's "over 90 days" bucket has real entries.
   longStay?: boolean;
   // Suppresses the automatic "Schedule Vet Examination" follow-up task that
-  // intake creates for any non-healthy in-care animal. That auto-task is
+  // intake creates for any in-care animal not arriving healthy. That auto-task is
   // realistic — staff really do open one at triage — but it means such an
   // animal is never *untasked*, so the attention queue's care signal (an open
   // care episode with no open task and no scheduled care) would have nothing
@@ -862,7 +877,7 @@ const animalSeedData: AnimalBlueprint[] = [
       allCharacteristics.GOOD_WITH_DOGS,
     ],
     intakeType: IntakeType.OWNER_SURRENDER,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/dog/dog-01-1.webp`, `${baseUrl}/dog/dog-01-2.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A1.name,
     archetype: "IN_CARE",
@@ -889,7 +904,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.WHITE,
     characteristics: [allCharacteristics.NEEDS_QUIET_HOME],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
+    arrivalHealth: "AWAITING_VET_EXAM",
     images: [`${baseUrl}/dog/dog-02-1.webp`, `${baseUrl}/dog/dog-02-2.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A2.name,
     archetype: "IN_CARE",
@@ -908,7 +923,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.BROWN,
     characteristics: [allCharacteristics.HOUSEBROKEN],
     intakeType: IntakeType.TRANSFER_IN,
-    healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
+    arrivalHealth: "UNDER_VET_CARE",
     images: [`${baseUrl}/dog/dog-03-1.webp`, `${baseUrl}/dog/dog-03-2.webp`],
     unitName: allLocations.MEDICAL_WING.units.MED1.name,
     archetype: "IN_CARE",
@@ -930,7 +945,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.WHITE,
     characteristics: [allCharacteristics.GOOD_WITH_CATS],
     intakeType: IntakeType.OWNER_SURRENDER,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [
       `${baseUrl}/cat/cat-07-1.webp`,
       `${baseUrl}/cat/cat-07-2.webp`,
@@ -958,7 +973,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.GRAY,
     characteristics: [],
     intakeType: IntakeType.BORN_IN_CARE,
-    healthStatus: AnimalHealthStatus.AWAITING_SPAY_NEUTER,
+    arrivalHealth: "AWAITING_SPAY_NEUTER",
     images: [
       `${baseUrl}/cat/cat-09-1.webp`,
       `${baseUrl}/cat/cat-09-2.webp`,
@@ -981,7 +996,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.GREEN,
     characteristics: [],
     intakeType: IntakeType.SEIZE,
-    healthStatus: AnimalHealthStatus.AWAITING_TRIAGE,
+    arrivalHealth: "AWAITING_TRIAGE",
     images: [
       `${baseUrl}/reptile/reptile-01-1.webp`,
       `${baseUrl}/reptile/reptile-01-2.webp`,
@@ -1010,7 +1025,7 @@ const animalSeedData: AnimalBlueprint[] = [
       allCharacteristics.HOUSEBROKEN,
     ],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/dog/dog-04-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A3.name,
     archetype: "IN_CARE",
@@ -1035,7 +1050,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.TABBY,
     characteristics: [allCharacteristics.GOOD_WITH_CATS],
     intakeType: IntakeType.BORN_IN_CARE,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/cat/cat-01-1.webp`],
     // Unplaced: not yet assigned to a unit (shows in the "Unplaced" column).
     unitName: null,
@@ -1056,7 +1071,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.GOLDEN,
     characteristics: [allCharacteristics.DEAF],
     intakeType: IntakeType.TRANSFER_IN,
-    healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
+    arrivalHealth: "UNDER_VET_CARE",
     images: [`${baseUrl}/dog/dog-05-1.webp`],
     unitName: allLocations.MEDICAL_WING.units.MED2.name,
     archetype: "IN_CARE",
@@ -1088,7 +1103,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.BLACK,
     characteristics: [],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.HOSPITALISED,
+    arrivalHealth: "HOSPITALISED",
     images: [`${baseUrl}/cat/cat-02-1.webp`],
     unitName: null,
     archetype: "IN_CARE",
@@ -1108,7 +1123,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.BROWN,
     characteristics: [],
     intakeType: IntakeType.OWNER_SURRENDER,
-    healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
+    arrivalHealth: "UNDER_VET_CARE",
     images: [`${baseUrl}/dog/dog-06-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A4.name,
     archetype: "IN_CARE",
@@ -1128,7 +1143,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.WHITE,
     characteristics: [],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.AWAITING_TRIAGE,
+    arrivalHealth: "AWAITING_TRIAGE",
     images: [`${baseUrl}/rabbit/rabbit-01-1.webp`],
     unitName: allLocations.ISOLATION.units.ISO2.name,
     archetype: "IN_CARE",
@@ -1148,7 +1163,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.GOLDEN,
     characteristics: [allCharacteristics.HOUSEBROKEN],
     intakeType: IntakeType.TRANSFER_IN,
-    healthStatus: AnimalHealthStatus.RECOVERING_FROM_SURGERY,
+    arrivalHealth: "RECOVERING_FROM_SURGERY",
     images: [`${baseUrl}/dog/dog-07-1.webp`],
     unitName: null,
     archetype: "IN_CARE",
@@ -1170,7 +1185,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.TABBY,
     characteristics: [],
     intakeType: IntakeType.OWNER_SURRENDER,
-    healthStatus: AnimalHealthStatus.AWAITING_SPAY_NEUTER,
+    arrivalHealth: "AWAITING_SPAY_NEUTER",
     images: [`${baseUrl}/cat/cat-03-1.webp`],
     unitName: allLocations.CAT_ROOM.units.C2.name,
     archetype: "IN_CARE",
@@ -1193,7 +1208,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.BLACK,
     characteristics: [allCharacteristics.GOOD_WITH_DOGS],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/dog/dog-08-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A4.name,
     archetype: "IN_CARE",
@@ -1221,7 +1236,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.GOLDEN,
     characteristics: [allCharacteristics.GOOD_WITH_KIDS],
     intakeType: IntakeType.OWNER_SURRENDER,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/dog/dog-09-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A3.name,
     archetype: "IN_CARE",
@@ -1241,7 +1256,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.BLACK,
     characteristics: [allCharacteristics.HOUSEBROKEN],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/dog/dog-10-1.webp`],
     unitName: null,
     archetype: "IN_CARE",
@@ -1503,16 +1518,16 @@ function pickTypicalSize(
   return pickWeighted(typicalSizeWeightsBySpecies[speciesKey]);
 }
 
-function pickHealthStatus(): AnimalHealthStatus {
-  return pickWeighted([
-    { value: AnimalHealthStatus.HEALTHY, weight: 60 },
-    { value: AnimalHealthStatus.AWAITING_VET_EXAM, weight: 10 },
-    { value: AnimalHealthStatus.AWAITING_TRIAGE, weight: 5 },
-    { value: AnimalHealthStatus.UNDER_VET_CARE, weight: 8 },
-    { value: AnimalHealthStatus.HOSPITALISED, weight: 3 },
-    { value: AnimalHealthStatus.AWAITING_SPAY_NEUTER, weight: 8 },
-    { value: AnimalHealthStatus.AWAITING_OTHER_SURGERY, weight: 3 },
-    { value: AnimalHealthStatus.RECOVERING_FROM_SURGERY, weight: 3 },
+function pickArrivalHealth(): ArrivalHealth {
+  return pickWeighted<ArrivalHealth>([
+    { value: "HEALTHY", weight: 60 },
+    { value: "AWAITING_VET_EXAM", weight: 10 },
+    { value: "AWAITING_TRIAGE", weight: 5 },
+    { value: "UNDER_VET_CARE", weight: 8 },
+    { value: "HOSPITALISED", weight: 3 },
+    { value: "AWAITING_SPAY_NEUTER", weight: 8 },
+    { value: "AWAITING_OTHER_SURGERY", weight: 3 },
+    { value: "RECOVERING_FROM_SURGERY", weight: 3 },
   ]);
 }
 
@@ -1680,7 +1695,7 @@ function generateAnimalBlueprints(
           : null,
       archetype,
       intakeType,
-      healthStatus: pickHealthStatus(),
+      arrivalHealth: pickArrivalHealth(),
       listingStatus: isDraft
         ? AnimalListingStatus.DRAFT
         : AnimalListingStatus.PUBLISHED,
@@ -2282,7 +2297,6 @@ async function seedReturnAndReadoptAnimal(opts: {
         blueprint.description ?? "A wonderful companion looking for a home.",
       listingStatus: AnimalListingStatus.PUBLISHED,
       publishedAt: stay1.intakeDate,
-      healthStatus: blueprint.healthStatus,
       species: { connect: { id: species.id } },
       breeds: { connect: connectedBreeds },
       colors: { connect: connectedColors },
@@ -2363,7 +2377,7 @@ async function seedReturnAndReadoptAnimal(opts: {
       authorId: processingStaff.id,
       category: NoteCategory.GENERAL,
       createdAt: stay1.intakeDate,
-      content: `Initial intake notes. Animal appears to be in ${blueprint.healthStatus} condition.`,
+      content: `Initial intake notes. Animal appears to be in ${blueprint.arrivalHealth} condition.`,
     },
   });
 
@@ -2376,7 +2390,8 @@ async function seedReturnAndReadoptAnimal(opts: {
   });
 
   // Re-intake: mirrors `_createReIntake` — a new Intake event, the animal's
-  // prior archive reason is cleared, and a fresh health status is set.
+  // prior archive reason is cleared, and how it arrived back is drawn for its
+  // notes and follow-up task.
   const reIntakeType = pickWeighted([
     { value: IntakeType.OWNER_SURRENDER, weight: 70 },
     { value: IntakeType.STRAY, weight: 20 },
@@ -2387,7 +2402,7 @@ async function seedReturnAndReadoptAnimal(opts: {
     walkInPersons,
     allPartners,
   );
-  const reIntakeHealthStatus = pickHealthStatus();
+  const reIntakeArrivalHealth = pickArrivalHealth();
 
   await prisma.intake.create({
     data: {
@@ -2396,13 +2411,6 @@ async function seedReturnAndReadoptAnimal(opts: {
       intakeDate: shelterDayKey(stay2.intakeDate, seedTimezone),
       staffMemberId: processingStaff.id,
       ...reIntakeRelations,
-    },
-  });
-
-  await prisma.animal.update({
-    where: { id: animal.id },
-    data: {
-      healthStatus: reIntakeHealthStatus,
     },
   });
 
@@ -2424,7 +2432,7 @@ async function seedReturnAndReadoptAnimal(opts: {
       authorId: processingStaff.id,
       category: NoteCategory.GENERAL,
       createdAt: stay2.intakeDate,
-      content: `Re-intake notes. Animal appears to be in ${reIntakeHealthStatus} condition.`,
+      content: `Re-intake notes. Animal appears to be in ${reIntakeArrivalHealth} condition.`,
     },
   });
 
@@ -2447,7 +2455,7 @@ async function seedReturnAndReadoptAnimal(opts: {
         currentUnitId: null,
       },
     });
-  } else if (reIntakeHealthStatus !== AnimalHealthStatus.HEALTHY) {
+  } else if (reIntakeArrivalHealth !== "HEALTHY") {
     await prisma.task.create({
       data: {
         animalId: animal.id,
@@ -2815,7 +2823,6 @@ async function seedAnimalsAndRelations() {
             "A wonderful companion looking for a home.",
           listingStatus: interimListingStatus,
           publishedAt: stay.intakeDate,
-          healthStatus: blueprint.healthStatus,
           species: { connect: { id: species.id } },
           breeds: { connect: connectedBreeds },
           colors: { connect: connectedColors },
@@ -3005,7 +3012,7 @@ async function seedAnimalsAndRelations() {
           authorId: processingStaff.id,
           category: NoteCategory.GENERAL,
           createdAt: stay.intakeDate,
-          content: `Initial intake notes. Animal appears to be in ${blueprint.healthStatus} condition.`,
+          content: `Initial intake notes. Animal appears to be in ${blueprint.arrivalHealth} condition.`,
         },
       });
 
@@ -3015,7 +3022,7 @@ async function seedAnimalsAndRelations() {
       // care signal.
       if (
         isInCare &&
-        blueprint.healthStatus !== AnimalHealthStatus.HEALTHY &&
+        blueprint.arrivalHealth !== "HEALTHY" &&
         !blueprint.skipIntakeFollowUpTask
       ) {
         await prisma.task.create({
@@ -3496,7 +3503,6 @@ async function seedFostering() {
         description: "A wonderful companion looking for a home.",
         listingStatus: AnimalListingStatus.PUBLISHED,
         publishedAt: intakeDate,
-        healthStatus: AnimalHealthStatus.HEALTHY,
         species: { connect: { id: dogSpecies.id } },
         breeds: { connect: [{ id: breed.id }] },
         colors: { connect: [{ id: primaryColor.id }] },
@@ -3671,14 +3677,29 @@ async function seedFostering() {
 async function seedApplicationNoise() {
   console.log("Seeding standalone adoption applications...");
 
+  // Every list the draws below index into is read in a fixed order. Without
+  // one, Postgres returns rows in whatever order they sit on disk, which can
+  // change between runs, and the same seeded draws then land on different
+  // animals and people: which animals end up pending adoption would vary from
+  // one seed to the next. Ids are no tiebreak for that (cuids are random), so
+  // the order is by what the seed itself fixes, then by when it was written.
+  const personOrder = [
+    { name: "asc" as const },
+    { email: "asc" as const },
+    { createdAt: "asc" as const },
+    { id: "asc" as const },
+  ];
   const staffMembers = await prisma.person.findMany({
     where: { user: { role: Role.STAFF } },
+    orderBy: personOrder,
   });
   const walkInPersons = await prisma.person.findMany({
     where: { user: null, name: { notIn: ["External Agency", "SYSTEM"] } },
+    orderBy: personOrder,
   });
   const userRolePersons = await prisma.person.findMany({
     where: { user: { role: Role.USER } },
+    orderBy: personOrder,
   });
   const applicantPool: ApplicantPerson[] = [
     ...walkInPersons.filter((p) => !NON_APPLICANT_PERSON_NAMES.has(p.name)),
@@ -3689,6 +3710,12 @@ async function seedApplicationNoise() {
 
   const publishedAnimals = await prisma.animal.findMany({
     where: { listingStatus: AnimalListingStatus.PUBLISHED },
+    orderBy: [
+      { name: "asc" },
+      { birthDate: "asc" },
+      { createdAt: "asc" },
+      { id: "asc" },
+    ],
     select: {
       id: true,
       intake: {

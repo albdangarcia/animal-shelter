@@ -13,7 +13,6 @@ import assert from "node:assert/strict";
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import {
   AnimalActivityType,
-  AnimalHealthStatus,
   AnimalListingStatus,
   ApplicationSource,
   ApplicationStatus,
@@ -404,7 +403,6 @@ test("an outcome reversed after a re-intake leaves its placement ended and linke
           intakeType: IntakeType.SEIZE,
           intakeDate: "2026-01-20",
           notes: "",
-          healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
         }),
       },
       staffId,

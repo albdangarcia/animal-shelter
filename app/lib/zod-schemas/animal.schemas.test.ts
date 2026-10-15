@@ -9,7 +9,6 @@ import {
   TaskFormSchema,
 } from "./animal.schemas";
 import {
-  AnimalHealthStatus,
   AnimalListingStatus,
   IntakeType,
   Sex,
@@ -27,7 +26,6 @@ const baseInput = {
   additionalColors: [],
   sex: Sex.FEMALE,
   estimatedBirthDate: "2024-01-01",
-  healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
   listingStatus: AnimalListingStatus.DRAFT as AnimalListingStatus,
   heightCm: null,
   weightGrams: null,

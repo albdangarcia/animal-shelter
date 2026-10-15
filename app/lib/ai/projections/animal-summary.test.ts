@@ -75,8 +75,6 @@ test("the care facts are carried for a viewer who can read the medical record", 
     allergies: ["Penicillin"],
     conditions: ["Heartworm disease"],
   });
-  // Nothing of the old single health status is left beside it.
-  assert.equal("healthStatus" in summary, false);
   // Entry and episode ids stay on the server.
   assert.doesNotMatch(JSON.stringify(summary.care), /episode-1|entry-/);
 });

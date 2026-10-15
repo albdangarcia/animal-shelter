@@ -1,4 +1,4 @@
-import { AnimalHealthStatus, IntakeType } from "@/prisma/generated/enums";
+import { IntakeType } from "@/prisma/generated/enums";
 import { z } from "zod";
 import { calendarDaySchema, optionalUsStateSchema } from "./common.schemas";
 
@@ -89,18 +89,16 @@ export const IntakeFieldsSchema = z.object(intakeFieldsShape).partial();
 export type IntakeFieldsValues = z.input<typeof IntakeFieldsSchema>;
 
 // Composed from the shared shape, following batch 5's household/applicant
-// treatment — a fresh z.object() spreading intakeFieldsShape plus the one
-// field (healthStatus) that isn't a transport-shared intake fact, with
+// treatment — a fresh z.object() of intakeFieldsShape alone, with
 // intakeSuperRefine re-applied rather than .extend()'d onto a refined schema.
+// A re-intake records the intake facts and nothing else: the animal's care
+// on return is recorded on its medical record.
 // This adopts AnimalFormSchema's stricter rules (foundAddress required for
 // strays, foundState validated against the US state list, cuid2-typed
 // partner/person ids) in place of the looser ones this schema used to define
 // on its own — see the migration doc's handoff notes for why.
 export const ReIntakeFormSchema = z
-  .object({
-    ...intakeFieldsShape,
-    healthStatus: z.enum(AnimalHealthStatus),
-  })
+  .object({ ...intakeFieldsShape })
   .superRefine(intakeSuperRefine);
 
 export type ReIntakeFormInput = z.input<typeof ReIntakeFormSchema>;

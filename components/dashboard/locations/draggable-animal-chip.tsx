@@ -126,6 +126,9 @@ export const DraggableAnimalChip = ({ animal, fromUnitId, locationLabel }: Props
           // animal and described by its species, after the drag instructions
           // dnd-kit points to.
           aria-label={animal.name}
+          // Lets the board give focus back to an animal's chip after a dialog
+          // about it, the chip being a new node once the animal has moved.
+          data-animal-id={animal.id}
           aria-describedby={`${attributes["aria-describedby"]} ${speciesId}`}
           className={cn(
             "cursor-grab touch-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring",

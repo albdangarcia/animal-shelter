@@ -13,10 +13,13 @@ import {
   CareEpisodeEventAction,
   CareEpisodeType,
   IntakeType,
+  LocationType,
   PartnerType,
   Sex,
 } from "@/prisma/generated/enums";
 import {
+  careEpisodeOfferAfterMove,
+  careEpisodeOfferInMove,
   closeCareEpisode,
   editCareEpisode,
   openCareEpisode,
@@ -30,6 +33,7 @@ import {
   findReadinessForAnimals,
 } from "@/app/lib/data/animals/readiness";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
+import { moveAnimal } from "@/app/lib/services/animal-move";
 import { ConflictError } from "@/app/lib/utils/errors";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
@@ -48,6 +52,7 @@ let editorId: string;
 let clinicId: string;
 let closedClinicId: string;
 let rescueId: string;
+const locationIds: string[] = [];
 
 const name = (label: string) => `${label} ${runId}`;
 
@@ -89,6 +94,8 @@ after(async () => {
   await prisma.intake.deleteMany({ where: { staffMemberId: staffId } });
   // Takes the episodes, their events and activity rows.
   await prisma.animal.deleteMany({ where: { speciesId } });
+  await prisma.unit.deleteMany({ where: { locationId: { in: locationIds } } });
+  await prisma.location.deleteMany({ where: { id: { in: locationIds } } });
   await prisma.partner.deleteMany({
     where: { id: { in: [clinicId, closedClinicId, rescueId] } },
   });
@@ -751,6 +758,189 @@ test("readiness holds an animal under care from the open episode's start, and no
   ]);
   assert.deepEqual(one, expected);
   assert.deepEqual(board, expected);
+});
+
+// ---------------------------------------------------------------------------
+// After a move
+// ---------------------------------------------------------------------------
+
+/** A location of `type` with units of the names given, by name. */
+const makeLocation = async (label: string, type: LocationType, unitNames: string[]) => {
+  const location = await prisma.location.create({
+    data: { name: name(label), type },
+    select: { id: true },
+  });
+  locationIds.push(location.id);
+  const units: Record<string, string> = {};
+  for (const unitName of unitNames) {
+    units[unitName] = (
+      await prisma.unit.create({
+        data: { name: unitName, capacity: 2, locationId: location.id },
+        select: { id: true },
+      })
+    ).id;
+  }
+  return units;
+};
+
+/**
+ * Moves an animal as the board does, and reads the offer behind the move's
+ * lock. `offerTx` stands in for the transaction the offer is read on.
+ */
+const moveAndOffer = (
+  animalId: string,
+  unitId: string | null,
+  offerTx: (tx: TransactionClient) => TransactionClient = (tx) => tx,
+) =>
+  prisma.$transaction(async (tx) => {
+    const moved = await moveAnimal(tx, animalId, unitId, staffId);
+    return careEpisodeOfferInMove(
+      offerTx(tx),
+      animalId,
+      moved.fromUnitId,
+      moved.unit?.id ?? null,
+    );
+  });
+
+test("a move into a medical unit offers to open a stay in house, and a move out offers to close one", async () => {
+  const medical = await makeLocation("Medical wing", LocationType.MEDICAL, ["MED-1", "MED-2"]);
+  const kennels = await makeLocation("Kennels", LocationType.KENNEL, ["K-1", "K-2"]);
+  const placeName = `${name("Medical wing")} · MED-1`;
+  const placed = async (label: string, unitId: string | null) => {
+    const animalId = await makeAnimal(label);
+    if (unitId) await moveAndOffer(animalId, unitId);
+    return animalId;
+  };
+  const openEpisodeOf = async (animalId: string, input: Partial<CareEpisodeInput> = {}) =>
+    (await open(animalId, episode(input))).episodeId;
+
+  // Into the wing, from a kennel or from no unit, with nothing open.
+  const fromKennel = await placed("Into the wing", kennels["K-1"]);
+  assert.deepEqual(await moveAndOffer(fromKennel, medical["MED-1"]), {
+    kind: "OPEN",
+    animalId: fromKennel,
+    animalName: name("Into the wing"),
+    placeName,
+  });
+  const fromNowhere = await placed("Into the wing unplaced", null);
+  assert.deepEqual(await moveAndOffer(fromNowhere, medical["MED-1"]), {
+    kind: "OPEN",
+    animalId: fromNowhere,
+    animalName: name("Into the wing unplaced"),
+    placeName,
+  });
+  // With an episode already open, of any type, nothing.
+  const alreadyUnderCare = await placed("Into the wing under care", kennels["K-1"]);
+  await openEpisodeOf(alreadyUnderCare, { type: UNDER_VET_CARE });
+  assert.equal(await moveAndOffer(alreadyUnderCare, medical["MED-1"]), null);
+
+  // Out of the wing, to a kennel or to no unit, with a stay in house open.
+  const toKennel = await placed("Out of the wing", medical["MED-1"]);
+  const toKennelEpisode = await openEpisodeOf(toKennel);
+  assert.deepEqual(await moveAndOffer(toKennel, kennels["K-2"]), {
+    kind: "CLOSE",
+    animalId: toKennel,
+    animalName: name("Out of the wing"),
+    episode: {
+      id: toKennelEpisode,
+      type: HOSPITALISED_IN_HOUSE,
+      startDate: "2026-10-03",
+      clinicName: null,
+    },
+  });
+  const toNowhere = await placed("Out of the wing unplaced", medical["MED-2"]);
+  const toNowhereEpisode = await openEpisodeOf(toNowhere);
+  assert.deepEqual(await moveAndOffer(toNowhere, null), {
+    kind: "CLOSE",
+    animalId: toNowhere,
+    animalName: name("Out of the wing unplaced"),
+    episode: {
+      id: toNowhereEpisode,
+      type: HOSPITALISED_IN_HOUSE,
+      startDate: "2026-10-03",
+      clinicName: null,
+    },
+  });
+  // A stay at a clinic, vet care, a closed or voided stay, or none: nothing.
+  const offSite = await placed("Out of the wing off site", medical["MED-1"]);
+  await openEpisodeOf(offSite, { type: HOSPITALISED_OFF_SITE, partnerId: clinicId });
+  assert.equal(await moveAndOffer(offSite, kennels["K-1"]), null);
+  const vetCare = await placed("Out of the wing vet care", medical["MED-1"]);
+  await openEpisodeOf(vetCare, { type: UNDER_VET_CARE });
+  assert.equal(await moveAndOffer(vetCare, kennels["K-1"]), null);
+  const closedStay = await placed("Out of the wing closed", medical["MED-1"]);
+  await close(await openEpisodeOf(closedStay), day("2026-10-05"));
+  assert.equal(await moveAndOffer(closedStay, kennels["K-1"]), null);
+  const voidedStay = await placed("Out of the wing voided", medical["MED-1"]);
+  await voidIt(await openEpisodeOf(voidedStay), "Wrong animal.");
+  assert.equal(await moveAndOffer(voidedStay, kennels["K-1"]), null);
+  const noStay = await placed("Out of the wing nothing open", medical["MED-1"]);
+  assert.equal(await moveAndOffer(noStay, kennels["K-1"]), null);
+
+  // Within the wing, or between kennels: nothing, whatever is open.
+  const withinWing = await placed("Within the wing", medical["MED-1"]);
+  assert.equal(await moveAndOffer(withinWing, medical["MED-2"]), null);
+  await openEpisodeOf(withinWing);
+  assert.equal(await moveAndOffer(withinWing, medical["MED-1"]), null);
+  const betweenKennels = await placed("Between kennels", kennels["K-1"]);
+  assert.equal(await moveAndOffer(betweenKennels, kennels["K-2"]), null);
+
+  // An animal that has left: its stay is still offered to close, and nothing
+  // is offered to open (the move itself refuses to place it).
+  const left = await placed("Left with a stay open", medical["MED-1"]);
+  const leftEpisode = await openEpisodeOf(left);
+  await prisma.animal.update({
+    where: { id: left },
+    data: { listingStatus: AnimalListingStatus.ARCHIVED },
+  });
+  assert.equal((await moveAndOffer(left, null))?.kind, "CLOSE");
+  await close(leftEpisode, day("2026-10-09"));
+  assert.equal(
+    await careEpisodeOfferAfterMove(prisma, left, null, medical["MED-1"]),
+    null,
+  );
+
+  // Only an offer: no move above opened or closed anything.
+  assert.equal(
+    await prisma.careEpisode.count({ where: { animalId: { in: [fromKennel, fromNowhere, noStay] } } }),
+    0,
+  );
+  assert.equal((await stored(toKennelEpisode)).endDate, null);
+  assert.equal((await stored(toNowhereEpisode)).endDate, null);
+});
+
+test("an offer that can't be read gives none, and the move still commits", async (t) => {
+  const medical = await makeLocation("Faulty wing", LocationType.MEDICAL, ["F-1"]);
+  const animalId = await makeAnimal("Moved despite the offer");
+  const logged = t.mock.method(console, "error", () => {});
+  // Every episode read fails in Postgres itself, which aborts the whole
+  // transaction unless the offer's read is rolled back on its own.
+  const failingEpisodeReads = (tx: TransactionClient) =>
+    new Proxy(tx, {
+      get: (target, property, receiver) =>
+        property === "careEpisode"
+          ? { findMany: () => target.$queryRaw`SELECT 1 / 0` }
+          : Reflect.get(target, property, receiver),
+    });
+
+  assert.equal(
+    await moveAndOffer(animalId, medical["F-1"], failingEpisodeReads),
+    null,
+  );
+  assert.equal(logged.mock.callCount(), 1);
+  // The move and its activity row committed.
+  assert.equal(
+    (
+      await prisma.animal.findUniqueOrThrow({
+        where: { id: animalId },
+        select: { currentUnitId: true },
+      })
+    ).currentUnitId,
+    medical["F-1"],
+  );
+  assert.deepEqual(await feedOf(animalId, AnimalActivityType.LOCATION_CHANGE), [
+    `Moved to ${name("Faulty wing")} · F-1.`,
+  ]);
 });
 
 // ---------------------------------------------------------------------------
