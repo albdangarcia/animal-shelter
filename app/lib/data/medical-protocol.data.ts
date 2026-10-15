@@ -4,11 +4,18 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import {
   findIntakeProtocols,
   findMedicalProtocols,
+  findProtocolRecordFacts,
   findProtocolStepItems,
   type MedicalProtocolListing,
   type ProtocolStepItem,
 } from "./medical-protocol";
-import type { ProtocolPlanProtocol } from "../utils/medical-protocol-plan";
+import type {
+  ProtocolPlanProtocol,
+  ProtocolRecordFacts,
+} from "../utils/medical-protocol-plan";
+import { cuidSchema } from "../zod-schemas/common.schemas";
+import { calendarDay, type CalendarDay } from "../utils/shelter-day";
+import type { Sex } from "@/prisma/generated/enums";
 
 export type { MedicalProtocolListing, ProtocolStepItem } from "./medical-protocol";
 
@@ -60,3 +67,42 @@ const _fetchIntakeProtocols = async (): Promise<ProtocolPlanProtocol[]> => {
 export const fetchIntakeProtocols = RequirePermission(
   AppPermissions.INTAKE_MANAGE,
 )(_fetchIntakeProtocols);
+
+/** What the re-intake form previews a returning animal's protocol from. */
+export interface ReIntakeProtocolPreview {
+  protocols: ProtocolPlanProtocol[];
+  animal: { speciesId: string; sex: Sex; birthDate: CalendarDay };
+  record: ProtocolRecordFacts;
+}
+
+// The live protocols, and what the animal and its record say that a plan
+// reads, for the re-intake form. Null for an animal that doesn't exist.
+const _fetchReIntakeProtocolPreview = async (
+  animalId: string,
+): Promise<ReIntakeProtocolPreview | null> => {
+  const parsedId = cuidSchema.safeParse(animalId);
+  if (!parsedId.success) return null;
+  try {
+    const animal = await prisma.animal.findUnique({
+      where: { id: parsedId.data },
+      select: { speciesId: true, sex: true, birthDate: true },
+    });
+    if (!animal) return null;
+    const [protocols, record] = await Promise.all([
+      findIntakeProtocols(prisma, { speciesId: animal.speciesId }),
+      findProtocolRecordFacts(prisma, parsedId.data),
+    ]);
+    return {
+      protocols,
+      animal: { ...animal, birthDate: calendarDay(animal.birthDate) },
+      record,
+    };
+  } catch (error) {
+    console.error("Failed to fetch the re-intake protocol preview:", error);
+    throw new Error("Could not fetch the medical protocols.");
+  }
+};
+
+export const fetchReIntakeProtocolPreview = RequirePermission(
+  AppPermissions.INTAKE_MANAGE,
+)(_fetchReIntakeProtocolPreview);

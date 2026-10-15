@@ -4,8 +4,28 @@ import {
   PROTOCOL_SKIP_REASON_TEXT,
   protocolStepLabel,
   stepItemSkipReason,
+  type ProtocolPlan,
   type ProtocolPlanStep,
+  type SkippedProtocolStep,
 } from "./medical-protocol-plan";
+import { SURGERY_PROCEDURE_LABELS } from "@/app/lib/constants/medical";
+import { MedicalEntryKind } from "@/prisma/generated/enums";
+import { format, parseISO } from "date-fns";
+import type { CalendarDay } from "./shelter-day";
+
+/**
+ * A protocol as sentences name it: "Puppy protocol". A name that already
+ * ends in "protocol" reads as it is.
+ */
+export const protocolTitle = (name: string): string =>
+  /\bprotocol$/i.test(name.trim()) ? name.trim() : `${name.trim()} protocol`;
+
+/**
+ * Where care a protocol scheduled came from, as its row reads: "From the
+ * Puppy protocol". The protocol's name as it is now, renamed or not.
+ */
+export const protocolSourceText = (name: string): string =>
+  `From the ${protocolTitle(name)}`;
 
 const days = (count: number) => `${count} ${count === 1 ? "day" : "days"}`;
 
@@ -129,3 +149,65 @@ export const protocolStepIssueText = (
   const reason = step.item ? stepItemSkipReason(step.item, speciesId) : null;
   return reason ? `won't be scheduled: ${PROTOCOL_SKIP_REASON_TEXT[reason]}` : null;
 };
+
+// "a", "a and b", "a, b and c".
+const listText = (items: string[]) =>
+  items.length <= 1
+    ? items.join("")
+    : `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+
+/**
+ * The steps a plan leaves out, as a sentence: "Not scheduled: spay/neuter
+ * (sex unknown) and microchip (already microchipped)." Empty when none is.
+ */
+export const notScheduledText = (skipped: SkippedProtocolStep[]): string =>
+  skipped.length === 0
+    ? ""
+    : `Not scheduled: ${listText(
+        skipped.map((step) => `${step.label} (${PROTOCOL_SKIP_REASON_TEXT[step.reason]})`),
+      )}.`;
+
+/** How many entries a plan schedules: "9 entries", "1 entry", "nothing to schedule". */
+export const plannedEntriesText = (count: number): string =>
+  count === 0 ? "nothing to schedule" : `${count} ${count === 1 ? "entry" : "entries"}`;
+
+/** A due day in a preview line: "Oct 19" this year, "Feb 3, 2027" in another. */
+const previewDayText = (day: CalendarDay, today: CalendarDay) =>
+  format(parseISO(day), day.slice(0, 4) === today.slice(0, 4) ? "MMM d" : "MMM d, yyyy");
+
+export interface ProtocolPreviewLine {
+  stepId: string;
+  /** "DHPP", "Spay", "Intake exam". */
+  name: string;
+  /** "Oct 19, Nov 2, Nov 16". */
+  days: string;
+}
+
+/**
+ * What a plan schedules, one line per step that schedules anything, in the
+ * protocol's step order: "DHPP: Oct 19, Nov 2, Nov 16". A spay/neuter step
+ * reads as what it resolved to for this animal.
+ */
+export const protocolPreviewLines = (
+  plan: ProtocolPlan,
+  steps: Pick<ProtocolPlanStep, "id" | "kind" | "item" | "examType" | "sortOrder">[],
+  today: CalendarDay,
+): ProtocolPreviewLine[] =>
+  [...steps]
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .flatMap((step) => {
+      const entries = plan.entries.filter((entry) => entry.stepId === step.id);
+      if (entries.length === 0) return [];
+      const care = entries[0].care;
+      const name =
+        care.kind === MedicalEntryKind.SURGERY
+          ? SURGERY_PROCEDURE_LABELS[care.procedure]
+          : protocolStepName(step);
+      return [
+        {
+          stepId: step.id,
+          name,
+          days: entries.map((entry) => previewDayText(entry.dueDate, today)).join(", "),
+        },
+      ];
+    });

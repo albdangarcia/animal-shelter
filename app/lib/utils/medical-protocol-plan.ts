@@ -14,6 +14,10 @@ import {
 } from "@/app/lib/constants/medical";
 import { latestDueDate } from "@/app/lib/utils/medical-days";
 import {
+  spayNeuterStatus,
+  type SpayNeuterEntry,
+} from "@/app/lib/utils/spay-neuter";
+import {
   shelterDaysBetweenKeys,
   shiftDayKey,
   type CalendarDay,
@@ -88,6 +92,37 @@ export interface ProtocolPlanFacts extends ProtocolPlanDays {
     microchip: boolean;
   };
 }
+
+/**
+ * What an animal's medical record says that a plan reads, before its intake
+ * day is known: the server reads it behind the animal's lock, and the
+ * re-intake form's preview reads it with the page.
+ */
+export interface ProtocolRecordFacts {
+  /** Its spay and neuter entries that aren't voided. */
+  spayNeuterEntries: SpayNeuterEntry[];
+  chipped: boolean;
+  openScheduled: ProtocolPlanFacts["openScheduled"];
+}
+
+/** A record with nothing on it: an animal being created. */
+export const EMPTY_RECORD_FACTS: ProtocolRecordFacts = {
+  spayNeuterEntries: [],
+  chipped: false,
+  openScheduled: { itemIds: [], examTypes: [], spayNeuter: false, microchip: false },
+};
+
+/**
+ * Whether the record has the animal spayed or neutered, and exempt from it on
+ * the intake day, by the spay/neuter status's own rule.
+ */
+export const spayNeuterFactsOn = (
+  entries: SpayNeuterEntry[],
+  intakeDate: CalendarDay,
+): Pick<ProtocolPlanFacts, "altered" | "exempt"> => {
+  const { status } = spayNeuterStatus(entries, intakeDate);
+  return { altered: status === "ALTERED", exempt: status === "EXEMPT" };
+};
 
 /** Why a step schedules nothing, in the order they are checked. */
 export const PROTOCOL_SKIP_REASONS = [

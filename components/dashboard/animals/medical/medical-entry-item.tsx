@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { Badge } from "@/components/ui/badge";
+import { protocolSourceText } from "@/app/lib/utils/medical-protocol-text";
 import { TimeAgo } from "@/components/common/time-ago";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
 import {
@@ -389,6 +390,11 @@ export function MedicalEntryItem({
           <div className={clsx(voided && "line-through")}>
             {source && (
               <p className="mt-1 text-sm text-muted-foreground">{source}</p>
+            )}
+            {entry.protocolStep && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {protocolSourceText(entry.protocolStep.protocol.name)}
+              </p>
             )}
 
             {declined && (

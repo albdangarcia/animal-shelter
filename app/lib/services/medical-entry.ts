@@ -201,6 +201,12 @@ export interface MedicalBatchTag {
 /** How an entry is written, beyond what it holds. */
 export interface EntryWriteOptions {
   batch?: MedicalBatchTag | null;
+  /**
+   * The medical protocol step that scheduled it, kept as provenance only:
+   * the entry stands on its own. Applying a protocol writes one activity row
+   * for all its entries, so an entry scheduled with a step writes none.
+   */
+  protocolStepId?: string | null;
 }
 
 /** How care recorded on its own is written, beyond what it holds. */
@@ -407,6 +413,7 @@ const readStoredEntry = async (
 export interface AnimalFacts {
   speciesId: string;
   sex: Sex;
+  birthDate: CalendarDay;
   /** Out of the shelter's care: its listing is archived. */
   archived: boolean;
   firstIntakeDate: CalendarDay | null;
@@ -414,9 +421,10 @@ export interface AnimalFacts {
 }
 
 /**
- * What the medical record's rules need to know about an animal: its species
- * and sex, whether it has left the shelter's care, and its first and latest
- * intake days. Read behind the animal's lock by every medical write.
+ * What the medical record's rules need to know about an animal: its species,
+ * sex and birth day, whether it has left the shelter's care, and its first
+ * and latest intake days. Read behind the animal's lock by every medical
+ * write.
  */
 export const readAnimal = async (
   tx: TransactionClient,
@@ -427,6 +435,7 @@ export const readAnimal = async (
     select: {
       speciesId: true,
       sex: true,
+      birthDate: true,
       listingStatus: true,
       intake: { select: { intakeDate: true } },
     },
@@ -438,6 +447,7 @@ export const readAnimal = async (
   return {
     speciesId: animal.speciesId,
     sex: animal.sex,
+    birthDate: calendarDay(animal.birthDate),
     archived: animal.listingStatus === AnimalListingStatus.ARCHIVED,
     firstIntakeDate: days[0] ?? null,
     latestIntakeDate: days[days.length - 1] ?? null,
@@ -850,6 +860,10 @@ const asJson = (value: object) => value as Prisma.InputJsonObject;
 const batchData = (batch: MedicalBatchTag | null | undefined) =>
   batch ? { batchId: batch.batchId } : {};
 
+// What a protocol step adds to an entry and to the event that writes it.
+const protocolStepData = (protocolStepId: string | null | undefined) =>
+  protocolStepId ? { protocolStepId } : {};
+
 // ---------------------------------------------------------------------------
 // The operations
 // ---------------------------------------------------------------------------
@@ -865,13 +879,16 @@ const sameValue = (a: unknown, b: unknown) =>
  * Only an animal in the shelter's care can have care scheduled. Recording,
  * declining and voiding what is already scheduled work after it leaves, so
  * its open entries can still be cleared.
+ *
+ * Care a protocol schedules names its step, and its activity row is the
+ * protocol's, written once by the caller for every entry.
  */
 export async function scheduleMedicalEntry(
   tx: TransactionClient,
   input: ScheduleMedicalEntryInput,
   actorId: string,
   today: CalendarDay,
-  { batch }: EntryWriteOptions = {},
+  { batch, protocolStepId }: EntryWriteOptions = {},
 ): Promise<{ entryId: string; animalId: string }> {
   const { animalId } = input;
   await lockAnimal(tx, animalId);
@@ -897,6 +914,7 @@ export async function scheduleMedicalEntry(
       dueDate: input.dueDate,
       notes,
       ...batchData(batch),
+      ...protocolStepData(protocolStepId),
       createdById: actorId,
     },
     select: { id: true },
@@ -914,9 +932,12 @@ export async function scheduleMedicalEntry(
         dueDate: input.dueDate,
         notes,
         ...batchData(batch),
+        ...protocolStepData(protocolStepId),
       }),
     },
   });
+
+  if (protocolStepId) return { entryId: entry.id, animalId };
 
   await tx.animalActivityLog.create({
     data: {

@@ -234,3 +234,15 @@ test("TaskFormSchema: a cleared due date parses as no due date", () => {
     assert.equal(result.data?.dueDate, null);
   }
 });
+
+test("CreateAnimalFormSchema: the medical protocol is applied unless it is left out", () => {
+  assert.equal(CreateAnimalFormSchema.parse(baseInput).applyProtocol, true);
+  assert.equal(
+    CreateAnimalFormSchema.parse({ ...baseInput, applyProtocol: false }).applyProtocol,
+    false,
+  );
+  assert.equal(
+    CreateAnimalFormSchema.safeParse({ ...baseInput, applyProtocol: "no" }).success,
+    false,
+  );
+});

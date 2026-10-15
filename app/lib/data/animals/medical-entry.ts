@@ -87,6 +87,8 @@ export const MEDICAL_ENTRY_DISPLAY_SELECT = {
   voidReason: true,
   itemId: true,
   item: { select: { name: true } },
+  // The protocol that scheduled it, by its name now.
+  protocolStep: { select: { protocol: { select: { name: true } } } },
   vetPartnerId: true,
   vetPartner: { select: { name: true } },
   administeredBy: { select: { name: true } },
@@ -373,18 +375,24 @@ export const findVaccinesAndTests = (db: Db, animalId: string) =>
 
 // The fields of an event's before and after that hold an id, and what reads
 // them: an event stores ids, a page shows names.
-const ID_FIELDS = ["itemId", "vetPartnerId", "administeredById"] as const;
+const ID_FIELDS = ["itemId", "vetPartnerId", "administeredById", "protocolStepId"] as const;
 
 /**
  * Names for every item, partner and person id the entries' events mention,
- * keyed by id (cuids don't collide across tables). For showing an event's
- * before and after as names.
+ * keyed by id (cuids don't collide across tables), and for each protocol
+ * step, its protocol's name. For showing an event's before and after as
+ * names.
  */
 export const findEventNames = async (
   db: Db,
   entries: { events: { before: unknown; after: unknown }[] }[],
 ): Promise<Record<string, string>> => {
-  const ids = { itemId: new Set<string>(), vetPartnerId: new Set<string>(), administeredById: new Set<string>() };
+  const ids = {
+    itemId: new Set<string>(),
+    vetPartnerId: new Set<string>(),
+    administeredById: new Set<string>(),
+    protocolStepId: new Set<string>(),
+  };
   for (const entry of entries) {
     for (const event of entry.events) {
       for (const side of [event.before, event.after]) {
@@ -396,7 +404,7 @@ export const findEventNames = async (
       }
     }
   }
-  const [items, partners, people] = await Promise.all([
+  const [items, partners, people, steps] = await Promise.all([
     db.medicalItem.findMany({
       where: { id: { in: [...ids.itemId] } },
       select: { id: true, name: true },
@@ -409,8 +417,13 @@ export const findEventNames = async (
       where: { id: { in: [...ids.administeredById] } },
       select: { id: true, name: true },
     }),
+    db.medicalProtocolStep.findMany({
+      where: { id: { in: [...ids.protocolStepId] } },
+      select: { id: true, protocol: { select: { name: true } } },
+    }),
   ]);
-  return Object.fromEntries(
-    [...items, ...partners, ...people].map((row) => [row.id, row.name]),
-  );
+  return Object.fromEntries([
+    ...[...items, ...partners, ...people].map((row) => [row.id, row.name]),
+    ...steps.map((step) => [step.id, step.protocol.name]),
+  ]);
 };

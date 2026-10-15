@@ -21,6 +21,12 @@ export const intakeFieldsShape = {
   surrenderingPersonId: z.cuid2().optional().or(z.literal("")),
 };
 
+// Whether the intake schedules the care its medical protocol plans: the one
+// live protocol for the animal's species and age, if any. On unless someone
+// who may manage medical care unticks it; the action refuses a skip from
+// anyone else.
+export const applyProtocolSchema = z.boolean().default(true);
+
 // Typed against only the fields it reads, so it accepts any superset object
 // — matching householdSuperRefine.
 type IntakeRefineInput = {
@@ -98,7 +104,7 @@ export type IntakeFieldsValues = z.input<typeof IntakeFieldsSchema>;
 // partner/person ids) in place of the looser ones this schema used to define
 // on its own — see the migration doc's handoff notes for why.
 export const ReIntakeFormSchema = z
-  .object({ ...intakeFieldsShape })
+  .object({ ...intakeFieldsShape, applyProtocol: applyProtocolSchema })
   .superRefine(intakeSuperRefine);
 
 export type ReIntakeFormInput = z.input<typeof ReIntakeFormSchema>;

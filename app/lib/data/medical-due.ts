@@ -110,6 +110,8 @@ const DUE_ENTRY_SELECT = {
   examType: true,
   notes: true,
   item: { select: { name: true } },
+  // The protocol that scheduled it, by its name now.
+  protocolStep: { select: { protocol: { select: { name: true } } } },
 } as const satisfies Prisma.MedicalEntrySelect;
 
 /** The entry as a due row shows it, and as its Record, Reschedule and

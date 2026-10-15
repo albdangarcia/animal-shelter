@@ -6,6 +6,7 @@ import {
   planProtocol,
   planStepDays,
   protocolStepLabel,
+  spayNeuterFactsOn,
   type ProtocolPlanFacts,
   type ProtocolPlanProtocol,
   type ProtocolPlanStep,
@@ -13,9 +14,13 @@ import {
 import { calendarDay } from "./shelter-day";
 import {
   ExamType,
+  MedicalEntryStatus,
   MedicalProtocolStepKind,
   Sex,
+  SpayNeuterExemptionReason,
+  SurgeryProcedure,
 } from "@/prisma/generated/enums";
+import type { SpayNeuterEntry } from "./spay-neuter";
 
 const day = calendarDay;
 const TODAY = day("2026-10-14");
@@ -484,4 +489,46 @@ test("protocolStepLabel: names a step by its item, its exam type, or what it is"
   assert.equal(protocolStepLabel(exam({ examType: ExamType.VET })), "Vet exam");
   assert.equal(protocolStepLabel(spayNeuter()), "spay/neuter");
   assert.equal(protocolStepLabel(microchip()), "microchip");
+});
+
+test("spayNeuterFactsOn: altered on any day once given; exempt while the exemption holds on the intake day", () => {
+  const entry = (overrides: Partial<SpayNeuterEntry>): SpayNeuterEntry => ({
+    id: "spay",
+    status: MedicalEntryStatus.DECLINED,
+    procedure: SurgeryProcedure.SPAY,
+    completedDate: null,
+    exemptionReason: SpayNeuterExemptionReason.MEDICAL_RISK,
+    declineReason: null,
+    reviewDate: "2026-11-01",
+    updatedAt: new Date("2026-10-01T12:00:00Z"),
+    ...overrides,
+  });
+  const none = { altered: false, exempt: false };
+
+  assert.deepEqual(spayNeuterFactsOn([], TODAY), none);
+  assert.deepEqual(
+    spayNeuterFactsOn(
+      [entry({ status: MedicalEntryStatus.COMPLETED, exemptionReason: null, reviewDate: null })],
+      TODAY,
+    ),
+    { altered: true, exempt: false },
+  );
+  // It holds on its review day and lapses the day after.
+  assert.deepEqual(spayNeuterFactsOn([entry({})], day("2026-11-01")), {
+    altered: false,
+    exempt: true,
+  });
+  assert.deepEqual(spayNeuterFactsOn([entry({})], day("2026-11-02")), none);
+  assert.deepEqual(spayNeuterFactsOn([entry({ reviewDate: null })], day("2031-01-01")), {
+    altered: false,
+    exempt: true,
+  });
+  // A spay only scheduled is neither.
+  assert.deepEqual(
+    spayNeuterFactsOn(
+      [entry({ status: MedicalEntryStatus.SCHEDULED, exemptionReason: null, reviewDate: null })],
+      TODAY,
+    ),
+    none,
+  );
 });

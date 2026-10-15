@@ -52,7 +52,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DayField } from "@/components/forms/day-field";
-import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
+import {
+  EMPTY_RECORD_FACTS,
+  type ProtocolPlanFacts,
+  type ProtocolPlanProtocol,
+} from "@/app/lib/utils/medical-protocol-plan";
+import { ProtocolPreview } from "./protocol-preview";
 import {
   AnimalListingStatus,
   Sex,
@@ -138,6 +144,13 @@ interface AnimalFormProps {
    */
   canManageMedical?: boolean;
   /**
+   * The live medical protocols, for a viewer who may manage medical care:
+   * the create form shows the one that fits the animal and what it will
+   * schedule, and lets them leave it out. Anyone else's intake applies it
+   * with no choice.
+   */
+  protocols?: ProtocolPlanProtocol[];
+  /**
    * Today, on the shelter's calendar, resolved on the server. It is the day an
    * intake recorded now is filed under — a `new Date()` here would be
    * re-resolved in the viewer's zone, so the server render and the browser's
@@ -155,6 +168,7 @@ const AnimalForm = ({
   animal,
   canCreatePerson,
   canManageMedical = false,
+  protocols = [],
   today,
 }: AnimalFormProps) => {
   const router = useRouter();
@@ -253,6 +267,7 @@ const AnimalForm = ({
             ? { chipNumber: "", altered: null }
             : undefined,
           listingStatus: AnimalListingStatus.DRAFT,
+          applyProtocol: true,
           currentUnitId: "",
           notes: "",
           sourcePartnerId: "",
@@ -318,6 +333,34 @@ const AnimalForm = ({
     control: form.control,
     name: "intakeMedical.altered",
   });
+  const speciesId = useWatch({ control: form.control, name: "species" });
+  const birthDate = parseCalendarDay(
+    useWatch({ control: form.control, name: "estimatedBirthDate" }),
+  );
+  const intakeDate = parseCalendarDay(
+    useWatch({ control: form.control, name: "intakeDate" }),
+  );
+  const intakeChipNumber = useWatch({
+    control: form.control,
+    name: "intakeMedical.chipNumber",
+  });
+
+  // What the protocol's plan reads about a new animal: the form's species,
+  // sex and days, and the chip and spay or neuter it records first. It has
+  // no other record yet.
+  const protocolFacts: ProtocolPlanFacts | null =
+    speciesId && birthDate && intakeDate
+      ? {
+          speciesId,
+          sex,
+          birthDate,
+          intakeDate,
+          altered: !!intakeAltered,
+          exempt: false,
+          chipped: normaliseChipNumber(intakeChipNumber ?? "") !== "",
+          openScheduled: EMPTY_RECORD_FACTS.openScheduled,
+        }
+      : null;
 
   // Advisory occupancy hint, e.g. "A-3 · 2/2" or "A-3 · 2/2 (full)". Never blocks.
   const formatUnitOption = (unit: UnitPickerLocation["units"][number]) => {
@@ -1005,6 +1048,24 @@ const AnimalForm = ({
                 partners={partners}
                 canCreatePerson={canCreatePerson}
                 today={today}
+              />
+            )}
+
+            {/* Shown to someone who may manage medical care, who alone may
+                leave the protocol out. */}
+            {!isEditMode && canManageMedical && (
+              <FormField
+                control={form.control}
+                name="applyProtocol"
+                render={({ field }) => (
+                  <ProtocolPreview
+                    protocols={protocols}
+                    facts={protocolFacts}
+                    today={today}
+                    checked={field.value ?? true}
+                    onCheckedChange={field.onChange}
+                  />
+                )}
               />
             )}
           </CardContent>

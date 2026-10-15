@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { protocolSourceText } from "@/app/lib/utils/medical-protocol-text";
 import {
   Card,
   CardContent,
@@ -414,6 +415,11 @@ function DueRow({
               <span className="font-medium">{medicalEntryName(entry)}</span>
               <Badge variant="outline">{MEDICAL_ENTRY_KIND_LABELS[entry.kind]}</Badge>
             </p>
+            {entry.protocolStep && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {protocolSourceText(entry.protocolStep.protocol.name)}
+              </p>
+            )}
           </div>
         </div>
         <RowDay label="Due" day={entry.dueDate} today={today} />

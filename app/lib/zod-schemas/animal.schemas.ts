@@ -17,7 +17,11 @@ import {
   pageSizeSchema,
   searchQuerySchema,
 } from "./common.schemas";
-import { intakeFieldsShape, intakeSuperRefine } from "./intake.schema";
+import {
+  applyProtocolSchema,
+  intakeFieldsShape,
+  intakeSuperRefine,
+} from "./intake.schema";
 import {
   chipNumberIssue,
   normaliseChipNumber,
@@ -260,6 +264,7 @@ export const CreateAnimalFormSchema = z
     ...weightGramsShape,
     ...intakeFieldsShape,
     intakeMedical: intakeMedicalSchema.optional(),
+    applyProtocol: applyProtocolSchema,
   })
   .superRefine((data, ctx) => {
     animalColorSuperRefine(data, ctx);

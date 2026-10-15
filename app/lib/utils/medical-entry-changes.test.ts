@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  createdEventVerb,
   declineText,
   describeEntryChanges,
   formatEntryFieldValue,
@@ -223,5 +224,37 @@ test("describeEntryChanges: a system missing on one side reads as none, and reco
       names,
     ),
     [{ field: "examFindings.HEART", label: "Heart", from: "normal", to: "none" }],
+  );
+});
+
+test("createdEventVerb: what the entry's first event reads, naming the protocol that scheduled it", () => {
+  const names = { "step-1": "Puppy", "step-2": "Rabbit protocol" };
+  assert.equal(createdEventVerb({ status: "COMPLETED" }, names), "Recorded");
+  assert.equal(createdEventVerb({ status: "SCHEDULED" }, names), "Scheduled");
+  assert.equal(
+    createdEventVerb({ status: "SCHEDULED", protocolStepId: "step-1" }, names),
+    "Scheduled from the Puppy protocol",
+  );
+  assert.equal(
+    createdEventVerb({ status: "SCHEDULED", protocolStepId: "step-2" }, names),
+    "Scheduled from the Rabbit protocol",
+  );
+  // A step no name was read for reads as plain scheduling.
+  assert.equal(
+    createdEventVerb({ status: "SCHEDULED", protocolStepId: "gone" }, names),
+    "Scheduled",
+  );
+  assert.equal(createdEventVerb({ status: "DECLINED" }, names), "Exemption recorded");
+  assert.equal(createdEventVerb(null, names), "Recorded");
+});
+
+test("describeEntryChanges: the protocol step an entry came from is never listed as a change", () => {
+  assert.deepEqual(
+    describeEntryChanges(
+      { dueDate: "2026-10-14", protocolStepId: "step-1" },
+      { dueDate: "2026-10-21", protocolStepId: "step-1" },
+      {},
+    ).map((change) => change.field),
+    ["dueDate"],
   );
 });

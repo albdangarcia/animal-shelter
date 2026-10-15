@@ -41,6 +41,7 @@ import {
   MedicalEntrySource,
   MedicalEntryStatus,
   MedicalItemKind,
+  MedicalProtocolStepKind,
   MedicalRoute,
   ReproductiveStatus,
   SpayNeuterExemptionReason,
@@ -94,6 +95,12 @@ import {
   voidMedicalCondition,
 } from "@/app/lib/services/medical-condition";
 import { openCareEpisode } from "@/app/lib/services/care-episode";
+import {
+  createMedicalProtocol,
+  retireMedicalProtocol,
+  type MedicalProtocolInput,
+} from "@/app/lib/services/medical-protocol";
+import { applyIntakeProtocol } from "@/app/lib/services/medical-protocol-application";
 import { ALTERED_ENTRY_WHERE } from "@/app/lib/data/animals/medical-status";
 import { recordOutcome } from "@/app/lib/services/outcome-recording";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
@@ -7775,6 +7782,183 @@ async function seedCareFixtures() {
   );
 }
 
+// The medical protocols: what a dog, a puppy, a cat and a kitten get when
+// they arrive, and an older puppy protocol that was replaced. Written through
+// the protocol service by Olivia, with fixed values. Then the puppy and
+// kitten protocols are applied, through the apply service as an intake does,
+// to one young dog and one young cat. No other animal gets protocol care:
+// applied to every animal, the due lists and the attention queue would flood.
+async function seedMedicalProtocols() {
+  console.log("Seeding medical protocols...");
+
+  const today = shelterToday(seedTimezone);
+  const olivia = await prisma.person.findFirst({
+    where: { user: { email: "staff1@example.com" } },
+  });
+  if (!olivia) {
+    throw new Error("seedMedicalProtocols: staff fixtures not found.");
+  }
+  const [species, items] = await Promise.all([
+    prisma.species.findMany({ select: { id: true, name: true } }),
+    prisma.medicalItem.findMany({ select: { id: true, name: true } }),
+  ]);
+  const speciesId = (name: string) => {
+    const found = species.find((row) => row.name === name);
+    if (!found) throw new Error(`seedMedicalProtocols: species ${name} was not seeded.`);
+    return found.id;
+  };
+  const itemId = (name: string) => {
+    const found = items.find((row) => row.name === name);
+    if (!found) throw new Error(`seedMedicalProtocols: catalog item ${name} was not seeded.`);
+    return found.id;
+  };
+
+  type Step = MedicalProtocolInput["steps"][number];
+  const intakeExam: Step = {
+    kind: MedicalProtocolStepKind.EXAM,
+    examType: ExamType.INTAKE,
+    offsetDays: 0,
+  };
+  const vaccine = (name: string, timing: Partial<Step> = {}): Step => ({
+    kind: MedicalProtocolStepKind.VACCINE,
+    itemId: itemId(name),
+    offsetDays: 0,
+    ...timing,
+  });
+  const test = (name: string, timing: Partial<Step> = {}): Step => ({
+    ...vaccine(name, timing),
+    kind: MedicalProtocolStepKind.TEST,
+  });
+  const treatment = (name: string, timing: Partial<Step> = {}): Step => ({
+    ...vaccine(name, timing),
+    kind: MedicalProtocolStepKind.TREATMENT,
+  });
+  const microchip: Step = { kind: MedicalProtocolStepKind.MICROCHIP, offsetDays: 0 };
+  const spayNeuter = (timing: Partial<Step> = {}): Step => ({
+    kind: MedicalProtocolStepKind.SPAY_NEUTER,
+    offsetDays: 7,
+    ...timing,
+  });
+
+  const create = (input: MedicalProtocolInput) =>
+    prisma.$transaction((tx) => createMedicalProtocol(tx, input));
+
+  // Written first and retired at once: the live Puppy protocol covers its
+  // ages now, and only one live protocol of a species covers any age.
+  const old = await create({
+    name: "Puppy (until 2026)",
+    speciesId: speciesId("Dog"),
+    maxAgeDays: 140,
+    steps: [vaccine("DHPP", { repeatIntervalDays: 21, repeatCount: 2 })],
+  });
+  await prisma.$transaction((tx) => retireMedicalProtocol(tx, old.id));
+
+  const puppy = await create({
+    name: "Puppy",
+    speciesId: speciesId("Dog"),
+    maxAgeDays: 140,
+    steps: [
+      intakeExam,
+      vaccine("DHPP", { notBeforeAgeDays: 42, repeatIntervalDays: 14, untilAgeDays: 140 }),
+      vaccine("Bordetella", { notBeforeAgeDays: 56 }),
+      treatment("Pyrantel pamoate", { repeatIntervalDays: 14, repeatCount: 2 }),
+      test("Fecal flotation"),
+      vaccine("Rabies 1-year", { notBeforeAgeDays: 112 }),
+      microchip,
+      spayNeuter({ notBeforeAgeDays: 56 }),
+    ],
+  });
+  await create({
+    name: "Dog",
+    speciesId: speciesId("Dog"),
+    minAgeDays: 140,
+    steps: [
+      intakeExam,
+      vaccine("DHPP", { repeatIntervalDays: 21, repeatCount: 1 }),
+      vaccine("Bordetella"),
+      test("Heartworm antigen", { notBeforeAgeDays: 182 }),
+      treatment("Pyrantel pamoate"),
+      vaccine("Rabies 1-year"),
+      microchip,
+      spayNeuter(),
+    ],
+  });
+  const kitten = await create({
+    name: "Kitten",
+    speciesId: speciesId("Cat"),
+    maxAgeDays: 140,
+    steps: [
+      intakeExam,
+      vaccine("FVRCP", { notBeforeAgeDays: 42, repeatIntervalDays: 14, untilAgeDays: 140 }),
+      test("FeLV/FIV combo"),
+      treatment("Pyrantel pamoate", { repeatIntervalDays: 14, repeatCount: 2 }),
+      vaccine("Rabies 1-year", { notBeforeAgeDays: 84 }),
+      microchip,
+      spayNeuter({ notBeforeAgeDays: 56 }),
+    ],
+  });
+  await create({
+    name: "Cat",
+    speciesId: speciesId("Cat"),
+    minAgeDays: 140,
+    steps: [
+      intakeExam,
+      vaccine("FVRCP", { repeatIntervalDays: 21, repeatCount: 1 }),
+      test("FeLV/FIV combo"),
+      treatment("Selamectin"),
+      vaccine("Rabies 1-year"),
+      microchip,
+      spayNeuter(),
+    ],
+  });
+
+  // Claimed as the transferred-out dog and the lapsed exemption are, never a
+  // hand-authored animal: in care, with nothing on its medical record but
+  // care recorded before intake (most animals arrive with a chip on it), born
+  // by its latest intake and under 140 days old on it; youngest first.
+  const claim = async (speciesName: string, protocolId: string) => {
+    const candidates = await prisma.animal.findMany({
+      where: {
+        name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+        speciesId: speciesId(speciesName),
+        listingStatus: { not: AnimalListingStatus.ARCHIVED },
+        medicalEntries: { every: { source: MedicalEntrySource.BEFORE_INTAKE } },
+      },
+      orderBy: [{ birthDate: "desc" }, { id: "asc" }],
+      select: { id: true, name: true, birthDate: true, intake: { select: { intakeDate: true } } },
+    });
+    for (const candidate of candidates) {
+      const intakeDate = candidate.intake
+        .map((intake) => calendarDay(intake.intakeDate))
+        .sort()
+        .at(-1);
+      const birthDate = calendarDay(candidate.birthDate);
+      if (!intakeDate || birthDate > intakeDate) continue;
+      if (shelterDaysBetweenKeys(birthDate, intakeDate) >= 140) continue;
+      const applied = await prisma.$transaction((tx) =>
+        applyIntakeProtocol(tx, { animalId: candidate.id, intakeDate }, olivia.id, today),
+      );
+      if (applied?.protocolId !== protocolId) {
+        throw new Error(
+          `seedMedicalProtocols: ${candidate.name} didn't get the ${speciesName.toLowerCase()} protocol expected.`,
+        );
+      }
+      return { name: candidate.name, entries: applied.entryIds.length, skipped: applied.skipped };
+    }
+    throw new Error(
+      `seedMedicalProtocols: no ${speciesName.toLowerCase()} in care under 140 days old has only care from before intake on its record.`,
+    );
+  };
+  const dog = await claim("Dog", puppy.id);
+  const cat = await claim("Cat", kitten.id);
+
+  const skippedText = (skipped: { label: string }[]) =>
+    skipped.length === 0 ? "" : `, not ${skipped.map((step) => step.label).join(", ")}`;
+  console.log(
+    `Seeded 5 medical protocols (1 retired); the Puppy protocol scheduled ${dog.entries} entries for ${dog.name}${skippedText(dog.skipped)}, and the Kitten protocol ${cat.entries} for ${cat.name}${skippedText(cat.skipped)}.`,
+  );
+}
+
 let seedTimezone = fallbackShelterSettings().timezone;
 
 export async function main() {
@@ -7843,6 +8027,7 @@ async function seedAll() {
   await seedSurgeryAndMicrochipFixtures();
   await seedExamFixtures();
   await seedCareFixtures();
+  await seedMedicalProtocols();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

@@ -29,6 +29,10 @@ import { ConflictError, NotFoundError } from "../utils/errors";
 import { findLiveUnitForPlacement } from "../services/unit-housing";
 import { createAnimalFromForm } from "../services/animal-creation";
 import {
+  SKIP_PROTOCOL_REFUSAL,
+  withProtocolHeadline,
+} from "../services/medical-protocol-application";
+import {
   careEpisodeOfferInMove,
   type CareEpisodeOffer,
 } from "../services/care-episode";
@@ -86,7 +90,7 @@ const _createAnimal = async (
     };
   }
 
-  const { intakeType, surrenderingPersonId, intakeMedical } =
+  const { intakeType, surrenderingPersonId, intakeMedical, applyProtocol } =
     validatedFields.data;
 
   // A chip or a spay or neuter recorded at intake goes on the medical record,
@@ -103,6 +107,12 @@ const _createAnimal = async (
     };
   }
 
+  // The protocol is the shelter's policy for every new animal; leaving it
+  // out is a medical decision.
+  if (!applyProtocol && !can(user.role, AppPermissions.MEDICAL_MANAGE)) {
+    return { ok: false, message: SKIP_PROTOCOL_REFUSAL };
+  }
+
   if (intakeType === IntakeType.OWNER_SURRENDER) {
     const parsedPersonId = cuidSchema.safeParse(surrenderingPersonId);
     if (!parsedPersonId.success) {
@@ -116,10 +126,11 @@ const _createAnimal = async (
     }
   }
 
+  let created: Awaited<ReturnType<typeof createAnimalFromForm>>;
   try {
     // The day check reads the shelter's settings, so it sits inside the try
     // with the writes.
-    const created = await createAnimalFromForm(
+    created = await createAnimalFromForm(
       validatedFields.data,
       staffMemberId,
     );
@@ -153,10 +164,17 @@ const _createAnimal = async (
   }
 
   revalidatePath("/dashboard/animals");
+  if (created.protocol) {
+    revalidatePath(`/dashboard/animals/${created.animalId}`);
+    revalidatePath("/dashboard/medical/due");
+  }
 
   return {
     ok: true,
-    message: "Animal intake created successfully.",
+    message: withProtocolHeadline(
+      "Animal intake created successfully.",
+      created.protocol,
+    ),
     redirectTo: "/dashboard/animals",
   };
 };

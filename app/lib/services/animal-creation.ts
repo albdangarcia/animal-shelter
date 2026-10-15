@@ -6,8 +6,12 @@ import {
 } from "@/app/lib/data/shelter-settings.data";
 import { findLiveUnitForPlacement } from "@/app/lib/services/unit-housing";
 import { recordMedicalEntry } from "@/app/lib/services/medical-entry";
+import {
+  applyIntakeProtocol,
+  type AppliedProtocol,
+} from "@/app/lib/services/medical-protocol-application";
 import { toAnimalData } from "@/app/lib/utils/animal-data";
-import { startOfShelterDay } from "@/app/lib/utils/shelter-day";
+import { startOfShelterDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import {
   hasIntakeMedical,
   type CreateAnimalFormOutput,
@@ -38,12 +42,16 @@ import {
  * service and its rules. One it refuses (a chip number already on another
  * animal's record) rolls back the whole intake. The caller checks that the
  * actor may record medical care.
+ *
+ * Then the medical protocol for the animal's species and age schedules its
+ * care, last, so it counts the chip and the spay or neuter just recorded,
+ * unless `applyProtocol` is off; the caller checks that the actor may skip it.
  */
 export const recordAnimalCreation = async (
   tx: TransactionClient,
   values: CreateAnimalFormOutput,
   staffMemberId: string,
-): Promise<{ animalId: string }> => {
+): Promise<{ animalId: string; protocol: AppliedProtocol | null }> => {
   const {
     animalName,
     estimatedBirthDate,
@@ -58,6 +66,7 @@ export const recordAnimalCreation = async (
     weightGrams,
     heightCm,
     intakeMedical,
+    applyProtocol,
   } = values;
 
   const mapped = toAnimalData(values);
@@ -216,34 +225,48 @@ export const recordAnimalCreation = async (
     }));
   }
 
+  const today = await getShelterToday();
+
   // After the intake and its activity, and stamped after them, so the feed
   // reads the animal as admitted before anything was found on it.
   if (hasIntakeMedical(intakeMedical)) {
-    await recordIntakeMedical(
+    lastLoggedAt = await recordIntakeMedical(
       tx,
       newAnimal.id,
       intakeMedical,
       staffMemberId,
+      today,
       lastLoggedAt,
     );
   }
 
-  return { animalId: newAnimal.id };
+  const protocol = applyProtocol
+    ? await applyIntakeProtocol(
+        tx,
+        { animalId: newAnimal.id, intakeDate },
+        staffMemberId,
+        today,
+        { loggedAfter: lastLoggedAt },
+      )
+    : null;
+
+  return { animalId: newAnimal.id, protocol };
 };
 
 /**
  * Care the animal arrived with, recorded as given before intake on an
  * unknown day: the day it was implanted or done is rarely known. Each
  * activity row is stamped after the one before it, the chip's first.
+ * Returns the last row's stamp.
  */
 const recordIntakeMedical = async (
   tx: TransactionClient,
   animalId: string,
   { chipNumber, altered }: IntakeMedical,
   staffMemberId: string,
+  today: CalendarDay,
   loggedAfter: Date,
-) => {
-  const today = await getShelterToday();
+): Promise<Date> => {
   if (chipNumber) {
     ({ loggedAt: loggedAfter } = await recordMedicalEntry(
       tx,
@@ -260,7 +283,7 @@ const recordIntakeMedical = async (
     ));
   }
   if (altered) {
-    await recordMedicalEntry(
+    ({ loggedAt: loggedAfter } = await recordMedicalEntry(
       tx,
       {
         animalId,
@@ -273,9 +296,17 @@ const recordIntakeMedical = async (
       staffMemberId,
       today,
       { loggedAfter },
-    );
+    ));
   }
+  return loggedAfter;
 };
+
+/**
+ * An intake can schedule a protocol's worth of care, an entry and its event
+ * at a time behind their locks, so its transaction is given the time a batch
+ * is, against a remote database.
+ */
+export const INTAKE_TRANSACTION = { timeout: 30_000 };
 
 /**
  * The create form's write: the first intake's day is checked, then the animal
@@ -285,7 +316,9 @@ const recordIntakeMedical = async (
 export const createAnimalFromForm = async (
   values: CreateAnimalFormOutput,
   staffMemberId: string,
-): Promise<{ refusal: string } | { animalId: string }> => {
+): Promise<
+  { refusal: string } | { animalId: string; protocol: AppliedProtocol | null }
+> => {
   // The picker disables future days, but only in the browser, and against
   // the day the page was rendered on. The animal has no other events yet,
   // so this is the only part of the timeline check that can apply.
@@ -294,7 +327,8 @@ export const createAnimalFromForm = async (
     return { refusal };
   }
 
-  return prisma.$transaction((tx) =>
-    recordAnimalCreation(tx, values, staffMemberId),
+  return prisma.$transaction(
+    (tx) => recordAnimalCreation(tx, values, staffMemberId),
+    INTAKE_TRANSACTION,
   );
 };

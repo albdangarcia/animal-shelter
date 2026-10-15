@@ -3,11 +3,21 @@
 // permissions.
 
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
-import { MedicalItemKind } from "@/prisma/generated/enums";
+import {
+  MedicalEntryKind,
+  MedicalEntryStatus,
+  MedicalItemKind,
+  SurgeryProcedure,
+} from "@/prisma/generated/enums";
 import type {
   ProtocolPlanProtocol,
   ProtocolPlanStep,
+  ProtocolRecordFacts,
 } from "@/app/lib/utils/medical-protocol-plan";
+import {
+  CURRENT_CHIP_WHERE,
+  findSpayNeuterEntries,
+} from "@/app/lib/data/animals/medical-status";
 
 type Db = TransactionClient | typeof prisma;
 
@@ -94,9 +104,9 @@ export type MedicalProtocolListing = Awaited<
   ReturnType<typeof findMedicalProtocols>
 >[number];
 
-const findIntakeProtocolRows = (db: Db) =>
+const findIntakeProtocolRows = (db: Db, speciesId?: string) =>
   db.medicalProtocol.findMany({
-    where: { retiredAt: null },
+    where: { retiredAt: null, ...(speciesId && { speciesId }) },
     orderBy: [{ speciesId: "asc" }, { minAgeDays: { sort: "asc", nulls: "first" } }],
     select: {
       id: true,
@@ -110,12 +120,14 @@ const findIntakeProtocolRows = (db: Db) =>
 
 /**
  * The live protocols with their live steps, as the plan takes them: what the
- * intake forms preview for the animal being admitted.
+ * intake forms preview for the animal being admitted, and what applying one
+ * matches against (`speciesId` narrows it to one species).
  */
 export const findIntakeProtocols = async (
   db: Db,
+  { speciesId }: { speciesId?: string } = {},
 ): Promise<ProtocolPlanProtocol[]> =>
-  (await findIntakeProtocolRows(db)).map(({ steps, ...protocol }) => ({
+  (await findIntakeProtocolRows(db, speciesId)).map(({ steps, ...protocol }) => ({
     ...protocol,
     retired: false,
     steps: steps.map(toPlanStep),
@@ -150,3 +162,39 @@ export const findProtocolStepItems = async (db: Db) =>
 export type ProtocolStepItem = Awaited<
   ReturnType<typeof findProtocolStepItems>
 >[number];
+
+/**
+ * What the animal's medical record says that a protocol's plan reads: its
+ * spay and neuter entries, whether it carries a chip, and the care already
+ * open and scheduled for it (a returning animal's leftovers). Read one query
+ * after another, so a transaction can call it.
+ */
+export const findProtocolRecordFacts = async (
+  db: Db,
+  animalId: string,
+): Promise<ProtocolRecordFacts> => {
+  const spayNeuterEntries = (await findSpayNeuterEntries(db, [animalId])).get(animalId) ?? [];
+  const chip = await db.medicalEntry.findFirst({
+    where: { animalId, ...CURRENT_CHIP_WHERE },
+    select: { id: true },
+  });
+  const open = await db.medicalEntry.findMany({
+    where: { animalId, status: MedicalEntryStatus.SCHEDULED, voidedAt: null },
+    select: { kind: true, itemId: true, procedure: true, examType: true },
+  });
+  return {
+    spayNeuterEntries,
+    chipped: chip !== null,
+    openScheduled: {
+      itemIds: [...new Set(open.flatMap((entry) => entry.itemId ?? []))],
+      examTypes: [...new Set(open.flatMap((entry) => entry.examType ?? []))],
+      spayNeuter: open.some(
+        (entry) =>
+          entry.kind === MedicalEntryKind.SURGERY &&
+          (entry.procedure === SurgeryProcedure.SPAY ||
+            entry.procedure === SurgeryProcedure.NEUTER),
+      ),
+      microchip: open.some((entry) => entry.kind === MedicalEntryKind.MICROCHIP),
+    },
+  };
+};

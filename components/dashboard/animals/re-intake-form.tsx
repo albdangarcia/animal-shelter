@@ -4,7 +4,7 @@ import { createReIntake } from "@/app/lib/actions/intake.actions";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,7 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Form } from "@/components/ui/form";
+import { Form, FormField } from "@/components/ui/form";
 import { AnimalReIntakeFormPayload, PartnerPayload } from "@/app/lib/types";
 import Link from "next/link";
 import { IntakeFormFields } from "./intake-form-fields";
@@ -25,12 +25,25 @@ import {
   type ReIntakeFormInput,
 } from "@/app/lib/zod-schemas/intake.schema";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
-import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
+import type { ReIntakeProtocolPreview } from "@/app/lib/data/medical-protocol.data";
+import {
+  spayNeuterFactsOn,
+  type ProtocolPlanFacts,
+} from "@/app/lib/utils/medical-protocol-plan";
+import { ProtocolPreview } from "./protocol-preview";
 
 interface ReIntakeFormProps {
   animal: AnimalReIntakeFormPayload;
   partners: PartnerPayload[];
   canCreatePerson?: boolean;
+  /**
+   * The live protocols and what the animal's record says, for a viewer who
+   * may manage medical care: the form shows the protocol that fits the
+   * returning animal and what it will schedule, and lets them leave it out.
+   * Null for anyone else, whose re-intake applies it with no choice.
+   */
+  protocolPreview?: ReIntakeProtocolPreview | null;
   /**
    * Today, on the shelter's calendar, resolved on the server. It is the day an
    * intake recorded now is filed under — a `new Date()` here would be
@@ -44,6 +57,7 @@ const ReIntakeForm = ({
   animal,
   partners,
   canCreatePerson,
+  protocolPreview = null,
   today,
 }: ReIntakeFormProps) => {
   const router = useRouter();
@@ -62,8 +76,25 @@ const ReIntakeForm = ({
       foundCity: "",
       foundState: "",
       surrenderingPersonId: "",
+      applyProtocol: true,
     },
   });
+
+  // What the protocol's plan reads: the animal and its record as the page
+  // read them, on the day the form says it came back.
+  const intakeDate = parseCalendarDay(
+    useWatch({ control: form.control, name: "intakeDate" }),
+  );
+  const protocolFacts: ProtocolPlanFacts | null =
+    protocolPreview && intakeDate
+      ? {
+          ...protocolPreview.animal,
+          intakeDate,
+          ...spayNeuterFactsOn(protocolPreview.record.spayNeuterEntries, intakeDate),
+          chipped: protocolPreview.record.chipped,
+          openScheduled: protocolPreview.record.openScheduled,
+        }
+      : null;
 
   const onSubmit = (values: ReIntakeFormInput) => {
     startSubmitTransition(async () => {
@@ -102,6 +133,22 @@ const ReIntakeForm = ({
               canCreatePerson={canCreatePerson}
               today={today}
             />
+
+            {protocolPreview && (
+              <FormField
+                control={form.control}
+                name="applyProtocol"
+                render={({ field }) => (
+                  <ProtocolPreview
+                    protocols={protocolPreview.protocols}
+                    facts={protocolFacts}
+                    today={today}
+                    checked={field.value ?? true}
+                    onCheckedChange={field.onChange}
+                  />
+                )}
+              />
+            )}
           </CardContent>
 
           <CardFooter className="flex justify-end space-x-4">

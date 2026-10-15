@@ -42,6 +42,7 @@ const row = (
     examType: null,
     notes: null,
     item: { name: options.item ?? "DHPP" },
+    protocolStep: null,
   },
   animal: {
     id: `animal-${options.animal ?? id}`,

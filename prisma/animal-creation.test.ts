@@ -18,6 +18,8 @@ import {
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalEntryStatus,
+  MedicalProtocolStepKind,
+  ExamType,
   Sex,
   SurgeryEvidence,
   SurgeryProcedure,
@@ -27,6 +29,7 @@ import {
   recordAnimalCreation,
 } from "@/app/lib/services/animal-creation";
 import { MedicalEntryRefusal } from "@/app/lib/services/medical-entry";
+import { createMedicalProtocol } from "@/app/lib/services/medical-protocol";
 import { findMedicalStatus } from "@/app/lib/data/animals/medical-status";
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { calendarDay, shiftDayKey } from "@/app/lib/utils/shelter-day";
@@ -36,6 +39,8 @@ import { assertNoListingMismatch } from "./listing-consistency";
 const runId = Date.now().toString(36);
 
 let speciesId: string;
+let birdId: string;
+let birdBreedId: string;
 let breedId: string;
 let colorId: string;
 let staffId: string;
@@ -50,6 +55,19 @@ before(async () => {
   breedId = (
     await prisma.breed.create({
       data: { name: `Creation breed ${runId}`, speciesId },
+      select: { id: true },
+    })
+  ).id;
+  // No protocol covers this one.
+  birdId = (
+    await prisma.species.create({
+      data: { name: `Creation bird ${runId}` },
+      select: { id: true },
+    })
+  ).id;
+  birdBreedId = (
+    await prisma.breed.create({
+      data: { name: `Creation bird breed ${runId}`, speciesId: birdId },
       select: { id: true },
     })
   ).id;
@@ -71,11 +89,13 @@ after(async () => {
   await prisma.vitalsLog.deleteMany({ where: { recordedById: staffId } });
   await prisma.intake.deleteMany({ where: { staffMemberId: staffId } });
   // Takes the activity rows with it.
-  await prisma.animal.deleteMany({ where: { speciesId } });
+  await prisma.animal.deleteMany({ where: { speciesId: { in: [speciesId, birdId] } } });
+  await prisma.medicalProtocolStep.deleteMany({ where: { protocol: { speciesId } } });
+  await prisma.medicalProtocol.deleteMany({ where: { speciesId } });
   await prisma.person.deleteMany({ where: { id: staffId } });
-  await prisma.breed.deleteMany({ where: { id: breedId } });
+  await prisma.breed.deleteMany({ where: { id: { in: [breedId, birdBreedId] } } });
   await prisma.color.deleteMany({ where: { id: colorId } });
-  await prisma.species.deleteMany({ where: { id: speciesId } });
+  await prisma.species.deleteMany({ where: { id: { in: [speciesId, birdId] } } });
   await prisma.$disconnect();
 });
 
@@ -476,4 +496,133 @@ test("a spay at intake follows the entry service's sex rule, and rolls the intak
     await prisma.medicalEntry.count({ where: { chipNumber: chipNumber(3) } }),
     0,
   );
+});
+
+// --- The medical protocol ---------------------------------------------------
+
+// The young animals' protocol for this file's species, written once: every
+// animal created young from here on gets it.
+let youngProtocol: Promise<{ id: string; stepIds: string[] }> | null = null;
+const ensureYoungProtocol = () =>
+  (youngProtocol ??= prisma.$transaction((tx) =>
+    createMedicalProtocol(tx, {
+      name: `Young ${runId}`,
+      speciesId,
+      minAgeDays: null,
+      maxAgeDays: 140,
+      steps: [
+        { kind: MedicalProtocolStepKind.EXAM, examType: ExamType.INTAKE, offsetDays: 0 },
+        { kind: MedicalProtocolStepKind.MICROCHIP, offsetDays: 0 },
+        { kind: MedicalProtocolStepKind.SPAY_NEUTER, offsetDays: 7 },
+      ],
+    }),
+  ));
+
+/** A young animal's submission, arriving today at 30 days old. */
+const young = async (changes: Record<string, unknown> = {}) => {
+  const today = await getShelterToday();
+  return {
+    estimatedBirthDate: shiftDayKey(today, -30),
+    intakeDate: today,
+    ...changes,
+  };
+};
+
+test("a young animal created with a chip gets its protocol's care but no second chip, logged after the chip", async (t) => {
+  const protocol = await ensureYoungProtocol();
+  const changes = await young({
+    listingStatus: AnimalListingStatus.PUBLISHED,
+    intakeMedical: { chipNumber: chipNumber(6), altered: null },
+  });
+  // Frozen, so every row is written in the same millisecond.
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  let created: Awaited<ReturnType<typeof create>>;
+  try {
+    created = await create("Young and chipped", changes);
+  } finally {
+    t.mock.timers.reset();
+  }
+  const { animalId } = created;
+  const today = calendarDay(changes.intakeDate);
+
+  assert.equal(created.protocol?.protocolId, protocol.id);
+  assert.deepEqual(created.protocol?.skipped, [
+    { stepId: protocol.stepIds[1], label: "microchip", reason: "ALREADY_CHIPPED" },
+  ]);
+  const scheduled = await prisma.medicalEntry.findMany({
+    where: { animalId, status: MedicalEntryStatus.SCHEDULED },
+    orderBy: { dueDate: "asc" },
+    select: { kind: true, examType: true, procedure: true, dueDate: true, protocolStepId: true, createdById: true },
+  });
+  assert.deepEqual(scheduled, [
+    {
+      kind: MedicalEntryKind.EXAM,
+      examType: ExamType.INTAKE,
+      procedure: null,
+      dueDate: today,
+      protocolStepId: protocol.stepIds[0],
+      createdById: staffId,
+    },
+    {
+      kind: MedicalEntryKind.SURGERY,
+      examType: null,
+      procedure: SurgeryProcedure.SPAY,
+      dueDate: shiftDayKey(today, 7),
+      protocolStepId: protocol.stepIds[2],
+      createdById: staffId,
+    },
+  ]);
+
+  // Admitted, published, the chip found, then the protocol: each strictly
+  // later than the one before, as the feed orders them.
+  const rows = await prisma.animalActivityLog.findMany({
+    where: { animalId },
+    select: { activityType: true, changeSummary: true, changedAt: true },
+    orderBy: { changedAt: "asc" },
+  });
+  assert.deepEqual(
+    rows.map((row) => row.activityType),
+    [
+      AnimalActivityType.INTAKE_PROCESSED,
+      AnimalActivityType.STATUS_CHANGE,
+      AnimalActivityType.MEDICAL_ENTRY_RECORDED,
+      AnimalActivityType.MEDICAL_PROTOCOL_APPLIED,
+    ],
+  );
+  assert.match(
+    rows[3].changeSummary ?? "",
+    /^Young \S+ protocol applied: 2 entries scheduled, .+\. Not scheduled: microchip \(already microchipped\)\.$/,
+  );
+  for (let i = 1; i < rows.length; i++) {
+    assert.ok(rows[i].changedAt > rows[i - 1].changedAt, `row ${i}`);
+  }
+  assert.equal(created.protocol?.loggedAt.getTime(), rows[3].changedAt.getTime());
+});
+
+test("a young animal created with its protocol left out gets no protocol care", async () => {
+  await ensureYoungProtocol();
+  const { animalId, protocol } = await create(
+    "Young, protocol skipped",
+    await young({ applyProtocol: false }),
+  );
+
+  assert.equal(protocol, null);
+  assert.equal(await prisma.medicalEntry.count({ where: { animalId } }), 0);
+  assert.equal(
+    await prisma.animalActivityLog.count({
+      where: { animalId, activityType: AnimalActivityType.MEDICAL_PROTOCOL_APPLIED },
+    }),
+    0,
+  );
+});
+
+test("an animal of a species no protocol covers gets none", async () => {
+  await ensureYoungProtocol();
+  const { animalId, protocol } = await create(
+    "Young bird",
+    await young({ species: birdId, breed: birdBreedId }),
+  );
+
+  assert.equal(protocol, null);
+  assert.equal(await prisma.medicalEntry.count({ where: { animalId } }), 0);
 });

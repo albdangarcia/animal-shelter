@@ -34,6 +34,7 @@ import {
 import { examBodySystemLabel } from "@/app/lib/constants/exam";
 import { orderFindings } from "@/app/lib/utils/exam-findings";
 import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
+import { protocolTitle } from "@/app/lib/utils/medical-protocol-text";
 
 export const MEDICAL_ENTRY_FIELD_LABELS: Record<string, string> = {
   itemId: "Item",
@@ -77,9 +78,10 @@ export const MEDICAL_ENTRY_FIELD_LABELS: Record<string, string> = {
 const FIELD_ORDER = Object.keys(MEDICAL_ENTRY_FIELD_LABELS);
 
 // Links an event stores to other records written with the entry: an exam's
-// vitals entry, and the exam a spay or neuter was found on. They are never
-// corrected through the entry, so a change never lists them.
-const UNLISTED_FIELDS = new Set(["vitalsLogId", "foundOnExamId"]);
+// vitals entry, the exam a spay or neuter was found on, and the protocol
+// step that scheduled it. They are never corrected through the entry, so a
+// change never lists them.
+const UNLISTED_FIELDS = new Set(["vitalsLogId", "foundOnExamId", "protocolStepId"]);
 
 const NONE = "none";
 
@@ -231,4 +233,25 @@ export const declineText = (after: unknown): string => {
       : "no review date",
   ].join(", ");
   return declineReason ? `${terms}. ${declineReason}` : `${terms}.`;
+};
+
+/**
+ * How an entry's CREATED event reads before its actor: "Recorded",
+ * "Scheduled", "Scheduled from the Puppy protocol" (by the protocol's name
+ * now, through `names`), or "Exemption recorded" for an exemption recorded
+ * on its own, which is written declined.
+ */
+export const createdEventVerb = (
+  after: unknown,
+  names: Record<string, string>,
+): string => {
+  const { status, protocolStepId } = (after ?? {}) as {
+    status?: string;
+    protocolStepId?: string;
+  };
+  if (status === "SCHEDULED") {
+    const protocol = protocolStepId ? names[protocolStepId] : undefined;
+    return protocol ? `Scheduled from the ${protocolTitle(protocol)}` : "Scheduled";
+  }
+  return status === "DECLINED" ? "Exemption recorded" : "Recorded";
 };

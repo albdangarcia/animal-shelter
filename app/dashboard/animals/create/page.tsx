@@ -9,6 +9,7 @@ import StatusPage from "@/components/StatusPage";
 import { fetchColors, fetchPartners, fetchSpecies } from "@/app/lib/data/animals/animal.data";
 import { fetchUnitPickerOptions } from "@/app/lib/data/locations/unit-picker.data";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { fetchIntakeProtocols } from "@/app/lib/data/medical-protocol.data";
 
 const Page = async () => {
   return (
@@ -38,6 +39,10 @@ const PageContent = async () => {
     hasPermission(AppPermissions.MEDICAL_MANAGE),
   ]);
 
+  // Only someone who may manage medical care sees the protocol and may leave
+  // it out; anyone else's intake applies it as the shelter set it.
+  const protocols = canManageMedical ? await fetchIntakeProtocols() : [];
+
   return (
     <main>
       <AnimalForm
@@ -48,6 +53,7 @@ const PageContent = async () => {
         unitOptions={unitOptions}
         canCreatePerson={canCreatePerson}
         canManageMedical={canManageMedical}
+        protocols={protocols}
         today={await getShelterToday()}
       />
     </main>

@@ -2,13 +2,11 @@
 
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
 import {
+  createdEventVerb,
   declineText,
   describeEntryChanges,
 } from "@/app/lib/utils/medical-entry-changes";
-import {
-  MedicalEntryEventAction,
-  MedicalEntryStatus,
-} from "@/prisma/generated/enums";
+import { MedicalEntryEventAction } from "@/prisma/generated/enums";
 import { ChangeHistory } from "./change-history";
 
 type EntryEvent = MedicalEntryDisplay["events"][number];
@@ -50,14 +48,7 @@ export function MedicalEntryChanges({ events, names }: Props) {
   const later = events.filter(
     (event) => event.action !== MedicalEntryEventAction.CREATED,
   );
-  const createdStatus = (created?.after as { status?: string } | null)?.status;
-  // An exemption recorded on its own is written declined.
-  const createdVerb =
-    createdStatus === MedicalEntryStatus.SCHEDULED
-      ? "Scheduled"
-      : createdStatus === MedicalEntryStatus.DECLINED
-        ? "Exemption recorded"
-        : "Recorded";
+  const createdVerb = createdEventVerb(created?.after, names);
 
   return (
     <ChangeHistory
