@@ -44,7 +44,11 @@ const animalId = (page: Page, name: string) =>
   firstRowIdByQuery(page, "/dashboard/animals", name);
 
 // Days are handled as `yyyy-MM-dd` keys, as the app stores them, so no
-// comparison depends on the runner's zone or clock time. The helpers below
+// comparison depends on the runner's zone or clock time. The test reads
+// today once, at its start, and picks that day in the day given rather than
+// keeping the form's default: a form defaults to the server's today when it
+// opens, which is the next day if the test runs across the shelter's
+// midnight. The helpers below
 // are the ones in medical-scheduling.spec.ts.
 type DayKey = string;
 
@@ -249,6 +253,7 @@ test.describe("as staff", () => {
     await pickFromMenu(page, page.getByRole("button", { name: "Add entry" }), "Surgery");
     const surgery = page.getByRole("dialog", { name: "Record a surgery" });
     await chooseOption(page, surgery.getByRole("combobox", { name: /^Procedure/ }), "Spay");
+    await pickDay(page, surgery.getByRole("button", { name: /^Date given \*:/ }), today);
     await surgery.getByLabel("Notes", { exact: true }).fill(`${marker}: spay given, attempt ${attempt}.`);
     await surgery.getByRole("button", { name: "Record Surgery" }).click();
     await expect(surgery).toBeHidden();

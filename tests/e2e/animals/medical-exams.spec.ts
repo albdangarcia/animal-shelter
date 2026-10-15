@@ -56,7 +56,11 @@ const animalIdNamed = async (page: Page, name: string) => {
 };
 
 // Days are handled as `yyyy-MM-dd` keys, as the app stores them, so no
-// comparison depends on the runner's zone or clock time. The helpers below
+// comparison depends on the runner's zone or clock time. The test reads
+// today once, at its start, and picks that day in the day given rather than
+// keeping the form's default: a form defaults to the server's today when it
+// opens, which is the next day if the test runs across the shelter's
+// midnight. The helpers below
 // are the ones in medical-surgery-microchip.spec.ts.
 type DayKey = string;
 
@@ -224,6 +228,7 @@ test.describe("as staff", () => {
     await pickFromMenu(page, page.getByRole("button", { name: "Add entry" }), "Exam");
     const examForm = page.getByRole("dialog", { name: "Record an exam" });
     await chooseOption(page, examForm.getByRole("combobox", { name: /^Exam type/ }), "Intake exam");
+    await pickDay(page, examForm.getByRole("button", { name: /^Date given \*:/ }), today);
     await pickRadio(examForm, /^Overall result/, "Needs vet review");
     await pickRadio(examForm, "Heart", "Abnormal");
     await examForm
@@ -271,6 +276,7 @@ test.describe("as staff", () => {
       .getByRole("button", { name: /^Record Recheck exam .* as given$/ })
       .click();
     const recheck = page.getByRole("dialog", { name: "Record Recheck exam as given" });
+    await pickDay(page, recheck.getByRole("button", { name: /^Date given \*:/ }), today);
     await pickRadio(recheck, /^Overall result/, "No concerns");
     await recheck.getByRole("button", { name: "Record Exam" }).click();
     await expect(recheck).toBeHidden();
