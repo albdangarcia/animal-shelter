@@ -302,3 +302,7 @@ export const DOSE_SHEET_PAST_DAYS = 7;
 
 /** The longest instructions a medication order can carry. */
 export const MEDICATION_INSTRUCTIONS_MAX_LENGTH = 1000;
+
+/** The longest "prescribed by" a medication order can carry: a vet's name
+ * or a clinic's. */
+export const MEDICATION_PRESCRIBED_BY_MAX_LENGTH = 120;

@@ -6,6 +6,7 @@
 
 import type {
   CareEpisodeType,
+  DoseSlot,
   MedicalEntryKind,
   TaskPriority,
 } from "@/prisma/generated/enums";
@@ -55,6 +56,15 @@ export type MedicalDueRow = {
   itemName: string;
   kind: MedicalEntryKind;
   dueDate: CalendarDay;
+};
+
+/** Medication dose slots missed yesterday or today, for one animal: how
+ * many, the earliest, and the medications they were of. */
+export type MissedDoseRow = {
+  animal: AttentionAnimal;
+  count: number;
+  earliest: { slotDate: CalendarDay; slot: DoseSlot };
+  medications: string[];
 };
 
 /** An open care episode on an animal with nothing planned for it: no open

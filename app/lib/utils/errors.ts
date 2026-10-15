@@ -73,3 +73,18 @@ export class UnauthenticatedError extends Error {
     this.name = "UnauthenticatedError";
   }
 }
+
+/**
+ * Records `cause` as what followed `error`, when `error` is an Error with no
+ * cause of its own. Best effort, and never throws: an error that can't take
+ * the property (frozen, say) is left as it was, since the point is to report
+ * `error` itself.
+ */
+export const attachCause = (error: unknown, cause: unknown): void => {
+  if (!(error instanceof Error) || error.cause !== undefined) return;
+  try {
+    error.cause = cause;
+  } catch {
+    // Not extensible: report it without the cause.
+  }
+};

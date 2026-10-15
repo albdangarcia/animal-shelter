@@ -55,15 +55,17 @@ export interface MedicalBatchAnimalRefusal {
   message: string;
 }
 
-/** Every animal a batch was refused for. Nothing was written. */
+/** Every animal a batch was refused for. Nothing was written. `message`
+ * replaces the summary, for a batch whose refusals aren't one per animal. */
 export class MedicalBatchRefusal extends PreconditionFailedError {
   readonly refusals: MedicalBatchAnimalRefusal[];
 
-  constructor(refusals: MedicalBatchAnimalRefusal[]) {
+  constructor(refusals: MedicalBatchAnimalRefusal[], message?: string) {
     super(
-      refusals.length === 1
-        ? `Nothing was saved: ${refusals[0].animalName} was refused.`
-        : `Nothing was saved: ${refusals.length} animals were refused.`,
+      message ??
+        (refusals.length === 1
+          ? `Nothing was saved: ${refusals[0].animalName} was refused.`
+          : `Nothing was saved: ${refusals.length} animals were refused.`),
     );
     this.name = "MedicalBatchRefusal";
     this.refusals = refusals;

@@ -96,13 +96,16 @@ export interface MedicalDueGroup {
   sections: { bucket: MedicalDueBucket; rows: MedicalDueSectionRow[] }[];
 }
 
-const GROUP_RANK: Record<MedicalDuePlace["type"], number> = {
+/** Units first, then fosters, then animals not housed: the order the
+ * shelter-wide lists group by place in. */
+export const GROUP_RANK: Record<MedicalDuePlace["type"], number> = {
   UNIT: 0,
   FOSTER: 1,
   NOT_HOUSED: 2,
 };
 
-const groupOf = (place: MedicalDuePlace) => {
+/** The group a place falls in: its location, its foster, or "Not housed". */
+export const groupOf = (place: MedicalDuePlace) => {
   switch (place.type) {
     case "UNIT":
       return { key: `location:${place.locationId}`, title: place.locationName };

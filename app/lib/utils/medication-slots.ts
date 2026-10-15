@@ -24,6 +24,7 @@ import {
   DOSE_SLOT_ORDER,
 } from "@/app/lib/constants/medical";
 import {
+  calendarDay,
   formatShelterDay,
   shelterDaysBetweenKeys,
   shiftDayKey,
@@ -68,6 +69,25 @@ export type OrderState =
   | "UPCOMING"
   | "ENDED"
   | "ACTIVE";
+
+/** An order as it is stored, read as the slot rules take it. */
+export const slotOrderOf = (order: {
+  frequency: MedicationFrequency;
+  intervalDays: number | null;
+  startDate: string;
+  firstSlot: DoseSlot | null;
+  endDate: string | null;
+  discontinuedDate: string | null;
+  voidedAt: Date | null;
+}): SlotOrder => ({
+  frequency: order.frequency,
+  intervalDays: order.intervalDays,
+  startDate: calendarDay(order.startDate),
+  firstSlot: order.firstSlot,
+  endDate: order.endDate ? calendarDay(order.endDate) : null,
+  discontinuedDate: order.discontinuedDate ? calendarDay(order.discontinuedDate) : null,
+  voided: order.voidedAt !== null,
+});
 
 const SLOTS: Record<MedicationFrequency, readonly DoseSlot[]> = {
   SID: ["AM"],

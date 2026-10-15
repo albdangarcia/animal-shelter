@@ -24,6 +24,7 @@ import {
   type MedicalItemInput,
 } from "@/app/lib/services/medical-catalog";
 import { recordMedicalEntry } from "@/app/lib/services/medical-entry";
+import { createMedicationOrder } from "@/app/lib/services/medication-order";
 import { MedicalEntryRefusal } from "@/app/lib/services/medical-entry-values";
 import {
   findMedicalBatchItems,
@@ -814,19 +815,23 @@ test("a medication once ordered keeps its kind, and the catalog counts its order
   const name = uniqueName("Ordered");
   const { id } = await create(medication({ name }));
   const animal = await newAnimal();
-  await prisma.medicationOrder.create({
-    data: {
-      animalId: animal.id,
-      itemId: id,
-      doseAmount: 100,
-      doseUnit: DoseUnit.MG,
-      route: MedicalRoute.ORAL,
-      frequency: MedicationFrequency.BID,
-      startDate: "2026-09-01",
-      firstSlot: DoseSlot.AM,
-      createdById: staffId,
-    },
-  });
+  await prisma.$transaction((tx) =>
+    createMedicationOrder(
+      tx,
+      {
+        animalId: animal.id,
+        itemId: id,
+        doseAmount: 100,
+        doseUnit: DoseUnit.MG,
+        route: MedicalRoute.ORAL,
+        frequency: MedicationFrequency.BID,
+        startDate: calendarDay("2026-09-01"),
+        firstSlot: DoseSlot.AM,
+      },
+      staffId,
+      calendarDay("2026-10-10"),
+    ),
+  );
 
   await assert.rejects(
     update(id, { ...medication(), kind: MedicalItemKind.TREATMENT, name }),
