@@ -81,6 +81,25 @@ test("MedicalItemFormSchema: only a treatment has a dose, and a dose needs a uni
   );
 });
 
+test("MedicalItemFormSchema: a medication has a route and dose, and no repeat interval", () => {
+  const medication: MedicalItemFormInput = {
+    ...base,
+    kind: "MEDICATION",
+    name: "Doxycycline",
+    defaultRoute: "ORAL",
+    defaultDoseAmount: 100,
+    defaultDoseUnit: "MG",
+  };
+  assert.equal(MedicalItemFormSchema.safeParse(medication).success, true);
+  assert.deepEqual(
+    fieldErrorsOf({ ...medication, repeatIntervalDays: 14 }).repeatIntervalDays,
+    ["A medication has no repeat interval: an order says how often."],
+  );
+  assert.ok(fieldErrorsOf({ ...medication, defaultDoseUnit: null }).defaultDoseUnit);
+  assert.ok(fieldErrorsOf({ ...medication, isRabies: true }).isRabies);
+  assert.ok(fieldErrorsOf({ ...medication, analytes: [{ name: "Antigen" }] }).analytes);
+});
+
 test("MedicalItemFormSchema: a repeat interval is a whole number of days up to five years", () => {
   assert.equal(
     MedicalItemFormSchema.parse({ ...base, repeatIntervalDays: 1825 })

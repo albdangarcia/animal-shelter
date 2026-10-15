@@ -38,6 +38,7 @@ import {
   updateMedicalItem,
 } from "@/app/lib/actions/medical-catalog.actions";
 import {
+  HAS_DEFAULT_DOSE,
   MedicalItemFormSchema,
   type MedicalItemFormInput,
   type MedicalItemFormValues,
@@ -100,10 +101,12 @@ export function MedicalItemForm({ onFormSubmit, species, item, ref }: Props) {
   const [isPending, startSubmitTransition] = useTransition();
   useImperativeHandle(ref, () => ({ isPending: () => isPending }), [isPending]);
   // An entry's kind must match its item's, and so must a protocol step's
-  // (retired steps included), so an item in use keeps its kind.
+  // (retired steps included), and an order names only a medication, so an
+  // item in use keeps its kind.
   const recorded = (item?._count.entries ?? 0) > 0;
   const inProtocol = (item?._count.protocolSteps ?? 0) > 0;
-  const kindLocked = recorded || inProtocol;
+  const ordered = (item?._count.medicationOrders ?? 0) > 0;
+  const kindLocked = recorded || inProtocol || ordered;
 
   const form = useForm<MedicalItemFormInput, unknown, MedicalItemFormValues>({
     resolver: standardSchemaResolver(MedicalItemFormSchema),
@@ -123,9 +126,12 @@ export function MedicalItemForm({ onFormSubmit, species, item, ref }: Props) {
     form.setValue("kind", next);
     if (next !== MedicalItemKind.VACCINE) form.setValue("isRabies", false);
     if (next === MedicalItemKind.TEST) form.setValue("defaultRoute", null);
-    if (next !== MedicalItemKind.TREATMENT) {
+    if (!HAS_DEFAULT_DOSE.has(next)) {
       form.setValue("defaultDoseAmount", null);
       form.setValue("defaultDoseUnit", null);
+    }
+    if (next === MedicalItemKind.MEDICATION) {
+      form.setValue("repeatIntervalDays", null);
     }
     if (next !== MedicalItemKind.TEST) {
       form.setValue("analytes", []);
@@ -199,7 +205,9 @@ export function MedicalItemForm({ onFormSubmit, species, item, ref }: Props) {
                     <FormDescription>
                       {recorded
                         ? "Recorded on animals"
-                        : "A step of a medical protocol"}
+                        : ordered
+                          ? "Ordered for animals"
+                          : "A step of a medical protocol"}
                       , so its kind can&apos;t change.
                     </FormDescription>
                   )}
@@ -242,14 +250,17 @@ export function MedicalItemForm({ onFormSubmit, species, item, ref }: Props) {
               )}
             />
 
-            <NumberField
-              control={form.control}
-              name="repeatIntervalDays"
-              label="Repeat every (days)"
-              min={1}
-              max={MAX_REPEAT_INTERVAL_DAYS}
-              placeholder="e.g. 14"
-            />
+            {/* A medication's order says how often. */}
+            {kind !== MedicalItemKind.MEDICATION && (
+              <NumberField
+                control={form.control}
+                name="repeatIntervalDays"
+                label="Repeat every (days)"
+                min={1}
+                max={MAX_REPEAT_INTERVAL_DAYS}
+                placeholder="e.g. 14"
+              />
+            )}
 
             {kind !== MedicalItemKind.TEST && (
               <FormField
@@ -286,7 +297,7 @@ export function MedicalItemForm({ onFormSubmit, species, item, ref }: Props) {
               />
             )}
 
-            {kind === MedicalItemKind.TREATMENT && (
+            {HAS_DEFAULT_DOSE.has(kind) && (
               <div className="grid grid-cols-2 gap-2">
                 <NumberField
                   control={form.control}

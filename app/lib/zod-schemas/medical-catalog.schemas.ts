@@ -19,6 +19,12 @@ const optionalText = z
   .nullish()
   .transform((s) => (s ? s : null));
 
+/** The kinds whose items carry a default dose and unit. */
+export const HAS_DEFAULT_DOSE: ReadonlySet<MedicalItemKind> = new Set([
+  MedicalItemKind.TREATMENT,
+  MedicalItemKind.MEDICATION,
+]);
+
 // The form's view of a catalog item. The kind rules here mirror the catalog
 // service, which stays the authority, so the form can show them before submit.
 // The form clears the fields a kind doesn't use before it submits.
@@ -74,13 +80,20 @@ export const MedicalItemFormSchema = z
       });
     }
     if (
-      item.kind !== MedicalItemKind.TREATMENT &&
+      !HAS_DEFAULT_DOSE.has(item.kind) &&
       (item.defaultDoseAmount !== null || item.defaultDoseUnit)
     ) {
       ctx.addIssue({
         code: "custom",
         path: ["defaultDoseAmount"],
-        message: "Only a treatment has a default dose.",
+        message: "Only a treatment or a medication has a default dose.",
+      });
+    }
+    if (item.kind === MedicalItemKind.MEDICATION && item.repeatIntervalDays !== null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["repeatIntervalDays"],
+        message: "A medication has no repeat interval: an order says how often.",
       });
     }
     if (item.defaultDoseAmount !== null && !item.defaultDoseUnit) {

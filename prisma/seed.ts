@@ -1,4 +1,8 @@
-import { fallbackShelterSettings, resolveShelterSettings } from "@/app/lib/utils/shelter-settings";
+import {
+  fallbackShelterSettings,
+  resolveShelterSettings,
+  shelterSettingsColumns,
+} from "@/app/lib/utils/shelter-settings";
 import fs from "node:fs";
 import path from "node:path";
 import { betterAuth } from "better-auth";
@@ -5206,7 +5210,12 @@ async function clearDatabase() {
   // protocols go after entries and before items.
   // Conditions and care episodes cascade from Animal too, and their person
   // FKs (created, opened, closed or voided by, event actor) aren't cascades
-  // either, so their events and then the rows go first.
+  // either, so their events and then the rows go first. Medication orders
+  // and doses are the same, and a dose's order and an order's item are
+  // Restrict: doses, then order events, then orders, all before items.
+  await prisma.medicationDose.deleteMany();
+  await prisma.medicationOrderEvent.deleteMany();
+  await prisma.medicationOrder.deleteMany();
   await prisma.medicalConditionEvent.deleteMany();
   await prisma.careEpisodeEvent.deleteMany();
   await prisma.careEpisode.deleteMany();
@@ -7985,7 +7994,7 @@ async function seedAll() {
     where: { id: "shelter" },
     create: {
       id: "shelter",
-      ...settings,
+      ...shelterSettingsColumns(settings),
       phoneIndexCountry: settings.defaultPhoneCountry,
     },
     update: {},

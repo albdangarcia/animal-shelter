@@ -94,6 +94,13 @@ model Person {
   careEpisodesClosed         CareEpisode[]           @relation("CareEpisodeClosedBy")
   careEpisodesVoided         CareEpisode[]           @relation("CareEpisodeVoidedBy")
   careEpisodeEvents          CareEpisodeEvent[]      @relation("CareEpisodeEventActor")
+  medicationOrdersCreated      MedicationOrder[]      @relation("MedicationOrderCreatedBy")
+  medicationOrdersDiscontinued MedicationOrder[]      @relation("MedicationOrderDiscontinuedBy")
+  medicationOrdersVoided       MedicationOrder[]      @relation("MedicationOrderVoidedBy")
+  medicationOrderEvents        MedicationOrderEvent[] @relation("MedicationOrderEventActor")
+  medicationDosesCreated       MedicationDose[]       @relation("MedicationDoseCreatedBy")
+  medicationDosesAdministered  MedicationDose[]       @relation("MedicationDoseAdministeredBy")
+  medicationDosesVoided        MedicationDose[]       @relation("MedicationDoseVoidedBy")
 
   @@index([phoneNormalized])
   @@map("persons")
@@ -367,6 +374,12 @@ model ShelterSettings {
   defaultPhoneCountry String
   // Country used for the derived Person.phoneNormalized index.
   phoneIndexCountry   String?
+  /// When each medication dose slot's window ends, as "HH:mm" on the
+  /// shelter's clock. A slot with no dose recorded by then reads as missed.
+  /// AM before Midday before PM; a window never crosses midnight.
+  amDoseEndTime       String   @default("10:00")
+  middayDoseEndTime   String   @default("14:00")
+  pmDoseEndTime       String   @default("20:00")
   updatedAt           DateTime @updatedAt
 
   @@map("shelter_settings")
@@ -495,6 +508,8 @@ model Animal {
   medicalEntries       MedicalEntry[]
   medicalConditions    MedicalCondition[]
   careEpisodes         CareEpisode[]
+  medicationOrders     MedicationOrder[]
+  medicationDoses      MedicationDose[]
   notes                AnimalNote[]
   tasks                Task[]
   favorites            Favorite[]
@@ -856,11 +871,13 @@ model VitalsLog {
 }
 
 /// What a catalog item is. A vaccine, test or treatment entry's kind must
-/// match its item's kind.
+/// match its item's kind. A medication is never an entry's item: it is what a
+/// medication order names.
 enum MedicalItemKind {
   VACCINE
   TEST
   TREATMENT
+  MEDICATION
 }
 
 /// What a medical entry records. Each kind has its own one-to-one details
@@ -1014,10 +1031,11 @@ enum DoseUnit {
   UNIT
 }
 
-/// A vaccine, test or treatment the shelter uses, managed by admins. Retiring
-/// an item (`retiredAt`) hides it from the pickers for new entries; entries
-/// that already use it keep it and keep showing it, and retiring can be undone.
-/// Items are never deleted while an entry points at them.
+/// A vaccine, test, treatment or medication the shelter uses, managed by
+/// admins. Retiring an item (`retiredAt`) hides it from the pickers for new
+/// entries and orders; entries and orders that already use it keep it and
+/// keep showing it, and retiring can be undone. Items are never deleted while
+/// an entry or an order points at them.
 ///
 /// The defaults (manufacturer, route, dose) are copied onto an entry's details
 /// when it is recorded, so changing a default never rewrites history. The name
@@ -1031,13 +1049,15 @@ model MedicalItem {
   /// The species this item applies to. Empty means every species.
   species Species[] @relation("MedicalItemSpecies")
 
-  /// Defaults for treatments (route, dose and unit) and vaccines (route only).
+  /// Defaults for treatments and medications (route, dose and unit) and
+  /// vaccines (route only).
   defaultRoute      MedicalRoute? @map(name: "default_route")
   defaultDoseAmount Float?        @map(name: "default_dose_amount")
   defaultDoseUnit   DoseUnit?     @map(name: "default_dose_unit")
 
   /// The booster or repeat interval. Recording an entry for this item offers
-  /// to schedule the next one this many days after the day it was given.
+  /// to schedule the next one this many days after the day it was given. A
+  /// medication has none: its order says how often.
   repeatIntervalDays Int? @map(name: "repeat_interval_days")
 
   /// Rabies vaccines carry a tag number, a duration and a valid-until day.
@@ -1045,9 +1065,10 @@ model MedicalItem {
   isRabies Boolean @default(false) @map(name: "is_rabies")
 
   /// What a test reports, one result per analyte. Only tests have analytes.
-  analytes      MedicalItemAnalyte[]
-  entries       MedicalEntry[]
-  protocolSteps MedicalProtocolStep[]
+  analytes         MedicalItemAnalyte[]
+  entries          MedicalEntry[]
+  protocolSteps    MedicalProtocolStep[]
+  medicationOrders MedicationOrder[]
 
   retiredAt DateTime? @map(name: "retired_at")
   createdAt DateTime  @default(now()) @map(name: "created_at")
@@ -1737,6 +1758,184 @@ model MedicalProtocolStep {
   @@map("medical_protocol_steps")
 }
 
+/// How often a medication order expects a dose, and so which named slots it
+/// expects each day: once a day the AM slot; twice a day AM and PM; three
+/// times a day AM, Midday and PM; every few days the AM slot on the start day
+/// and every `intervalDays` after it; as needed no slot at all, so nothing is
+/// ever missed.
+enum MedicationFrequency {
+  SID
+  BID
+  TID
+  EVERY_N_DAYS
+  PRN
+}
+
+/// A named time of day a dose is due in. Each slot's window ends at a time
+/// the shelter sets (`ShelterSettings`), read on the shelter's wall clock.
+enum DoseSlot {
+  AM
+  MIDDAY
+  PM
+}
+
+/// What happened when a dose was due. Refused and not given still account for
+/// the slot: only a slot with no live dose is missed.
+enum MedicationDoseResult {
+  GIVEN
+  REFUSED
+  NOT_GIVEN
+}
+
+/// What an event on a medication order's audit trail records.
+enum MedicationOrderEventAction {
+  CREATED
+  EDITED
+  DISCONTINUED
+  VOIDED
+}
+
+/// A course of a catalog medication for one animal: a dose, a route and a
+/// frequency, from `startDate` through `endDate` (inclusive), or until it is
+/// discontinued. It expects a dose in each of its frequency's slots on each
+/// day it runs, from `firstSlot` on the start day; a discontinued order
+/// expects none from `discontinuedDate` on, and a voided one none at all.
+///
+/// The medication, dose, unit, route and frequency never change: changing
+/// them would rewrite what earlier doses and missed slots meant, so staff
+/// discontinue the order and order again. Its state (upcoming, active, ended,
+/// discontinued) is worked out on read from its days, never stored.
+model MedicationOrder {
+  id       String      @id @default(cuid())
+  animalId String      @map(name: "animal_id")
+  animal   Animal      @relation(fields: [animalId], references: [id], onDelete: Cascade)
+  /// A `MEDICATION` catalog item. A retired one can't be ordered; orders that
+  /// already name it keep it.
+  itemId   String      @map(name: "item_id")
+  item     MedicalItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  doseAmount   Float               @map(name: "dose_amount")
+  doseUnit     DoseUnit            @map(name: "dose_unit")
+  route        MedicalRoute
+  frequency    MedicationFrequency
+  /// Days between doses, 2 to 31, for EVERY_N_DAYS only, and always set then.
+  intervalDays Int?                @map(name: "interval_days")
+
+  /// The first day it runs, as `yyyy-MM-dd`: on or after the animal's latest
+  /// intake. It may be in the past (an order recorded late) or the future.
+  startDate String    @map(name: "start_date")
+  /// Which of the frequency's slots is first due on the start day; the start
+  /// day's earlier slots aren't expected. Null for PRN.
+  firstSlot DoseSlot? @map(name: "first_slot")
+  /// The last day it runs, inclusive, on or after `startDate`. Null runs
+  /// until it is discontinued.
+  endDate   String?   @map(name: "end_date")
+
+  instructions String?
+  prescribedBy String? @map(name: "prescribed_by")
+
+  /// The first day it no longer runs: no slot on or after it is expected, and
+  /// a dose already recorded on it stays. Set with a reason, once.
+  discontinuedDate  String? @map(name: "discontinued_date")
+  discontinueReason String? @map(name: "discontinue_reason")
+  discontinuedById  String? @map(name: "discontinued_by_id")
+  discontinuedBy    Person? @relation("MedicationOrderDiscontinuedBy", fields: [discontinuedById], references: [id])
+
+  /// Write-once, as on a medical entry: a voided order and its doses are kept
+  /// but count for nothing, and the reason is required whenever `voidedAt` is
+  /// set.
+  voidedAt   DateTime? @map(name: "voided_at")
+  voidedById String?   @map(name: "voided_by_id")
+  voidedBy   Person?   @relation("MedicationOrderVoidedBy", fields: [voidedById], references: [id])
+  voidReason String?   @map(name: "void_reason")
+
+  createdById String @map(name: "created_by_id")
+  createdBy   Person @relation("MedicationOrderCreatedBy", fields: [createdById], references: [id])
+
+  events MedicationOrderEvent[]
+  doses  MedicationDose[]
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@index([animalId])
+  @@index([itemId])
+  @@map("medication_orders")
+}
+
+/// Append-only audit trail for medication orders, shaped as
+/// `CareEpisodeEvent` is. CREATED stores the whole order in `after`; EDITED
+/// stores only what changed on both sides; DISCONTINUED stores the day and
+/// reason; VOIDED stores `{ voidReason }`. Each event is also written to
+/// AnimalActivityLog as readable text.
+model MedicationOrderEvent {
+  id      String                     @id @default(cuid())
+  orderId String                     @map(name: "order_id")
+  order   MedicationOrder            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  action  MedicationOrderEventAction
+
+  actorId String @map(name: "actor_id")
+  actor   Person @relation("MedicationOrderEventActor", fields: [actorId], references: [id])
+
+  before Json?
+  after  Json?
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+
+  @@index([orderId])
+  @@map("medication_order_events")
+}
+
+/// One dose recorded against an order: only doses someone recorded are
+/// stored, and a slot with none is worked out on read. `slotDate` and `slot`
+/// say which expected slot it accounts for (no slot for a PRN dose, of which
+/// any number may be recorded on a day). A dose is never edited: a wrong one
+/// is voided with a reason and the slot recorded again, so the row itself
+/// holds who recorded it and who voided it.
+model MedicationDose {
+  id       String          @id @default(cuid())
+  orderId  String          @map(name: "order_id")
+  order    MedicationOrder @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  animalId String          @map(name: "animal_id")
+  animal   Animal          @relation(fields: [animalId], references: [id], onDelete: Cascade)
+
+  /// The day of the slot it accounts for, as `yyyy-MM-dd`.
+  slotDate String               @map(name: "slot_date")
+  slot     DoseSlot?
+  result   MedicationDoseResult
+  /// Why it wasn't given: required for NOT_GIVEN, optional for REFUSED, null
+  /// for GIVEN.
+  reason   String?
+
+  /// When it was given or tried: not before its slot day begins in the
+  /// shelter's zone, and not in the future.
+  administeredAt   DateTime @map(name: "administered_at")
+  /// Who gave or tried it, as an entry's in-house giver.
+  administeredById String   @map(name: "administered_by_id")
+  administeredBy   Person   @relation("MedicationDoseAdministeredBy", fields: [administeredById], references: [id])
+  notes            String?
+
+  /// Provenance only: doses recorded together from the dose sheet share it.
+  batchId String? @map(name: "batch_id")
+
+  /// Write-once: a voided dose is kept but counts for nothing, and the slot
+  /// can be recorded again.
+  voidedAt   DateTime? @map(name: "voided_at")
+  voidedById String?   @map(name: "voided_by_id")
+  voidedBy   Person?   @relation("MedicationDoseVoidedBy", fields: [voidedById], references: [id])
+  voidReason String?   @map(name: "void_reason")
+
+  createdById String @map(name: "created_by_id")
+  createdBy   Person @relation("MedicationDoseCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@unique([orderId, slotDate, slot], where: { voidedAt: null })
+  @@index([animalId, slotDate])
+  @@map("medication_doses")
+}
+
 // ═══════════════════════════════════════════════════
 // ASSESSMENTS
 // ═══════════════════════════════════════════════════
@@ -2398,6 +2597,12 @@ enum AnimalActivityType {
   CARE_EPISODE_EDITED // A care episode was corrected
   CARE_EPISODE_VOIDED // A care episode was voided as recorded in error
   MEDICAL_PROTOCOL_APPLIED // A medical protocol scheduled care at intake: one row for every entry it wrote
+  MEDICATION_ORDERED // A medication was ordered
+  MEDICATION_ORDER_EDITED // A medication order was corrected
+  MEDICATION_DISCONTINUED // A medication order was discontinued, with a reason
+  MEDICATION_ORDER_VOIDED // A medication order was voided as recorded in error
+  MEDICATION_DOSE_NOT_GIVEN // A dose was recorded as refused or not given (a dose given writes no row)
+  MEDICATION_DOSE_VOIDED // A recorded dose was voided as recorded in error
 }
 
 model AnimalActivityLog {

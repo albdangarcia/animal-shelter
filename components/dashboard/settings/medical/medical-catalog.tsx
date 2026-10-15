@@ -77,8 +77,9 @@ const MedicalCatalog = ({ items, species }: Props) => {
         <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
         <CardDescription>
           The vaccines, tests and treatments staff pick from when they record
-          care. Retired items can&apos;t be picked for new entries; entries
-          that already use them keep them.
+          care, and the medications they order. Retired items can&apos;t be
+          picked for new entries or orders; entries and orders that already
+          use them keep them.
         </CardDescription>
         <CardAction>
           {/* Not closed under a save: its result closes the dialog, which
@@ -99,7 +100,7 @@ const MedicalCatalog = ({ items, species }: Props) => {
               <DialogHeader>
                 <DialogTitle>Add Item</DialogTitle>
                 <DialogDescription>
-                  Add a vaccine, test or treatment to the catalog.
+                  Add a vaccine, test, treatment or medication to the catalog.
                 </DialogDescription>
               </DialogHeader>
               <MedicalItemForm

@@ -8,6 +8,7 @@ import {
   MAX_PROTOCOL_NOT_BEFORE_AGE_DAYS,
   MAX_PROTOCOL_OFFSET_DAYS,
   MAX_PROTOCOL_STEP_DOSES,
+  MEDICAL_ITEM_KIND_LABELS,
   MEDICAL_PROTOCOL_NAME_MAX_LENGTH,
 } from "@/app/lib/constants/medical";
 import {
@@ -417,7 +418,7 @@ const checkStepItem = async (
   }
   if (item.kind !== step.kind) {
     throw new MedicalProtocolRefusal(
-      `${item.name} is a ${KIND_NOUN[item.kind]}, not a ${KIND_NOUN[step.kind]}.`,
+      `${item.name} is a ${MEDICAL_ITEM_KIND_LABELS[item.kind].toLowerCase()}, not a ${KIND_NOUN[step.kind]}.`,
       field,
     );
   }

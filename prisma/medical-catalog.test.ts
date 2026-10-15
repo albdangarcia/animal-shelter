@@ -7,11 +7,13 @@ import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import {
+  DoseSlot,
   DoseUnit,
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalItemKind,
   MedicalRoute,
+  MedicationFrequency,
   Sex,
 } from "@/prisma/generated/enums";
 import {
@@ -22,7 +24,13 @@ import {
   type MedicalItemInput,
 } from "@/app/lib/services/medical-catalog";
 import { recordMedicalEntry } from "@/app/lib/services/medical-entry";
-import { findPickableMedicalItems } from "@/app/lib/data/medical-catalog";
+import { MedicalEntryRefusal } from "@/app/lib/services/medical-entry-values";
+import {
+  findMedicalBatchItems,
+  findMedicalCatalog,
+  findMedicalEntryFormItems,
+  findPickableMedicalItems,
+} from "@/app/lib/data/medical-catalog";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
 import {
   ConflictError,
@@ -83,6 +91,14 @@ after(async () => {
 let counter = 0;
 const uniqueName = (label: string) => `${label} ${++counter} ${runId}`;
 
+const medication = (overrides: Partial<MedicalItemInput> = {}): MedicalItemInput => ({
+  kind: MedicalItemKind.MEDICATION,
+  name: uniqueName("Medication"),
+  speciesIds: [],
+  analytes: [],
+  ...overrides,
+});
+
 const vaccine = (overrides: Partial<MedicalItemInput> = {}): MedicalItemInput => ({
   kind: MedicalItemKind.VACCINE,
   name: uniqueName("Vaccine"),
@@ -118,10 +134,8 @@ const analytesOf = (itemId: string) =>
     select: { id: true, name: true, sortOrder: true, retiredAt: true },
   });
 
-/** An animal with one vaccine entry on `itemId`, recorded the way staff
- * record one. The catalog only cares that the item is in use. */
-const useItem = async (itemId: string) => {
-  const animal = await prisma.animal.create({
+const newAnimal = () =>
+  prisma.animal.create({
     data: {
       name: `Catalog animal ${runId}`,
       birthDate: "2024-01-01",
@@ -131,6 +145,11 @@ const useItem = async (itemId: string) => {
     },
     select: { id: true },
   });
+
+/** An animal with one vaccine entry on `itemId`, recorded the way staff
+ * record one. The catalog only cares that the item is in use. */
+const useItem = async (itemId: string) => {
+  const animal = await newAnimal();
   const { entryId } = await prisma.$transaction((tx) =>
     recordMedicalEntry(
       tx,
@@ -681,4 +700,150 @@ test("the pickable items are live, of the kind, and for the animal's species", a
   const tests = await findPickableMedicalItems(prisma, dogId, MedicalItemKind.TEST);
   const picked = tests.find((item) => item.id === aTest.id);
   assert.deepEqual(picked?.analytes, [{ id: antigen.id, name: "Antigen" }]);
+});
+
+test("a medication carries a default route, dose and unit, and nothing its order decides", async () => {
+  const name = uniqueName("Doxycycline");
+  const { id } = await create(
+    medication({
+      name,
+      manufacturer: "Zoetis",
+      defaultRoute: MedicalRoute.ORAL,
+      defaultDoseAmount: 100,
+      defaultDoseUnit: DoseUnit.MG,
+    }),
+  );
+  const stored = await prisma.medicalItem.findUniqueOrThrow({ where: { id } });
+  assert.equal(stored.kind, MedicalItemKind.MEDICATION);
+  assert.equal(stored.defaultRoute, MedicalRoute.ORAL);
+  assert.equal(stored.defaultDoseAmount, 100);
+  assert.equal(stored.defaultDoseUnit, DoseUnit.MG);
+  assert.equal(stored.repeatIntervalDays, null);
+
+  const refused = (message: string) => (error: Error) =>
+    error instanceof PreconditionFailedError && error.message === message;
+  await assert.rejects(
+    create(medication({ repeatIntervalDays: 14 })),
+    refused("A medication has no repeat interval: an order says how often."),
+  );
+  await assert.rejects(
+    update(id, medication({ name, repeatIntervalDays: 14 })),
+    refused("A medication has no repeat interval: an order says how often."),
+  );
+  await assert.rejects(
+    create(medication({ isRabies: true })),
+    refused("Only a vaccine can be a rabies vaccine."),
+  );
+  await assert.rejects(
+    create(medication({ analytes: [{ name: "Antigen" }] })),
+    refused("Only a test has analytes."),
+  );
+  await assert.rejects(
+    create(medication({ defaultDoseAmount: 1 })),
+    refused("A default dose needs a unit."),
+  );
+  await assert.rejects(
+    create(medication({ defaultDoseAmount: 0, defaultDoseUnit: DoseUnit.MG })),
+    PreconditionFailedError,
+  );
+  assert.equal(
+    (await prisma.medicalItem.findUniqueOrThrow({ where: { id } })).repeatIntervalDays,
+    null,
+  );
+});
+
+test("a medication is ordered, never entered: the entry and batch pickers leave it out, and an entry naming it is refused", async () => {
+  const animal = await newAnimal();
+  const ordered = await create(medication());
+  const given = await create(vaccine());
+
+  const { items } = await findMedicalEntryFormItems(prisma, {
+    id: animal.id,
+    speciesId: dogId,
+  });
+  const offered = new Set(items.map((item) => item.id));
+  assert.ok(offered.has(given.id));
+  assert.ok(!offered.has(ordered.id));
+  assert.ok(!items.some((item) => item.kind === MedicalItemKind.MEDICATION));
+
+  const batch = new Set((await findMedicalBatchItems(prisma)).map((item) => item.id));
+  assert.ok(batch.has(given.id));
+  assert.ok(!batch.has(ordered.id));
+
+  // What the order form reads.
+  const orderable = await findPickableMedicalItems(
+    prisma,
+    dogId,
+    MedicalItemKind.MEDICATION,
+  );
+  assert.ok(orderable.some((item) => item.id === ordered.id));
+  assert.ok(!orderable.some((item) => item.id === given.id));
+
+  for (const kind of [MedicalEntryKind.VACCINE, MedicalEntryKind.TREATMENT]) {
+    await assert.rejects(
+      prisma.$transaction((tx) =>
+        recordMedicalEntry(
+          tx,
+          {
+            animalId: animal.id,
+            kind,
+            itemId: ordered.id,
+            completedDate: calendarDay("2026-09-01"),
+            source: MedicalEntrySource.IN_HOUSE,
+          },
+          staffId,
+          calendarDay("2026-10-10"),
+        ),
+      ),
+      (error: Error) =>
+        error instanceof MedicalEntryRefusal &&
+        error.field === "itemId" &&
+        / is a medication, not a (vaccine|treatment)\.$/.test(error.message),
+    );
+  }
+  assert.equal(await prisma.medicalEntry.count({ where: { animalId: animal.id } }), 0);
+});
+
+test("a medication once ordered keeps its kind, and the catalog counts its orders", async () => {
+  // Unused, it can change kind and back.
+  const unused = await create(medication());
+  const unusedName = (await prisma.medicalItem.findUniqueOrThrow({ where: { id: unused.id } })).name;
+  await update(unused.id, { ...medication(), kind: MedicalItemKind.TREATMENT, name: unusedName });
+  await update(unused.id, medication({ name: unusedName }));
+
+  const name = uniqueName("Ordered");
+  const { id } = await create(medication({ name }));
+  const animal = await newAnimal();
+  await prisma.medicationOrder.create({
+    data: {
+      animalId: animal.id,
+      itemId: id,
+      doseAmount: 100,
+      doseUnit: DoseUnit.MG,
+      route: MedicalRoute.ORAL,
+      frequency: MedicationFrequency.BID,
+      startDate: "2026-09-01",
+      firstSlot: DoseSlot.AM,
+      createdById: staffId,
+    },
+  });
+
+  await assert.rejects(
+    update(id, { ...medication(), kind: MedicalItemKind.TREATMENT, name }),
+    (error: Error) =>
+      error instanceof ConflictError &&
+      error.message ===
+        "This medication has been ordered for animals, so it can't become a treatment. Retire it and add a new item instead.",
+  );
+  assert.equal(
+    (await prisma.medicalItem.findUniqueOrThrow({ where: { id } })).kind,
+    MedicalItemKind.MEDICATION,
+  );
+  // ...while the rest of it can still be corrected.
+  await update(id, medication({ name, defaultRoute: MedicalRoute.ORAL }));
+
+  const catalog = new Map((await findMedicalCatalog(prisma)).map((item) => [item.id, item]));
+  assert.equal(catalog.get(id)?._count.medicationOrders, 1);
+  assert.equal(catalog.get(id)?._count.entries, 0);
+  assert.equal(catalog.get(unused.id)?._count.medicationOrders, 0);
 });

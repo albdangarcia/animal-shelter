@@ -25,6 +25,7 @@ import {
   Stethoscope,
   Hospital,
   CalendarCheck,
+  Pill,
   LucideProps,
 } from "lucide-react";
 import { AnimalActivityType } from "@/prisma/generated/enums";
@@ -160,6 +161,30 @@ const activityConfig: Record<
   [AnimalActivityType.MEDICAL_PROTOCOL_APPLIED]: {
     icon: CalendarPlus,
     text: "applied a medical protocol",
+  },
+  [AnimalActivityType.MEDICATION_ORDERED]: {
+    icon: Pill,
+    text: "ordered a medication",
+  },
+  [AnimalActivityType.MEDICATION_ORDER_EDITED]: {
+    icon: Pencil,
+    text: "corrected a medication order",
+  },
+  [AnimalActivityType.MEDICATION_DISCONTINUED]: {
+    icon: CircleSlash,
+    text: "discontinued a medication",
+  },
+  [AnimalActivityType.MEDICATION_ORDER_VOIDED]: {
+    icon: Ban,
+    text: "voided a medication order",
+  },
+  [AnimalActivityType.MEDICATION_DOSE_NOT_GIVEN]: {
+    icon: CircleSlash,
+    text: "recorded a dose not given",
+  },
+  [AnimalActivityType.MEDICATION_DOSE_VOIDED]: {
+    icon: Ban,
+    text: "voided a dose",
   },
   [AnimalActivityType.TASK_CREATED]: {
     icon: ClipboardList,

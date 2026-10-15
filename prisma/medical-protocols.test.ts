@@ -507,6 +507,18 @@ test("steps: an item must be of the step's kind, live, and for the species", asy
     create(input({ steps: [vaccineStep({ itemId: "ckq1a2b3c4d5e6f7g8h9i0j1k" })] })),
     refusedOn("steps.0.itemId", "That catalog item no longer exists."),
   );
+  // A medication is ordered for an animal, never scheduled by a protocol.
+  const medication = await newItem(MedicalItemKind.MEDICATION);
+  for (const kind of [
+    MedicalProtocolStepKind.VACCINE,
+    MedicalProtocolStepKind.TEST,
+    MedicalProtocolStepKind.TREATMENT,
+  ]) {
+    await assert.rejects(
+      create(input({ steps: [vaccineStep({ kind, itemId: medication })] })),
+      refusedOn("steps.0.itemId", /is a medication, not a (vaccine|test|treatment)\.$/),
+    );
+  }
   assert.equal(await protocolCount(), before);
 });
 
@@ -1046,6 +1058,8 @@ test("reads: a step can name live vaccines, tests and treatments, and the catalo
   const byId = new Map(items.map((item) => [item.id, item]));
 
   assert.ok(!byId.has(f.retiredItem));
+  const medication = await newItem(MedicalItemKind.MEDICATION);
+  assert.ok(!(await findProtocolStepItems(prisma)).some((item) => item.id === medication));
   assert.deepEqual(byId.get(f.narrowedItem)?.speciesIds, [f.second]);
   assert.deepEqual(byId.get(fecalId)?.speciesIds, []);
   assert.equal(byId.get(dhppId)?.kind, MedicalItemKind.VACCINE);

@@ -63,9 +63,10 @@ export const AppPermissions = {
   // ANIMAL_VITALS_MANAGE because an entry states what the shelter did to the
   // animal, not what someone observed, so it is staff work.
   MEDICAL_MANAGE: "medical:manage",
-  // The catalog of vaccines, tests and treatments staff pick from (admins
-  // only). Retiring an item hides it from new entries shelter-wide, so it is
-  // configuration, not record-keeping.
+  // The catalog of vaccines, tests, treatments and medications staff pick
+  // from, the protocols that schedule care at intake, and the times doses are
+  // due (admins only). Retiring an item hides it from new entries and orders
+  // shelter-wide, so it is configuration, not record-keeping.
   MEDICAL_SETTINGS_MANAGE: "medical_settings:manage",
 
   // Animal Note Permissions

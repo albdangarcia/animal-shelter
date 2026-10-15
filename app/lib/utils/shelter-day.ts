@@ -75,11 +75,12 @@ export const shelterToday = (
 const wallClockFormats = new Map<string, Intl.DateTimeFormat>();
 
 /**
- * What the clock in `timezone` reads at `at`, as the UTC instant that reads
- * the same. Read through `Intl` with the era: the date-fns formatters have no
- * year zero, so the day before 0001-01-01 would read as year 1.
+ * What the clock in `timezone` reads at `at`, part by part, with the year
+ * counted from 1 BC as year 0. Read through `Intl` with the era: the date-fns
+ * formatters have no year zero, so the day before 0001-01-01 would read as
+ * year 1.
  */
-const wallClockAsUtc = (at: number, timezone: string): number => {
+const wallClockParts = (at: number, timezone: string) => {
   let wallClock = wallClockFormats.get(timezone);
   if (!wallClock) {
     wallClock = new Intl.DateTimeFormat("en-US", {
@@ -99,17 +100,67 @@ const wallClockAsUtc = (at: number, timezone: string): number => {
   const part = Object.fromEntries(
     wallClock.formatToParts(at).map(({ type, value }) => [type, value]),
   );
-  const year = part.era === "BC" ? 1 - Number(part.year) : Number(part.year);
+  return {
+    year: part.era === "BC" ? 1 - Number(part.year) : Number(part.year),
+    month: Number(part.month),
+    day: Number(part.day),
+    hour: Number(part.hour),
+    minute: Number(part.minute),
+    second: Number(part.second),
+    millisecond: Number(part.fractionalSecond),
+  };
+};
+
+/** What the clock in `timezone` reads at `at`, as the UTC instant that reads
+ * the same. */
+const wallClockAsUtc = (at: number, timezone: string): number => {
+  const part = wallClockParts(at, timezone);
   // `setUTCFullYear`, not `Date.UTC`, which reads years 0 to 99 as 1900s.
   const utc = new Date(0);
-  utc.setUTCFullYear(year, Number(part.month) - 1, Number(part.day));
-  utc.setUTCHours(
-    Number(part.hour),
-    Number(part.minute),
-    Number(part.second),
-    Number(part.fractionalSecond),
-  );
+  utc.setUTCFullYear(part.year, part.month - 1, part.day);
+  utc.setUTCHours(part.hour, part.minute, part.second, part.millisecond);
   return utc.getTime();
+};
+
+/**
+ * The shelter's wall clock: the day it is and the time it reads, as
+ * `"HH:mm"`. A dose slot's window ends at a time on that clock, so whether a
+ * slot has ended is a comparison of a day and a time as strings, and no
+ * instant is built from a slot: a skipped or repeated hour can't misplace
+ * one. During a repeated hour the clock reads the same time twice, as a
+ * clock on the wall does.
+ */
+export interface ShelterClock {
+  day: CalendarDay;
+  time: string;
+}
+
+const pad = (value: number, width = 2) => String(value).padStart(width, "0");
+
+/** What the shelter's clock reads at `now`. Its day is `shelterToday`'s. */
+export const shelterClock = (now: Date, timezone: string): ShelterClock => {
+  const part = wallClockParts(now.getTime(), timezone);
+  return {
+    day: `${pad(part.year, 4)}-${pad(part.month)}-${pad(part.day)}` as CalendarDay,
+    time: `${pad(part.hour)}:${pad(part.minute)}`,
+  };
+};
+
+/**
+ * One reading of the shelter's time: the instant, today, and the clock, all
+ * from `now`, so today is always the clock's day. Code that needs more than
+ * one of them takes them from one reading: two reads either side of midnight
+ * would disagree.
+ */
+export interface ShelterNow {
+  now: Date;
+  today: CalendarDay;
+  clock: ShelterClock;
+}
+
+export const shelterNow = (now: Date, timezone: string): ShelterNow => {
+  const clock = shelterClock(now, timezone);
+  return { now, today: clock.day, clock };
 };
 
 /**
@@ -165,6 +216,13 @@ export const startOfShelterDay = (day: CalendarDay, timezone: string): Date => {
   }
   // Unreachable: by `to` every clock reads the day or later.
   return new Date(to);
+};
+
+/** A time of day, `"HH:mm"`, as it reads on a page: "8:00 PM", "12:30 AM". */
+export const formatTimeOfDay = (time: string): string => {
+  const [hour, minute] = time.split(":").map(Number);
+  const half = hour < 12 ? "AM" : "PM";
+  return `${hour % 12 === 0 ? 12 : hour % 12}:${pad(minute)} ${half}`;
 };
 
 /** A day as it reads on a page, e.g. "Sep 1, 2026". */

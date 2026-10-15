@@ -485,7 +485,8 @@ const readItem = async (
     orderBy: { sortOrder: "asc" },
     select: { id: true, name: true, retiredAt: true },
   });
-  // Item and entry kinds are separate enums with the same values.
+  // Item and entry kinds are separate enums that share their catalog values.
+  // A medication isn't an entry kind, so its item never matches an entry's.
   return { ...item, kind: item.kind as MedicalEntryKind, species, analytes };
 };
 

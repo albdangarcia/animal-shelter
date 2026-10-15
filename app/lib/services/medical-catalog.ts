@@ -14,7 +14,8 @@ import { MAX_REPEAT_INTERVAL_DAYS } from "@/app/lib/utils/medical-days";
 
 /**
  * The catalog of vaccines, tests and treatments staff pick from when they
- * record care. Admins manage it; entries hold a foreign key to their item.
+ * record care, and of the medications they order. Admins manage it; entries
+ * and medication orders hold a foreign key to their item.
  *
  * Items and analytes are retired, never deleted: retiring hides them from new
  * entries and leaves every entry that already uses them as it was. Retiring an
@@ -53,6 +54,7 @@ const KIND_NOUN: Record<MedicalItemKind, string> = {
   VACCINE: "vaccine",
   TEST: "test",
   TREATMENT: "treatment",
+  MEDICATION: "medication",
 };
 
 const tidyName = (value: string) => value.trim().replace(/\s+/g, " ");
@@ -104,6 +106,7 @@ const normalise = (input: MedicalItemInput): NormalisedItem => {
       );
     }
   }
+  // A treatment's and a medication's defaults follow the same rules below.
   if (defaultDoseAmount !== null && !(defaultDoseAmount > 0)) {
     throw new PreconditionFailedError(
       "The default dose must be more than zero.",
@@ -116,6 +119,11 @@ const normalise = (input: MedicalItemInput): NormalisedItem => {
   }
 
   const repeatIntervalDays = input.repeatIntervalDays ?? null;
+  if (input.kind === MedicalItemKind.MEDICATION && repeatIntervalDays !== null) {
+    throw new PreconditionFailedError(
+      "A medication has no repeat interval: an order says how often.",
+    );
+  }
   if (
     repeatIntervalDays !== null &&
     (!Number.isInteger(repeatIntervalDays) || repeatIntervalDays < 1)
@@ -175,10 +183,11 @@ const normalise = (input: MedicalItemInput): NormalisedItem => {
 
 /**
  * Holds one item against changes until the transaction ends. Every catalog
- * write takes it first, and recording or correcting an entry takes
- * `lockMedicalItemForUse` on its item, so an item's kind can't change between
- * an entry checking it and the entry being written, and the check that an
- * item is unused sees an entry written at the same moment.
+ * write takes it first, and recording or correcting an entry (or ordering a
+ * medication) takes `lockMedicalItemForUse` on its item, so an item's kind
+ * can't change between a write checking it and the write landing, and the
+ * check that an item is unused sees an entry or order written at the same
+ * moment.
  */
 export const lockMedicalItem = (tx: TransactionClient, itemId: string) =>
   tx.$queryRaw`SELECT id FROM medical_items WHERE id = ${itemId} FOR NO KEY UPDATE`;
@@ -309,12 +318,19 @@ export const updateMedicalItem = async (
   }
 
   // An entry's kind must match its item's, and entries never change kind,
-  // so an item in use keeps its kind.
+  // so an item in use keeps its kind. A medication order names only a
+  // medication, so one that has been ordered stays one.
   if (item.kind !== current.kind) {
     const used = await tx.medicalEntry.count({ where: { itemId } });
     if (used > 0) {
       throw new ConflictError(
         `This ${KIND_NOUN[current.kind]} has been used on animals, so it can't become a ${KIND_NOUN[item.kind]}. Retire it and add a new item instead.`,
+      );
+    }
+    const ordered = await tx.medicationOrder.count({ where: { itemId } });
+    if (ordered > 0) {
+      throw new ConflictError(
+        `This ${KIND_NOUN[current.kind]} has been ordered for animals, so it can't become a ${KIND_NOUN[item.kind]}. Retire it and add a new item instead.`,
       );
     }
     // A protocol step's kind is its item's, checked when the step is saved

@@ -1,5 +1,6 @@
 import type {
   CareEpisodeType,
+  DoseSlot,
   DoseUnit,
   ExamFindingStatus,
   ExamResult,
@@ -12,6 +13,8 @@ import type {
   MedicalItemKind,
   MedicalProtocolStepKind,
   MedicalRoute,
+  MedicationDoseResult,
+  MedicationFrequency,
   ReproductiveStatus,
   SpayNeuterExemptionReason,
   SurgeryEvidence,
@@ -137,12 +140,14 @@ export const MEDICAL_ITEM_KIND_LABELS: Record<MedicalItemKind, string> = {
   VACCINE: "Vaccine",
   TEST: "Test",
   TREATMENT: "Treatment",
+  MEDICATION: "Medication",
 };
 
 export const MEDICAL_ITEM_KIND_PLURALS: Record<MedicalItemKind, string> = {
   VACCINE: "Vaccines",
   TEST: "Tests",
   TREATMENT: "Treatments",
+  MEDICATION: "Medications",
 };
 
 export const MEDICAL_ROUTE_LABELS: Record<MedicalRoute, string> = {
@@ -249,3 +254,51 @@ export const MAX_PROTOCOL_OFFSET_DAYS = 365;
  * years of 365 days.
  */
 export const MAX_PROTOCOL_NOT_BEFORE_AGE_DAYS = 1825;
+
+/** How often a medication order expects a dose. */
+export const MEDICATION_FREQUENCY_LABELS: Record<MedicationFrequency, string> = {
+  SID: "Once a day",
+  BID: "Twice a day",
+  TID: "Three times a day",
+  EVERY_N_DAYS: "Every few days",
+  PRN: "As needed",
+};
+
+export const DOSE_SLOT_LABELS: Record<DoseSlot, string> = {
+  AM: "AM",
+  MIDDAY: "Midday",
+  PM: "PM",
+};
+
+/** The slots in the order a day runs through them. */
+export const DOSE_SLOT_ORDER = [
+  "AM",
+  "MIDDAY",
+  "PM",
+] as const satisfies readonly DoseSlot[];
+
+export const MEDICATION_DOSE_RESULT_LABELS: Record<MedicationDoseResult, string> = {
+  GIVEN: "Given",
+  REFUSED: "Refused",
+  NOT_GIVEN: "Not given",
+};
+
+/**
+ * The days between doses an every-few-days order can have. Every day is once
+ * a day; past a month, a dose is better scheduled as care on the due list.
+ */
+export const MIN_EVERY_N_DAYS = 2;
+export const MAX_EVERY_N_DAYS = 31;
+
+/**
+ * How many days before today the attention queue looks for missed doses. A
+ * slot missed yesterday or today can still be given or accounted for; older
+ * ones stay on the animal's dose sheet.
+ */
+export const MISSED_DOSE_LOOKBACK_DAYS = 1;
+
+/** How many days back the dose sheets go. */
+export const DOSE_SHEET_PAST_DAYS = 7;
+
+/** The longest instructions a medication order can carry. */
+export const MEDICATION_INSTRUCTIONS_MAX_LENGTH = 1000;

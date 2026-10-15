@@ -3,6 +3,7 @@
 
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import { MedicalItemKind, PartnerType } from "@/prisma/generated/enums";
+import { CATALOG_ENTRY_KINDS } from "@/app/lib/constants/medical";
 import { findOpenScheduledEntryIdsByItem } from "./animals/medical-entry";
 
 type Db = TransactionClient | typeof prisma;
@@ -25,10 +26,10 @@ export const PICKABLE_MEDICAL_ITEM_SELECT = {
 } as const;
 
 /**
- * The items staff can pick when recording care of `kind` on one animal: not
- * retired, of that kind, and for every species or the animal's own. Each
- * carries its defaults, its repeat interval and, for a test, the analytes it
- * reports, in order.
+ * The items staff can pick when recording care of `kind` on one animal, or,
+ * for `MEDICATION`, when ordering one: not retired, of that kind, and for
+ * every species or the animal's own. Each carries its defaults, its repeat
+ * interval and, for a test, the analytes it reports, in order.
  */
 export const findPickableMedicalItems = (
   db: Db,
@@ -64,7 +65,8 @@ export type MedicalEntryFormItem = PickableMedicalItem & {
 
 /**
  * The items the entry forms offer for one animal. `items` are the pickable
- * ones, every kind. `scheduledItems` are the items of its open scheduled care
+ * ones, every kind of care given from the catalog (never a medication, which
+ * is ordered, not entered). `scheduledItems` are the items of its open scheduled care
  * that can't be picked for new entries any more (retired, or narrowed to
  * other species): that care is still recorded with its own item.
  */
@@ -77,7 +79,7 @@ export const findMedicalEntryFormItems = async (
 }> => {
   // One query at a time, so it can run inside a transaction on one client.
   const items: PickableMedicalItem[] = [];
-  for (const kind of Object.values(MedicalItemKind)) {
+  for (const kind of CATALOG_ENTRY_KINDS) {
     items.push(...(await findPickableMedicalItems(db, animal.speciesId, kind)));
   }
   const scheduled = await findOpenScheduledEntryIdsByItem(db, animal.id);
@@ -178,7 +180,9 @@ export const findMedicalCatalog = (db: Db) =>
         orderBy: { sortOrder: "asc" },
         select: { id: true, name: true, retiredAt: true },
       },
-      _count: { select: { entries: true, protocolSteps: true } },
+      _count: {
+        select: { entries: true, protocolSteps: true, medicationOrders: true },
+      },
     },
   });
 
