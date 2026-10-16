@@ -4,8 +4,11 @@ import { calendarDay, type ShelterClock } from "@/app/lib/utils/shelter-day";
 import type { DoseSlotEnds } from "@/app/lib/utils/medication-slots";
 import type { MedicalDuePlace } from "./medical-due-groups";
 import {
+  doseSheetCell,
+  doseSheetDay,
   doseSheetRows,
   doseSheetSections,
+  doseSheetView,
   type DoseSheetDose,
   type DoseSheetOrder,
 } from "./medication-sheet";
@@ -75,6 +78,7 @@ const sheetOrder = (
       birthDate: "2024-01-01",
     },
     place,
+    runs: true,
     slots: frequency === "PRN" ? [] : ["AM", "PM"],
     doses: [],
     ...rest,
@@ -200,5 +204,122 @@ test("doseSheetRows: an as-needed order is one row with every dose of the day, a
   assert.deepEqual(
     rows.map((row) => ({ key: row.key, slot: row.slot, state: row.state, dose: row.dose, doses: row.doses })),
     [{ key: "o-prn:PRN", slot: null, state: null, dose: null, doses }],
+  );
+});
+
+test("doseSheetDay: today by default, back seven days, never ahead; anything else shows today", () => {
+  const today = DAY;
+  const earliest = calendarDay("2026-10-08");
+  assert.deepEqual(doseSheetDay(undefined, today), { day: today, earliest, refused: false });
+  assert.deepEqual(doseSheetDay("", today), { day: today, earliest, refused: false });
+  assert.deepEqual(doseSheetDay("2026-10-14", today), {
+    day: calendarDay("2026-10-14"),
+    earliest,
+    refused: false,
+  });
+  // Seven days back is the last day shown; eight is refused.
+  assert.deepEqual(doseSheetDay("2026-10-08", today), { day: earliest, earliest, refused: false });
+  assert.deepEqual(doseSheetDay("2026-10-07", today), { day: today, earliest, refused: true });
+  assert.deepEqual(doseSheetDay("2026-10-15", today), { day: today, earliest, refused: false });
+  assert.deepEqual(doseSheetDay("2026-10-16", today), { day: today, earliest, refused: true });
+  for (const junk of ["yesterday", "2026-10-32", "2026-1-14", "2026-10-1"]) {
+    assert.deepEqual(doseSheetDay(junk, today), { day: today, earliest, refused: true }, junk);
+  }
+  // Given twice, the first counts.
+  assert.deepEqual(doseSheetDay(["2026-10-13", "2026-10-01"], today).day, "2026-10-13");
+});
+
+test("doseSheetCell: a slot takes a dose until one is recorded, an as-needed order while it runs", () => {
+  const given = dose({ slot: "AM", administeredAt: new Date("2026-10-15T12:12:00Z") });
+  const order = sheetOrder("o-bid", "Fido", medWing, { doses: [given] });
+  const [am, pm] = doseSheetRows(order, DAY, clockAt("21:00"), ENDS);
+  const amCell = doseSheetCell(am, true, DAY, DAY, "America/New_York");
+  assert.deepEqual(amCell, {
+    key: `o-bid:${DAY}:AM`,
+    orderId: "o-bid",
+    slotDate: DAY,
+    slot: "AM",
+    expected: true,
+    state: "GIVEN",
+    doses: [
+      {
+        id: given.id,
+        result: "GIVEN",
+        reason: null,
+        notes: null,
+        // On the shelter's clock, not UTC's.
+        givenAt: "8:12 AM",
+        givenBy: "Olivia Chen",
+        voided: false,
+        voidedBy: null,
+        voidReason: null,
+      },
+    ],
+    voidedDoses: [],
+    recordable: false,
+    label: "Doxycycline, AM dose on Oct 15, 2026",
+  });
+  const pmCell = doseSheetCell(pm, true, DAY, DAY, "America/New_York");
+  assert.equal(pmCell.state, "MISSED");
+  assert.equal(pmCell.recordable, true);
+  // A slot holding a dose of an order discontinued from that day is no
+  // longer expected.
+  assert.equal(doseSheetCell(am, false, DAY, DAY, "America/New_York").expected, false);
+
+  // A dose given late, on a later day, names that day.
+  const yesterday = calendarDay("2026-10-14");
+  const [lateAm] = doseSheetRows(order, yesterday, clockAt("21:00"), ENDS);
+  assert.equal(
+    doseSheetCell(lateAm, true, yesterday, DAY, "America/New_York").doses[0].givenAt,
+    "Oct 15, 2026, 8:12 AM",
+  );
+
+  const [prn] = doseSheetRows(
+    sheetOrder("o-prn", "Rusty", notHoused, { itemName: "Gabapentin", frequency: "PRN" }),
+    DAY,
+    clockAt("21:00"),
+    ENDS,
+  );
+  const running = doseSheetCell(prn, true, DAY, DAY, "America/New_York");
+  assert.equal(running.recordable, true);
+  assert.equal(running.expected, false);
+  assert.equal(running.label, "Gabapentin, as-needed dose on Oct 15, 2026");
+  assert.equal(doseSheetCell(prn, false, DAY, DAY, "America/New_York").recordable, false);
+  // Never a day ahead of today.
+  assert.equal(doseSheetCell(pm, true, DAY, yesterday, "America/New_York").recordable, false);
+});
+
+test("doseSheetView: the sections, each row with its cell, read off whether its order runs", () => {
+  const stopped = sheetOrder("o-stopped", "Rusty", notHoused, {
+    itemName: "Gabapentin",
+    frequency: "PRN",
+    runs: false,
+    doses: [dose({ slot: null })],
+  });
+  const running = sheetOrder("o-running", "Rusty", notHoused, {
+    itemName: "Gabapentin",
+    frequency: "PRN",
+  });
+  const sections = doseSheetView(
+    [sheetOrder("o-bid", "Fido", medWing), stopped, running],
+    DAY,
+    { today: DAY, clock: clockAt("09:00") },
+    ENDS,
+    "America/New_York",
+  );
+  assert.deepEqual(
+    sections.flatMap((section) =>
+      section.groups.flatMap((group) =>
+        group.rows.map((row) => [row.key, row.cell.key, row.cell.state, row.cell.recordable]),
+      ),
+    ),
+    [
+      ["o-bid:AM", `o-bid:${DAY}:AM`, "DUE", true],
+      ["o-bid:PM", `o-bid:${DAY}:PM`, "DUE", true],
+      // Each as-needed order by whether it runs: the one running takes a
+      // dose, the one stopped doesn't.
+      ["o-running:PRN", `o-running:${DAY}:PRN`, null, true],
+      ["o-stopped:PRN", `o-stopped:${DAY}:PRN`, null, false],
+    ],
   );
 });

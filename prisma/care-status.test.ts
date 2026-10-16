@@ -11,6 +11,8 @@ import prisma from "@/app/lib/prisma";
 import {
   AnimalListingStatus,
   CareEpisodeType,
+  DoseSlot,
+  DoseUnit,
   FosterPlacementType,
   IntakeType,
   LocationType,
@@ -18,6 +20,9 @@ import {
   MedicalConditionType,
   MedicalEntryKind,
   MedicalEntrySource,
+  MedicalItemKind,
+  MedicalRoute,
+  MedicationFrequency,
   PartnerType,
   Sex,
   SurgeryEvidence,
@@ -45,6 +50,13 @@ import {
   type ScheduleMedicalEntryInput,
 } from "@/app/lib/services/medical-entry";
 import type { SurgeryEntryInput } from "@/app/lib/services/medical-entry-values";
+import { createMedicalItem } from "@/app/lib/services/medical-catalog";
+import {
+  createMedicationOrder,
+  discontinueMedicationOrder,
+  voidMedicationOrder,
+  type MedicationOrderInput,
+} from "@/app/lib/services/medication-order";
 import { findCareStatus } from "@/app/lib/data/animals/care-status";
 import {
   findOpenCareEpisodes,
@@ -69,6 +81,7 @@ let medicalLocationId: string;
 let medicalUnitId: string;
 let kennelLocationId: string;
 let kennelUnitId: string;
+let medicationId: string | null = null;
 
 const name = (label: string) => `${label} ${runId}`;
 
@@ -140,6 +153,8 @@ after(async () => {
   // Takes the episodes, conditions, entries, tasks, their events and
   // activity rows.
   await prisma.animal.deleteMany({ where: { speciesId } });
+  // Its orders went with the animals.
+  if (medicationId) await prisma.medicalItem.deleteMany({ where: { id: medicationId } });
   await prisma.unit.deleteMany({
     where: { locationId: { in: [medicalLocationId, kennelLocationId] } },
   });
@@ -540,7 +555,7 @@ test("the queue takes an open episode with nothing planned, and leaves out tasks
     voided,
     left,
   ];
-  const rows = (await findUnplannedCareForQueue(prisma)).filter((row) =>
+  const rows = (await findUnplannedCareForQueue(prisma, TODAY)).filter((row) =>
     mine.includes(row.animal.id),
   );
   assert.deepEqual(rows, [
@@ -556,6 +571,87 @@ test("the queue takes an open episode with nothing planned, and leaves out tasks
       startDate: "2026-10-05",
     },
   ]);
+});
+
+test("a medication order running or still to start is planned care; one ended, discontinued or voided isn't", async () => {
+  medicationId ??= (
+    await prisma.$transaction((tx) =>
+      createMedicalItem(tx, {
+        kind: MedicalItemKind.MEDICATION,
+        name: name("Care doxycycline"),
+        speciesIds: [],
+        analytes: [],
+      }),
+    )
+  ).id;
+  const itemId = medicationId;
+  const order = async (animalId: string, input: Partial<MedicationOrderInput> = {}) =>
+    (
+      await prisma.$transaction((tx) =>
+        createMedicationOrder(
+          tx,
+          {
+            animalId,
+            itemId,
+            doseAmount: 100,
+            doseUnit: DoseUnit.MG,
+            route: MedicalRoute.ORAL,
+            frequency: MedicationFrequency.BID,
+            startDate: day("2026-10-01"),
+            firstSlot: DoseSlot.AM,
+            ...input,
+          },
+          staffId,
+          TODAY,
+        ),
+      )
+    ).orderId;
+  const underCare = async (label: string) => {
+    const animalId = await makeAnimal(label);
+    await openEpisode(animalId);
+    return animalId;
+  };
+
+  // Planned: running with no end, ending today, as needed, and starting later.
+  const running = await underCare("Order running");
+  await order(running);
+  const endsToday = await underCare("Order ends today");
+  await order(endsToday, { endDate: TODAY });
+  const asNeeded = await underCare("Order as needed");
+  await order(asNeeded, { frequency: MedicationFrequency.PRN, firstSlot: null });
+  const upcoming = await underCare("Order upcoming");
+  await order(upcoming, { startDate: day("2026-10-20") });
+
+  // Not planned: ended yesterday, discontinued, voided.
+  const ended = await underCare("Order ended");
+  await order(ended, { endDate: day("2026-10-13") });
+  const discontinued = await underCare("Order discontinued");
+  const discontinuedOrder = await order(discontinued);
+  await prisma.$transaction((tx) =>
+    discontinueMedicationOrder(
+      tx,
+      discontinuedOrder,
+      { day: day("2026-10-10"), reason: "Course changed" },
+      staffId,
+      TODAY,
+    ),
+  );
+  const voided = await underCare("Order voided");
+  const voidedOrder = await order(voided);
+  await prisma.$transaction((tx) =>
+    voidMedicationOrder(tx, voidedOrder, "Wrong animal.", staffId),
+  );
+
+  const mine = [running, endsToday, asNeeded, upcoming, ended, discontinued, voided];
+  const listed = (await findUnplannedCareForQueue(prisma, TODAY))
+    .map((row) => row.animal.id)
+    .filter((id) => mine.includes(id));
+  assert.deepEqual(new Set(listed), new Set([ended, discontinued, voided]));
+  // The day after, the order that ended today has stopped too.
+  const tomorrow = (await findUnplannedCareForQueue(prisma, day("2026-10-15")))
+    .map((row) => row.animal.id)
+    .filter((id) => mine.includes(id));
+  assert.deepEqual(new Set(tomorrow), new Set([endsToday, ended, discontinued, voided]));
 });
 
 // ---------------------------------------------------------------------------

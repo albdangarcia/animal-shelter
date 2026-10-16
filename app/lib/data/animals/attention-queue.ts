@@ -1,6 +1,6 @@
 // Pure merge/sort/dedupe logic for the attention queue — no Prisma imports, so
 // it is trivially unit-testable (see `attention-queue.test.ts`). The query in
-// `attention-queue.data.ts` stays dumb: it fetches the four candidate row sets
+// `attention-queue.data.ts` stays dumb: it fetches the five candidate row sets
 // and hands them here. This split is the shape recommended by
 // `docs/specs/ai-chat/03-attention-queue.md` §Acceptance.
 
@@ -11,6 +11,7 @@ import type {
   TaskPriority,
 } from "@/prisma/generated/enums";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import { DOSE_SLOT_ORDER } from "@/app/lib/constants/medical";
 
 /** The queue is capped so it stays a scannable worklist, not a report. */
 export const ATTENTION_QUEUE_CAP = 20;
@@ -35,7 +36,8 @@ export type AttentionAnimal = {
  * "Dog block A · A-3": the same "Location · Unit" convention as
  * `app/lib/utils/location-activity.ts`. Null for an animal in no unit
  * (fostered or unplaced). Shared by every signal's query, including the
- * medical one in `app/lib/data/medical-due.ts`.
+ * medical ones in `app/lib/data/medical-due.ts` and
+ * `app/lib/data/medication-doses.ts`.
  */
 export const attentionUnitLabel = (
   unit: { name: string; location: { name: string } } | null,
@@ -94,6 +96,15 @@ export type AttentionReason =
       priority: TaskPriority;
     }
   | {
+      kind: "DOSE_MISSED";
+      /** How many slots were missed yesterday and today. */
+      count: number;
+      earliestSlotDate: CalendarDay;
+      earliestSlot: DoseSlot;
+      /** The medications missed, by name. */
+      medications: string[];
+    }
+  | {
       kind: "MEDICAL_DUE";
       entryId: string;
       itemName: string;
@@ -124,19 +135,33 @@ export type AttentionQueueItem = {
 // An animal's tier is its most time-sensitive reason. Lower = surfaced first.
 const TIER = {
   TASK_DUE: 1,
-  MEDICAL_DUE: 2,
-  CARE_UNPLANNED: 3,
-  FOSTER_OVERDUE: 4,
+  DOSE_MISSED: 2,
+  MEDICAL_DUE: 3,
+  CARE_UNPLANNED: 4,
+  FOSTER_OVERDUE: 5,
 } as const;
+
+/** A missed slot's place in time: its day, then AM before Midday before PM. */
+const compareSlots = (
+  a: { slotDate: CalendarDay; slot: DoseSlot },
+  b: { slotDate: CalendarDay; slot: DoseSlot },
+): number =>
+  a.slotDate.localeCompare(b.slotDate) ||
+  DOSE_SLOT_ORDER.indexOf(a.slot) - DOSE_SLOT_ORDER.indexOf(b.slot);
+
+const earliestMissed = (reason: Extract<AttentionReason, { kind: "DOSE_MISSED" }>) => ({
+  slotDate: reason.earliestSlotDate,
+  slot: reason.earliestSlot,
+});
 
 function reasonTier(reason: AttentionReason): number {
   return TIER[reason.kind];
 }
 
 // Order reasons within a single animal: overdue tasks first (earliest due, then
-// priority), then medical care (earliest due), then care with nothing
-// planned (an animal has at most one open episode), then foster.
-// Deterministic.
+// priority), then missed doses (one reason per animal), then medical care
+// (earliest due), then care with nothing planned (an animal has at most one
+// open episode), then foster. Deterministic.
 function compareReasons(a: AttentionReason, b: AttentionReason): number {
   const byTier = reasonTier(a) - reasonTier(b);
   if (byTier !== 0) return byTier;
@@ -148,6 +173,9 @@ function compareReasons(a: AttentionReason, b: AttentionReason): number {
     if (byPriority !== 0) return byPriority;
     return a.taskId.localeCompare(b.taskId);
   }
+  if (a.kind === "DOSE_MISSED" && b.kind === "DOSE_MISSED") {
+    return compareSlots(earliestMissed(a), earliestMissed(b));
+  }
   if (a.kind === "MEDICAL_DUE" && b.kind === "MEDICAL_DUE") {
     return (
       a.dueDate.localeCompare(b.dueDate) || a.entryId.localeCompare(b.entryId)
@@ -157,20 +185,24 @@ function compareReasons(a: AttentionReason, b: AttentionReason): number {
 }
 
 /**
- * Merge the four signal row sets into one deduplicated, ordered, capped list.
+ * Merge the five signal row sets into one deduplicated, ordered, capped list.
  *
  * An animal appears **once**, carrying every reason it matched. Sort tiers
- * (`docs/specs/ai-chat/03-attention-queue.md` §Sort order, with scheduled
- * medical care added after tasks):
+ * (`docs/specs/ai-chat/03-attention-queue.md` §Sort order, with missed doses
+ * and scheduled medical care added after tasks):
  *   1. has an overdue/due-today task — by earliest due date, then priority
- *   2. has scheduled medical care overdue or due today — by earliest due date
- *   3. is under an open care episode with nothing planned (no open task, no
- *      scheduled care) — by the episode's start
- *   4. overdue foster placement — by earliest expected end date
+ *   2. missed a medication dose yesterday or today — by the earliest missed
+ *      slot. Before scheduled care: a missed dose can still be given today,
+ *      and a course goes wrong one missed dose at a time.
+ *   3. has scheduled medical care overdue or due today — by earliest due date
+ *   4. is under an open care episode with nothing planned (no open task, no
+ *      scheduled care, no medication order running) — by the episode's start
+ *   5. overdue foster placement — by earliest expected end date
  * An animal in more than one tier sorts by its highest (lowest-numbered) tier.
  */
 export function buildAttentionQueue(input: {
   tasksDue: TaskDueRow[];
+  dosesMissed: MissedDoseRow[];
   medicalDue: MedicalDueRow[];
   careUnplanned: CareUnplannedRow[];
   fostersOverdue: FosterOverdueRow[];
@@ -196,6 +228,15 @@ export function buildAttentionQueue(input: {
       title: row.title,
       dueDate: row.dueDate,
       priority: row.priority,
+    });
+  }
+  for (const row of input.dosesMissed) {
+    ensure(row.animal).reasons.push({
+      kind: "DOSE_MISSED",
+      count: row.count,
+      earliestSlotDate: row.earliest.slotDate,
+      earliestSlot: row.earliest.slot,
+      medications: row.medications,
     });
   }
   for (const row of input.medicalDue) {
@@ -237,6 +278,7 @@ export function buildAttentionQueue(input: {
       // Sort keys derived from the (now ordered) reasons.
       tier: Math.min(...sortedReasons.map(reasonTier)),
       firstTask: sortedReasons.find((r) => r.kind === "TASK_DUE"),
+      firstMissed: sortedReasons.find((r) => r.kind === "DOSE_MISSED"),
       firstMedical: sortedReasons.find((r) => r.kind === "MEDICAL_DUE"),
       firstCare: sortedReasons.find((r) => r.kind === "CARE_UNPLANNED"),
       firstFoster: sortedReasons.find((r) => r.kind === "FOSTER_OVERDUE"),
@@ -252,6 +294,14 @@ export function buildAttentionQueue(input: {
       const byPriority =
         PRIORITY_RANK[a.firstTask.priority] - PRIORITY_RANK[b.firstTask.priority];
       if (byPriority !== 0) return byPriority;
+    }
+
+    if (a.tier === TIER.DOSE_MISSED && a.firstMissed && b.firstMissed) {
+      const byEarliest = compareSlots(
+        earliestMissed(a.firstMissed),
+        earliestMissed(b.firstMissed),
+      );
+      if (byEarliest !== 0) return byEarliest;
     }
 
     if (a.tier === TIER.MEDICAL_DUE && a.firstMedical && b.firstMedical) {

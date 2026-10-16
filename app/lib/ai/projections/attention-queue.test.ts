@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { toAttentionQueueView } from "./attention-queue";
 import type { AttentionQueueItem } from "@/app/lib/data/animals/attention-queue";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
-import { MedicalEntryKind, TaskPriority } from "@/prisma/generated/enums";
+import { DoseSlot, MedicalEntryKind, TaskPriority } from "@/prisma/generated/enums";
 
 const TODAY = calendarDay("2026-08-28");
 
@@ -115,5 +115,35 @@ test("non-task reasons are unaffected", () => {
     kind: "CARE_UNPLANNED",
     episodeType: "HOSPITALISED_OFF_SITE",
     startDate: "2026-08-20",
+  });
+});
+
+test("missed doses reach the model as how many, the first one missed, and the medications", () => {
+  const view = toAttentionQueueView(
+    [
+      {
+        animalId: "a3",
+        name: "Fido",
+        species: "Dog",
+        currentUnit: "Medical wing · MED-1",
+        reasons: [
+          {
+            kind: "DOSE_MISSED",
+            // Three slots of two medications.
+            count: 3,
+            earliestSlotDate: calendarDay("2026-08-27"),
+            earliestSlot: DoseSlot.PM,
+            medications: ["Doxycycline", "Meloxicam"],
+          },
+        ],
+      },
+    ],
+    TODAY,
+  );
+  assert.deepEqual(view[0].reasons[0], {
+    kind: "DOSE_MISSED",
+    missedDoses: 3,
+    earliest: { date: "2026-08-27", slot: "PM" },
+    medications: ["Doxycycline", "Meloxicam"],
   });
 });

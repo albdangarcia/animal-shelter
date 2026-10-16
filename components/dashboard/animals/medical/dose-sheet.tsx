@@ -39,7 +39,7 @@ export const doseCellId = (slot: SlotView) => `dose-slot-${slot.key}`;
 const WARNING = "text-amber-700 dark:text-amber-300";
 
 /** "Given 8:12 AM · Olivia Chen", "Refused: Spat it out", "Not given: …". */
-function DoseLine({ dose }: { dose: DoseView }) {
+export function DoseLine({ dose }: { dose: DoseView }) {
   const who = `${dose.givenAt} · ${dose.givenBy}`;
   return (
     <div className={clsx(dose.voided && "text-muted-foreground")}>
@@ -86,7 +86,7 @@ function DoseLine({ dose }: { dose: DoseView }) {
 }
 
 /** A slot with no live dose: missed once its window has ended, else due. */
-function OpenSlotText({ slot }: { slot: SlotView }) {
+export function OpenSlotText({ slot }: { slot: SlotView }) {
   if (slot.slot === null)
     return <p className="text-muted-foreground">None given</p>;
   if (slot.state === "MISSED")

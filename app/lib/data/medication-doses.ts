@@ -24,24 +24,32 @@ import {
 } from "@/app/lib/utils/shelter-day";
 import {
   expectedSlots,
+  orderLastDay,
   slotEnded,
   slotOrderOf,
   type DoseSlotEnds,
   type ExpectedSlot,
+  type SlotOrder,
 } from "@/app/lib/utils/medication-slots";
 import { ANIMAL_PLACE_SELECT, placeOf } from "./medical-due";
 import { attentionUnitLabel, type MissedDoseRow } from "./animals/attention-queue";
 import type { DoseSheetDose, DoseSheetOrder } from "./medication-sheet";
 
 export {
+  doseSheetCell,
+  doseSheetDay,
   doseSheetRows,
   doseSheetSections,
+  doseSheetView,
   type DoseSheetDose,
   type DoseSheetGroup,
   type DoseSheetOrder,
   type DoseSheetRow,
   type DoseSheetSection,
   type DoseSheetSectionKey,
+  type DoseSheetViewGroup,
+  type DoseSheetViewRow,
+  type DoseSheetViewSection,
 } from "./medication-sheet";
 
 // The root client only, never a transaction's: both reads select sibling
@@ -73,6 +81,12 @@ const runsOn = (day: CalendarDay) =>
     OR: [{ endDate: null }, { endDate: { gte: day } }],
     AND: [{ OR: [{ discontinuedDate: null }, { discontinuedDate: { gt: day } }] }],
   }) satisfies Prisma.MedicationOrderWhereInput;
+
+/** `runsOn`'s rule for an order already read, by the slot rules' last day. */
+const runsOnDay = (order: SlotOrder, day: CalendarDay) => {
+  const lastDay = orderLastDay(order);
+  return !order.voided && order.startDate <= day && (lastDay === null || day <= lastDay);
+};
 
 const slotRank = (slot: string | null) =>
   slot === null ? DOSE_SLOT_ORDER.length : DOSE_SLOT_ORDER.indexOf(slot as never);
@@ -167,6 +181,7 @@ export const findDoseSheet = async (db: Db, day: CalendarDay): Promise<DoseSheet
           birthDate: order.animal.birthDate,
         },
         place: placeOf(order.animal),
+        runs: runsOnDay(slotOrder, day),
         slots,
         doses: orderDoses,
       },

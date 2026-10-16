@@ -35,12 +35,15 @@ const OPEN_EPISODE_IN_CARE = {
 } satisfies Prisma.CareEpisodeWhereInput;
 
 /**
- * Open episodes on animals in care that have nothing planned: no open task
- * and no scheduled care that isn't voided. Such an animal needs care and
- * nobody has planned any; creating a task or scheduling care clears it.
+ * Open episodes on animals in care that have nothing planned: no open task,
+ * no scheduled care that isn't voided, and no medication order running or
+ * still to start on `today` (not voided, not discontinued, its end day not
+ * before today). Such an animal needs care and nobody has planned any;
+ * creating a task, scheduling care or ordering a medication clears it.
  */
 export const findUnplannedCareForQueue = async (
   db: Db,
+  today: CalendarDay,
 ): Promise<CareUnplannedRow[]> => {
   const rows = await db.careEpisode.findMany({
     where: {
@@ -52,6 +55,15 @@ export const findUnplannedCareForQueue = async (
         },
         medicalEntries: {
           none: { status: MedicalEntryStatus.SCHEDULED, voidedAt: null },
+        },
+        // An order is discontinued from a day no later than today, so any
+        // discontinued order has stopped.
+        medicationOrders: {
+          none: {
+            voidedAt: null,
+            discontinuedDate: null,
+            OR: [{ endDate: null }, { endDate: { gte: today } }],
+          },
         },
       },
     },

@@ -1,5 +1,6 @@
 import type {
   CareEpisodeType,
+  DoseSlot,
   MedicalEntryKind,
   TaskPriority,
 } from "@/prisma/generated/enums";
@@ -26,6 +27,15 @@ export type AttentionReasonView =
        */
       overdue: boolean;
       priority: TaskPriority;
+    }
+  | {
+      kind: "DOSE_MISSED";
+      /** How many medication dose slots were missed yesterday and today. */
+      missedDoses: number;
+      /** The first one missed: its day, and AM, MIDDAY or PM. */
+      earliest: { date: string; slot: DoseSlot };
+      /** The medications missed, by name. */
+      medications: string[];
     }
   | {
       kind: "MEDICAL_DUE";
@@ -92,6 +102,13 @@ function toReasonView(
         // the same boundary the data layer's query draws.
         overdue: reason.dueDate < today,
         priority: reason.priority,
+      };
+    case "DOSE_MISSED":
+      return {
+        kind: "DOSE_MISSED",
+        missedDoses: reason.count,
+        earliest: { date: reason.earliestSlotDate, slot: reason.earliestSlot },
+        medications: reason.medications,
       };
     case "MEDICAL_DUE":
       return {

@@ -163,19 +163,30 @@ export interface MedicationsView {
   sheetTo: CalendarDay;
 }
 
+/**
+ * When a dose was given or tried, on the shelter's clock: "8:12 AM", or with
+ * its day when that isn't the slot's: "Oct 15, 2026, 8:12 AM".
+ */
+export const givenAtText = (
+  administeredAt: Date,
+  slotDate: CalendarDay,
+  timezone: string,
+): string => {
+  const given = shelterClock(administeredAt, timezone);
+  const time = formatTimeOfDay(given.time);
+  return given.day === slotDate ? time : `${formatShelterDay(given.day)}, ${time}`;
+};
+
 const doseView = (
   dose: AnimalMedicationDose,
   { timezone, names }: MedicationViewContext,
 ): DoseView => {
-  const given = shelterClock(dose.administeredAt, timezone);
-  const time = formatTimeOfDay(given.time);
   return {
     id: dose.id,
     result: dose.result,
     reason: dose.reason,
     notes: dose.notes,
-    givenAt:
-      given.day === dose.slotDate ? time : `${formatShelterDay(given.day)}, ${time}`,
+    givenAt: givenAtText(dose.administeredAt, dose.slotDate, timezone),
     givenBy: names[dose.administeredById] ?? "someone",
     voided: dose.voided,
     voidedBy: dose.voidedById ? (names[dose.voidedById] ?? "someone") : null,

@@ -1226,6 +1226,15 @@ test("the dose sheet for a day: the slots each order has, its doses, and where i
   const stoppedToday = await orderFor(unhoused, { firstSlot: DoseSlot.AM });
   const stoppedAm = await record(given(stoppedToday, "2026-10-14", DoseSlot.AM));
   await discontinueFrom(stoppedToday, "2026-10-14");
+  // As needed, given that day, then discontinued from it: listed for its
+  // dose, and no longer running.
+  const prnStoppedToday = await orderFor(unhoused, {
+    frequency: MedicationFrequency.PRN,
+    firstSlot: null,
+    endDate: null,
+  });
+  const prnStoppedDose = await record(given(prnStoppedToday, "2026-10-14", null));
+  await discontinueFrom(prnStoppedToday, "2026-10-14");
   // Left off: discontinued before the day, ended before it, voided with a
   // dose that day, and on an animal that left.
   const stoppedEarlier = await orderFor(unhoused, { firstSlot: DoseSlot.AM });
@@ -1262,6 +1271,7 @@ test("the dose sheet for a day: the slots each order has, its doses, and where i
         slots: entry.slots,
         doses: entry.doses.map((dose) => dose.id),
         place: entry.place,
+        runs: entry.runs,
       }))
       .sort((a, b) => a.order.localeCompare(b.order)),
     [
@@ -1276,15 +1286,30 @@ test("the dose sheet for a day: the slots each order has, its doses, and where i
           unitId: unit.id,
           unitName: "MED-1",
         },
+        runs: true,
       },
       {
         order: onceADay,
         slots: [DoseSlot.AM],
         doses: [],
         place: { type: "FOSTER", fosterPersonId: fosterPerson.id, fosterName: fosterPerson.name },
+        runs: true,
       },
-      { order: asNeeded, slots: [], doses: [prnDose.doseId], place: { type: "NOT_HOUSED" } },
-      { order: stoppedToday, slots: [DoseSlot.AM], doses: [stoppedAm.doseId], place: { type: "NOT_HOUSED" } },
+      { order: asNeeded, slots: [], doses: [prnDose.doseId], place: { type: "NOT_HOUSED" }, runs: true },
+      {
+        order: stoppedToday,
+        slots: [DoseSlot.AM],
+        doses: [stoppedAm.doseId],
+        place: { type: "NOT_HOUSED" },
+        runs: false,
+      },
+      {
+        order: prnStoppedToday,
+        slots: [],
+        doses: [prnStoppedDose.doseId],
+        place: { type: "NOT_HOUSED" },
+        runs: false,
+      },
     ].sort((a, b) => a.order.localeCompare(b.order)),
   );
   // Every three days from the 12th falls on the 15th, not the 14th.

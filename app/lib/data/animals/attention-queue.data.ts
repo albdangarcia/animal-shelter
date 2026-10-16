@@ -2,11 +2,15 @@ import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import { AnimalListingStatus, TaskStatus } from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
+import {
+  getShelterNow,
+  getShelterSettings,
+} from "@/app/lib/data/shelter-settings.data";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
 import { RequireAllPermissions } from "../../auth/protected-actions";
 import { findMedicalDueForQueue } from "../medical-due";
 import { findUnplannedCareForQueue } from "../care-episodes";
+import { findMissedDosesForQueue } from "../medication-doses";
 import {
   attentionUnitLabel,
   buildAttentionQueue,
@@ -23,11 +27,16 @@ export type { AttentionQueueItem, AttentionReason } from "./attention-queue";
 //
 // Signals:
 //   1. Task overdue or due today (status TODO/IN_PROGRESS, dueDate <= today)
-//   2. Scheduled medical care overdue or due today (status SCHEDULED, not
+//   2. Medication dose slots missed yesterday or today: a slot an order
+//      expects whose window has ended on the shelter's clock with no dose
+//      recorded, read by `findMissedDosesForQueue`. Refused and not given
+//      account for their slot.
+//   3. Scheduled medical care overdue or due today (status SCHEDULED, not
 //      voided, dueDate <= today), read by `findMedicalDueForQueue`
-//   3. An open care episode with nothing planned: no open task and no
-//      scheduled care, read by `findUnplannedCareForQueue`
-//   4. Open foster placement past its expectedEndDate
+//   4. An open care episode with nothing planned: no open task, no
+//      scheduled care and no medication order running, read by
+//      `findUnplannedCareForQueue`
+//   5. Open foster placement past its expectedEndDate
 //
 // Queue-wide precondition: ARCHIVED animals (adopted / transferred / deceased)
 // are excluded from every signal. Their state is frozen history — an item on
@@ -70,16 +79,21 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
     // day compared as a plain string — resolved on the shelter's calendar,
     // which is the only place "today" means anything here.
     //
-    // Signals 1 and 2 count anything due at any point today, so `<= today`.
-    // Signal 4 is strictly before today, so a placement expected to end today
-    // is not yet overdue.
-    const today = await getShelterToday();
+    // Signals 1 and 3 count anything due at any point today, so `<= today`.
+    // Signal 5 is strictly before today, so a placement expected to end today
+    // is not yet overdue. Signal 2 reads the clock too, to tell which of
+    // today's slots have ended: one reading gives both, so they agree on the
+    // day.
+    const [{ today, clock }, { doseSlotEnds }] = await Promise.all([
+      getShelterNow(),
+      getShelterSettings(),
+    ]);
 
     const notArchived = {
       listingStatus: { not: AnimalListingStatus.ARCHIVED },
     } satisfies Prisma.AnimalWhereInput;
 
-    const [tasksDue, medicalDue, careUnplanned, fostersOverdue] = await Promise.all([
+    const [tasksDue, dosesMissed, medicalDue, careUnplanned, fostersOverdue] = await Promise.all([
       // Signal 1. A null dueDate never satisfies `lte`, so undated backlog
       // tasks are excluded without an explicit filter.
       prisma.task.findMany({
@@ -97,12 +111,15 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
         },
       }),
       // Signal 2. Archived animals are left out there too.
+      findMissedDosesForQueue(prisma, clock, doseSlotEnds),
+      // Signal 3. Archived animals are left out there too.
       findMedicalDueForQueue(prisma, today),
-      // Signal 3. Under care AND nothing planned — an animal that needs care
-      // and nobody has planned anything. Creating a task or scheduling care
-      // clears it. Archived animals are left out there too.
-      findUnplannedCareForQueue(prisma),
-      // Signal 4. Open placement (endDate == null) past its expected end.
+      // Signal 4. Under care AND nothing planned — an animal that needs care
+      // and nobody has planned anything. Creating a task, scheduling care or
+      // ordering a medication clears it. Archived animals are left out there
+      // too.
+      findUnplannedCareForQueue(prisma, today),
+      // Signal 5. Open placement (endDate == null) past its expected end.
       // One open placement per animal is an action-layer rule, not a DB
       // constraint — do not assume at most one row per animal.
       prisma.fosterPlacement.findMany({
@@ -131,6 +148,7 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
         dueDate: calendarDay(task.dueDate!),
         priority: task.priority,
       })),
+      dosesMissed,
       medicalDue,
       careUnplanned,
       fostersOverdue: fostersOverdue.map((placement) => ({
@@ -148,8 +166,9 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
 
 /**
  * `ANIMAL_INFO_READ`, `ANIMAL_TASK_READ` **and** `MEDICAL_READ`: the queue
- * returns task detail (titles, due dates, priorities) and scheduled medical
- * care next to animal identity, so a caller needs all three reads.
+ * returns task detail (titles, due dates, priorities), missed medication
+ * doses and scheduled medical care next to animal identity, so a caller needs
+ * all three reads.
  * `RequirePermission` takes a single permission — `RequireAllPermissions` is
  * the and-composition.
  *

@@ -1,6 +1,7 @@
 // How the shelter-wide dose sheet is laid out: a day's slots in sections AM,
 // Midday, PM and As needed, each grouped by where the animal is, as the Due
-// page groups. Pure functions of the rows `medication-doses.ts` reads, the
+// page groups; which days it can show; and each row as the slot controls
+// take it. Pure functions of the rows `medication-doses.ts` reads, the
 // shelter's clock and the dose times, with no Prisma import, so unit tests
 // and the page can use them.
 
@@ -12,14 +13,25 @@ import type {
   MedicationFrequency,
   Sex,
 } from "@/prisma/generated/enums";
-import type { CalendarDay, ShelterClock } from "@/app/lib/utils/shelter-day";
-import { DOSE_SLOT_LABELS, DOSE_SLOT_ORDER } from "@/app/lib/constants/medical";
+import {
+  parseCalendarDay,
+  shiftDayKey,
+  type CalendarDay,
+  type ShelterClock,
+} from "@/app/lib/utils/shelter-day";
+import {
+  DOSE_SHEET_PAST_DAYS,
+  DOSE_SLOT_LABELS,
+  DOSE_SLOT_ORDER,
+} from "@/app/lib/constants/medical";
 import {
   slotState,
   type DoseSlotEnds,
   type SlotState,
 } from "@/app/lib/utils/medication-slots";
+import { doseSlotText } from "@/app/lib/services/medication-text";
 import { GROUP_RANK, groupOf, type MedicalDuePlace } from "./medical-due-groups";
+import { givenAtText, type SlotView } from "./animals/medication-view";
 
 /** A live dose recorded on the sheet's day. */
 export interface DoseSheetDose {
@@ -56,6 +68,12 @@ export interface DoseSheetOrder {
     birthDate: string;
   };
   place: MedicalDuePlace;
+  /**
+   * Whether the order runs that day: started, not past its end day, not
+   * discontinued on or before it. An as-needed order takes a dose only then;
+   * one discontinued from that day is listed for the doses given before.
+   */
+  runs: boolean;
   /**
    * Its slots that day, in the day's order: those it expects, and any other
    * that holds a live dose (one recorded before the order was discontinued
@@ -181,4 +199,95 @@ export const doseSheetSections = (
         .map(({ group }) => ({ ...group, rows: group.rows.sort(compareRows) })),
     };
   }).filter((section) => section.groups.length > 0);
+};
+
+/**
+ * The days the dose sheet shows: today and the `DOSE_SHEET_PAST_DAYS` before
+ * it, never a day ahead. `?day=` picks one; anything else (a day out of that
+ * range, or not a day at all) shows today, and says the day asked for was
+ * refused. A param given twice takes its first value.
+ */
+export const doseSheetDay = (
+  param: string | string[] | undefined,
+  today: CalendarDay,
+): { day: CalendarDay; earliest: CalendarDay; refused: boolean } => {
+  const earliest = shiftDayKey(today, -DOSE_SHEET_PAST_DAYS);
+  const value = Array.isArray(param) ? param[0] : param;
+  if (value === undefined || value === "") return { day: today, earliest, refused: false };
+  const day = parseCalendarDay(value);
+  if (!day || day < earliest || day > today) return { day: today, earliest, refused: true };
+  return { day, earliest, refused: false };
+};
+
+/**
+ * A row as a slot's controls take it: the same shape the animal's own dose
+ * sheet gives its cells, so the sheet records doses with the same Give and
+ * menu. A slot takes a dose while it holds none (the sheet lists a slot with
+ * no dose only when the order expects it); an as-needed order while it runs.
+ * The time each dose was given is written here, on the shelter's clock.
+ */
+export const doseSheetCell = (
+  row: DoseSheetRow,
+  runs: boolean,
+  day: CalendarDay,
+  today: CalendarDay,
+  timezone: string,
+): SlotView => ({
+  key: `${row.order.id}:${day}:${row.slot ?? "PRN"}`,
+  orderId: row.order.id,
+  slotDate: day,
+  slot: row.slot,
+  // A slot holding a dose is no longer expected once the order stopped
+  // running that day (discontinued from it).
+  expected: row.slot !== null && (row.dose === null || runs),
+  state: row.state,
+  doses: row.doses.map((dose) => ({
+    id: dose.id,
+    result: dose.result,
+    reason: dose.reason,
+    notes: dose.notes,
+    givenAt: givenAtText(dose.administeredAt, day, timezone),
+    givenBy: dose.administeredByName,
+    voided: false,
+    voidedBy: null,
+    voidReason: null,
+  })),
+  voidedDoses: [],
+  recordable: day <= today && (row.slot === null ? runs : row.dose === null),
+  label: `${row.order.itemName}, ${doseSlotText({ slotDate: day, slot: row.slot })}`,
+});
+
+/** A row of the sheet with its cell, as the page renders it. */
+export interface DoseSheetViewRow extends DoseSheetRow {
+  cell: SlotView;
+}
+
+export interface DoseSheetViewGroup extends Omit<DoseSheetGroup, "rows"> {
+  rows: DoseSheetViewRow[];
+}
+
+export interface DoseSheetViewSection extends Omit<DoseSheetSection, "groups"> {
+  groups: DoseSheetViewGroup[];
+}
+
+/** The sheet for `day` as the page shows it: `doseSheetSections`, each row
+ * with its cell. */
+export const doseSheetView = (
+  orders: DoseSheetOrder[],
+  day: CalendarDay,
+  { today, clock }: { today: CalendarDay; clock: ShelterClock },
+  ends: DoseSlotEnds,
+  timezone: string,
+): DoseSheetViewSection[] => {
+  const runs = new Map(orders.map((entry) => [entry.order.id, entry.runs]));
+  return doseSheetSections(orders, day, clock, ends).map((section) => ({
+    ...section,
+    groups: section.groups.map((group) => ({
+      ...group,
+      rows: group.rows.map((row) => ({
+        ...row,
+        cell: doseSheetCell(row, runs.get(row.order.id) ?? false, day, today, timezone),
+      })),
+    })),
+  }));
 };

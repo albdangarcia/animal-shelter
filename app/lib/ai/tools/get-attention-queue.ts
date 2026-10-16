@@ -15,8 +15,8 @@ import {
   type ToolResult,
 } from "./tool-result";
 
-// All three reads: the queue puts task detail and scheduled medical care next
-// to animal identity.
+// All three reads: the queue puts task detail, missed medication doses and
+// scheduled medical care next to animal identity.
 export const GET_ATTENTION_QUEUE_PERMISSIONS = [
   AppPermissions.ANIMAL_INFO_READ,
   AppPermissions.ANIMAL_TASK_READ,
@@ -27,15 +27,17 @@ export const getAttentionQueueTool = tool({
   description:
     "List the animals that need attention today and why. Each entry carries " +
     "one or more structured reasons: an overdue or due-today task, a " +
-    "vaccine, test, treatment, surgery, microchip or exam that's due today " +
-    "or overdue, an open care episode (under vet care or hospitalised) " +
-    "with nothing scheduled and no open task, or a foster placement past " +
-    "its expected end date. Use this for questions like \"what needs attention\", " +
+    "medication dose missed yesterday or today (how many, the first one " +
+    "missed and the medications), a vaccine, test, treatment, surgery, " +
+    "microchip or exam that's due today or overdue, an open care episode " +
+    "(under vet care or hospitalised) with nothing scheduled, no medication " +
+    "order running and no open task, or a foster placement past its " +
+    "expected end date. Use this for questions like \"what needs attention\", " +
     "\"what's overdue\", or \"what should we prioritise today\". Takes no " +
     "arguments. The result is already sorted most urgent first: an animal's " +
-    "place is set by its most pressing kind of reason (a task, then medical " +
-    "care, then care with nothing planned, then a foster placement), and " +
-    "within a kind by " +
+    "place is set by its most pressing kind of reason (a task, then a " +
+    "missed dose, then medical care, then care with nothing planned, then a " +
+    "foster placement), and within a kind by " +
     "the earliest date. Report every entry, in the order given, and do not " +
     "drop or summarise any away. A task or medical reason carries " +
     "`overdue: true` when it should already have been done: say so, and never " +
