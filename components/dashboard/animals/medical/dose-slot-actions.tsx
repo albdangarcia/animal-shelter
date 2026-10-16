@@ -67,28 +67,58 @@ import { VoidReasonDialog } from "./void-reason-dialog";
 /**
  * Focus for controls that go once they've done their work: a slot's Give
  * and menu once its dose is recorded, a dose's Void once it is voided. The
- * slot's cell stays, so focus goes there: when the save lands, and when the
- * controls leave while focus was on them or in their dialog (the update can
- * arrive before the dialog has closed). A dialog closed without saving hands
- * focus back to the control that opened it.
+ * slot's cell stays, so focus goes there: when the save lands (unless the
+ * person moved focus elsewhere while it was out), and when the controls
+ * leave while focus was on them, in their dialog (the update can arrive
+ * before the dialog has closed) or elsewhere in the cell. A dialog closed without saving hands focus
+ * back to the control that opened it.
+ *
+ * Focus lost to the page (a button disabled while its save is out drops it)
+ * is handed to the cell only once the controls were used. In development
+ * React mounts each component twice, running the cleanup on load, when
+ * nothing has focus yet: without that check every page load would move focus
+ * to the first open slot and scroll the page to it.
  */
 function useSlotFocus(cellId: string | undefined) {
   const rootId = useId();
   const dialogId = useId();
   const saved = useRef(false);
+  const used = useRef(false);
   const focusCell = () => {
     if (cellId) document.getElementById(cellId)?.focus();
   };
   useLayoutEffect(
     () => () => {
       const active = document.activeElement;
+      const cell = cellId ? document.getElementById(cellId) : null;
       const ours = [rootId, dialogId].some((id) => document.getElementById(id)?.contains(active));
-      if (cellId && (!active || active === document.body || ours)) {
-        document.getElementById(cellId)?.focus();
-      }
+      // Elsewhere in the cell, such as the sheet row's checkbox: a slot that
+      // takes no more doses loses it along with the controls.
+      const inCell = !!cell && cell !== active && cell.contains(active);
+      const lost = !active || active === document.body;
+      if (cell && (ours || inCell || (used.current && lost))) cell.focus();
     },
     [cellId, rootId, dialogId],
   );
+  /** Marks the controls used: a save started, or a dialog opened. */
+  const markUsed = () => {
+    used.current = true;
+  };
+  /** After a save from the controls themselves (not a dialog) lands: focus
+   * it dropped, or focus still on them, goes to the cell. Focus the person
+   * moved elsewhere while it was out stays there. */
+  const handBack = () => {
+    const active = document.activeElement;
+    const ours = document.getElementById(rootId)?.contains(active);
+    if (!active || active === document.body || ours) focusCell();
+  };
+  /** After such a save was refused: focus goes back as `handBack` says, and
+   * the controls count as unused again, so a later update that takes them
+   * away leaves focus alone. */
+  const settleRefused = () => {
+    handBack();
+    used.current = false;
+  };
   /** Marks the dialog's work done, so it hands focus to the cell. */
   const markSaved = () => {
     saved.current = true;
@@ -98,10 +128,13 @@ function useSlotFocus(cellId: string | undefined) {
   const returnFocus = (trigger: HTMLElement | null) => (event: Event) => {
     event.preventDefault();
     if (saved.current || !trigger?.isConnected) focusCell();
-    else trigger.focus();
+    else {
+      trigger.focus();
+      used.current = false;
+    }
     saved.current = false;
   };
-  return { rootId, dialogId, markSaved, focusCell, returnFocus };
+  return { rootId, dialogId, markUsed, markSaved, handBack, settleRefused, returnFocus };
 }
 
 /** What the viewer may do with doses, and the shelter's time when the page
@@ -378,8 +411,13 @@ export function DoseSlotActions({
     );
   const focus = useSlotFocus(fallbackId);
   const menuRef = useRef<HTMLButtonElement>(null);
+  const openForm = (next: DoseMode) => {
+    focus.markUsed();
+    setMode(next);
+  };
 
   const onGive = () => {
+    focus.markUsed();
     startGiving(async () => {
       const result = await recordMedicationDose(
         slot.orderId,
@@ -388,10 +426,11 @@ export function DoseSlotActions({
       );
       if (result.ok) {
         toast.success(result.message);
-        focus.focusCell();
+        focus.handBack();
         return;
       }
       toast.error(result.message);
+      focus.settleRefused();
       // The slot was taken, or the order changed, since the page was read.
       router.refresh();
     });
@@ -425,9 +464,9 @@ export function DoseSlotActions({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setMode("REFUSED")}>Refused…</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setMode("NOT_GIVEN")}>Not given…</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => setMode("DETAILS")}>
+          <DropdownMenuItem onSelect={() => openForm("REFUSED")}>Refused…</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openForm("NOT_GIVEN")}>Not given…</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => openForm("DETAILS")}>
             Record with details…
           </DropdownMenuItem>
         </DropdownMenuContent>
@@ -501,7 +540,10 @@ export function VoidDoseButton({
         size="icon"
         variant="ghost"
         className="h-7 w-7 shrink-0"
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          focus.markUsed();
+          setIsOpen(true);
+        }}
         aria-label={`Void ${label}, ${doseWhen(dose)}`}
       >
         <Ban className="h-3.5 w-3.5 text-muted-foreground" />
