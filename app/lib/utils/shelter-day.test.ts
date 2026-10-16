@@ -13,6 +13,7 @@ import {
   shelterToday as rawShelterToday,
   shelterDaysBetween as rawShelterDaysBetween,
   shelterClock,
+  shelterInstant,
   shelterNow,
   shelterDaysBetweenKeys,
   shiftDayKey,
@@ -321,4 +322,35 @@ test("one reading of the shelter's time gives today and the clock from the same 
     assert.equal(reading.today, reading.clock.day);
     assert.equal(reading.today, rawShelterToday("America/New_York", now));
   }
+});
+
+test("a day and a time on the shelter's clock is the instant the clock reads them", () => {
+  const day = calendarDay("2026-10-15");
+  assert.equal(shelterInstant(day, "08:12", "America/New_York").toISOString(), "2026-10-15T12:12:00.000Z");
+  assert.equal(shelterInstant(day, "00:00", "America/New_York").toISOString(), "2026-10-15T04:00:00.000Z");
+  assert.equal(shelterInstant(day, "23:59", "America/New_York").toISOString(), "2026-10-16T03:59:00.000Z");
+  // East of UTC the instant is on the day before UTC's.
+  assert.equal(shelterInstant(day, "05:00", "Asia/Tokyo").toISOString(), "2026-10-14T20:00:00.000Z");
+  // Read back, it is the same day and time.
+  const at = shelterInstant(day, "19:45", "America/Los_Angeles");
+  assert.deepEqual(shelterClock(at, "America/Los_Angeles"), { day, time: "19:45" });
+});
+
+test("a skipped time reads as the jump's landing, a repeated one as the first", () => {
+  // New York springs forward at 02:00 on Mar 8, 2026: 02:30 never happens,
+  // and the clock reads 03:00 at 07:00Z.
+  const spring = calendarDay("2026-03-08");
+  assert.equal(shelterInstant(spring, "02:30", "America/New_York").toISOString(), "2026-03-08T07:00:00.000Z");
+  assert.equal(shelterInstant(spring, "01:59", "America/New_York").toISOString(), "2026-03-08T06:59:00.000Z");
+  assert.equal(shelterInstant(spring, "03:00", "America/New_York").toISOString(), "2026-03-08T07:00:00.000Z");
+  // And falls back at 02:00 on Nov 1, 2026: 01:30 comes at 05:30Z and 06:30Z.
+  const fall = calendarDay("2026-11-01");
+  assert.equal(shelterInstant(fall, "01:30", "America/New_York").toISOString(), "2026-11-01T05:30:00.000Z");
+  assert.equal(shelterInstant(fall, "02:30", "America/New_York").toISOString(), "2026-11-01T07:30:00.000Z");
+  // A midnight the clock skips is when the day begins.
+  const santiago = calendarDay("2026-09-06");
+  assert.equal(
+    shelterInstant(santiago, "00:00", "America/Santiago").toISOString(),
+    rawStartOfShelterDay(santiago, "America/Santiago").toISOString(),
+  );
 });

@@ -94,16 +94,22 @@ const slotRank = (slot: DoseSlot | null) =>
   slot === null ? DOSE_SLOT_ORDER.length : DOSE_SLOT_ORDER.indexOf(slot);
 
 /**
- * Every medication order of the animal, voided ones included, with its audit
- * trail and its doses from `fromDay` through `toDay`, live and voided.
+ * Every medication order of the animal, voided ones included, or those of
+ * `orderIds`, with its audit trail and its doses from `fromDay` through
+ * `toDay`, live and voided. A day left out leaves that end of the range
+ * open: with neither, every dose.
  */
 export const findAnimalMedications = async (
   db: Db,
   animalId: string,
-  { fromDay, toDay }: { fromDay: CalendarDay; toDay: CalendarDay },
+  {
+    fromDay,
+    toDay,
+    orderIds,
+  }: { fromDay?: CalendarDay; toDay?: CalendarDay; orderIds?: readonly string[] } = {},
 ): Promise<AnimalMedications> => {
   const rows = await db.medicationOrder.findMany({
-    where: { animalId },
+    where: { animalId, ...(orderIds && { id: { in: [...orderIds] } }) },
     orderBy: [{ startDate: "desc" }, { createdAt: "desc" }, { id: "desc" }],
     select: {
       id: true,
@@ -129,9 +135,9 @@ export const findAnimalMedications = async (
       item: { select: { name: true } },
     },
   });
-  const orderIds = rows.map((row) => row.id);
+  const ids = rows.map((row) => row.id);
   const events = await db.medicationOrderEvent.findMany({
-    where: { orderId: { in: orderIds } },
+    where: { orderId: { in: ids } },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: {
       id: true,
@@ -144,7 +150,10 @@ export const findAnimalMedications = async (
     },
   });
   const doses = await db.medicationDose.findMany({
-    where: { orderId: { in: orderIds }, slotDate: { gte: fromDay, lte: toDay } },
+    where: {
+      orderId: { in: ids },
+      ...((fromDay || toDay) && { slotDate: { gte: fromDay, lte: toDay } }),
+    },
     orderBy: [{ slotDate: "asc" }, { createdAt: "asc" }, { id: "asc" }],
     select: {
       id: true,

@@ -2,8 +2,13 @@
 // call them. `medical-catalog.data.ts` wraps them behind their permissions.
 
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
-import { MedicalItemKind, PartnerType } from "@/prisma/generated/enums";
+import {
+  AnimalListingStatus,
+  MedicalItemKind,
+  PartnerType,
+} from "@/prisma/generated/enums";
 import { CATALOG_ENTRY_KINDS } from "@/app/lib/constants/medical";
+import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import { findOpenScheduledEntryIdsByItem } from "./animals/medical-entry";
 
 type Db = TransactionClient | typeof prisma;
@@ -189,3 +194,40 @@ export const findMedicalCatalog = (db: Db) =>
 export type MedicalCatalogItem = Awaited<
   ReturnType<typeof findMedicalCatalog>
 >[number];
+
+/** What the order form offers for one animal. */
+export interface MedicationOrderChoices {
+  /** The medications it can be ordered: live, for every species or its own,
+   * each with its default route, dose and unit. */
+  medications: PickableMedicalItem[];
+  /** An order can't start before it. */
+  latestIntakeDate: CalendarDay | null;
+  /** An animal that has left care can't be ordered anything. */
+  inCare: boolean;
+}
+
+/**
+ * What the medication order form offers for one animal: the medications it
+ * can be ordered, its latest intake (no order starts before it), and whether
+ * it is still in care.
+ */
+export const findMedicationOrderChoices = async (
+  db: Db,
+  animalId: string,
+): Promise<MedicationOrderChoices> => {
+  const animal = await db.animal.findUniqueOrThrow({
+    where: { id: animalId },
+    select: { speciesId: true, listingStatus: true, intake: { select: { intakeDate: true } } },
+  });
+  const medications = await findPickableMedicalItems(
+    db,
+    animal.speciesId,
+    MedicalItemKind.MEDICATION,
+  );
+  return {
+    medications,
+    latestIntakeDate:
+      animal.intake.map((intake) => calendarDay(intake.intakeDate)).sort().at(-1) ?? null,
+    inCare: animal.listingStatus !== AnimalListingStatus.ARCHIVED,
+  };
+};

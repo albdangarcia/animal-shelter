@@ -26,7 +26,9 @@ import { openEpisodeText, type CareStatus } from "@/app/lib/utils/care-status";
 import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { formatWeight } from "@/app/lib/utils/weight-format";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
+import type { TodaysDoses } from "@/app/lib/data/animals/medication.data";
 import { MedicalEntryList } from "./medical-entry-list";
+import { DoseSlotCell, doseControlsOf } from "./dose-sheet";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
 import { DUE_HEADING_ID } from "./use-entry-dialog-focus";
 
@@ -130,14 +132,62 @@ const dueRows = (overview: MedicalOverviewData) => {
     : [...dueEntries.slice(0, at), reviewEntry, ...dueEntries.slice(at)];
 };
 
+/**
+ * Each order's slots today, with their state and Give, and an active
+ * as-needed order's day. Shown only when an order expects a dose today or
+ * one as needed is active.
+ */
+function TodaysDosesSection({
+  doses,
+  controls,
+  href,
+}: {
+  doses: TodaysDoses;
+  controls: MedicalControls | null;
+  href: string;
+}) {
+  const doseControls = doseControlsOf(controls, doses.today, doses.time);
+  return (
+    <section aria-labelledby="todays-doses" className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 id="todays-doses" className="font-medium">
+          Today&apos;s doses
+        </h3>
+        <Link href={href} className="text-sm underline underline-offset-4">
+          Medications
+        </Link>
+      </div>
+      <ul className="space-y-3">
+        {doses.rows.map(({ summary, slots }) => (
+          <li key={summary.order.id} className="space-y-2 rounded-lg border p-3">
+            <p className="text-sm font-semibold">{summary.line}</p>
+            {summary.order.instructions && (
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                {summary.order.instructions}
+              </p>
+            )}
+            <ul className="grid gap-2 sm:grid-cols-3">
+              {slots.map((slot) => (
+                <DoseSlotCell key={slot.key} slot={slot} controls={doseControls} showSlotName />
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 interface Props {
   animalId: string;
   overview: MedicalOverviewData;
+  /** Null when no order expects a dose today and none as needed is active. */
+  todaysDoses: TodaysDoses | null;
   unitSystem: WeightUnitSystem;
   controls: MedicalControls | null;
 }
 
-const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) => {
+const MedicalOverview = ({ animalId, overview, todaysDoses, unitSystem, controls }: Props) => {
   const base = `/dashboard/animals/${animalId}/medical`;
   const {
     rabies,
@@ -159,8 +209,9 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
         <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
         <CardDescription>
           Vaccines, tests, treatments, surgeries, microchips and exams: what
-          is due, and what this animal has been given. Its conditions and
-          care episodes are on Conditions.
+          is due, and what this animal has been given, and today&apos;s
+          medication doses. Its orders are on Medications, its conditions and
+          care episodes on Conditions.
         </CardDescription>
         {controls?.canManage && (
           <CardAction>
@@ -268,6 +319,14 @@ const MedicalOverview = ({ animalId, overview, unitSystem, controls }: Props) =>
             </p>
           )}
         </section>
+
+        {todaysDoses && (
+          <TodaysDosesSection
+            doses={todaysDoses}
+            controls={controls}
+            href={`${base}/medications`}
+          />
+        )}
 
         <section aria-labelledby="recent-medical-entries" className="space-y-3">
           <div className="flex items-center justify-between">

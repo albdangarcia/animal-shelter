@@ -13,6 +13,9 @@ import {
   DoseSlot,
   DoseUnit,
   IntakeType,
+  MedicalConditionStatus,
+  MedicalConditionType,
+  MedicalEntryKind,
   MedicalItemKind,
   MedicalRoute,
   MedicationDoseResult,
@@ -35,6 +38,8 @@ import {
   type MedicationOrderInput,
 } from "@/app/lib/services/medication-order";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
+import { findMedicalHistoryPage } from "@/app/lib/data/animals/medical-entry";
+import type { MedicalHistoryKind } from "@/app/lib/zod-schemas/medical-entry.schemas";
 import { ConflictError } from "@/app/lib/utils/errors";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 
@@ -779,6 +784,70 @@ test("an animal that left can still have its order corrected, discontinued and v
   await edit(first.orderId, { instructions: "With food." });
   await discontinue(first.orderId, { day: TODAY, reason: "Left the shelter" });
   await voidIt(second.orderId, "Recorded on the wrong animal");
+});
+
+test("History lists an order by its start day, voided ones too, and filters to orders", async () => {
+  const animalId = await makeAnimal("History");
+  const { orderId: course } = await create(orderOf(animalId, { startDate: day("2026-10-12") }));
+  const { orderId: earlier } = await create(
+    // Its end, after the condition's onset, would put it above the
+    // condition: History goes by the start.
+    orderOf(animalId, { frequency: SID, startDate: day("2026-09-20"), endDate: day("2026-10-05") }),
+  );
+  await voidIt(earlier, "Wrong animal");
+  // A condition with its onset between the two orders' starts.
+  const { id: conditionId } = await prisma.medicalCondition.create({
+    data: {
+      animalId,
+      type: MedicalConditionType.CONDITION,
+      name: "Skin infection",
+      status: MedicalConditionStatus.ACTIVE,
+      onsetDate: "2026-10-01",
+      createdById: staffId,
+    },
+    select: { id: true },
+  });
+
+  const page = (kinds: MedicalHistoryKind[], pageNumber = 1, perPage = 10) =>
+    findMedicalHistoryPage(prisma, animalId, {
+      kinds,
+      page: pageNumber,
+      perPage,
+      timeZone: "UTC",
+    });
+  const ids = (result: Awaited<ReturnType<typeof page>>) =>
+    result.items.map((item) => [item.source, item.id]);
+
+  assert.deepEqual(ids(await page([])), [
+    ["ORDER", course],
+    ["CONDITION", conditionId],
+    ["ORDER", earlier],
+  ]);
+  // Paged across the tables, the orders counted.
+  const first = await page([], 1, 2);
+  assert.equal(first.totalPages, 2);
+  assert.deepEqual(ids(await page([], 2, 2)), [["ORDER", earlier]]);
+  // The Medication filter: orders alone, or beside another kind.
+  assert.deepEqual(ids(await page(["MEDICATION"])), [
+    ["ORDER", course],
+    ["ORDER", earlier],
+  ]);
+  assert.deepEqual(ids(await page(["CONDITION"])), [["CONDITION", conditionId]]);
+  assert.deepEqual(ids(await page([MedicalEntryKind.VACCINE])), []);
+
+  // Each order row carries what its row shows, and the names its history needs.
+  const result = await page(["MEDICATION"]);
+  const [courseRow, earlierRow] = result.items;
+  assert.ok(courseRow.source === "ORDER" && earlierRow.source === "ORDER");
+  assert.equal(courseRow.order.itemName, doxy);
+  assert.deepEqual(
+    courseRow.order.events.map((event) => event.action),
+    [MedicationOrderEventAction.CREATED],
+  );
+  assert.equal(earlierRow.order.slotOrder.voided, true);
+  assert.equal(earlierRow.order.voidReason, "Wrong animal");
+  assert.equal(result.orderNames[staffId], name("Orders staff"));
+  assert.equal(result.orderNames[editorId], name("Orders editor"));
 });
 
 test("a correction made while a dose is being written waits for it, then sees it", async () => {

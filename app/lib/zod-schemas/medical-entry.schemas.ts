@@ -98,8 +98,9 @@ export const medicalEntryKindsParam = z
     ),
   ]);
 
-/** What History lists besides entries: problem-list rows and care episodes. */
-export const MEDICAL_HISTORY_RECORD_KINDS = ["CONDITION", "CARE_EPISODE"] as const;
+/** What History lists besides entries: problem-list rows, care episodes and
+ * medication orders. */
+export const MEDICAL_HISTORY_RECORD_KINDS = ["CONDITION", "CARE_EPISODE", "MEDICATION"] as const;
 
 /** A value of History's kind filter: an entry kind, or one of the records
  * History lists beside entries. */
@@ -114,8 +115,8 @@ const MEDICAL_HISTORY_KINDS: readonly string[] = [
 
 /**
  * History's kind filter, read from the URL as `medicalEntryKindsParam` reads
- * it: the entry kinds, plus CONDITION and CARE_EPISODE. None means every
- * kind of record.
+ * it: the entry kinds, plus CONDITION, CARE_EPISODE and MEDICATION. None
+ * means every kind of record.
  */
 export const medicalHistoryKindsParam = z
   .union([z.string(), z.array(z.string())])

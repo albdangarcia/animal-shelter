@@ -218,6 +218,43 @@ export const startOfShelterDay = (day: CalendarDay, timezone: string): Date => {
   return new Date(to);
 };
 
+/**
+ * The instant the shelter's clock reads `time` (`"HH:mm"`) on `day`: when a
+ * dose was given, entered as a day and a time of day. A time the clock
+ * skipped (the hour it springs forward over) reads as the moment the jump
+ * lands; a time it read twice (the hour it falls back over), as the first.
+ */
+export const shelterInstant = (day: CalendarDay, time: string, timezone: string): Date => {
+  // The wall clock as if it were UTC, and how far the clock is from UTC at an
+  // instant, read off the clock itself.
+  const target = Date.parse(`${day}T${time}:00Z`);
+  const offsetAt = (at: number) => wallClockAsUtc(at, timezone) - at;
+  // The offsets in force within a day either side: a clock changes far less
+  // often than that, so these are the one or two it could read the time at.
+  const candidates = [
+    ...new Set([
+      offsetAt(target - MS_PER_DAY),
+      offsetAt(target),
+      offsetAt(target + MS_PER_DAY),
+    ]),
+  ]
+    .map((offset) => target - offset)
+    .sort((a, b) => a - b);
+  const reading = candidates.find((at) => wallClockAsUtc(at, timezone) === target);
+  if (reading !== undefined) return new Date(reading);
+  // Skipped: before the jump the clock is short of the time, after it past
+  // it. The jump is the first instant at the later offset.
+  let before = candidates[0];
+  let after = candidates[candidates.length - 1];
+  const offsetBefore = offsetAt(before);
+  while (after - before > 1) {
+    const middle = before + Math.floor((after - before) / 2);
+    if (offsetAt(middle) === offsetBefore) before = middle;
+    else after = middle;
+  }
+  return new Date(after);
+};
+
 /** A time of day, `"HH:mm"`, as it reads on a page: "8:00 PM", "12:30 AM". */
 export const formatTimeOfDay = (time: string): string => {
   const [hour, minute] = time.split(":").map(Number);

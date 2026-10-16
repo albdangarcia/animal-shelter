@@ -263,6 +263,7 @@ export function OptionalSelectField<TValues extends FieldValues>({
   noneLabel,
   options,
   required = false,
+  disabled = false,
 }: {
   control: Control<TValues>;
   name: Path<TValues>;
@@ -271,6 +272,9 @@ export function OptionalSelectField<TValues extends FieldValues>({
   options: { value: string; label: string }[];
   /** Marks the label required; the schema still decides. */
   required?: boolean;
+  /** A disabled fieldset doesn't stop a Radix select from opening, so a
+   * form saving says so here too. */
+  disabled?: boolean;
 }) {
   return (
     <FormField
@@ -285,6 +289,7 @@ export function OptionalSelectField<TValues extends FieldValues>({
             onValueChange={(value) => field.onChange(value === NONE ? null : value)}
             value={field.value ?? NONE}
             name={field.name}
+            disabled={disabled}
           >
             <FormControl>
               <SelectTrigger className="w-full" id={name}>

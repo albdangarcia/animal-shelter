@@ -17,6 +17,11 @@ export const DUE_HEADING_ID = "due-medical-entries";
 export const PROBLEM_LIST_HEADING_ID = "problem-list";
 export const CARE_EPISODES_HEADING_ID = "care-episodes";
 
+/** The Medications page's headings, where focus goes when an order's menu
+ * goes: after a discontinue or a void moves the order. */
+export const CURRENT_MEDICATIONS_HEADING_ID = "current-medications";
+export const PAST_MEDICATIONS_HEADING_ID = "past-medications";
+
 // Where focus goes when the control a dialog opened from is gone: the given
 // element, or Add entry, or the due list's heading.
 const focusFallback = (fallbackId?: string) =>

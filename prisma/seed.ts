@@ -39,6 +39,7 @@ import {
   ExamFindingStatus,
   ExamResult,
   ExamType,
+  DoseSlot,
   MedicalConditionStatus,
   MedicalConditionType,
   MedicalEntryKind,
@@ -47,6 +48,8 @@ import {
   MedicalItemKind,
   MedicalProtocolStepKind,
   MedicalRoute,
+  MedicationDoseResult,
+  MedicationFrequency,
   ReproductiveStatus,
   SpayNeuterExemptionReason,
   SurgeryEvidence,
@@ -65,6 +68,7 @@ import {
   shelterDayKey,
   shelterDaysBetweenKeys,
   shelterToday,
+  shelterInstant,
   shiftDayKey,
   startOfShelterDay,
   type CalendarDay,
@@ -105,6 +109,13 @@ import {
   type MedicalProtocolInput,
 } from "@/app/lib/services/medical-protocol";
 import { applyIntakeProtocol } from "@/app/lib/services/medical-protocol-application";
+import {
+  createMedicationOrder,
+  discontinueMedicationOrder,
+  voidMedicationOrder,
+  type MedicationOrderInput,
+} from "@/app/lib/services/medication-order";
+import { recordMedicationDose, voidMedicationDose } from "@/app/lib/services/medication-dose";
 import { ALTERED_ENTRY_WHERE } from "@/app/lib/data/animals/medical-status";
 import { recordOutcome } from "@/app/lib/services/outcome-recording";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
@@ -7968,6 +7979,301 @@ async function seedMedicalProtocols() {
   );
 }
 
+// Medications in the catalog, and fixed medication orders and doses on four
+// hand-authored animals in care, none in a foster placement: a course with
+// a refused dose and a missed slot after a voided order (Fido), a short
+// course and an as-needed one (Rusty), a dose voided and recorded again and
+// a course discontinued with a dose not given (Daisy), and a course every
+// few days, over (Whiskers). Rocket and Marigold, under care with nothing
+// planned, get none. Through the catalog, order and dose services as Olivia,
+// with no random draws; their medications are created here rather than in
+// the catalog defaults, so every earlier draw is what it was. Days are
+// offsets from today kept inside each stay, and past doses are given at a
+// fixed time on their day's clock. Today's slots are never recorded, so
+// nothing depends on the time of day the seed ran.
+async function seedMedications() {
+  console.log("Seeding medications...");
+
+  const now = new Date();
+  const today = shelterToday(seedTimezone, now);
+  const olivia = await prisma.person.findFirst({
+    where: { user: { email: "staff1@example.com" } },
+  });
+  if (!olivia) throw new Error("seedMedications: staff fixtures not found.");
+
+  const medications = [
+    { name: "Amoxicillin-clavulanate", defaultDoseUnit: DoseUnit.TABLET },
+    { name: "Doxycycline", defaultDoseUnit: DoseUnit.MG },
+    { name: "Meloxicam", defaultDoseUnit: DoseUnit.ML },
+    { name: "Gabapentin", defaultDoseUnit: DoseUnit.CAPSULE },
+    { name: "Metronidazole", defaultDoseUnit: DoseUnit.MG },
+    { name: "Prednisolone", defaultDoseUnit: DoseUnit.MG },
+    { name: "Amoxicillin drops (old stock)", defaultDoseUnit: DoseUnit.ML, retired: true },
+  ];
+  const itemIds = new Map<string, string>();
+  for (const { retired, ...item } of medications) {
+    await prisma.$transaction(async (tx) => {
+      const { id } = await createMedicalItem(tx, {
+        kind: MedicalItemKind.MEDICATION,
+        defaultRoute: MedicalRoute.ORAL,
+        speciesIds: [],
+        analytes: [],
+        ...item,
+      });
+      if (retired) await retireMedicalItem(tx, id);
+      itemIds.set(item.name, id);
+    });
+  }
+  const medication = (name: string) => itemIds.get(name)!;
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        listingStatus: true,
+        intake: { select: { intakeDate: true } },
+        fosterPlacements: { where: { endDate: null }, select: { id: true } },
+      },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(`seedMedications: ${name} was not seeded with an intake.`);
+    }
+    if (row.listingStatus === AnimalListingStatus.ARCHIVED || row.fosterPlacements.length > 0) {
+      throw new Error(`seedMedications: ${name} must be in the shelter's care, not in a foster placement.`);
+    }
+    const latestIntake = row.intake.map((intake) => calendarDay(intake.intakeDate)).sort().at(-1)!;
+    return { id: row.id, latestIntake };
+  };
+  const openEpisodeStart = async (animalId: string, name: string) => {
+    const episode = await prisma.careEpisode.findFirst({
+      where: { animalId, endDate: null, voidedAt: null },
+      select: { startDate: true },
+    });
+    if (!episode) throw new Error(`seedMedications: ${name}'s open care episode was not seeded.`);
+    return calendarDay(episode.startDate);
+  };
+  // A day `daysAgo` days before today, never before the current stay.
+  const sinceDaysAgo = (subject: { latestIntake: CalendarDay }, daysAgo: number) => {
+    const day = shiftDayKey(today, -daysAgo);
+    return day < subject.latestIntake ? subject.latestIntake : day;
+  };
+  const daysFrom = (from: CalendarDay, to: CalendarDay) => {
+    const days: CalendarDay[] = [];
+    for (let day = from; day <= to; day = shiftDayKey(day, 1)) days.push(day);
+    return days;
+  };
+  const yesterday = shiftDayKey(today, -1);
+
+  const write = <T,>(fn: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<T>) =>
+    prisma.$transaction(fn, { timeout: 30_000 });
+  const order = (input: MedicationOrderInput) =>
+    write((tx) => createMedicationOrder(tx, input, olivia.id, today)).then((o) => o.orderId);
+  // Past doses only, at a fixed time on their day's clock: before the AM
+  // slot ends, at midday, in the evening.
+  const TIME: Record<DoseSlot, string> = { AM: "08:00", MIDDAY: "12:30", PM: "18:00" };
+  const dose = (
+    orderId: string,
+    slotDate: CalendarDay,
+    slot: DoseSlot | null,
+    result: MedicationDoseResult = MedicationDoseResult.GIVEN,
+    reason?: string,
+  ) => {
+    if (slotDate >= today) throw new Error("seedMedications: today's slots are left unrecorded.");
+    return write((tx) =>
+      recordMedicationDose(
+        tx,
+        {
+          orderId,
+          slotDate,
+          slot,
+          result,
+          reason,
+          administeredAt: shelterInstant(slotDate, slot ? TIME[slot] : "14:00", seedTimezone),
+        },
+        olivia.id,
+        today,
+        now,
+      ),
+    );
+  };
+
+  // --- Fido: doxycycline for his heartworm treatment ----------------------
+  const fido = await animal("Fido");
+  const fidoStart = await openEpisodeStart(fido.id, "Fido");
+  const doxycycline = {
+    animalId: fido.id,
+    itemId: medication("Doxycycline"),
+    doseUnit: DoseUnit.MG,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.BID,
+    startDate: fidoStart,
+    firstSlot: DoseSlot.AM,
+    endDate: shiftDayKey(fidoStart, 29),
+    prescribedBy: "Downtown Veterinary Clinic",
+  };
+  const wrongDose = await order({ ...doxycycline, doseAmount: 50 });
+  await write((tx) =>
+    voidMedicationOrder(tx, wrongDose, "Wrong dose: the vet ordered 100 mg", olivia.id),
+  );
+  const fidoCourse = await order({
+    ...doxycycline,
+    doseAmount: 100,
+    instructions: "With food, to spare his stomach. Keep him rested.",
+  });
+  const twoDaysAgo = shiftDayKey(today, -2);
+  for (const day of daysFrom(fidoStart, yesterday)) {
+    await dose(fidoCourse, day, DoseSlot.AM);
+    if (day === twoDaysAgo) {
+      await dose(fidoCourse, day, DoseSlot.PM, MedicationDoseResult.REFUSED, "Spat it out");
+    } else if (day !== yesterday) {
+      // Yesterday's PM is left missed.
+      await dose(fidoCourse, day, DoseSlot.PM);
+    }
+  }
+
+  // --- Rusty: pain relief after his mass removal --------------------------
+  const rusty = await animal("Rusty");
+  const surgery = await prisma.medicalEntry.findFirst({
+    where: {
+      animalId: rusty.id,
+      kind: MedicalEntryKind.SURGERY,
+      procedure: SurgeryProcedure.MASS_REMOVAL,
+      status: MedicalEntryStatus.COMPLETED,
+      voidedAt: null,
+    },
+    select: { completedDate: true },
+  });
+  if (!surgery?.completedDate) {
+    throw new Error("seedMedications: Rusty's mass removal was not seeded.");
+  }
+  const surgeryDay = calendarDay(surgery.completedDate);
+  const meloxicamStart = shiftDayKey(surgeryDay, 1);
+  const meloxicam = await order({
+    animalId: rusty.id,
+    itemId: medication("Meloxicam"),
+    doseAmount: 0.5,
+    doseUnit: DoseUnit.ML,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.SID,
+    startDate: meloxicamStart,
+    firstSlot: DoseSlot.AM,
+    endDate: shiftDayKey(meloxicamStart, 6),
+    instructions: "With food.",
+  });
+  for (const day of daysFrom(meloxicamStart, yesterday)) {
+    await dose(meloxicam, day, DoseSlot.AM);
+  }
+  const gabapentin = await order({
+    animalId: rusty.id,
+    itemId: medication("Gabapentin"),
+    doseAmount: 1,
+    doseUnit: DoseUnit.CAPSULE,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.PRN,
+    startDate: surgeryDay,
+    instructions: "100 mg capsules, for pain: at most one every 8 hours.",
+  });
+  await dose(gabapentin, sinceDaysAgo(rusty, 2), null);
+
+  // --- Daisy: after her dental --------------------------------------------
+  const daisy = await animal("Daisy");
+  const daisyStart = await openEpisodeStart(daisy.id, "Daisy");
+  const amoxicillin = await order({
+    animalId: daisy.id,
+    itemId: medication("Amoxicillin-clavulanate"),
+    doseAmount: 62.5,
+    doseUnit: DoseUnit.MG,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.BID,
+    startDate: daisyStart,
+    firstSlot: DoseSlot.AM,
+    endDate: shiftDayKey(daisyStart, 9),
+    instructions: "With a small meal.",
+    prescribedBy: "Downtown Veterinary Clinic",
+  });
+  const recordedTwice = shiftDayKey(daisyStart, 1);
+  for (const day of daysFrom(daisyStart, yesterday)) {
+    const am = await dose(amoxicillin, day, DoseSlot.AM);
+    if (day === recordedTwice) {
+      await write((tx) =>
+        voidMedicationDose(tx, am.doseId, "Recorded on the wrong day", olivia.id),
+      );
+      await dose(amoxicillin, day, DoseSlot.AM);
+    }
+    await dose(amoxicillin, day, DoseSlot.PM);
+  }
+  const metronidazoleStart = sinceDaysAgo(daisy, 4);
+  const metronidazole = await order({
+    animalId: daisy.id,
+    itemId: medication("Metronidazole"),
+    doseAmount: 250,
+    doseUnit: DoseUnit.MG,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.TID,
+    startDate: metronidazoleStart,
+    firstSlot: DoseSlot.AM,
+    endDate: shiftDayKey(metronidazoleStart, 6),
+  });
+  const notGivenDay = shiftDayKey(metronidazoleStart, 1);
+  for (const day of daysFrom(metronidazoleStart, shiftDayKey(yesterday, -1))) {
+    await dose(metronidazole, day, DoseSlot.AM);
+    if (day === notGivenDay) {
+      await dose(
+        metronidazole,
+        day,
+        DoseSlot.MIDDAY,
+        MedicationDoseResult.NOT_GIVEN,
+        "Out of stock until the afternoon delivery",
+      );
+    } else {
+      await dose(metronidazole, day, DoseSlot.MIDDAY);
+    }
+    await dose(metronidazole, day, DoseSlot.PM);
+  }
+  await write((tx) =>
+    discontinueMedicationOrder(
+      tx,
+      metronidazole,
+      { day: yesterday, reason: "Stools normal again" },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- Whiskers: a short course of prednisolone, over ---------------------
+  const whiskers = await animal("Whiskers");
+  const prednisoloneEnd = shiftDayKey(today, -7);
+  const prednisoloneStart = shiftDayKey(prednisoloneEnd, -6);
+  if (prednisoloneStart < whiskers.latestIntake) {
+    throw new Error("seedMedications: Whiskers' course would start before her stay.");
+  }
+  const prednisolone = await order({
+    animalId: whiskers.id,
+    itemId: medication("Prednisolone"),
+    doseAmount: 5,
+    doseUnit: DoseUnit.MG,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.EVERY_N_DAYS,
+    intervalDays: 2,
+    startDate: prednisoloneStart,
+    firstSlot: DoseSlot.AM,
+    endDate: prednisoloneEnd,
+  });
+  for (let day = prednisoloneStart; day <= prednisoloneEnd; day = shiftDayKey(day, 2)) {
+    await dose(prednisolone, day, DoseSlot.AM);
+  }
+
+  const [orders, doses] = await Promise.all([
+    prisma.medicationOrder.count(),
+    prisma.medicationDose.count({ where: { voidedAt: null } }),
+  ]);
+  console.log(
+    `Seeded ${medications.length} medications (1 retired), ${orders} medication orders and ${doses} doses on Fido, Rusty, Daisy and Whiskers.`,
+  );
+}
+
 let seedTimezone = fallbackShelterSettings().timezone;
 
 export async function main() {
@@ -8037,6 +8343,7 @@ async function seedAll() {
   await seedExamFixtures();
   await seedCareFixtures();
   await seedMedicalProtocols();
+  await seedMedications();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

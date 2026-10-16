@@ -35,8 +35,9 @@ export const MedicalOverviewSkeleton = () => (
       <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
       <CardDescription>
         Vaccines, tests, treatments, surgeries, microchips and exams: what
-        is due, and what this animal has been given. Its conditions and
-        care episodes are on Conditions.
+        is due, and what this animal has been given, and today&apos;s
+        medication doses. Its orders are on Medications, its conditions and
+        care episodes on Conditions.
       </CardDescription>
     </CardHeader>
     <CardContent className="space-y-6">
@@ -65,10 +66,10 @@ export const MedicalHistorySkeleton = () => (
     <CardHeader>
       <CardTitle className="@[650px]/card:text-xl">History</CardTitle>
       <CardDescription>
-        Every entry, condition and care episode, newest first by the day
-        given or due, the onset or the start, so care still to come is at the
-        top. Voided ones stay here, struck through, with who voided them and
-        why.
+        Every entry, condition, care episode and medication order, newest
+        first by the day given or due, the onset or the start, so care still
+        to come is at the top. Voided ones stay here, struck through, with who
+        voided them and why. Doses are on Medications.
       </CardDescription>
       <div className="mt-4">
         <Skeleton className="h-8 w-24" />
@@ -125,6 +126,45 @@ export const MedicalConditionsSkeleton = () => (
           When the animal was under vet care or hospitalised, here or at a
           clinic. The open episode comes first.
         </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <EntryRowsSkeleton rows={1} />
+      </CardContent>
+    </Card>
+  </div>
+);
+
+export const MedicationsSkeleton = () => (
+  <div className="flex flex-col gap-4">
+    <Card className="@container/card">
+      <CardHeader>
+        <CardTitle className="@[650px]/card:text-xl">Current orders</CardTitle>
+        <CardDescription>
+          Medications being given or about to start, with today&apos;s doses.
+          A dose not recorded by the end of its slot reads Missed.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <EntryRowsSkeleton rows={1} />
+      </CardContent>
+    </Card>
+    <Card className="@container/card">
+      <CardHeader>
+        <CardTitle className="@[650px]/card:text-xl">Dose sheet</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {[0, 1, 2].map((row) => (
+          <div key={row} className="grid grid-cols-3 gap-2">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-10" />
+            <Skeleton className="h-10" />
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+    <Card className="@container/card">
+      <CardHeader>
+        <CardTitle className="@[650px]/card:text-xl">Past orders</CardTitle>
       </CardHeader>
       <CardContent>
         <EntryRowsSkeleton rows={1} />

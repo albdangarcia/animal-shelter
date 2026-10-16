@@ -18,6 +18,9 @@ import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { MedicalEntryRow } from "./medical-entry-list";
 import { CareEpisodeRow, ConditionRow } from "./condition-list";
 import { AddMedicalEntryMenu } from "./add-medical-entry-menu";
+import { MedicationOrderItem } from "./medication-order-item";
+import { MedicationOrderActions } from "./medication-order-actions";
+import { orderSummary } from "@/app/lib/data/animals/medication-view";
 
 // Every entry kind, then the records History lists beside entries.
 const kindOptions = [
@@ -27,6 +30,7 @@ const kindOptions = [
   })),
   { value: "CONDITION", label: "Condition" },
   { value: "CARE_EPISODE", label: "Care episode" },
+  { value: "MEDICATION", label: "Medication" },
 ];
 
 interface Props {
@@ -55,10 +59,10 @@ const MedicalHistory = ({
       <CardHeader>
         <CardTitle className="@[650px]/card:text-xl">History</CardTitle>
         <CardDescription>
-          Every entry, condition and care episode, newest first by the day
-          given or due, the onset or the start, so care still to come is at
-          the top. Voided ones stay here, struck through, with who voided
-          them and why.
+          Every entry, condition, care episode and medication order, newest
+          first by the day given or due, the onset or the start, so care
+          still to come is at the top. Voided ones stay here, struck through,
+          with who voided them and why. Doses are on Medications.
         </CardDescription>
         {controls?.canManage && (
           <CardAction>
@@ -111,6 +115,26 @@ const MedicalHistory = ({
                       animalName={animalName}
                     />
                   );
+                case "ORDER": {
+                  const summary = orderSummary(item.order, today);
+                  const orderOptions = controls?.canManage ? controls.orderOptions : null;
+                  return (
+                    <MedicationOrderItem
+                      key={item.id}
+                      summary={summary}
+                      names={names}
+                      actions={
+                        controls && orderOptions ? (
+                          <MedicationOrderActions
+                            animalId={controls.animalId}
+                            summary={summary}
+                            options={orderOptions}
+                          />
+                        ) : undefined
+                      }
+                    />
+                  );
+                }
               }
             })}
           </ul>

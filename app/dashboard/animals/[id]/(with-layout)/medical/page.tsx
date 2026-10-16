@@ -5,6 +5,7 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchMedicalControls } from "@/app/lib/data/medical-catalog.data";
 import { fetchMedicalOverview } from "@/app/lib/data/animals/medical-entry.data";
 import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
+import { fetchTodaysDoses } from "@/app/lib/data/animals/medication.data";
 import MedicalOverview from "@/components/dashboard/animals/medical/medical-overview";
 
 interface Props {
@@ -24,8 +25,9 @@ const Page = async ({ params }: Props) => {
 
 const PageContent = async ({ params }: Props) => {
   const { id: animalId } = await params;
-  const [overview, settings, controls] = await Promise.all([
+  const [overview, todaysDoses, settings, controls] = await Promise.all([
     fetchMedicalOverview(animalId),
+    fetchTodaysDoses(animalId),
     getShelterSettings(),
     fetchMedicalControls(animalId),
   ]);
@@ -34,6 +36,7 @@ const PageContent = async ({ params }: Props) => {
     <MedicalOverview
       animalId={animalId}
       overview={overview}
+      todaysDoses={todaysDoses}
       unitSystem={settings.weightUnitSystem}
       controls={controls}
     />

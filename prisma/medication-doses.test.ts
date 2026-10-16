@@ -14,6 +14,7 @@ import {
   AnimalListingStatus,
   DoseSlot,
   FosterPlacementType,
+  IntakeType,
   LocationType,
   DoseUnit,
   MedicalItemKind,
@@ -43,6 +44,7 @@ import {
 } from "@/app/lib/services/medication-dose";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import { findAnimalMedications } from "@/app/lib/data/animals/medication";
+import { findMedicationOrderChoices } from "@/app/lib/data/medical-catalog";
 import {
   doseSheetSections,
   findDoseSheet,
@@ -1058,6 +1060,122 @@ test("an animal's orders, latest start first, with their events and the doses in
   assert.equal(names[editorId], `Doses editor ${runId}`);
   // The medication a CREATED event names.
   assert.equal(names[itemId], doxy());
+});
+
+test("an animal's orders read with every dose, or only some orders", async () => {
+  const animalId = await newAnimal();
+  const course = await orderFor(animalId);
+  const asNeeded = await orderFor(animalId, {
+    frequency: MedicationFrequency.PRN,
+    firstSlot: null,
+    startDate: day("2026-10-14"),
+  });
+  await record(given(course, "2026-10-12", DoseSlot.PM));
+  await record(given(course, "2026-10-15", DoseSlot.AM));
+  await record(given(asNeeded, "2026-10-14", null));
+
+  const daysOf = (orders: Awaited<ReturnType<typeof findAnimalMedications>>["orders"]) =>
+    orders.map((order) => [order.id, order.doses.map((dose) => dose.slotDate)]);
+  // No range: every dose.
+  assert.deepEqual(daysOf((await findAnimalMedications(prisma, animalId)).orders), [
+    [asNeeded, ["2026-10-14"]],
+    [course, ["2026-10-12", "2026-10-15"]],
+  ]);
+  // One end left open.
+  assert.deepEqual(
+    daysOf((await findAnimalMedications(prisma, animalId, { toDay: day("2026-10-14") })).orders),
+    [
+      [asNeeded, ["2026-10-14"]],
+      [course, ["2026-10-12"]],
+    ],
+  );
+  assert.deepEqual(
+    daysOf((await findAnimalMedications(prisma, animalId, { fromDay: day("2026-10-13") })).orders),
+    [
+      [asNeeded, ["2026-10-14"]],
+      [course, ["2026-10-15"]],
+    ],
+  );
+  // Only the orders asked for, with their names.
+  const some = await findAnimalMedications(prisma, animalId, { orderIds: [course] });
+  assert.deepEqual(daysOf(some.orders), [[course, ["2026-10-12", "2026-10-15"]]]);
+  assert.equal(some.names[staffId], `Doses staff ${runId}`);
+});
+
+test("the order form offers the live medications for the animal's species, and its latest intake", async () => {
+  const animalId = await newAnimal();
+  await prisma.intake.createMany({
+    data: [
+      { animalId, type: IntakeType.STRAY, intakeDate: "2026-09-01", staffMemberId: staffId },
+      { animalId, type: IntakeType.STRAY, intakeDate: "2026-10-01", staffMemberId: staffId },
+    ],
+  });
+  const forItsSpecies = (
+    await prisma.$transaction((tx) =>
+      createMedicalItem(tx, {
+        kind: MedicalItemKind.MEDICATION,
+        name: `Meloxicam ${runId}`,
+        speciesIds: [speciesId],
+        defaultRoute: MedicalRoute.ORAL,
+        defaultDoseAmount: 0.5,
+        defaultDoseUnit: DoseUnit.ML,
+        analytes: [],
+      }),
+    )
+  ).id;
+  const otherSpecies = await prisma.species.create({
+    data: { name: `Doses other species ${runId}` },
+    select: { id: true },
+  });
+  const forAnother = (
+    await prisma.$transaction((tx) =>
+      createMedicalItem(tx, {
+        kind: MedicalItemKind.MEDICATION,
+        name: `Other species medication ${runId}`,
+        speciesIds: [otherSpecies.id],
+        analytes: [],
+      }),
+    )
+  ).id;
+  const retired = await newMedication("Retired medication");
+  await prisma.medicalItem.update({ where: { id: retired }, data: { retiredAt: new Date() } });
+  const treatment = (
+    await prisma.$transaction((tx) =>
+      createMedicalItem(tx, {
+        kind: MedicalItemKind.TREATMENT,
+        name: `Doses treatment ${runId}`,
+        speciesIds: [],
+        analytes: [],
+      }),
+    )
+  ).id;
+
+  try {
+    const choices = await findMedicationOrderChoices(prisma, animalId);
+    const offered = choices.medications.map((item) => item.id);
+    assert.ok(offered.includes(itemId), "a medication for every species");
+    assert.ok(offered.includes(forItsSpecies), "a medication for its species");
+    for (const left of [forAnother, retired, treatment]) {
+      assert.ok(!offered.includes(left));
+    }
+    const meloxicam = choices.medications.find((item) => item.id === forItsSpecies)!;
+    assert.deepEqual(
+      [meloxicam.defaultRoute, meloxicam.defaultDoseAmount, meloxicam.defaultDoseUnit],
+      [MedicalRoute.ORAL, 0.5, DoseUnit.ML],
+    );
+    assert.equal(choices.latestIntakeDate, "2026-10-01");
+    assert.equal(choices.inCare, true);
+    await archive(animalId);
+    assert.equal((await findMedicationOrderChoices(prisma, animalId)).inCare, false);
+    // Inside a transaction too.
+    await prisma.$transaction(async (tx) => {
+      assert.equal((await findMedicationOrderChoices(tx, animalId)).latestIntakeDate, "2026-10-01");
+    });
+  } finally {
+    await prisma.intake.deleteMany({ where: { animalId } });
+    await prisma.medicalItem.deleteMany({ where: { id: forAnother } });
+    await prisma.species.delete({ where: { id: otherSpecies.id } });
+  }
 });
 
 test("the dose sheet for a day: the slots each order has, its doses, and where its animal is", async () => {

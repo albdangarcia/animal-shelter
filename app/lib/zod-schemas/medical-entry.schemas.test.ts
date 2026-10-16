@@ -584,13 +584,14 @@ test("medicalEntryKindsParam: a comma list or a repeated param, unknown kinds ig
   ]);
 });
 
-test("medicalHistoryKindsParam: entry kinds plus conditions and care episodes", () => {
+test("medicalHistoryKindsParam: entry kinds plus conditions, care episodes and medications", () => {
   const kinds = (value: unknown) => medicalHistoryKindsParam.parse(value);
   assert.deepEqual(kinds(undefined), []);
   assert.deepEqual(kinds("CONDITION,CARE_EPISODE"), ["CONDITION", "CARE_EPISODE"]);
   assert.deepEqual(kinds(["TEST,CONDITION", "GROOMING", "TEST"]), ["TEST", "CONDITION"]);
+  assert.deepEqual(kinds("MEDICATION,VACCINE"), ["MEDICATION", "VACCINE"]);
   // The Due page's filter lists entries only.
-  assert.deepEqual(medicalEntryKindsParam.parse("CONDITION,EXAM"), ["EXAM"]);
+  assert.deepEqual(medicalEntryKindsParam.parse("CONDITION,EXAM,MEDICATION"), ["EXAM"]);
 });
 
 // Batches. Ids are checked as cuids, so these are shaped like one.

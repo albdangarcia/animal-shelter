@@ -12,6 +12,7 @@ import { Prisma } from "@/prisma/generated/client";
 import { MedicalEntryKind, MedicalEntryStatus } from "@/prisma/generated/enums";
 import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import type { MedicalHistoryKind } from "@/app/lib/zod-schemas/medical-entry.schemas";
+import { findAnimalMedications, type AnimalMedicationOrder } from "./medication";
 import {
   CARE_EPISODE_DISPLAY_SELECT,
   MEDICAL_CONDITION_DISPLAY_SELECT,
@@ -250,22 +251,25 @@ export const findOpenScheduledEntryIdsByItem = async (
 export type MedicalHistoryItem =
   | { source: "ENTRY"; id: string; entry: MedicalEntryDisplay }
   | { source: "CONDITION"; id: string; condition: MedicalConditionDisplay }
-  | { source: "EPISODE"; id: string; episode: CareEpisodeDisplay };
+  | { source: "EPISODE"; id: string; episode: CareEpisodeDisplay }
+  | { source: "ORDER"; id: string; order: AnimalMedicationOrder };
 
 /**
  * One page of the animal's history: its entries, whatever their status, its
- * problem-list rows and its care episodes, voided ones included. History is
- * the only read that shows them all. `kinds` filters by entry kind and by
- * CONDITION and CARE_EPISODE; empty means everything.
+ * problem-list rows, its care episodes and its medication orders, voided ones
+ * included. History is the only read that shows them all. `kinds` filters by
+ * entry kind and by CONDITION, CARE_EPISODE and MEDICATION; empty means
+ * everything.
  *
  * Newest first by the day each is about. An entry goes by the day given or,
  * for care not given, the day due, so upcoming care comes first and care
  * given on an unknown day before intake comes last. A spay/neuter exemption
  * recorded on its own was never due, so it goes by the day it was recorded,
  * on the shelter's calendar (`timeZone`). A condition goes by its onset, or
- * the day it was recorded when it has none; an episode by its start. Prisma
- * can't order across tables, so the page's ids are picked in SQL and the rows
- * read by id.
+ * the day it was recorded when it has none; an episode and an order by
+ * their start. Prisma can't order across tables, so the page's ids are picked
+ * in SQL and the rows read by id. `orderNames` are the names the orders'
+ * events and doses hold.
  *
  * The root client only: the rows select sibling relations, which Prisma
  * fetches at once.
@@ -279,14 +283,19 @@ export const findMedicalHistoryPage = async (
     perPage: number;
     timeZone: string;
   },
-): Promise<{ items: MedicalHistoryItem[]; totalPages: number }> => {
+): Promise<{
+  items: MedicalHistoryItem[];
+  totalPages: number;
+  orderNames: Record<string, string>;
+}> => {
   const all = options.kinds.length === 0;
-  const entryKinds = options.kinds.filter(
-    (kind): kind is MedicalEntryKind => kind !== "CONDITION" && kind !== "CARE_EPISODE",
+  const entryKinds = options.kinds.filter((kind): kind is MedicalEntryKind =>
+    Object.values(MedicalEntryKind).includes(kind as MedicalEntryKind),
   );
   const withEntries = all || entryKinds.length > 0;
   const withConditions = all || options.kinds.includes("CONDITION");
   const withEpisodes = all || options.kinds.includes("CARE_EPISODE");
+  const withOrders = all || options.kinds.includes("MEDICATION");
 
   // The shelter day a row was recorded on. `created_at` is stored as UTC with
   // no zone, so it is read as UTC first, then as the shelter's wall clock.
@@ -312,8 +321,13 @@ export const findMedicalHistoryPage = async (
       SELECT 'EPISODE' AS source, id, created_at, start_date AS day
       FROM care_episodes WHERE animal_id = ${animalId}`);
   }
+  if (withOrders) {
+    branches.push(Prisma.sql`
+      SELECT 'ORDER' AS source, id, created_at, start_date AS day
+      FROM medication_orders WHERE animal_id = ${animalId}`);
+  }
 
-  const [entryCount, conditionCount, episodeCount, page] = await Promise.all([
+  const [entryCount, conditionCount, episodeCount, orderCount, page] = await Promise.all([
     withEntries
       ? db.medicalEntry.count({
           where: { animalId, ...(!all && { kind: { in: entryKinds } }) },
@@ -321,6 +335,7 @@ export const findMedicalHistoryPage = async (
       : 0,
     withConditions ? db.medicalCondition.count({ where: { animalId } }) : 0,
     withEpisodes ? db.careEpisode.count({ where: { animalId } }) : 0,
+    withOrders ? db.medicationOrder.count({ where: { animalId } }) : 0,
     db.$queryRaw<{ source: MedicalHistoryItem["source"]; id: string }[]>`
       SELECT source, id FROM (${Prisma.join(branches, " UNION ALL ")}) AS history
       ORDER BY day DESC NULLS LAST, created_at DESC, id DESC
@@ -328,7 +343,7 @@ export const findMedicalHistoryPage = async (
   ]);
   const idsOf = (source: MedicalHistoryItem["source"]) =>
     page.filter((row) => row.source === source).map((row) => row.id);
-  const [entries, conditions, episodes] = await Promise.all([
+  const [entries, conditions, episodes, medications] = await Promise.all([
     db.medicalEntry.findMany({
       where: { id: { in: idsOf("ENTRY") } },
       select: MEDICAL_ENTRY_DISPLAY_SELECT,
@@ -341,6 +356,7 @@ export const findMedicalHistoryPage = async (
       where: { id: { in: idsOf("EPISODE") } },
       select: CARE_EPISODE_DISPLAY_SELECT,
     }),
+    findAnimalMedications(db, animalId, { orderIds: idsOf("ORDER") }),
   ]);
   const byId = new Map<string, MedicalHistoryItem>([
     ...entries.map((entry) => [entry.id, { source: "ENTRY", id: entry.id, entry }] as const),
@@ -351,11 +367,15 @@ export const findMedicalHistoryPage = async (
     ...episodes.map(
       (episode) => [episode.id, { source: "EPISODE", id: episode.id, episode }] as const,
     ),
+    ...medications.orders.map(
+      (order) => [order.id, { source: "ORDER", id: order.id, order }] as const,
+    ),
   ]);
-  const total = entryCount + conditionCount + episodeCount;
+  const total = entryCount + conditionCount + episodeCount + orderCount;
   return {
     items: page.flatMap((row) => byId.get(row.id) ?? []),
     totalPages: Math.max(1, Math.ceil(total / options.perPage)),
+    orderNames: medications.names,
   };
 };
 

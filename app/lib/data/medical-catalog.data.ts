@@ -20,6 +20,10 @@ import {
   fetchConditionFormChoices,
   type ConditionFormChoices,
 } from "./animals/medical-condition.data";
+import {
+  fetchMedicationOrderFormOptions,
+  type MedicationOrderFormOptions,
+} from "./animals/medication.data";
 
 export type {
   MedicalBatchItem,
@@ -143,9 +147,10 @@ export const fetchMedicalEntryFormOptions = RequirePermission(
 /**
  * What a Medical page offers the viewer beyond reading: the entry forms'
  * options, and which of the two medical write permissions they hold.
- * `canAdminister` gives scheduled care (records or declines it); `canManage`
- * plans and corrects care (schedules, reschedules, records ad hoc, edits,
- * voids), and keeps the problem list and care episodes.
+ * `canAdminister` gives scheduled care (records or declines it) and records
+ * medication doses; `canManage` plans and corrects care (schedules,
+ * reschedules, records ad hoc, edits, voids), keeps the problem list and care
+ * episodes, and orders medications.
  */
 export interface MedicalControls {
   animalId: string;
@@ -153,6 +158,8 @@ export interface MedicalControls {
   /** What the problem-list and care-episode forms offer; null without
    * `canManage`. */
   conditionChoices: ConditionFormChoices | null;
+  /** What the medication order form offers; null without `canManage`. */
+  orderOptions: MedicationOrderFormOptions | null;
   canManage: boolean;
   canAdminister: boolean;
   /** Whether they may also change the animal's traits, as adding one from a
@@ -174,14 +181,16 @@ export const fetchMedicalControls = async (
     hasPermission(AppPermissions.ANIMAL_CHARACTERISTICS_MANAGE),
   ]);
   if (!canAdminister) return null;
-  const [options, conditionChoices] = await Promise.all([
+  const [options, conditionChoices, orderOptions] = await Promise.all([
     fetchMedicalEntryFormOptions(animalId),
     canManage ? fetchConditionFormChoices(animalId) : null,
+    canManage ? fetchMedicationOrderFormOptions(animalId) : null,
   ]);
   return {
     animalId,
     options,
     conditionChoices,
+    orderOptions,
     canManage,
     canAdminister,
     canManageCharacteristics,

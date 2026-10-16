@@ -173,8 +173,9 @@ const _fetchMedicalHistory = async (
     ]);
     return {
       animalName: animal.name,
-      ...page,
-      names: { ...entryNames, ...recordNames },
+      items: page.items,
+      totalPages: page.totalPages,
+      names: { ...entryNames, ...recordNames, ...page.orderNames },
       today,
     };
   } catch (error) {

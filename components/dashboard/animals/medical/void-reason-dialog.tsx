@@ -29,6 +29,8 @@ interface Props {
   confirmLabel: string;
   onVoid: (reason: string) => Promise<FormResult<{ reason: string }>>;
   onCloseAutoFocus: (event: Event) => void;
+  /** The dialog's id, for a caller that needs to find it. */
+  contentId?: string;
 }
 
 /**
@@ -44,6 +46,7 @@ export function VoidReasonDialog({
   confirmLabel,
   onVoid,
   onCloseAutoFocus,
+  contentId,
 }: Props) {
   const router = useRouter();
   const [reason, setReason] = useState("");
@@ -87,7 +90,7 @@ export function VoidReasonDialog({
         }
       }}
     >
-      <AlertDialogContent onCloseAutoFocus={onCloseAutoFocus}>
+      <AlertDialogContent id={contentId} onCloseAutoFocus={onCloseAutoFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription asChild>

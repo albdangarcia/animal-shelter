@@ -3,9 +3,14 @@ import assert from "node:assert/strict";
 import { z } from "zod";
 import {
   DiscontinueMedicationOrderSchema,
+  DoseSlotSchema,
+  MedicationDoseFormSchema,
+  MedicationDosesGivenSchema,
   MedicationOrderCorrectionSchema,
   MedicationOrderFormSchema,
+  VoidMedicationDoseSchema,
   VoidMedicationOrderSchema,
+  type MedicationDoseFormInput,
   type MedicationOrderCorrectionInput,
   type MedicationOrderFormInput,
 } from "./medication.schemas";
@@ -172,5 +177,93 @@ test("DiscontinueMedicationOrderSchema and VoidMedicationOrderSchema: the day an
   );
   assert.deepEqual(errorsOf(VoidMedicationOrderSchema, { reason: "" }).reason, [
     "A reason for voiding this order is required.",
+  ]);
+});
+
+const dose: MedicationDoseFormInput = {
+  result: "GIVEN",
+  reason: "",
+  givenDate: "",
+  givenTime: "",
+  notes: "",
+};
+
+test("MedicationDoseFormSchema: a dose given now sends its result alone", () => {
+  assert.deepEqual(MedicationDoseFormSchema.parse({ result: "GIVEN" }), {
+    result: "GIVEN",
+    reason: null,
+    givenDate: null,
+    givenTime: null,
+    notes: null,
+  });
+  assert.deepEqual(
+    MedicationDoseFormSchema.parse({
+      ...dose,
+      result: "REFUSED",
+      reason: " Spat it out ",
+      givenDate: "2026-10-14",
+      givenTime: "20:15",
+      notes: " Tried twice. ",
+    }),
+    {
+      result: "REFUSED",
+      reason: "Spat it out",
+      givenDate: "2026-10-14",
+      givenTime: "20:15",
+      notes: "Tried twice.",
+    },
+  );
+});
+
+test("MedicationDoseFormSchema: not given needs a reason, and a dose given has none", () => {
+  assert.deepEqual(errorsOf(MedicationDoseFormSchema, { ...dose, result: "NOT_GIVEN" }).reason, [
+    "Say why the dose wasn't given.",
+  ]);
+  assert.deepEqual(errorsOf(MedicationDoseFormSchema, { ...dose, reason: "Asleep" }).reason, [
+    "A dose given has no reason.",
+  ]);
+  // Refused may have one or not.
+  assert.equal(MedicationDoseFormSchema.safeParse({ ...dose, result: "REFUSED" }).success, true);
+  assert.deepEqual(errorsOf(MedicationDoseFormSchema, { ...dose, result: undefined as never }).result, [
+    "Pick what happened.",
+  ]);
+});
+
+test("MedicationDoseFormSchema: the day and the time given come together, as a time of day", () => {
+  assert.deepEqual(errorsOf(MedicationDoseFormSchema, { ...dose, givenDate: "2026-10-14" }).givenTime, [
+    "Give the time as well.",
+  ]);
+  assert.deepEqual(errorsOf(MedicationDoseFormSchema, { ...dose, givenTime: "08:30" }).givenDate, [
+    "Pick the date as well.",
+  ]);
+  for (const time of ["8:30", "24:00", "08:60", "noon"]) {
+    assert.deepEqual(
+      errorsOf(MedicationDoseFormSchema, { ...dose, givenDate: "2026-10-14", givenTime: time }).givenTime,
+      ["Enter a time of day, such as 08:30."],
+      time,
+    );
+  }
+  assert.deepEqual(
+    errorsOf(MedicationDoseFormSchema, { ...dose, notes: "x".repeat(2001) }).notes,
+    ["Must be 2000 characters or fewer."],
+  );
+});
+
+test("DoseSlotSchema, MedicationDosesGivenSchema and VoidMedicationDoseSchema", () => {
+  assert.deepEqual(DoseSlotSchema.parse({ slotDate: "2026-10-14", slot: null }), {
+    slotDate: "2026-10-14",
+    slot: null,
+  });
+  assert.equal(DoseSlotSchema.safeParse({ slotDate: "2026-10-14", slot: "NOON" }).success, false);
+
+  const slot = { orderId: "cmmedication0000000000000", slotDate: "2026-10-14", slot: "AM" as const };
+  assert.equal(MedicationDosesGivenSchema.safeParse([slot]).success, true);
+  assert.equal(MedicationDosesGivenSchema.safeParse([]).success, false);
+  assert.equal(MedicationDosesGivenSchema.safeParse(Array(51).fill(slot)).success, false);
+  // A batch slot always has a slot: as-needed doses aren't recorded together.
+  assert.equal(MedicationDosesGivenSchema.safeParse([{ ...slot, slot: null }]).success, false);
+
+  assert.deepEqual(errorsOf(VoidMedicationDoseSchema, { reason: " " }).reason, [
+    "A reason for voiding this dose is required.",
   ]);
 });

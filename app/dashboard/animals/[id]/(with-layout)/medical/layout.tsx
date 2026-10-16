@@ -12,6 +12,7 @@ const sections = [
   { suffix: "", label: "Overview" },
   { suffix: "/history", label: "History" },
   { suffix: "/vaccines-tests", label: "Vaccines & Tests" },
+  { suffix: "/medications", label: "Medications" },
   { suffix: "/conditions", label: "Conditions" },
   { suffix: "/vitals", label: "Vitals" },
 ];

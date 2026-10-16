@@ -72,6 +72,25 @@ export const orderDoseText = (order: Omit<OrderTextFields, "startDate" | "endDat
 export const orderText = (order: OrderTextFields) =>
   `${orderDoseText(order)}, ${orderSpanText(order.startDate, order.endDate)}`;
 
+/**
+ * An order's line on the pages: "Doxycycline · 100 mg oral · twice a day ·
+ * Oct 12, 2026 to Nov 10, 2026", "… · from Oct 12, 2026" with no end day,
+ * "… · on Oct 12, 2026" for one day.
+ */
+export const orderLineText = (order: OrderTextFields) => {
+  const { startDate, endDate } = order;
+  const span =
+    endDate && endDate !== startDate
+      ? `${formatShelterDay(startDate)} to ${formatShelterDay(endDate)}`
+      : orderSpanText(startDate, endDate);
+  return [
+    order.itemName,
+    doseText(order.doseAmount, order.doseUnit, order.route),
+    frequencyText(order.frequency, order.intervalDays),
+    span,
+  ].join(" · ");
+};
+
 /** "AM dose on Oct 14, 2026", or "as-needed dose on Oct 14, 2026" with no slot. */
 export const doseSlotText = ({
   slotDate,
