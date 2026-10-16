@@ -106,3 +106,34 @@ export const documentDayIssue = (
 ): string | null =>
   futureDayIssue(day, today, "The document date") ??
   beforeBirthIssue(day, birthDate, "The document date");
+
+// The extension a served file's name takes, by its content type.
+const EXTENSIONS: Record<MedicalDocumentContentType, string> = {
+  "application/pdf": "pdf",
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+/**
+ * The `Content-Disposition` a document's file is served with: shown in the
+ * browser (`inline`) or saved (`attachment`), named after the document with
+ * the extension its type takes ("Heartworm antigen panel.pdf"). The name is
+ * sent percent-encoded as UTF-8 (`filename*`), so any character a person
+ * typed reaches the browser as typed and none can break out of the header.
+ */
+export function documentContentDisposition(
+  name: string,
+  contentType: string,
+  disposition: "inline" | "attachment",
+): string {
+  const extension = EXTENSIONS[contentType as MedicalDocumentContentType];
+  const fileName = extension ? `${name}.${extension}` : name;
+  // `encodeURIComponent` leaves ' ( ) * as they are; the header's encoding
+  // allows none of them.
+  const encoded = encodeURIComponent(fileName).replace(
+    /['()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `${disposition}; filename*=UTF-8''${encoded}`;
+}

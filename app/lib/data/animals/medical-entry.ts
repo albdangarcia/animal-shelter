@@ -95,6 +95,17 @@ export const MEDICAL_ENTRY_DISPLAY_SELECT = {
   administeredBy: { select: { name: true } },
   createdBy: { select: { name: true } },
   voidedBy: { select: { name: true } },
+  // Given by a foster, or recorded from a foster's report of an outside vet
+  // visit (which then names the report).
+  reportedByFoster: true,
+  vetReport: { select: { visitDate: true } },
+  // Its paperwork: live documents only, oldest upload first. A voided one is
+  // on the Documents page, struck through.
+  documents: {
+    where: { voidedAt: null },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, name: true, type: true },
+  },
   vaccine: {
     select: {
       manufacturer: true,

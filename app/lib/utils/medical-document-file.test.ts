@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { MEDICAL_DOCUMENT_MAX_BYTES } from "@/app/lib/constants/medical";
 import {
+  documentContentDisposition,
   documentDayIssue,
   documentFileIssue,
   documentNameFromFile,
@@ -129,5 +130,31 @@ test("documentDayIssue: from the birth day through today", () => {
   assert.equal(
     documentDayIssue(day("2026-10-17"), birth, today),
     "The document date can't be in the future.",
+  );
+});
+
+test("documentContentDisposition names the file after the document, with its type's extension", () => {
+  assert.equal(
+    documentContentDisposition("Heartworm antigen panel", "application/pdf", "inline"),
+    "inline; filename*=UTF-8''Heartworm%20antigen%20panel.pdf",
+  );
+  assert.equal(
+    documentContentDisposition("Radiograph", "image/jpeg", "attachment"),
+    "attachment; filename*=UTF-8''Radiograph.jpg",
+  );
+  assert.equal(
+    documentContentDisposition("x", "image/png", "inline"),
+    "inline; filename*=UTF-8''x.png",
+  );
+  assert.equal(
+    documentContentDisposition("x", "image/webp", "inline"),
+    "inline; filename*=UTF-8''x.webp",
+  );
+});
+
+test("documentContentDisposition encodes every character the header can't carry", () => {
+  assert.equal(
+    documentContentDisposition(`Ñoño's "scan" (1)*; a/b\r\nX: y`, "application/pdf", "inline"),
+    "inline; filename*=UTF-8''%C3%91o%C3%B1o%27s%20%22scan%22%20%281%29%2A%3B%20a%2Fb%0D%0AX%3A%20y.pdf",
   );
 });
