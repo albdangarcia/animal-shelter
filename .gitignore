@@ -51,4 +51,8 @@ next-env.d.ts
 # prisma generated client
 /prisma/generated/
 
+# medical documents' files kept on disk (development without a token, e2e)
+/.medical-documents/
+/.medical-documents-e2e/
+
 docs/specs/

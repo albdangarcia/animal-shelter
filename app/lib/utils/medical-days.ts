@@ -131,3 +131,15 @@ export const beforeIntakeIssue = (
   intakeDate && day < intakeDate
     ? `${label} can't be before the animal's intake on ${formatShelterDay(intakeDate)}.`
     : null;
+
+/**
+ * Why `day` can't be: it's before the animal was born on `birthDate`.
+ */
+export const beforeBirthIssue = (
+  day: CalendarDay,
+  birthDate: CalendarDay,
+  label: string,
+): string | null =>
+  day < birthDate
+    ? `${label} can't be before the animal's birth on ${formatShelterDay(birthDate)}.`
+    : null;

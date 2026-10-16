@@ -1,4 +1,5 @@
 import prisma from "@/app/lib/prisma";
+import { findOpenPlacement } from "@/app/lib/data/fosters/foster-access";
 
 /**
  * Type-guard utility that checks if a resource is owned by the current user.
@@ -15,7 +16,9 @@ export function isOwnedByUser<T extends { applicantId: string }>(
 
 /**
  * THE predicate for foster-scoped ownership: true iff an open FosterPlacement
- * (endDate == null) exists whose FosterProfile belongs to this person.
+ * (endDate == null) exists whose FosterProfile belongs to this person. The
+ * rule itself is `findOpenPlacement`, which refuses an empty person id rather
+ * than widening to any caller.
  * @param personId - The ID of the currently authenticated user's Person record.
  * @param animalId - The animal being checked.
  * @returns True if the person is currently fostering the animal.
@@ -24,21 +27,5 @@ export async function isFosteringAnimal(
   personId: string,
   animalId: string
 ): Promise<boolean> {
-  // H1: Prisma treats `undefined` in a `where` as "omit this condition" —
-  // an empty/falsy personId here must never fall through to the query below,
-  // or it silently widens to "any fostered animal, any caller."
-  if (!personId) {
-    return false;
-  }
-
-  const openPlacement = await prisma.fosterPlacement.findFirst({
-    where: {
-      animalId,
-      endDate: null,
-      fosterProfile: { personId },
-    },
-    select: { id: true },
-  });
-
-  return openPlacement !== null;
+  return (await findOpenPlacement(prisma, personId, animalId)) !== null;
 }

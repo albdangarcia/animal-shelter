@@ -5224,6 +5224,12 @@ async function clearDatabase() {
   // either, so their events and then the rows go first. Medication orders
   // and doses are the same, and a dose's order and an order's item are
   // Restrict: doses, then order events, then orders, all before items.
+  // Medical documents point at entries and foster reports (Restrict), so
+  // their events and then the rows go before both. Entries point at the
+  // report they were recorded from (Restrict), so reports go after entries,
+  // and before placements, which a report points at.
+  await prisma.medicalDocumentEvent.deleteMany();
+  await prisma.medicalDocument.deleteMany();
   await prisma.medicationDose.deleteMany();
   await prisma.medicationOrderEvent.deleteMany();
   await prisma.medicationOrder.deleteMany();
@@ -5241,6 +5247,7 @@ async function clearDatabase() {
   await prisma.examFinding.deleteMany();
   await prisma.examDetails.deleteMany();
   await prisma.medicalEntry.deleteMany();
+  await prisma.vetVisitReport.deleteMany();
   await prisma.medicalProtocolStep.deleteMany();
   await prisma.medicalProtocol.deleteMany();
   await prisma.medicalItemAnalyte.deleteMany();

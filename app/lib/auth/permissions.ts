@@ -109,6 +109,10 @@ export const AppPermissions = {
   // My Foster Management (users managing their own foster application/animals)
   MY_FOSTER_APPLICATION_MANAGE: "my_foster_application:manage",
   MY_FOSTER_ANIMALS_READ: "my_foster_animals:read",
+  // Recording care for an animal in the person's own open foster placement,
+  // and reporting its outside vet visits. Held with the placement: every use
+  // checks that the placement is open.
+  MY_FOSTER_ANIMALS_CARE: "my_foster_animals:care",
 
   MY_PROFILE_UPDATE: "my_profile:update", // Self-service profile feature
 

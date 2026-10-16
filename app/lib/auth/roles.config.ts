@@ -8,6 +8,7 @@ const userPermissions: readonly AppPermission[] = [
   AppPermissions.MY_PROFILE_UPDATE,
   AppPermissions.MY_FOSTER_APPLICATION_MANAGE,
   AppPermissions.MY_FOSTER_ANIMALS_READ,
+  AppPermissions.MY_FOSTER_ANIMALS_CARE,
 ] as const;
 
 // Volunteers inherit user permissions + read-only access to operational data, with one

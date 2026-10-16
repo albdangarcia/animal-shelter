@@ -121,9 +121,12 @@ Typical values per environment:
 
 ### Storage
 
-| Variable                | Required    | Description                                                      |
-| ----------------------- | ----------- | ---------------------------------------------------------------- |
-| `BLOB_READ_WRITE_TOKEN` | ✅ Required | Read/write token for Vercel Blob Storage (stores animal images). |
+| Variable                                  | Required             | Description                                                                                                                                                                                                         |
+| ----------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BLOB_READ_WRITE_TOKEN`                   | ✅ Required          | Read/write token for Vercel Blob Storage (stores animal images, which are public).                                                                                                                                  |
+| `MEDICAL_DOCUMENTS_BLOB_READ_WRITE_TOKEN` | Required in production | Read/write token for a **second, private** Blob store holding medical documents, which are served only through a route that checks who is asking. Without it, development keeps the files on disk in `.medical-documents/`. |
+| `MEDICAL_DOCUMENT_STORE`                  | Optional             | `blob` or `local`. Left empty: Blob when the token above is set, otherwise local (and in production, a missing token makes document uploads and downloads fail). Set `local` to keep development off the real store. |
+| `MEDICAL_DOCUMENT_DIR`                    | Optional             | The folder the local store uses. Defaults to `.medical-documents/` in the checkout.                                                                                                                                 |
 
 ### Shelter settings
 
@@ -225,6 +228,7 @@ First, clone the repository and set up your environment variables.
     - Generate a `BETTER_AUTH_SECRET` by running `openssl rand -base64 32`.
     - Set `BETTER_AUTH_URL` to `http://localhost:3000` and leave `BETTER_AUTH_ALLOWED_HOSTS` as `localhost:*`.
     - Log into your Vercel account, create a new Blob store, and get your `BLOB_READ_WRITE_TOKEN`. **This is required for all image upload/delete functionality.**
+    - (Optional) Medical documents work without any setup: development keeps their files on disk in `.medical-documents/`. To use Blob for them, create a second store with **private** access and set its read/write token as `MEDICAL_DOCUMENTS_BLOB_READ_WRITE_TOKEN`.
 
 ## Running the App
 
@@ -276,6 +280,7 @@ This method mirrors the live production environment. It's ideal for testing the 
 3.  **Set up Vercel Integrations**:
     - Add the **Vercel Postgres** integration to create a serverless database.
     - Add the **Vercel Blob** integration for image storage.
+    - Create a second Blob store with **private** access for medical documents, and add its read/write token by hand as `MEDICAL_DOCUMENTS_BLOB_READ_WRITE_TOKEN`. **Don't connect this store to the project**: connecting adds `BLOB_STORE_ID`, which the Blob SDK prefers over `BLOB_READ_WRITE_TOKEN`, so image uploads would go to the private store and fail.
 4.  **Connect Environment Variables**: the Vercel Postgres (Neon) integration provides several `POSTGRES_*` variables, but the app reads `DATABASE_URL` (pooled) and `DATABASE_URL_UNPOOLED` (direct) — set both explicitly, per environment scope (Production and Preview each need their own). **Give Preview its own Neon branch**, rather than pointing it at the Production database: Preview and Production previously shared one database, which meant every preview migration was also a production migration. Copy the remaining variables from your `.env` file into the **Environment Variables** section of your Vercel project settings.
 5.  **Set the auth variables per environment scope.** `BETTER_AUTH_SECRET` needs its own value in Production and in Preview — see the table in [Environment Variables](#environment-variables) for `BETTER_AUTH_ALLOWED_HOSTS` and `BETTER_AUTH_URL`. Preview deployments get a new URL per deploy, which is why the allowlist is a pattern rather than a single URL.
 6.  **GitHub sign-in needs its own OAuth App per environment**, with that environment's `/api/auth/callback/github` registered on it. It will not work on preview deployments, since their URLs change per deploy; email and password sign-in is unaffected.
@@ -312,7 +317,7 @@ Playwright is configured for a Chromium-only E2E workflow that mirrors the local
 ### Requirements
 
 - Docker with `docker compose`
-- No `.env` is needed. `playwright/env.ts` pins what it needs — `BETTER_AUTH_URL`, `BETTER_AUTH_ALLOWED_HOSTS`, the database URLs, and the OAuth vars — and falls back to test-only values for `BETTER_AUTH_SECRET` and `ADMIN_PASSWORD` when `.env` does not set them. If `.env` sets `ADMIN_PASSWORD`, the seeded admin uses it.
+- No `.env` is needed. `playwright/env.ts` pins what it needs — `BETTER_AUTH_URL`, `BETTER_AUTH_ALLOWED_HOSTS`, the database URLs, the OAuth vars, and a local medical documents store in `.medical-documents-e2e/` (so a test run never writes to a real store) — and falls back to test-only values for `BETTER_AUTH_SECRET` and `ADMIN_PASSWORD` when `.env` does not set them. If `.env` sets `ADMIN_PASSWORD`, the seeded admin uses it.
 
 ### Install the browser once
 

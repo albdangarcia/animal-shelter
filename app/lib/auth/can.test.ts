@@ -112,6 +112,17 @@ test("MEDICAL_SETTINGS_MANAGE stops at ADMIN", () => {
   assert.equal(can(Role.ADMIN, AppPermissions.MEDICAL_SETTINGS_MANAGE), true);
 });
 
+// A foster of any role cares for the animal in their own placement, so every
+// role holds it; the placement, checked on every use, is what limits it. It
+// gives no staff-wide medical permission.
+test("MY_FOSTER_ANIMALS_CARE is held by every role", () => {
+  for (const role of Object.values(Role)) {
+    assert.equal(can(role, AppPermissions.MY_FOSTER_ANIMALS_CARE), true, role);
+  }
+  assert.equal(can(Role.USER, AppPermissions.MEDICAL_READ), false);
+  assert.equal(can(Role.USER, AppPermissions.MEDICAL_ADMINISTER), false);
+});
+
 test("the documented volunteer exception: VOLUNTEER holds ANIMAL_VITALS_MANAGE", () => {
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_VITALS_MANAGE), true);
   // ...and it is genuinely an exception: no other MANAGE permission leaks to it.

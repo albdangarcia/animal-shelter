@@ -101,6 +101,12 @@ model Person {
   medicationDosesCreated       MedicationDose[]       @relation("MedicationDoseCreatedBy")
   medicationDosesAdministered  MedicationDose[]       @relation("MedicationDoseAdministeredBy")
   medicationDosesVoided        MedicationDose[]       @relation("MedicationDoseVoidedBy")
+  medicalDocumentsUploaded     MedicalDocument[]      @relation("MedicalDocumentUploadedBy")
+  medicalDocumentsVoided       MedicalDocument[]      @relation("MedicalDocumentVoidedBy")
+  medicalDocumentFilesRemoved  MedicalDocument[]      @relation("MedicalDocumentFileRemovedBy")
+  medicalDocumentEvents        MedicalDocumentEvent[] @relation("MedicalDocumentEventActor")
+  vetVisitReportsReported      VetVisitReport[]       @relation("VetVisitReportReportedBy")
+  vetVisitReportsReviewed      VetVisitReport[]       @relation("VetVisitReportReviewedBy")
 
   @@index([phoneNormalized])
   @@map("persons")
@@ -335,6 +341,7 @@ model Partner {
   transferredOutAnimals Outcome[]
   medicalEntries        MedicalEntry[]
   careEpisodes          CareEpisode[]
+  vetVisitReports       VetVisitReport[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -510,6 +517,8 @@ model Animal {
   careEpisodes         CareEpisode[]
   medicationOrders     MedicationOrder[]
   medicationDoses      MedicationDose[]
+  medicalDocuments     MedicalDocument[]
+  vetVisitReports      VetVisitReport[]
   notes                AnimalNote[]
   tasks                Task[]
   favorites            Favorite[]
@@ -1217,6 +1226,17 @@ model MedicalEntry {
   protocolStepId String?              @map(name: "protocol_step_id")
   protocolStep   MedicalProtocolStep? @relation(fields: [protocolStepId], references: [id], onDelete: Restrict)
 
+  /// True when a foster wrote the entry (a treatment given in foster), or
+  /// staff recorded it from a foster's report of an outside vet visit. It
+  /// counts at once, as any other entry does: it only says where it came from.
+  reportedByFoster Boolean @default(false) @map(name: "reported_by_foster")
+
+  /// The foster's report of an outside vet visit this entry was recorded
+  /// from. Provenance only, as `batchId` is. Null for care recorded any other
+  /// way.
+  vetReportId String?         @map(name: "vet_report_id")
+  vetReport   VetVisitReport? @relation(fields: [vetReportId], references: [id], onDelete: Restrict)
+
   /// Voiding marks an entry that should never have been recorded: it is kept,
   /// but counts for nothing (it is left out of every derived fact, such as
   /// whether rabies is current). Write-once, as `Outcome.reversedAt` is:
@@ -1246,6 +1266,10 @@ model MedicalEntry {
   /// On a test or an exam: the problem-list conditions it found.
   conditionsFound MedicalCondition[] @relation("ConditionSourceEntry")
 
+  /// The paperwork filed with this entry: a test's lab report, a surgery's
+  /// discharge sheet.
+  documents MedicalDocument[]
+
   createdAt DateTime @default(now()) @map(name: "created_at")
   updatedAt DateTime @updatedAt @map(name: "updated_at")
 
@@ -1256,6 +1280,7 @@ model MedicalEntry {
   @@index([status, dueDate])
   @@index([batchId])
   @@index([protocolStepId])
+  @@index([vetReportId])
   @@map("medical_entries")
 }
 
@@ -1918,6 +1943,10 @@ model MedicationDose {
   /// Provenance only: doses recorded together from the dose sheet share it.
   batchId String? @map(name: "batch_id")
 
+  /// True when the animal's foster recorded the dose. It counts at once, as
+  /// a dose staff record does: it only says who was there.
+  reportedByFoster Boolean @default(false) @map(name: "reported_by_foster")
+
   /// Write-once: a voided dose is kept but counts for nothing, and the slot
   /// can be recorded again.
   voidedAt   DateTime? @map(name: "voided_at")
@@ -1934,6 +1963,169 @@ model MedicationDose {
   @@unique([orderId, slotDate, slot], where: { voidedAt: null })
   @@index([animalId, slotDate])
   @@map("medication_doses")
+}
+
+/// What kind of paper a medical document is. Defined in code: staff pick
+/// one, and nothing derives from it beyond the label and the list's filter.
+enum MedicalDocumentType {
+  LAB_RESULT
+  VET_RECORD
+  IMAGING
+  PRESCRIPTION
+  CONSENT_FORM
+  OTHER
+}
+
+/// What an event on a medical document's audit trail records.
+enum MedicalDocumentEventAction {
+  CREATED
+  EDITED
+  VOIDED
+  FILE_REMOVED
+}
+
+/// A file kept on an animal's medical record: a lab result, a vet record, an
+/// image, a prescription or a consent form. Optionally filed with one of the
+/// animal's entries, and, when a foster sent it with a report of an outside
+/// vet visit, naming that report.
+///
+/// The file is private. `pathname` is its key in the document store, never a
+/// URL, and the file is served only through a route that checks who is
+/// asking. The file is kept exactly as uploaded.
+///
+/// Corrected in place, each change kept in its events. Voiding (write-once)
+/// keeps the row and the file: a voided document counts for nothing and
+/// fosters don't see it. Removing the file, on a voided document only, deletes
+/// it from the store for good and keeps the row, saying who removed it, when
+/// and why: for a file the shelter should never have held.
+model MedicalDocument {
+  id       String @id @default(cuid())
+  animalId String @map(name: "animal_id")
+  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+
+  /// The entry of the same animal this paper belongs to, if any.
+  entryId String?       @map(name: "entry_id")
+  entry   MedicalEntry? @relation(fields: [entryId], references: [id], onDelete: Restrict)
+
+  /// The foster's report it was sent with, if any. Provenance only.
+  vetReportId String?         @map(name: "vet_report_id")
+  vetReport   VetVisitReport? @relation(fields: [vetReportId], references: [id], onDelete: Restrict)
+
+  name         String
+  type         MedicalDocumentType
+  /// The calendar day on the paper (when the vet wrote it), as
+  /// `yyyy-MM-dd`. Optional: not every paper is dated.
+  documentDate String?             @map(name: "document_date")
+  notes        String?
+
+  /// The store's key for the file. Holds no part of the uploaded file's
+  /// name, which can carry a person's name. Never shown.
+  pathname    String @unique
+  /// The type read from the file's first bytes when it was uploaded, never
+  /// the name's extension or what the browser claimed.
+  contentType String @map(name: "content_type")
+  sizeBytes   Int    @map(name: "size_bytes")
+
+  uploadedById String @map(name: "uploaded_by_id")
+  uploadedBy   Person @relation("MedicalDocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  /// Write-once, as an entry's void is. The reason is required whenever
+  /// `voidedAt` is set.
+  voidedAt   DateTime? @map(name: "voided_at")
+  voidedById String?   @map(name: "voided_by_id")
+  voidedBy   Person?   @relation("MedicalDocumentVoidedBy", fields: [voidedById], references: [id])
+  voidReason String?   @map(name: "void_reason")
+
+  /// Set when the file was deleted from the store, on a voided document only.
+  /// Write-once; the reason is required whenever `fileRemovedAt` is set.
+  fileRemovedAt     DateTime? @map(name: "file_removed_at")
+  fileRemovedById   String?   @map(name: "file_removed_by_id")
+  fileRemovedBy     Person?   @relation("MedicalDocumentFileRemovedBy", fields: [fileRemovedById], references: [id])
+  fileRemovalReason String?   @map(name: "file_removal_reason")
+
+  events MedicalDocumentEvent[]
+
+  /// When the file was uploaded.
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@index([animalId])
+  @@index([entryId])
+  @@index([vetReportId])
+  @@map("medical_documents")
+}
+
+/// Append-only audit trail for medical documents, shaped as
+/// `CareEpisodeEvent` is. CREATED stores the whole document in `after`;
+/// EDITED stores only what changed on both sides; VOIDED stores
+/// `{ voidReason }`; FILE_REMOVED stores `{ fileRemovalReason }`. Each event
+/// is also written to AnimalActivityLog as readable text.
+model MedicalDocumentEvent {
+  id         String                     @id @default(cuid())
+  documentId String                     @map(name: "document_id")
+  document   MedicalDocument            @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  action     MedicalDocumentEventAction
+
+  actorId String @map(name: "actor_id")
+  actor   Person @relation("MedicalDocumentEventActor", fields: [actorId], references: [id])
+
+  before Json?
+  after  Json?
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+
+  @@index([documentId])
+  @@map("medical_document_events")
+}
+
+/// A foster's report of a visit to an outside vet, sent under an open
+/// placement: the day, the clinic (a vet clinic partner, or a vet's name),
+/// what happened, and its paperwork as documents. It counts for nothing on
+/// the record: staff record ordinary entries from it, which name it, then
+/// mark it reviewed, or dismiss it with a reason.
+///
+/// Waiting while `reviewedAt` is null. Reviewing is write-once and needs no
+/// entry: a visit can find nothing to record. A report stays after its
+/// placement ends, still waiting until staff close it.
+model VetVisitReport {
+  id       String @id @default(cuid())
+  animalId String @map(name: "animal_id")
+  animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
+
+  /// The placement it was sent under.
+  placementId String          @map(name: "placement_id")
+  placement   FosterPlacement @relation(fields: [placementId], references: [id], onDelete: Restrict)
+
+  /// The foster who sent it.
+  reportedById String @map(name: "reported_by_id")
+  reportedBy   Person @relation("VetVisitReportReportedBy", fields: [reportedById], references: [id])
+
+  /// The calendar day of the visit, as `yyyy-MM-dd`.
+  visitDate String @map(name: "visit_date")
+
+  /// The vet clinic partner seen, or a vet's name when it isn't a partner.
+  vetPartnerId String?  @map(name: "vet_partner_id")
+  vetPartner   Partner? @relation(fields: [vetPartnerId], references: [id])
+  vetName      String?  @map(name: "vet_name")
+
+  /// What happened at the visit, in the foster's words.
+  summary String
+
+  reviewedAt    DateTime? @map(name: "reviewed_at")
+  reviewedById  String?   @map(name: "reviewed_by_id")
+  reviewedBy    Person?   @relation("VetVisitReportReviewedBy", fields: [reviewedById], references: [id])
+  /// Set only when the review dismissed the report, and required then.
+  dismissReason String?   @map(name: "dismiss_reason")
+
+  documents MedicalDocument[]
+  entries   MedicalEntry[]
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@index([animalId])
+  @@index([reviewedAt])
+  @@map("vet_visit_reports")
 }
 
 // ═══════════════════════════════════════════════════
@@ -2362,6 +2554,9 @@ model FosterPlacement {
   outcomeId String?  @unique @map(name: "outcome_id")
   outcome   Outcome? @relation(fields: [outcomeId], references: [id], onDelete: SetNull)
 
+  // Outside vet visits the foster reported while this placement was open.
+  vetVisitReports VetVisitReport[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -2603,6 +2798,13 @@ enum AnimalActivityType {
   MEDICATION_ORDER_VOIDED // A medication order was voided as recorded in error
   MEDICATION_DOSE_NOT_GIVEN // A dose was recorded as refused or not given (a dose given writes no row)
   MEDICATION_DOSE_VOIDED // A recorded dose was voided as recorded in error
+  MEDICAL_DOCUMENT_ADDED // A medical document was uploaded
+  MEDICAL_DOCUMENT_EDITED // A medical document's name, type, day, notes or entry was corrected
+  MEDICAL_DOCUMENT_VOIDED // A medical document was voided as uploaded in error
+  MEDICAL_DOCUMENT_FILE_REMOVED // A voided medical document's file was deleted from storage
+  VET_VISIT_REPORTED // A foster reported an outside vet visit
+  VET_VISIT_REPORT_REVIEWED // Staff marked a foster's vet visit report reviewed
+  VET_VISIT_REPORT_DISMISSED // Staff dismissed a foster's vet visit report, with a reason
 }
 
 model AnimalActivityLog {

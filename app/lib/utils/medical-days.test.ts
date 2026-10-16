@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   addCalendarMonths,
+  beforeBirthIssue,
   beforeIntakeIssue,
   dueDateIssue,
   futureDayIssue,
@@ -111,4 +112,12 @@ test("beforeIntakeIssue: the intake day is allowed, the day before isn't, and no
     "The start date can't be before the animal's intake on Aug 1, 2026.",
   );
   assert.equal(beforeIntakeIssue(day("2020-01-01"), null, "The start date"), null);
+});
+
+test("beforeBirthIssue: the birth day is allowed, the day before isn't", () => {
+  assert.equal(beforeBirthIssue(day("2024-03-03"), day("2024-03-03"), "The document date"), null);
+  assert.equal(
+    beforeBirthIssue(day("2024-03-02"), day("2024-03-03"), "The document date"),
+    "The document date can't be before the animal's birth on Mar 3, 2024.",
+  );
 });

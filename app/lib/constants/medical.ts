@@ -9,6 +9,7 @@ import type {
   MedicalEntrySource,
   MedicalConditionStatus,
   MedicalConditionType,
+  MedicalDocumentType,
   MedicalEntryStatus,
   MedicalItemKind,
   MedicalProtocolStepKind,
@@ -306,3 +307,31 @@ export const MEDICATION_INSTRUCTIONS_MAX_LENGTH = 1000;
 /** The longest "prescribed by" a medication order can carry: a vet's name
  * or a clinic's. */
 export const MEDICATION_PRESCRIBED_BY_MAX_LENGTH = 120;
+
+/** What kind of paper a medical document is. */
+export const MEDICAL_DOCUMENT_TYPE_LABELS: Record<MedicalDocumentType, string> = {
+  LAB_RESULT: "Lab result",
+  VET_RECORD: "Vet record",
+  IMAGING: "Imaging",
+  PRESCRIPTION: "Prescription",
+  CONSENT_FORM: "Consent form",
+  OTHER: "Other",
+};
+
+/**
+ * The largest file a medical document can be: under the 4.5 MB a serverless
+ * function accepts as a request body, with room for the form's other fields.
+ */
+export const MEDICAL_DOCUMENT_MAX_BYTES = 4 * 1024 * 1024;
+
+/** The longest name a medical document can carry. */
+export const MEDICAL_DOCUMENT_NAME_MAX_LENGTH = 200;
+
+/** The longest account of an outside vet visit a foster can send. */
+export const VET_VISIT_SUMMARY_MAX_LENGTH = 2000;
+
+/**
+ * How many days back a foster's page lists an animal's doses: as far as the
+ * dose sheets go, and never before the placement began.
+ */
+export const FOSTER_DOSE_PAST_DAYS = DOSE_SHEET_PAST_DAYS;

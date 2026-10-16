@@ -65,6 +65,14 @@ export const E2E_NEXT_DIST_DIR = ".next-e2e";
 
 export const E2E_DATABASE_URL = coordinates.e2e.databaseUrl;
 
+// The e2e server keeps medical documents' files on disk here, so a test run
+// never writes to a real store, even when .env holds a token. Global setup
+// empties it before seeding, as it resets the database.
+export const E2E_MEDICAL_DOCUMENT_DIR = path.join(
+  process.cwd(),
+  ".medical-documents-e2e",
+);
+
 // `npm run test:db` has its own container, so it can run while e2e does and
 // e2e's teardown (`down -v`) never removes its database. Same compose file.
 export const TEST_DB_DOCKER_PROJECT_NAME = coordinates.testDb.projectName;
@@ -138,6 +146,9 @@ export const getPlaywrightEnv = (): NodeJS.ProcessEnv => {
     // Images skip /_next/image on the e2e server; next.config.ts says why.
     PLAYWRIGHT_UNOPTIMIZED_IMAGES: "1",
     BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN ?? "",
+    MEDICAL_DOCUMENT_STORE: "local",
+    MEDICAL_DOCUMENT_DIR: E2E_MEDICAL_DOCUMENT_DIR,
+    MEDICAL_DOCUMENTS_BLOB_READ_WRITE_TOKEN: "",
     NEXT_TELEMETRY_DISABLED: "1",
   };
 };

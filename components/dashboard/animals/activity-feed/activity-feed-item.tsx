@@ -186,6 +186,34 @@ const activityConfig: Record<
     icon: Ban,
     text: "voided a dose",
   },
+  [AnimalActivityType.MEDICAL_DOCUMENT_ADDED]: {
+    icon: FileText,
+    text: "added a medical document",
+  },
+  [AnimalActivityType.MEDICAL_DOCUMENT_EDITED]: {
+    icon: Pencil,
+    text: "corrected a medical document",
+  },
+  [AnimalActivityType.MEDICAL_DOCUMENT_VOIDED]: {
+    icon: Ban,
+    text: "voided a medical document",
+  },
+  [AnimalActivityType.MEDICAL_DOCUMENT_FILE_REMOVED]: {
+    icon: Trash2,
+    text: "removed a medical document's file",
+  },
+  [AnimalActivityType.VET_VISIT_REPORTED]: {
+    icon: Stethoscope,
+    text: "reported an outside vet visit",
+  },
+  [AnimalActivityType.VET_VISIT_REPORT_REVIEWED]: {
+    icon: CalendarCheck,
+    text: "reviewed a foster's report",
+  },
+  [AnimalActivityType.VET_VISIT_REPORT_DISMISSED]: {
+    icon: CircleSlash,
+    text: "dismissed a foster's report",
+  },
   [AnimalActivityType.TASK_CREATED]: {
     icon: ClipboardList,
     text: "created a task",
