@@ -5,6 +5,7 @@ import {
   shelterSettingsColumns,
 } from "@/app/lib/utils/shelter-settings";
 import fs from "node:fs";
+import assert from "node:assert/strict";
 import path from "node:path";
 import { betterAuth } from "better-auth";
 import { authOptions } from "@/auth.options";
@@ -130,6 +131,10 @@ import {
 } from "@/app/lib/storage/medical-document-store";
 import { ALTERED_ENTRY_WHERE } from "@/app/lib/data/animals/medical-status";
 import { recordOutcome } from "@/app/lib/services/outcome-recording";
+import { correctOutcomeMedical } from "@/app/lib/services/outcome-medical";
+import { recordOutcomeReversal } from "@/app/lib/services/outcome-reversal";
+import { lockAnimal } from "@/app/lib/data/application-status.data";
+import { EuthanasiaMedicalSchema, type OutcomeMedicalDetailsInput } from "@/app/lib/zod-schemas/outcome-medical.schemas";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -5258,6 +5263,8 @@ async function clearDatabase() {
   await prisma.microchipDetails.deleteMany();
   await prisma.examFinding.deleteMany();
   await prisma.examDetails.deleteMany();
+  await prisma.euthanasiaDetails.deleteMany();
+  await prisma.deathDetails.deleteMany();
   await prisma.medicalEntry.deleteMany();
   await prisma.vetVisitReport.deleteMany();
   await prisma.medicalProtocolStep.deleteMany();
@@ -8477,6 +8484,163 @@ async function seedFosterMedical() {
   console.log(`Seeded Rosa Lindqvist (foster1@example.com), fostering ${dog.name}: a medication course, dewormer, and two vet visit reports with paperwork.`);
 }
 
+/** Late documentation of old outcomes, and an outcome recorded in error. */
+async function seedEndOfLife() {
+  console.log("Seeding end-of-life medical records...");
+  const today = shelterToday(seedTimezone);
+  const olivia = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff1@example.com" } } });
+  const benjamin = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff2@example.com" } } });
+  const admin = await prisma.person.findFirstOrThrow({ where: { user: { email: "admin@example.com" } } });
+  const clinic = await prisma.partner.findFirstOrThrow({ where: { name: "Downtown Veterinary Clinic", type: PartnerType.VET_CLINIC, isActive: true } });
+  const euthanasia = EuthanasiaMedicalSchema.parse({
+    kind: "EUTHANASIA", source: MedicalEntrySource.OUTSIDE_VET,
+    vetPartnerId: clinic.id, performedByName: "Dr. Morgan Hale",
+    authorizedById: benjamin.id, reasonCategory: "MEDICAL",
+    reasonNotes: "Irreversible illness with poor quality of life; clinical paperwork supplied after the outcome was recorded.",
+    drug: "Pentobarbital", dose: "4 mL", route: "Intravenous",
+    witness: olivia.name, bodyDisposition: "Private cremation arranged",
+  });
+  const death: OutcomeMedicalDetailsInput = {
+    kind: "DEATH", circumstances: "FOUND_DEAD",
+    circumstanceNotes: "Found during morning rounds; details documented after the outcome was recorded.",
+    causeKnowledge: "UNKNOWN", cause: null, necropsyRequested: null,
+    bodyDisposition: "Pending family instructions",
+  };
+
+  const attached: { animalId: string; name: string; entryId: string; day: CalendarDay }[] = [];
+  for (const [type, medical] of [[OutcomeType.EUTHANIZED, euthanasia], [OutcomeType.DECEASED, death]] as const) {
+    const outcome = await prisma.outcome.findFirst({
+      where: {
+        type, reversedAt: null, medicalEntry: { is: null },
+        animal: { name: { notIn: HAND_AUTHORED_ANIMAL_NAMES }, listingStatus: AnimalListingStatus.ARCHIVED, archiveReason: type },
+      },
+      orderBy: [{ animal: { name: "desc" } }, { id: "asc" }],
+      include: { animal: { select: { name: true } } },
+    });
+    assert(outcome, `seedEndOfLife: no generated live ${type} outcome without medical details.`);
+    assert(outcome.outcomeDate <= today, "seedEndOfLife: a historical outcome is in the future.");
+    const documentedAfter = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      await lockAnimal(tx, outcome.animalId);
+      return correctOutcomeMedical(tx, outcome.id, outcome.animalId, medical, olivia.id);
+    });
+    assert.equal(result.status, "created");
+    assert(result.entryId);
+    const { animal: _animal, ...originalOutcome } = outcome;
+    assert.deepEqual(await prisma.outcome.findUniqueOrThrow({ where: { id: outcome.id } }), originalOutcome,
+      "seedEndOfLife: late documentation changed the original outcome or its provenance.");
+    const entry = await prisma.medicalEntry.findUniqueOrThrow({ where: { id: result.entryId } });
+    assert.equal(entry.createdById, olivia.id);
+    assert(entry.createdAt >= documentedAfter, "seedEndOfLife: documentation must not be backdated.");
+    attached.push({ animalId: outcome.animalId, name: outcome.animal.name, entryId: result.entryId, day: calendarDay(outcome.outcomeDate) });
+  }
+
+  // No earlier scenario is consumed: this animal has no care, placements or
+  // applications, and reversing restores its listing and unit.
+  const eligible = {
+    name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+    listingStatus: { not: AnimalListingStatus.ARCHIVED }, archiveReason: null,
+    intake: { some: { intakeDate: { lte: today } } }, Outcome: { none: {} },
+    adoptionApplications: { none: {} }, fosterPlacements: { none: {} },
+    medicationOrders: { none: {} }, medicalEntries: { none: {} },
+    medicalConditions: { none: {} }, careEpisodes: { none: {} },
+    medicalDocuments: { none: {} }, vetVisitReports: { none: {} },
+  } satisfies Prisma.AnimalWhereInput;
+  const mistaken = await prisma.animal.findFirst({
+    where: eligible, orderBy: [{ name: "desc" }, { id: "asc" }],
+    select: { id: true, name: true, listingStatus: true, currentUnitId: true },
+  });
+  assert(mistaken, "seedEndOfLife: no unreserved generated animal for the reversed-outcome example.");
+  // Reassert the entire claim before writing, rather than relying on its name.
+  assert.equal(await prisma.animal.count({ where: { ...eligible, id: mistaken.id } }), 1);
+  const reversedEntry = await prisma.$transaction(async (tx) => {
+    await recordOutcome(tx, {
+      animalId: mistaken.id,
+      values: {
+        outcomeType: OutcomeType.EUTHANIZED, outcomeDate: today,
+        notes: "Outcome recorded against the wrong animal; retained to show its correction by reversal.",
+        medical: { ...euthanasia, source: MedicalEntrySource.IN_HOUSE,
+          vetPartnerId: null, performedByName: null, performedById: benjamin.id,
+          reasonNotes: "Severe injury; this documentation belongs to another animal.",
+          witness: olivia.name, bodyDisposition: "Pending" },
+      },
+    }, olivia.id);
+    return tx.medicalEntry.findFirstOrThrow({
+      where: { animalId: mistaken.id, outcomeId: { not: null } },
+      select: { id: true, outcomeId: true },
+    });
+  });
+
+  // Real sample paperwork stays attached when the mistaken entry is voided.
+  const store = medicalDocumentStore({ overwrite: true });
+  const bytes = new Uint8Array(fs.readFileSync(path.join(process.cwd(), "prisma/seed-files/sample-vet-record.pdf")));
+  for (const [subject, fileName, name] of [
+    [attached[0], "euthanasia-clinical-record.pdf", "Euthanasia clinical record"],
+    [{ animalId: mistaken.id, entryId: reversedEntry.id, day: today }, "reversed-outcome-paperwork.pdf", "Retained outcome paperwork"],
+  ] as const) {
+    await storeThenRecord(store, { pathname: seedDocumentPathname(fileName), bytes, fresh: false }, (stored) =>
+      prisma.$transaction((tx) => createMedicalDocument(tx, {
+        animalId: subject.animalId, entryId: subject.entryId, documentDate: subject.day,
+        type: MedicalDocumentType.VET_RECORD, name, ...stored,
+      }, olivia.id, today)),
+    );
+  }
+  assert(reversedEntry.outcomeId);
+  await prisma.$transaction((tx) => recordOutcomeReversal(tx, reversedEntry.outcomeId!, "Recorded against the wrong animal", admin.id));
+  const restored = await prisma.animal.findUniqueOrThrow({ where: { id: mistaken.id } });
+  assert.equal(restored.listingStatus, mistaken.listingStatus);
+  assert.equal(restored.currentUnitId, mistaken.currentUnitId);
+  assert.equal(restored.archiveReason, null);
+
+  await assertEndOfLifeConsistency();
+  console.log(`Seeded end-of-life records: ${attached[0].name} (late euthanasia documentation), ${attached[1].name} (late death documentation), ${mistaken.name} (reversed euthanasia with retained paperwork).`);
+}
+
+async function assertEndOfLifeConsistency() {
+  const entries = await prisma.medicalEntry.findMany({
+    where: { OR: [{ outcomeId: { not: null } }, { kind: { in: [MedicalEntryKind.EUTHANASIA, MedicalEntryKind.DEATH] } }] },
+    include: { outcome: true, euthanasia: true, death: true, events: { orderBy: { createdAt: "asc" } }, documents: true },
+  });
+  assert.equal(entries.length, 3, "seedEndOfLife: expected exactly three linked examples.");
+  for (const entry of entries) {
+    const outcome = entry.outcome;
+    assert(outcome, "seedEndOfLife: an end-of-life entry has no outcome.");
+    assert.equal(entry.animalId, outcome.animalId);
+    assert.equal(entry.completedDate, outcome.outcomeDate);
+    assert.equal(entry.status, MedicalEntryStatus.COMPLETED);
+    assert.equal(entry.administeredById, null);
+    assert.equal(entry.kind, outcome.type === OutcomeType.EUTHANIZED ? MedicalEntryKind.EUTHANASIA : MedicalEntryKind.DEATH);
+    assert.equal(Boolean(entry.euthanasia), outcome.type === OutcomeType.EUTHANIZED);
+    assert.equal(Boolean(entry.death), outcome.type === OutcomeType.DECEASED);
+    assert.deepEqual(entry.voidedAt, outcome.reversedAt);
+    assert.equal(entry.voidedById, outcome.reversedById);
+    assert.equal(entry.voidReason, outcome.reversalReason);
+    assert.equal(entry.events.filter((event) => event.action === "CREATED").length, 1);
+    if (outcome.reversedAt) {
+      const [event] = entry.events.filter((event) => event.action === "VOIDED");
+      assert.equal(entry.events.length, 2);
+      assert.deepEqual(event.createdAt, outcome.reversedAt);
+      assert.equal(event.actorId, outcome.reversedById);
+      assert.equal(entry.documents.length, 1);
+      assert.equal(entry.documents[0].voidedAt, null);
+      assert.equal(entry.documents[0].fileRemovedAt, null);
+    } else {
+      assert.equal(entry.events.length, 1);
+    }
+    if (entry.death) {
+      assert.equal(entry.source, null);
+      assert.equal(entry.death.cause, null);
+      assert.equal(entry.death.necropsyRequested, null);
+    }
+  }
+  for (const type of [OutcomeType.EUTHANIZED, OutcomeType.DECEASED]) {
+    assert.equal(entries.filter((entry) => entry.outcome?.type === type && !entry.voidedAt).length, 1);
+    assert(await prisma.outcome.count({ where: { type, reversedAt: null, medicalEntry: { is: null } } }) > 0,
+      `seedEndOfLife: expected intentional legacy ${type} gaps to remain.`);
+  }
+  console.log("Verified end-of-life links, days, provenance, retained documents and reversal symmetry; legacy gaps remain.");
+}
+
 export async function main() {
   const restoreRandom = installDeterministicRandom();
   // Drain any leftover deal queues so a second main() in the same process
@@ -8547,6 +8711,7 @@ async function seedAll() {
   await seedMedications();
   await seedMedicalDocuments();
   await seedFosterMedical();
+  await seedEndOfLife();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

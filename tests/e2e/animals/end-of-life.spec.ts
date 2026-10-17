@@ -275,3 +275,75 @@ test("staff explicitly adds missing legacy details with current provenance", asy
     await expect(page.getByRole("listitem", { name: /^Death,/ })).toContainText("Recorded historical cause");
   } finally { await context.close(); await cleanup(f); }
 });
+
+test("seeded clinical records, retained reversal and legacy gaps are readable on both surfaces", async ({ browser }, testInfo) => {
+  test.setTimeout(150_000);
+  const examples = await withDb(async (db) => {
+    await db.query("BEGIN READ ONLY");
+    const linked = await db.query<{ outcomeId: string; animalId: string; name: string; kind: string; reversed: boolean }>(`
+      SELECT o.id AS "outcomeId", a.id AS "animalId", a.name, e.kind, o."reversedAt" IS NOT NULL AS reversed
+      FROM outcomes o JOIN animals a ON a.id = o."animalId" JOIN medical_entries e ON e.outcome_id = o.id
+      ORDER BY e.kind, a.name, a.id`);
+    const legacy = await db.query<{ outcomeId: string; animalId: string; name: string }>(`
+      SELECT o.id AS "outcomeId", a.id AS "animalId", a.name FROM outcomes o JOIN animals a ON a.id = o."animalId"
+      LEFT JOIN medical_entries e ON e.outcome_id = o.id
+      WHERE o.type IN ('DECEASED', 'EUTHANIZED') AND o."reversedAt" IS NULL AND e.id IS NULL
+      ORDER BY a.name, a.id LIMIT 1`);
+    await db.query("COMMIT");
+    return { linked: linked.rows, legacy: legacy.rows[0] };
+  });
+  expect(examples.linked).toHaveLength(3);
+  expect(examples.legacy).toBeDefined();
+  const context = await browser.newContext({ storageState: states.staff });
+  const page = await context.newPage();
+  try {
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const example of examples.linked) {
+        const label = example.kind === "DEATH" ? "Death" : "Euthanasia";
+        const key = example.reversed ? "reversed" : example.kind.toLowerCase();
+        for (const surface of ["outcome", "history"]) {
+          await page.goto(surface === "outcome"
+            ? `/dashboard/outcomes/${example.outcomeId}/edit`
+            : `/dashboard/animals/${example.animalId}/medical/history?kind=${example.kind}`);
+          const entry = page.getByRole("listitem", { name: new RegExp(`^${label},`) });
+          await expect(entry).toBeVisible();
+          await expect(entry).toContainText("Recorded by Olivia Chen");
+          if (example.kind === "DEATH") {
+            await expect(entry).toContainText("Cause: Unknown");
+            await expect(entry).toContainText("Necropsy requested: Unknown");
+            await expect(entry).toContainText("Found dead");
+          } else {
+            await expect(entry).toContainText("Pentobarbital");
+            await expect(entry).toContainText("4 mL");
+            await expect(entry).toContainText("Intravenous");
+          }
+          if (example.reversed) {
+            await expect(entry).toContainText("Voided");
+            await entry.getByRole("button", { name: "Show 1 change", exact: true }).click();
+            await expect(entry.getByRole("list", { name: "Change history" })).toContainText("Recorded against the wrong animal");
+            if (surface === "outcome") await expect(page.getByRole("heading", { name: "Outcome Reversed", exact: true })).toBeVisible();
+          }
+          if (example.kind === "EUTHANASIA") {
+            const document = entry.getByRole("link", { name: example.reversed ? "Retained outcome paperwork" : "Euthanasia clinical record", exact: true });
+            await expect(document).toBeVisible();
+            const response = await context.request.get((await document.getAttribute("href"))!);
+            expect(response.status()).toBe(200);
+            expect((await response.body()).subarray(0, 5).toString()).toBe("%PDF-");
+          }
+          if (surface === "history") await expect(page.getByText(example.name, { exact: true }).first()).toBeVisible();
+          expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+          await page.screenshot({ path: testInfo.outputPath(`seeded-${key}-${surface}-${width}.png`), fullPage: true });
+        }
+      }
+      await page.goto(`/dashboard/outcomes/${examples.legacy.outcomeId}/edit`);
+      await expect(page.getByText("Medical details not recorded", { exact: true }).filter({ visible: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Add medical details", exact: true })).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`seeded-legacy-outcome-${width}.png`), fullPage: true });
+      await page.goto(`/dashboard/animals/${examples.legacy.animalId}/medical/history`);
+      await expect(page.getByText(examples.legacy.name, { exact: true }).first()).toBeVisible();
+      await expect(page.getByRole("listitem", { name: /^(Death|Euthanasia),/ })).toHaveCount(0);
+      await page.screenshot({ path: testInfo.outputPath(`seeded-legacy-history-${width}.png`), fullPage: true });
+    }
+  } finally { await context.close(); }
+});
