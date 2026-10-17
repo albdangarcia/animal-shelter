@@ -9,8 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import type { VetVisitReportDisplay } from "@/app/lib/data/vet-visit-reports";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
-import { MedicalEntryKind } from "@/prisma/generated/enums";
-import { MEDICAL_ENTRY_KIND_LABELS } from "@/app/lib/constants/medical";
+import { MEDICAL_ENTRY_KIND_LABELS, isOrdinaryCareKind, type OrdinaryCareKind } from "@/app/lib/constants/medical";
 import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import { documentFileHref } from "@/app/lib/utils/medical-document-file";
 import { medicalEntryName } from "@/app/lib/utils/medical-entry-name";
@@ -20,14 +19,14 @@ import { CareEntryForm } from "./care-entry-form";
 import { DiscardChangesDialog } from "./discard-changes-dialog";
 import { VoidReasonDialog } from "./void-reason-dialog";
 
-const KINDS = [MedicalEntryKind.VACCINE, MedicalEntryKind.TEST, MedicalEntryKind.TREATMENT, MedicalEntryKind.SURGERY, MedicalEntryKind.EXAM, MedicalEntryKind.MICROCHIP];
+const KINDS = ["VACCINE", "TEST", "TREATMENT", "SURGERY", "EXAM", "MICROCHIP"] as const satisfies readonly OrdinaryCareKind[];
 
 function ReportControls({ report, options, scheduled }: { report: VetVisitReportDisplay; options: MedicalEntryFormOptions; scheduled: MedicalEntryDisplay[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [dismissOpen, setDismissOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [selection, setSelection] = useState<{ kind: MedicalEntryKind; scheduled?: MedicalEntryDisplay } | null>(null);
+  const [selection, setSelection] = useState<{ kind: OrdinaryCareKind; scheduled?: MedicalEntryDisplay } | null>(null);
   const form = useRef<DirtyFormHandle & { isPending?: () => boolean }>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const guard = useConfirmedOpenChange(() => form.current?.isDirty() ?? false, setOpen);
@@ -50,7 +49,7 @@ function ReportControls({ report, options, scheduled }: { report: VetVisitReport
       <DialogContent className="sm:max-w-[640px] max-h-[90vh] overflow-y-auto" onCloseAutoFocus={returnFocus}>
         <DialogHeader className="min-w-0"><DialogTitle className="break-words">{selection ? `Record ${MEDICAL_ENTRY_KIND_LABELS[selection.kind].toLowerCase()} from report` : "Record care from report"}</DialogTitle><DialogDescription>Visit on {formatShelterDayOrNA(report.visitDate)}. Record what the paperwork supports, then mark the report reviewed when finished.</DialogDescription></DialogHeader>
         {open && (selection ? <CareEntryForm key={selection.scheduled?.id ?? selection.kind} animalId={report.animalId} kind={selection.kind} scheduled={selection.scheduled} report={{ id: report.id, visitDate: report.visitDate, vetPartnerId: report.vetPartnerId, vetName: report.vetName }} options={options} ref={form} onFormSubmit={() => setOpen(false)} /> : <div className="space-y-4">
-          <div><p className="mb-2 text-sm font-medium">Record care already scheduled</p><div className="flex flex-col items-start gap-2">{scheduled.length ? scheduled.map((entry) => <Button key={entry.id} variant="outline" className="h-auto max-w-full whitespace-normal text-left break-words" onClick={() => setSelection({ kind: entry.kind, scheduled: entry })}>{medicalEntryName(entry)} · Due {formatShelterDayOrNA(entry.dueDate)}</Button>) : <p className="text-sm text-muted-foreground">No scheduled care.</p>}</div></div>
+          <div><p className="mb-2 text-sm font-medium">Record care already scheduled</p><div className="flex flex-col items-start gap-2">{scheduled.length ? scheduled.filter((entry): entry is MedicalEntryDisplay & { kind: OrdinaryCareKind } => isOrdinaryCareKind(entry.kind)).map((entry) => <Button key={entry.id} variant="outline" className="h-auto max-w-full whitespace-normal text-left break-words" onClick={() => setSelection({ kind: entry.kind, scheduled: entry })}>{medicalEntryName(entry)} · Due {formatShelterDayOrNA(entry.dueDate)}</Button>) : <p className="text-sm text-muted-foreground">No scheduled care.</p>}</div></div>
           <div><p className="mb-2 text-sm font-medium">Add an entry</p><div className="flex flex-wrap gap-2">{KINDS.map((kind) => <Button key={kind} variant="outline" onClick={() => setSelection({ kind })}>{MEDICAL_ENTRY_KIND_LABELS[kind]}</Button>)}</div></div>
         </div>)}
       </DialogContent>

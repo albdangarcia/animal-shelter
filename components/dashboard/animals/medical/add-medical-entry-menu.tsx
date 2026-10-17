@@ -17,10 +17,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import {
-  CATALOG_ENTRY_KINDS,
+  ORDINARY_CARE_KINDS,
+  type OrdinaryCareKind,
   MEDICAL_ENTRY_KIND_LABELS,
 } from "@/app/lib/constants/medical";
 import {
@@ -38,16 +38,8 @@ interface Props {
   options: MedicalEntryFormOptions;
 }
 
-// Care given from the catalog first, then the kinds with forms of their own.
-const RECORDED_KINDS: MedicalEntryKind[] = [
-  ...CATALOG_ENTRY_KINDS,
-  MedicalEntryKind.SURGERY,
-  MedicalEntryKind.MICROCHIP,
-  MedicalEntryKind.EXAM,
-];
-
 // "a vaccine", "an exam".
-const withArticle = (kind: MedicalEntryKind) => {
+const withArticle = (kind: OrdinaryCareKind) => {
   const noun = MEDICAL_ENTRY_KIND_LABELS[kind].toLowerCase();
   return `${/^[aeiou]/.test(noun) ? "an" : "a"} ${noun}`;
 };
@@ -56,7 +48,7 @@ const withArticle = (kind: MedicalEntryKind) => {
  * What the menu's dialog is doing: recording care of a kind, scheduling, or
  * recording a spay/neuter exemption.
  */
-type Mode = { record: MedicalEntryKind } | "schedule" | "exemption";
+type Mode = { record: OrdinaryCareKind } | "schedule" | "exemption";
 
 /**
  * "+ Add entry": pick a kind and record care already given, schedule care
@@ -91,7 +83,7 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {RECORDED_KINDS.map((value) => (
+          {ORDINARY_CARE_KINDS.map((value) => (
             <DropdownMenuItem
               key={value}
               onSelect={() => setMode({ record: value })}

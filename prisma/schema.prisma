@@ -87,6 +87,8 @@ model Person {
   medicalEntriesAdministered MedicalEntry[]      @relation("MedicalEntryAdministeredBy")
   medicalEntriesVoided       MedicalEntry[]      @relation("MedicalEntryVoidedBy")
   medicalEntryEvents         MedicalEntryEvent[] @relation("MedicalEntryEventActor")
+  euthanasiasAuthorized       EuthanasiaDetails[] @relation("EuthanasiaAuthorizedBy")
+  euthanasiasPerformed        EuthanasiaDetails[] @relation("EuthanasiaPerformedBy")
   medicalConditionsCreated   MedicalCondition[]      @relation("MedicalConditionCreatedBy")
   medicalConditionsVoided    MedicalCondition[]      @relation("MedicalConditionVoidedBy")
   medicalConditionEvents     MedicalConditionEvent[] @relation("MedicalConditionEventActor")
@@ -786,6 +788,9 @@ model Outcome {
   // Set when this outcome was created via a FOSTER_TO_ADOPT placement conversion.
   fosterPlacement FosterPlacement?
 
+  /// The clinical record owned by this outcome, retained after reversal.
+  medicalEntry MedicalEntry?
+
   // For RETURN_TO_OWNER
   ownerId String?
   owner   Person? @relation("ReclaimedByOwner", fields: [ownerId], references: [id])
@@ -895,7 +900,8 @@ enum MedicalItemKind {
 /// Vaccines, tests and treatments are given from the catalog, so each entry
 /// points at a catalog item. Surgeries, microchips and exams have no catalog
 /// item: a surgery says which procedure it is, a microchip carries its
-/// number, and an exam names its type.
+/// number, and an exam names its type. Euthanasia and death are owned by
+/// their outcomes and have no catalog item.
 /// New values go at the end (see `MedicalEntryStatus`).
 enum MedicalEntryKind {
   VACCINE
@@ -904,6 +910,22 @@ enum MedicalEntryKind {
   SURGERY
   MICROCHIP
   EXAM
+  EUTHANASIA
+  DEATH
+}
+
+/// The recorded reason for euthanasia; Other requires explanatory notes.
+enum EuthanasiaReasonCategory {
+  MEDICAL
+  BEHAVIORAL
+  OTHER
+}
+
+/// How a death occurred; an unknown cause is stored separately as null.
+enum DeathCircumstances {
+  FOUND_DEAD
+  DURING_PROCEDURE
+  OTHER
 }
 
 /// Which surgery an entry is. Defined here rather than in the catalog,
@@ -1146,8 +1168,12 @@ model MedicalEntry {
   animal   Animal           @relation(fields: [animalId], references: [id], onDelete: Cascade)
   kind     MedicalEntryKind
 
+  /// A single immutable link across both outcome-owned kinds, including voided rows.
+  outcomeId String?  @unique @map(name: "outcome_id")
+  outcome   Outcome? @relation(fields: [outcomeId], references: [id], onDelete: Restrict)
+
   /// The catalog item, for a vaccine, test or treatment. Null for a surgery,
-  /// a microchip or an exam, which aren't given from the catalog.
+  /// a microchip, an exam, euthanasia or death, which have no catalog item.
   itemId String?      @map(name: "item_id")
   item   MedicalItem? @relation(fields: [itemId], references: [id], onDelete: Restrict)
 
@@ -1182,8 +1208,8 @@ model MedicalEntry {
   /// docs/calendar-days.md.
   completedDate String? @map(name: "completed_date")
 
-  /// Who gave the care. Set on every COMPLETED entry and only there: nobody
-  /// knows who will give scheduled care, and declined care was never given.
+  /// Where care was given. Required on completed care except DEATH, which
+  /// records an event rather than administered care. Null before completion.
   source MedicalEntrySource?
 
   /// Why the care won't be given, in words. On a DECLINED entry: required,
@@ -1258,6 +1284,8 @@ model MedicalEntry {
   surgery   SurgeryDetails?
   microchip MicrochipDetails?
   exam      ExamDetails?
+  euthanasia EuthanasiaDetails?
+  death      DeathDetails?
   events    MedicalEntryEvent[]
 
   /// On an exam: the spay or neuter it found already done, recorded from it.
@@ -1282,6 +1310,54 @@ model MedicalEntry {
   @@index([protocolStepId])
   @@index([vetReportId])
   @@map("medical_entries")
+}
+
+/// Clinical facts recorded with a euthanasia outcome. Authorization is a
+/// recorded assertion, without a separate approval workflow. The performer
+/// is either a Person or a name; services enforce that exactly one is set.
+model EuthanasiaDetails {
+  id      String       @id @default(cuid())
+  entryId String       @unique @map(name: "entry_id")
+  entry   MedicalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  reasonCategory EuthanasiaReasonCategory @map(name: "reason_category")
+  reasonNotes    String? @map(name: "reason_notes")
+  authorizedById String @map(name: "authorized_by_id")
+  authorizedBy   Person @relation("EuthanasiaAuthorizedBy", fields: [authorizedById], references: [id], onDelete: Restrict)
+  performedById  String? @map(name: "performed_by_id")
+  performedBy    Person? @relation("EuthanasiaPerformedBy", fields: [performedById], references: [id], onDelete: Restrict)
+  performedByName String? @map(name: "performed_by_name")
+
+  /// Descriptive text, including the dose's unit; no inventory or dosing logic.
+  drug String
+  dose String
+  route String
+  witness String?
+  bodyDisposition String? @map(name: "body_disposition")
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@map("euthanasia_details")
+}
+
+/// Facts recorded with a death outcome. Null cause and necropsy mean unknown;
+/// an absent disposition is unknown too, rather than an invented fact.
+model DeathDetails {
+  id      String       @id @default(cuid())
+  entryId String       @unique @map(name: "entry_id")
+  entry   MedicalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+
+  circumstances DeathCircumstances
+  circumstanceNotes String? @map(name: "circumstance_notes")
+  cause String?
+  necropsyRequested Boolean? @map(name: "necropsy_requested")
+  bodyDisposition String? @map(name: "body_disposition")
+
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @updatedAt @map(name: "updated_at")
+
+  @@map("death_details")
 }
 
 /// What was given with a vaccine. Manufacturer and route start as the item's

@@ -5,6 +5,9 @@
 
 import type {
   DoseUnit,
+  DeathCircumstances,
+  EuthanasiaReasonCategory,
+  MedicalEntryKind,
   ExamFindingStatus,
   ExamResult,
   ExamType,
@@ -19,6 +22,8 @@ import type {
 } from "@/prisma/generated/enums";
 import {
   DOSE_UNIT_LABELS,
+  DEATH_CIRCUMSTANCES_LABELS,
+  EUTHANASIA_REASON_CATEGORY_LABELS,
   EXAM_FINDING_STATUS_LABELS,
   EXAM_RESULT_LABELS,
   EXAM_TYPE_LABELS,
@@ -71,6 +76,19 @@ export const MEDICAL_ENTRY_FIELD_LABELS: Record<string, string> = {
   results: "Results",
   doseAmount: "Dose",
   doseUnit: "Dose unit",
+  reasonCategory: "Reason category",
+  reasonNotes: "Reason notes",
+  authorizedById: "Authorized by",
+  performedById: "Performed by",
+  performedByName: "Outside performer",
+  drug: "Drug",
+  dose: "Dose including unit",
+  witness: "Witness",
+  bodyDisposition: "Body disposition",
+  circumstances: "Circumstances",
+  circumstanceNotes: "Circumstance notes",
+  cause: "Cause",
+  necropsyRequested: "Necropsy requested",
 };
 
 // The order fields are listed in, so a change reads top to bottom like the
@@ -81,7 +99,7 @@ const FIELD_ORDER = Object.keys(MEDICAL_ENTRY_FIELD_LABELS);
 // vitals entry, the exam a spay or neuter was found on, and the protocol
 // step that scheduled it. They are never corrected through the entry, so a
 // change never lists them.
-const UNLISTED_FIELDS = new Set(["vitalsLogId", "foundOnExamId", "protocolStepId"]);
+const UNLISTED_FIELDS = new Set(["vitalsLogId", "foundOnExamId", "protocolStepId", "outcomeId", "kind"]);
 
 const NONE = "none";
 
@@ -90,11 +108,21 @@ export const formatEntryFieldValue = (
   field: string,
   value: unknown,
   names: Record<string, string>,
+  kind?: MedicalEntryKind,
 ): string => {
   if (value === null || value === undefined || value === "") {
-    return field === "completedDate" ? "unknown" : NONE;
+    return ["completedDate", "cause", "necropsyRequested", "bodyDisposition"].includes(field) ? "unknown" : NONE;
   }
   switch (field) {
+    case "authorizedById":
+    case "performedById":
+      return names[value as string] ?? "a person no longer on record";
+    case "reasonCategory":
+      return EUTHANASIA_REASON_CATEGORY_LABELS[value as EuthanasiaReasonCategory] ?? String(value);
+    case "circumstances":
+      return DEATH_CIRCUMSTANCES_LABELS[value as DeathCircumstances] ?? String(value);
+    case "necropsyRequested":
+      return value === true ? "Yes" : "No";
     case "itemId":
     case "vetPartnerId":
     case "administeredById":
@@ -121,11 +149,13 @@ export const formatEntryFieldValue = (
         String(value)
       );
     case "status":
-      return MEDICAL_ENTRY_STATUS_LABELS[value as MedicalEntryStatus] ?? String(value);
+      return value === "COMPLETED" && (kind === "DEATH" || kind === "EUTHANASIA")
+        ? "Recorded"
+        : MEDICAL_ENTRY_STATUS_LABELS[value as MedicalEntryStatus] ?? String(value);
     case "source":
       return MEDICAL_ENTRY_SOURCE_LABELS[value as MedicalEntrySource] ?? String(value);
     case "route":
-      return MEDICAL_ROUTE_LABELS[value as MedicalRoute] ?? String(value);
+      return kind === "EUTHANASIA" ? String(value) : MEDICAL_ROUTE_LABELS[value as MedicalRoute] ?? String(value);
     case "doseUnit":
       return DOSE_UNIT_LABELS[value as DoseUnit] ?? String(value);
     case "durationMonths":
@@ -194,6 +224,7 @@ export const describeEntryChanges = (
   before: unknown,
   after: unknown,
   names: Record<string, string>,
+  kind?: MedicalEntryKind,
 ): EntryFieldChange[] => {
   const was = (before ?? {}) as Record<string, unknown>;
   const now = (after ?? {}) as Record<string, unknown>;
@@ -206,9 +237,11 @@ export const describeEntryChanges = (
       : [
           {
             field,
-            label: MEDICAL_ENTRY_FIELD_LABELS[field] ?? field,
-            from: formatEntryFieldValue(field, was[field], names),
-            to: formatEntryFieldValue(field, now[field], names),
+            label: field === "completedDate" && (kind === "DEATH" || kind === "EUTHANASIA")
+              ? `Date of ${kind === "DEATH" ? "death" : "euthanasia"}`
+              : MEDICAL_ENTRY_FIELD_LABELS[field] ?? field,
+            from: formatEntryFieldValue(field, was[field], names, kind),
+            to: formatEntryFieldValue(field, now[field], names, kind),
           },
         ],
   );

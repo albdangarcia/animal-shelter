@@ -35,6 +35,7 @@ import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.dat
 import { voidMedicalEntry } from "@/app/lib/actions/medical-entry.actions";
 import {
   MEDICAL_ENTRY_KIND_LABELS,
+  isOrdinaryCareKind,
   MEDICAL_REASON_MAX_LENGTH,
 } from "@/app/lib/constants/medical";
 import {
@@ -83,6 +84,8 @@ export function MedicalEntryActions({ animalId, entry, options }: Props) {
   const what = entryLabel(entry);
   const given = entry.status === MedicalEntryStatus.COMPLETED;
   const noun = MEDICAL_ENTRY_KIND_LABELS[entry.kind].toLowerCase();
+
+  if (!isOrdinaryCareKind(entry.kind)) return null;
 
   const handleVoid = () => {
     setReasonError(undefined);

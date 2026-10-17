@@ -5,6 +5,8 @@ import type {
   ExamFindingStatus,
   ExamResult,
   ExamType,
+  EuthanasiaReasonCategory,
+  DeathCircumstances,
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalConditionStatus,
@@ -40,6 +42,19 @@ export const isCatalogEntryKind = (
 ): kind is CatalogEntryKind =>
   (CATALOG_ENTRY_KINDS as readonly MedicalEntryKind[]).includes(kind);
 
+/** Care recorded through the ordinary medical forms, scheduling and reports. */
+export const ORDINARY_CARE_KINDS = [
+  ...CATALOG_ENTRY_KINDS,
+  "SURGERY",
+  "MICROCHIP",
+  "EXAM",
+] as const satisfies readonly MedicalEntryKind[];
+
+export type OrdinaryCareKind = (typeof ORDINARY_CARE_KINDS)[number];
+
+export const isOrdinaryCareKind = (kind: MedicalEntryKind): kind is OrdinaryCareKind =>
+  (ORDINARY_CARE_KINDS as readonly MedicalEntryKind[]).includes(kind);
+
 // Display labels for the medical enums, in the order pickers list them.
 
 /** What kind of care an entry records, as its badge and filters read. */
@@ -50,6 +65,8 @@ export const MEDICAL_ENTRY_KIND_LABELS: Record<MedicalEntryKind, string> = {
   SURGERY: "Surgery",
   MICROCHIP: "Microchip",
   EXAM: "Exam",
+  EUTHANASIA: "Euthanasia",
+  DEATH: "Death",
 };
 
 export const SURGERY_PROCEDURE_LABELS: Record<SurgeryProcedure, string> = {
@@ -335,3 +352,18 @@ export const VET_VISIT_SUMMARY_MAX_LENGTH = 2000;
  * dose sheets go, and never before the placement began.
  */
 export const FOSTER_DOSE_PAST_DAYS = DOSE_SHEET_PAST_DAYS;
+
+/** Recorded reasons and circumstances for outcome-owned medical entries. */
+export const EUTHANASIA_REASON_CATEGORY_LABELS: Record<EuthanasiaReasonCategory, string> = {
+  MEDICAL: "Medical",
+  BEHAVIORAL: "Behavioral",
+  OTHER: "Other",
+};
+
+export const DEATH_CIRCUMSTANCES_LABELS: Record<DeathCircumstances, string> = {
+  FOUND_DEAD: "Found dead",
+  DURING_PROCEDURE: "During a procedure",
+  OTHER: "Other",
+};
+
+export const OUTCOME_MEDICAL_TEXT_MAX_LENGTH = 200;

@@ -54,6 +54,7 @@ import {
 } from "@/app/lib/zod-schemas/medical-entry.schemas";
 import {
   MEDICAL_ENTRY_KIND_LABELS,
+  type CatalogEntryKind,
   isCatalogEntryKind,
   TEST_RESULT_LABELS,
 } from "@/app/lib/constants/medical";
@@ -94,7 +95,7 @@ export type ScheduledCare = Pick<
  * sent only when the form offers it and the box is ticked.
  */
 type EntryFormState = {
-  kind: MedicalEntryKind;
+  kind: CatalogEntryKind;
   itemId: string;
   completedDate: string | null;
   dateUnknown: boolean;
@@ -116,8 +117,8 @@ type EntryFormState = {
   scheduleNext: { dueDate: string | null };
 };
 
-const fromEntry = (entry: MedicalEntryDisplay): EntryFormState => ({
-  kind: entry.kind,
+const fromEntry = (entry: MedicalEntryDisplay, kind: CatalogEntryKind): EntryFormState => ({
+  kind,
   // This form serves vaccines, tests and treatments, which all have an item.
   itemId: entry.itemId ?? "",
   completedDate: entry.completedDate,
@@ -143,7 +144,7 @@ const fromEntry = (entry: MedicalEntryDisplay): EntryFormState => ({
   scheduleNext: { dueDate: null },
 });
 
-const blank = (kind: MedicalEntryKind, today: string): EntryFormState => ({
+const blank = (kind: CatalogEntryKind, today: string): EntryFormState => ({
   kind,
   itemId: "",
   completedDate: today,
@@ -172,10 +173,11 @@ const blank = (kind: MedicalEntryKind, today: string): EntryFormState => ({
  */
 const fromScheduled = (
   scheduled: ScheduledCare,
+  kind: CatalogEntryKind,
   item: MedicalEntryFormItem | undefined,
   today: CalendarDay,
 ): EntryFormState => ({
-  ...blank(scheduled.kind, today),
+  ...blank(kind, today),
   ...(item && fillsFor(item)),
   itemId: scheduled.itemId ?? "",
   notes: scheduled.notes ?? "",
@@ -193,7 +195,7 @@ const byName = (a: { name: string }, b: { name: string }) =>
  * if it was recorded as a rabies vaccine, whatever the catalog says now.
  */
 const itemChoices = (
-  kind: MedicalEntryKind,
+  kind: CatalogEntryKind,
   options: MedicalEntryFormOptions,
   entry?: MedicalEntryDisplay,
   scheduled?: ScheduledCare,
@@ -244,13 +246,9 @@ const FILLED_FIELDS = {
   ],
   [MedicalEntryKind.TEST]: [],
   [MedicalEntryKind.TREATMENT]: ["route", "doseAmount", "doseUnit"],
-  // Not given from the catalog, so there is no item to fill anything in.
-  [MedicalEntryKind.SURGERY]: [],
-  [MedicalEntryKind.MICROCHIP]: [],
-  [MedicalEntryKind.EXAM]: [],
-} as const satisfies Record<MedicalEntryKind, readonly (keyof EntryFormState)[]>;
+} as const satisfies Record<CatalogEntryKind, readonly (keyof EntryFormState)[]>;
 
-type FilledField = (typeof FILLED_FIELDS)[MedicalEntryKind][number];
+type FilledField = (typeof FILLED_FIELDS)[CatalogEntryKind][number];
 type Fills = Pick<EntryFormState, FilledField | "results">;
 
 /** The item-filled fields of the form's state, rows copied. */
@@ -282,7 +280,7 @@ const fillsFor = (item: MedicalEntryFormItem): Fills => ({
 interface Props {
   report?: ReportEntryContext;
   animalId: string;
-  kind: MedicalEntryKind;
+  kind: CatalogEntryKind;
   options: MedicalEntryFormOptions;
   /** Present when editing. */
   entry?: MedicalEntryDisplay;
@@ -321,10 +319,11 @@ export function MedicalEntryForm({
   };
 
   const defaultValues = (): EntryFormState => {
-    if (entry) return fromEntry(entry);
+    if (entry) return fromEntry(entry, kind);
     const base = scheduled
       ? fromScheduled(
           scheduled,
+          kind,
           items.find((candidate) => candidate.id === scheduled.itemId),
           options.today,
         )

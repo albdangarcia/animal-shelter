@@ -309,6 +309,9 @@ const readStoredEntry = async (
   const stored = { kind, status, dueDate, voidedAt, foundOnExamId: null };
 
   switch (kind) {
+    case MedicalEntryKind.EUTHANASIA:
+    case MedicalEntryKind.DEATH:
+      throw new Error("Outcome-owned entries do not have ordinary care values.");
     case MedicalEntryKind.VACCINE: {
       const vaccine = await tx.vaccineDetails.findUniqueOrThrow({
         where: { entryId },

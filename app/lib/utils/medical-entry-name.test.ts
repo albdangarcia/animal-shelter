@@ -6,6 +6,7 @@ import {
   SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import { medicalEntryName } from "./medical-entry-name";
+import { subjectText, verbFor } from "@/app/lib/services/medical-entry-text";
 
 test("a vaccine, test or treatment is named by its catalog item", () => {
   for (const kind of [
@@ -52,4 +53,17 @@ test("an entry missing what names it is a bug, not a blank name", () => {
     () => medicalEntryName({ kind: MedicalEntryKind.EXAM, item: null, examType: null }),
     /no exam type/,
   );
+});
+
+
+test("outcome-owned entries have names without a catalog item or procedure", () => {
+  assert.equal(medicalEntryName({ kind: MedicalEntryKind.EUTHANASIA, item: null }), "Euthanasia");
+  assert.equal(medicalEntryName({ kind: MedicalEntryKind.DEATH, item: null }), "Death");
+});
+
+test("end-of-life activity subjects avoid ordinary-care nouns and verbs", () => {
+  assert.equal(subjectText({ kind: "EUTHANASIA", item: null }), "Euthanasia");
+  assert.equal(subjectText({ kind: "DEATH", item: null }), "Death");
+  assert.equal(verbFor("EUTHANASIA", "OUTSIDE_VET"), "performed");
+  assert.equal(verbFor("DEATH", null), "recorded");
 });

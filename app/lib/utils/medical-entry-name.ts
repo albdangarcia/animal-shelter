@@ -30,6 +30,10 @@ export interface NameableMedicalEntry {
  */
 export const medicalEntryName = (entry: NameableMedicalEntry): string => {
   switch (entry.kind) {
+    case MedicalEntryKind.EUTHANASIA:
+      return "Euthanasia";
+    case MedicalEntryKind.DEATH:
+      return "Death";
     case MedicalEntryKind.SURGERY:
       if (!entry.procedure) {
         throw new Error("A surgery entry has no procedure to name it by.");

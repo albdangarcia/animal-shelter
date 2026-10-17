@@ -2,6 +2,7 @@
 
 import type { ReportEntryContext } from "@/app/lib/utils/vet-visit-report";
 
+import type { OrdinaryCareKind } from "@/app/lib/constants/medical";
 import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
@@ -14,7 +15,7 @@ import { ExamEntryForm } from "./exam-entry-form";
 interface Props {
   report?: ReportEntryContext;
   animalId: string;
-  kind: MedicalEntryKind;
+  kind: OrdinaryCareKind;
   options: MedicalEntryFormOptions;
   /** Present when editing. */
   entry?: MedicalEntryDisplay;
@@ -42,7 +43,7 @@ export function CareEntryForm({ kind, ...props }: Props) {
 }
 
 /** What the dialog recording care of this kind says it is for. */
-export const recordDialogDescription = (kind: MedicalEntryKind) => {
+export const recordDialogDescription = (kind: OrdinaryCareKind) => {
   switch (kind) {
     case MedicalEntryKind.SURGERY:
       return "Record a surgery already done: what it was, who did it and how it went.";

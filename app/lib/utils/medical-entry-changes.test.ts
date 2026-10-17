@@ -9,6 +9,54 @@ import {
 
 const names = { item1: "DHPP", clinic1: "Downtown Veterinary Clinic", p1: "Olivia Chen" };
 
+test("end-of-life audit values name people, reasons and circumstances without exposing IDs", () => {
+  for (const field of ["authorizedById", "performedById"]) {
+    assert.equal(formatEntryFieldValue(field, "p1", names), "Olivia Chen");
+    assert.equal(formatEntryFieldValue(field, "missing", names), "a person no longer on record");
+    assert.equal(formatEntryFieldValue(field, null, names), "none");
+  }
+  assert.equal(formatEntryFieldValue("performedByName", "Dr Example", names), "Dr Example");
+  assert.equal(formatEntryFieldValue("reasonCategory", "BEHAVIORAL", names), "Behavioral");
+  assert.equal(formatEntryFieldValue("circumstances", "DURING_PROCEDURE", names), "During a procedure");
+  assert.equal(formatEntryFieldValue("route", "ORAL", names, "EUTHANASIA"), "ORAL");
+});
+
+test("unknown clinical facts remain unknown and necropsy distinguishes all three states", () => {
+  for (const field of ["cause", "necropsyRequested", "bodyDisposition"]) {
+    assert.equal(formatEntryFieldValue(field, null, names), "unknown");
+    assert.equal(formatEntryFieldValue(field, "", names), "unknown");
+  }
+  assert.equal(formatEntryFieldValue("necropsyRequested", false, names), "No");
+  assert.equal(formatEntryFieldValue("necropsyRequested", true, names), "Yes");
+  assert.equal(formatEntryFieldValue("bodyDisposition", "Pending", names), "Pending");
+});
+
+test("end-of-life corrections label their day truthfully and omit immutable linkage", () => {
+  for (const kind of ["DEATH", "EUTHANASIA"] as const) {
+    assert.equal(formatEntryFieldValue("status", "COMPLETED", names, kind), "Recorded");
+    assert.deepEqual(describeEntryChanges(
+      { completedDate: "2026-10-15", outcomeId: "old-id", kind },
+      { completedDate: "2026-10-16", outcomeId: "new-id", kind },
+      names,
+      kind,
+    ), [{
+      field: "completedDate",
+      label: `Date of ${kind === "DEATH" ? "death" : "euthanasia"}`,
+      from: "Oct 15, 2026",
+      to: "Oct 16, 2026",
+    }]);
+  }
+  assert.deepEqual(describeEntryChanges(
+    { cause: "Recorded cause", necropsyRequested: true },
+    { cause: null, necropsyRequested: null },
+    names,
+    "DEATH",
+  ), [
+    { field: "cause", label: "Cause", from: "Recorded cause", to: "unknown" },
+    { field: "necropsyRequested", label: "Necropsy requested", from: "Yes", to: "unknown" },
+  ]);
+});
+
 test("formatEntryFieldValue: ids read as names, and a missing one says so", () => {
   assert.equal(formatEntryFieldValue("itemId", "item1", names), "DHPP");
   assert.equal(

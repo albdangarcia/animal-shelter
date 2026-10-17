@@ -6,6 +6,7 @@ import { useForm, type Resolver } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { format } from "date-fns";
 import { CalendarClock, CircleSlash, Loader2, Syringe } from "lucide-react";
+import { isOrdinaryCareKind } from "@/app/lib/constants/medical";
 import { MedicalEntryKind, SurgeryProcedure } from "@/prisma/generated/enums";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -106,7 +107,7 @@ export function ScheduledEntryActions({
   canManage,
   canAdminister,
 }: Props) {
-  if (!canManage && !canAdminister) return null;
+  if ((!canManage && !canAdminister) || !isOrdinaryCareKind(entry.kind)) return null;
   // "DHPP (Due Oct 14, 2026)", or "DHPP (Due Oct 14, 2026) for Fido".
   const what = animalName
     ? `${entryLabel(entry)} for ${animalName}`
@@ -166,6 +167,8 @@ function RecordButton({
     useConfirmedOpenChange(() => formRef.current?.isDirty() ?? false, setOpen);
   // Recording takes the row off the due list, button and all.
   const { triggerRef, returnFocus } = useEntryDialogFocus();
+
+  if (!isOrdinaryCareKind(entry.kind)) return null;
 
   return (
     <>

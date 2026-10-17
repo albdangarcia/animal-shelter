@@ -37,7 +37,8 @@ import {
   type ScheduleMedicalEntryFormInput,
 } from "@/app/lib/zod-schemas/medical-entry.schemas";
 import {
-  CATALOG_ENTRY_KINDS,
+  ORDINARY_CARE_KINDS,
+  type OrdinaryCareKind,
   EXAM_TYPE_LABELS,
   MEDICAL_ENTRY_KIND_LABELS,
   SURGERY_PROCEDURE_LABELS,
@@ -58,21 +59,13 @@ import {
  * microchip none of these.
  */
 type ScheduleFormState = {
-  kind: MedicalEntryKind | "";
+  kind: OrdinaryCareKind | "";
   itemId: string;
   procedure: SurgeryProcedure | "";
   examType: ExamType | "";
   dueDate: string | null;
   notes: string;
 };
-
-// Care from the catalog first, then the kinds planned without an item.
-const SCHEDULED_KINDS: MedicalEntryKind[] = [
-  ...CATALOG_ENTRY_KINDS,
-  MedicalEntryKind.SURGERY,
-  MedicalEntryKind.MICROCHIP,
-  MedicalEntryKind.EXAM,
-];
 
 interface Props {
   animalId: string;
@@ -138,7 +131,7 @@ export function ScheduleMedicalEntryForm({
 
   // An item belongs to one kind, a procedure to surgery and a type to an
   // exam, so picking another kind clears them.
-  const pickKind = (next: MedicalEntryKind) => {
+  const pickKind = (next: OrdinaryCareKind) => {
     form.setValue("kind", next, { shouldValidate: true });
     form.setValue("itemId", "");
     form.setValue("procedure", "");
@@ -182,7 +175,7 @@ export function ScheduleMedicalEntryForm({
                   Kind
                 </FormLabel>
                 <Select
-                  onValueChange={(value) => pickKind(value as MedicalEntryKind)}
+                  onValueChange={(value) => pickKind(value as OrdinaryCareKind)}
                   value={field.value}
                   name={field.name}
                 >
@@ -192,7 +185,7 @@ export function ScheduleMedicalEntryForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {SCHEDULED_KINDS.map((value) => (
+                    {ORDINARY_CARE_KINDS.map((value) => (
                       <SelectItem key={value} value={value}>
                         {MEDICAL_ENTRY_KIND_LABELS[value]}
                       </SelectItem>

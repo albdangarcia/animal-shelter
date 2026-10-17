@@ -12,6 +12,7 @@ import { ServerSideFacetedFilter } from "@/components/table-common/server-side-f
 import { MedicalEntryKind } from "@/prisma/generated/enums";
 import {
   MEDICAL_ENTRY_KIND_LABELS,
+  ORDINARY_CARE_KINDS,
   SPAY_NEUTER_EXEMPTION_REASON_LABELS,
   SURGERY_PROCEDURE_LABELS,
 } from "@/app/lib/constants/medical";
@@ -50,7 +51,7 @@ import {
 export const MEDICAL_DUE_TITLE = "Medical Care Due";
 export const MEDICAL_DUE_DESCRIPTION = `Vaccines, tests, treatments, surgeries, microchips and exams that are overdue, due today or due in the next ${UPCOMING_DAYS} days, and spay/neuter exemptions up for review, by where each animal is.`;
 
-const kindOptions = Object.values(MedicalEntryKind).map((kind) => ({
+const kindOptions = ORDINARY_CARE_KINDS.map((kind) => ({
   value: kind,
   label: MEDICAL_ENTRY_KIND_LABELS[kind],
 }));

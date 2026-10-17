@@ -226,6 +226,8 @@ export const KIND_NOUN: Record<MedicalEntryKind, string> = {
   SURGERY: "surgery",
   MICROCHIP: "microchip",
   EXAM: "exam",
+  EUTHANASIA: "euthanasia",
+  DEATH: "death",
 };
 
 const RABIES_MAX_MONTHS = 36;

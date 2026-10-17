@@ -75,6 +75,8 @@ export const subjectText = (
       return entry.procedure === SurgeryProcedure.OTHER ? name : `${name} surgery`;
     case MedicalEntryKind.MICROCHIP:
       return entry.chipNumber ? `${name} ${entry.chipNumber}` : name;
+    case MedicalEntryKind.EUTHANASIA:
+    case MedicalEntryKind.DEATH:
     case MedicalEntryKind.EXAM:
       return name;
     default:
@@ -90,6 +92,8 @@ const KIND_VERB: Record<MedicalEntryKind, string> = {
   SURGERY: "done",
   MICROCHIP: "implanted",
   EXAM: "done",
+  EUTHANASIA: "performed",
+  DEATH: "recorded",
 };
 
 // A chip on the animal when it arrived was found on a scan, not implanted.

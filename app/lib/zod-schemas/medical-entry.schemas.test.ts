@@ -718,3 +718,15 @@ test("RecordScheduledBatchSchema: shared details for entries, notes left empty",
     }).doseUnit,
   );
 });
+
+
+test("outcome-owned kinds filter History but cannot be recorded, scheduled or batched as ordinary care", () => {
+  const batch = { ...vaccine, mode: "RECORD", animals: [{ animalId: "cmvc07m5h0094dtulmaxfa9gc" }] };
+  assert.equal(MedicalBatchSchema.safeParse(batch).success, true);
+  for (const kind of ["EUTHANASIA", "DEATH"]) {
+    assert.deepEqual(medicalHistoryKindsParam.parse(kind), [kind]);
+    assert.equal(MedicalEntryFormSchema.safeParse({ ...vaccine, kind }).success, false);
+    assert.equal(ScheduleMedicalEntrySchema.safeParse({ kind, dueDate: "2026-10-14" }).success, false);
+    assert.equal(MedicalBatchSchema.safeParse({ ...batch, kind }).success, false);
+  }
+});

@@ -15,7 +15,7 @@ import {
 } from "@/prisma/generated/enums";
 import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import {
-  CATALOG_ENTRY_KINDS,
+  ORDINARY_CARE_KINDS,
   MAX_BATCH_SIZE,
   MEDICAL_REASON_MAX_LENGTH,
   type CatalogEntryKind,
@@ -448,13 +448,6 @@ export const rabiesDurationIssue = (
     ? "A rabies vaccine needs its duration."
     : null;
 
-const SCHEDULED_KINDS = [
-  ...CATALOG_ENTRY_KINDS,
-  MedicalEntryKind.SURGERY,
-  MedicalEntryKind.MICROCHIP,
-  MedicalEntryKind.EXAM,
-] as const;
-
 /**
  * Care to schedule: an item for care given from the catalog, a procedure for
  * a surgery, a type for an exam, and none of these for a microchip, whose
@@ -463,7 +456,7 @@ const SCHEDULED_KINDS = [
  */
 export const ScheduleMedicalEntrySchema = z
   .object({
-    kind: z.enum(SCHEDULED_KINDS, { error: "Choose what to schedule." }),
+    kind: z.enum(ORDINARY_CARE_KINDS, { error: "Choose what to schedule." }),
     itemId: z.string().nullish(),
     // A form's empty choice is no procedure or type, as it is no item.
     procedure: optionalChoice(procedure),
