@@ -96,11 +96,17 @@ const slotRank = (slot: string | null) =>
  * slot that day or is as needed and running then, and any order that has a
  * live dose that day (one discontinued from that day keeps the doses given
  * before), each with where its animal is and the day's live doses.
+ * `animalIds` narrows every query to those animals; left out reads the shelter.
  */
-export const findDoseSheet = async (db: Db, day: CalendarDay): Promise<DoseSheetOrder[]> => {
+export const findDoseSheet = async (
+  db: Db,
+  day: CalendarDay,
+  { animalIds }: { animalIds?: string[] } = {},
+): Promise<DoseSheetOrder[]> => {
   const orders = await db.medicationOrder.findMany({
     where: {
       animal: IN_CARE,
+      ...(animalIds && { animalId: { in: animalIds } }),
       voidedAt: null,
       OR: [runsOn(day), { doses: { some: { slotDate: day, voidedAt: null } } }],
     },
@@ -137,6 +143,7 @@ export const findDoseSheet = async (db: Db, day: CalendarDay): Promise<DoseSheet
       reason: true,
       administeredAt: true,
       administeredById: true,
+      reportedByFoster: true,
       administeredBy: { select: { name: true } },
       notes: true,
     },

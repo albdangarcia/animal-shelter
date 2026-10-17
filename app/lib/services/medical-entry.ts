@@ -201,6 +201,8 @@ export interface MedicalBatchTag {
 /** How an entry is written, beyond what it holds. */
 export interface EntryWriteOptions {
   batch?: MedicalBatchTag | null;
+  /** Given in foster care, or recorded from a foster's outside vet report. */
+  reportedByFoster?: boolean;
   /**
    * The medical protocol step that scheduled it, kept as provenance only:
    * the entry stands on its own. Applying a protocol writes one activity row
@@ -1611,6 +1613,7 @@ async function writeRecordedEntry(
         status: MedicalEntryStatus.COMPLETED,
         createdById: actorId,
         ...entryData(values),
+        reportedByFoster: options.reportedByFoster ?? false,
         ...batchData(options.batch),
         ...detailsCreate(input.kind, values, foundOn?.entryId),
       },
@@ -1656,6 +1659,7 @@ async function writeRecordedEntry(
         kind: input.kind,
         status: MedicalEntryStatus.COMPLETED,
         ...values,
+        ...(options.reportedByFoster && { reportedByFoster: true }),
         ...batchData(options.batch),
         ...(vitalsLogId && { vitalsLogId }),
         ...(foundOn && { foundOnExamId: foundOn.entryId }),
@@ -1743,6 +1747,7 @@ export async function recordScheduledMedicalEntry(
       data: {
         status: MedicalEntryStatus.COMPLETED,
         ...entryData(values),
+        reportedByFoster: options.reportedByFoster ?? false,
         // The batch that gave it. One that scheduled it is kept in its
         // CREATED event.
         ...batchData(options.batch),
@@ -1786,6 +1791,7 @@ export async function recordScheduledMedicalEntry(
       after: asJson({
         status: MedicalEntryStatus.COMPLETED,
         ...values,
+        ...(options.reportedByFoster && { reportedByFoster: true }),
         ...batchData(options.batch),
         ...(vitalsLogId && { vitalsLogId }),
       }),

@@ -187,7 +187,7 @@ const doseView = (
     reason: dose.reason,
     notes: dose.notes,
     givenAt: givenAtText(dose.administeredAt, dose.slotDate, timezone),
-    givenBy: names[dose.administeredById] ?? "someone",
+    givenBy: `${names[dose.administeredById] ?? "someone"}${dose.reportedByFoster ? " (foster)" : ""}`,
     voided: dose.voided,
     voidedBy: dose.voidedById ? (names[dose.voidedById] ?? "someone") : null,
     voidReason: dose.voidReason,

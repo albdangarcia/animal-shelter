@@ -33,6 +33,7 @@ import {
   type MedicalBatchAnimalRefusal,
 } from "@/app/lib/services/medical-batch";
 import { doseSlotText } from "@/app/lib/services/medication-text";
+import { checkFostering } from "@/app/lib/data/fosters/foster-access";
 
 /**
  * The doses recorded against medication orders: one slot as given, refused
@@ -78,6 +79,7 @@ export interface MedicationSlotInput {
 /** Doses recorded together share it, as provenance only. */
 export interface DoseWriteOptions {
   batch?: { batchId: string };
+  foster?: { personId: string };
 }
 
 const ORDER_SELECT = {
@@ -149,6 +151,12 @@ export async function recordMedicationDose(
 
   const animalId = await locateOrder(tx, input.orderId);
   await lockAnimal(tx, animalId);
+  if (options.foster) {
+    const placement = await checkFostering(tx, options.foster.personId, animalId);
+    if (slotDate < placement.startDate) {
+      throw new MedicalEntryRefusal("That slot was before this animal was placed with you.");
+    }
+  }
   const animal = await readAnimal(tx, animalId);
   if (animal.archived) {
     throw new MedicalEntryRefusal(
@@ -202,6 +210,7 @@ export async function recordMedicationDose(
         notes: tidy(input.notes),
         batchId: options.batch?.batchId ?? null,
         createdById: actorId,
+        reportedByFoster: !!options.foster,
       },
       select: { id: true },
     }));

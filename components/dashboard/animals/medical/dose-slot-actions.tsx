@@ -140,6 +140,8 @@ function useSlotFocus(cellId: string | undefined) {
 /** What the viewer may do with doses, and the shelter's time when the page
  * was read, which the dose form starts from. */
 export interface DoseControls {
+  /** The scoped action on a foster page; staff use the default action. */
+  recordDoseAction?: typeof recordMedicationDose;
   /** Give, refuse and record doses. */
   canAdminister: boolean;
   /** Void a dose recorded in error. */
@@ -220,7 +222,7 @@ function DoseForm({
   const onSubmit = (state: DoseFormState) => {
     const values = state as unknown as MedicationDoseFormInput;
     startTransition(async () => {
-      const saved = await recordMedicationDose(
+      const saved = await (controls.recordDoseAction ?? recordMedicationDose)(
         slot.orderId,
         { slotDate: slot.slotDate, slot: slot.slot },
         values,
@@ -419,7 +421,7 @@ export function DoseSlotActions({
   const onGive = () => {
     focus.markUsed();
     startGiving(async () => {
-      const result = await recordMedicationDose(
+      const result = await (controls.recordDoseAction ?? recordMedicationDose)(
         slot.orderId,
         { slotDate: slot.slotDate, slot: slot.slot },
         { result: MedicationDoseResult.GIVEN },

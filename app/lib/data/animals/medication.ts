@@ -28,6 +28,7 @@ export interface AnimalMedicationDose {
   slotDate: CalendarDay;
   slot: DoseSlot | null;
   result: MedicationDoseResult;
+  reportedByFoster: boolean;
   reason: string | null;
   administeredAt: Date;
   administeredById: string;
@@ -161,6 +162,7 @@ export const findAnimalMedications = async (
       slotDate: true,
       slot: true,
       result: true,
+      reportedByFoster: true,
       reason: true,
       administeredAt: true,
       administeredById: true,

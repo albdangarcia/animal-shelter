@@ -47,6 +47,7 @@ const dose = (overrides: Partial<DoseSheetDose> = {}): DoseSheetDose => ({
   administeredAt: new Date("2026-10-15T12:12:00Z"),
   administeredById: "olivia",
   administeredByName: "Olivia Chen",
+  reportedByFoster: false,
   notes: null,
   ...overrides,
 });
@@ -260,6 +261,11 @@ test("doseSheetCell: a slot takes a dose until one is recorded, an as-needed ord
     label: "Doxycycline, AM dose on Oct 15, 2026",
   });
   const pmCell = doseSheetCell(pm, true, DAY, DAY, "America/New_York");
+  const [fosterAm] = doseSheetRows(
+    sheetOrder("foster-order", "Fido", medWing, { doses: [dose({ reportedByFoster: true })] }),
+    DAY, clockAt("21:00"), ENDS,
+  );
+  assert.equal(doseSheetCell(fosterAm, true, DAY, DAY, "America/New_York").doses[0].givenBy, "Olivia Chen (foster)");
   assert.equal(pmCell.state, "MISSED");
   assert.equal(pmCell.recordable, true);
   // A slot holding a dose of an order discontinued from that day is no

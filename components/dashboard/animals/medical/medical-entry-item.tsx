@@ -103,10 +103,14 @@ export const dueState = (
 /** Who gave the care: the shelter (and who), or the outside vet. */
 const sourceText = (entry: MedicalEntryDisplay) =>
   [
-    entry.source && MEDICAL_ENTRY_SOURCE_LABELS[entry.source],
+    entry.reportedByFoster && entry.source === "IN_HOUSE"
+      ? `Given in foster${entry.administeredBy ? ` by ${entry.administeredBy.name}` : ""}`
+      : entry.source && MEDICAL_ENTRY_SOURCE_LABELS[entry.source],
     entry.vetPartner?.name,
     entry.vetName,
-    entry.administeredBy ? `by ${entry.administeredBy.name}` : null,
+    entry.administeredBy && !(entry.reportedByFoster && entry.source === "IN_HOUSE")
+      ? `by ${entry.administeredBy.name}`
+      : null,
     // Given care that was planned first keeps the day it was due, and so
     // does an exemption declined from a scheduled spay or neuter.
     entry.status === MedicalEntryStatus.COMPLETED && entry.dueDate

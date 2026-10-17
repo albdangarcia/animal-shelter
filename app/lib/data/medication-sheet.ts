@@ -42,6 +42,7 @@ export interface DoseSheetDose {
   administeredAt: Date;
   administeredById: string;
   administeredByName: string;
+  reportedByFoster: boolean;
   notes: string | null;
 }
 
@@ -247,7 +248,7 @@ export const doseSheetCell = (
     reason: dose.reason,
     notes: dose.notes,
     givenAt: givenAtText(dose.administeredAt, day, timezone),
-    givenBy: dose.administeredByName,
+    givenBy: `${dose.administeredByName}${dose.reportedByFoster ? " (foster)" : ""}`,
     voided: false,
     voidedBy: null,
     voidReason: null,

@@ -40,6 +40,7 @@ const dose = (
   administeredById: "olivia",
   notes: null,
   batchId: null,
+  reportedByFoster: false,
   voided: false,
   voidedAt: null,
   voidedById: null,
@@ -417,4 +418,10 @@ test("an as-needed order takes a dose on any day it ran, through today", () => {
     null,
   );
   assert.equal(viewOf(order()).asNeededDays, null);
+});
+
+
+test("a foster's dose names its provenance on the staff view", () => {
+  const days = orderDays(order({ doses: [dose("2026-10-15", "AM", { reportedByFoster: true })] }), TODAY, TODAY, context());
+  assert.equal(days[0].slots[0].doses[0].givenBy, "Olivia Chen (foster)");
 });
