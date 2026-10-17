@@ -615,6 +615,8 @@ test("a reversed outcome puts the animal back in its unit, and the feed shows th
   await page.goto(`${OUTCOMES_PATH}/create?animalId=${animalId}`);
   await page.getByLabel("Outcome Type *", { exact: true }).click();
   await page.getByRole("option", { name: "Deceased" }).click();
+  await page.getByLabel("Circumstances").selectOption("FOUND_DEAD");
+  await page.getByLabel("Cause knowledge").selectOption("UNKNOWN");
   await page.getByRole("button", { name: "Process Outcome" }).click();
   await expect(page.getByText("Outcome processed successfully.")).toBeVisible();
   await waitForPathname(page, OUTCOMES_PATH);

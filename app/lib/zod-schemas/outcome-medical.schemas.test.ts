@@ -93,6 +93,19 @@ test("euthanasia requires exactly one performer and names alone are for outside 
   assert.equal(EuthanasiaMedicalSchema.safeParse({ ...euthanasia, performedById: null, source: "OUTSIDE_VET", vetPartnerId: person }).success, false);
 });
 
+test("an invalid performer choice marks both alternatives so the active control can show its error", () => {
+  for (const performer of [
+    { performedById: null, performedByName: "   " },
+    { performedById: person, performedByName: "Dr Example" },
+  ]) {
+    const result = EuthanasiaMedicalSchema.safeParse({ ...euthanasia, source: "OUTSIDE_VET", ...performer });
+    assert.equal(result.success, false);
+    if (result.success) continue;
+    assert.deepEqual(result.error.issues.map((issue) => issue.path), [["performedById"], ["performedByName"]]);
+    assert.equal(result.error.issues[0].message, result.error.issues[1].message);
+  }
+});
+
 test("euthanasia source excludes before-intake and in-house care excludes clinic or vet fields", () => {
   for (const source of ["BEFORE_INTAKE", null, ""]) {
     assert.equal(EuthanasiaMedicalSchema.safeParse({ ...euthanasia, source }).success, false);

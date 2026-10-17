@@ -45,6 +45,7 @@ after(async () => {
   await prisma.medicalDocument.deleteMany({ where: scope });
   await prisma.medicalEntry.deleteMany({ where: scope });
   await prisma.outcome.deleteMany({ where: scope });
+  await prisma.intake.deleteMany({ where: scope });
   await prisma.animal.deleteMany({ where: { speciesId } });
   await prisma.partner.deleteMany({ where: { id: { in: [clinicId, closedClinicId, rescueId] } } });
   await prisma.person.deleteMany({ where: { id: { in: [recorderId, editorId, authorizerId, performerId] } } });
@@ -595,4 +596,194 @@ test("a waiting correction rereads a reversal committed by the lock holder", asy
   const saved = await state(f);
   assert.equal(saved.events.length, 1);
   assert.equal(saved.entries[0].completedDate, "2026-01-03");
+});
+
+// Exercise the production writers together, including the transaction that owns archiving.
+import { recordOutcome, recordOutcomeCorrection } from "@/app/lib/services/outcome-recording";
+import { recordOutcomeReversal } from "@/app/lib/services/outcome-reversal";
+import { OutcomeFormSchema } from "@/app/lib/zod-schemas/outcome.schema";
+import { findOutcomeMedical, outcomeMedicalFormValues } from "@/app/lib/data/animals/outcome-medical";
+import { findEventNames, findMedicalHistoryPage, findRecentMedicalEntries, findVaccinesAndTests } from "@/app/lib/data/animals/medical-entry";
+
+async function activeFixture(type: OutcomeType) {
+  const f = await fixture(type);
+  await prisma.outcome.delete({ where: { id: f.outcomeId } });
+  await prisma.animal.update({ where: { id: f.animalId }, data: { listingStatus: "DRAFT", archiveReason: null } });
+  await prisma.intake.create({ data: { animalId: f.animalId, staffMemberId: recorderId, type: "STRAY", intakeDate: "2026-01-01" } });
+  return f;
+}
+const formValues = (outcomeType: OutcomeType, medical?: OutcomeMedicalDetailsInput, day = "2026-01-03", notes = "") =>
+  OutcomeFormSchema.parse({ outcomeType, outcomeDate: day, medical, notes });
+async function activate(type: OutcomeType, medical: OutcomeMedicalDetailsInput) {
+  const f = await activeFixture(type);
+  await prisma.$transaction((tx) => recordOutcome(tx, { animalId: f.animalId, values: formValues(type, medical) }, recorderId));
+  f.outcomeId = (await prisma.outcome.findFirstOrThrow({ where: { animalId: f.animalId } })).id;
+  return f;
+}
+for (const [type, payload] of [["EUTHANIZED", euthanasia], ["DECEASED", death]] as const) {
+  test(`${type} production creation, correction, reads and reversal share immutable links and audit`, async () => {
+    const f = await activate(type, payload());
+    const entry = (await state(f)).entries[0];
+    const projection = await findOutcomeMedical(f.outcomeId);
+    assert.equal(projection?.outcomeId, f.outcomeId);
+    assert.equal(outcomeMedicalFormValues(projection)?.kind, entry.kind);
+    const names = await findEventNames(prisma, [projection!]);
+    if (type === "EUTHANIZED") {
+      assert.match(names[authorizerId], /Authorizer without account/);
+      assert.equal(names[performerId], (await prisma.person.findUniqueOrThrow({ where: { id: performerId } })).name);
+    }
+    const beforeNotes = await state(f);
+    await recordOutcomeCorrection(f.outcomeId, formValues(type, undefined, "2026-01-03", "Outcome note"), editorId);
+    const notes = await state(f);
+    assert.deepEqual(notes.entries, beforeNotes.entries);
+    assert.deepEqual(notes.events, beforeNotes.events);
+    await recordOutcomeCorrection(f.outcomeId, formValues(type, { ...payload(), bodyDisposition: "Documented" }, "2026-01-02", "Outcome note"), editorId);
+    const corrected = await state(f);
+    assert.equal(corrected.entries[0].completedDate, "2026-01-02");
+    assert.equal(corrected.outcome?.outcomeDate, "2026-01-02");
+    assert.equal(corrected.events.length, 2);
+    assert.equal(corrected.events[1].actorId, editorId);
+    const unchanged = await recordOutcomeCorrection(f.outcomeId, formValues(type, { ...payload(), bodyDisposition: "Documented" }, "2026-01-02", "Outcome note"), editorId);
+    assert.equal(unchanged.status, "unchanged");
+    assert.deepEqual(await state(f), corrected);
+    assert.equal((await findRecentMedicalEntries(prisma, f.animalId, 5)).length, 1);
+    await prisma.$transaction((tx) => recordOutcomeReversal(tx, f.outcomeId, "Wrong animal", editorId));
+    const reversed = await state(f);
+    assert.equal(reversed.entries[0].voidedAt?.getTime(), reversed.outcome?.reversedAt?.getTime());
+    assert.equal(reversed.entries[0].voidedById, editorId);
+    assert.equal(reversed.entries[0].voidReason, "Wrong animal");
+    assert.equal((await findRecentMedicalEntries(prisma, f.animalId, 5)).length, 0);
+    assert.equal((await findVaccinesAndTests(prisma, f.animalId)).length, 0);
+    const history = await findMedicalHistoryPage(prisma, f.animalId, { kinds: [entry.kind], page: 1, perPage: 10, timeZone: "America/New_York" });
+    assert.equal(history.items.length, 1);
+    assert.equal(history.items[0].source, "ENTRY");
+    assert.ok((await findOutcomeMedical(f.outcomeId))?.voidedAt);
+    await prisma.$transaction((tx) => recordOutcome(tx, { animalId: f.animalId, values: formValues(type, payload()) }, recorderId));
+    const entries = (await state(f)).entries;
+    assert.equal(entries.length, 2);
+    assert.notEqual(entries[0].outcomeId, entries[1].outcomeId);
+  });
+  test(`${type} production audit failure rolls back archive, outcome and all medical writes`, async () => {
+    for (const model of ["medicalEntryEvent", "animalActivityLog"] as const) {
+      const f = await activeFixture(type);
+      await refusedUnchanged(f, () => prisma.$transaction((tx) => recordOutcome(failingAudit(tx, model), { animalId: f.animalId, values: formValues(type, payload()) }, recorderId)), (error) => error instanceof Error && /Audit unavailable/.test(error.message));
+    }
+  });
+  test(`${type} two concurrent production creates record exactly one outcome and clinical event`, async () => {
+    const f = await activeFixture(type);
+    const create = () => prisma.$transaction((tx) => recordOutcome(tx, { animalId: f.animalId, values: formValues(type, payload()) }, recorderId));
+    const results = await Promise.allSettled([create(), create()]);
+    assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+    assert.equal(await prisma.outcome.count({ where: { animalId: f.animalId } }), 1);
+    assert.equal((await state(f)).events.length, 1);
+  });
+}
+
+test("production creation rejects a missing clinical payload and leaves an active animal intact", async () => {
+  const f = await activeFixture("DECEASED");
+  await refusedUnchanged(f, () => prisma.$transaction((tx) => recordOutcome(tx, { animalId: f.animalId, values: formValues("DECEASED") }, recorderId)), fieldRefusal("medical"));
+});
+test("concurrent production clinical corrections use current before values and identical retry is a no-op", async () => {
+  const f = await activate("DECEASED", death());
+  const change = (disposition: string) => recordOutcomeCorrection(f.outcomeId, formValues("DECEASED", { ...death(), bodyDisposition: disposition }), editorId);
+  await Promise.all([change("First"), change("Second")]);
+  const saved = await state(f);
+  const events = saved.events.filter((event) => event.action === "EDITED");
+  assert.equal(events.length, 2);
+  assert.deepEqual(events[1].before, events[0].after);
+  const current = saved.death[0].bodyDisposition!;
+  assert.equal((await change(current)).status, "unchanged");
+  assert.deepEqual(await state(f), saved);
+});
+test("production non-latest reversal voids clinical entry while leaving the current listing intact", async () => {
+  const f = await activate("DECEASED", death());
+  await prisma.intake.create({ data: { animalId: f.animalId, staffMemberId: recorderId, type: "STRAY", intakeDate: "2026-01-05" } });
+  await prisma.animal.update({ where: { id: f.animalId }, data: { listingStatus: "PUBLISHED", archiveReason: null } });
+  await prisma.$transaction((tx) => recordOutcomeReversal(tx, f.outcomeId, "Mistaken historical outcome", editorId));
+  const saved = await state(f);
+  assert.equal(saved.animal?.listingStatus, "PUBLISHED");
+  assert.ok(saved.entries[0].voidedAt);
+});
+test("production correction authorizes the locked stored link and rolls back a refused linked day", async () => {
+  const f = await activate("DECEASED", death());
+  await refusedUnchanged(f, () => recordOutcomeCorrection(f.outcomeId, formValues("DECEASED", undefined, "2026-01-02"), editorId, { authorize: (operation) => {
+    assert.deepEqual(operation, { type: "DECEASED", linked: true, dayChanges: true, medicalSupplied: false });
+    throw new Error("permission refused");
+  } }), (error) => error instanceof Error && error.message === "permission refused");
+});
+
+test("a production clinical refusal rolls back the outcome day and notes", async () => {
+  const f = await activate("EUTHANIZED", euthanasia());
+  await refusedUnchanged(f, () => recordOutcomeCorrection(f.outcomeId,
+    formValues("EUTHANIZED", { ...euthanasia(), authorizedById: missingId }, "2026-01-02", "Updated notes"), editorId),
+    fieldRefusal("medical.authorizedById"));
+});
+
+test("a production reversal failure rolls back reversal, listing restoration and linked void", async () => {
+  const f = await activate("DECEASED", death());
+  await refusedUnchanged(f, () => prisma.$transaction((tx) =>
+    recordOutcomeReversal(failingAudit(tx, "medicalEntryEvent"), f.outcomeId, "Wrong animal", editorId)),
+    (error) => error instanceof Error && error.message === "Audit unavailable");
+});
+
+async function productionWhileHeld(f: Fixture, waiting: () => Promise<unknown>, write: (tx: TransactionClient) => Promise<unknown>) {
+  let release!: () => void, acquired!: (pid: number) => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const acquiredPid = new Promise<number>((resolve) => { acquired = resolve; });
+  const holder = prisma.$transaction(async (tx) => {
+    await lockAnimal(tx, f.animalId);
+    const [{ pid }] = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+    acquired(pid); await gate; await write(tx);
+  }, { timeout: 20_000 });
+  const pid = await Promise.race([acquiredPid, holder as Promise<never>]);
+  let settled = false, blocked = false;
+  const result = waiting().then((value) => ({ value }), (error: unknown) => ({ error })).finally(() => { settled = true; });
+  try {
+    const deadline = Date.now() + 5_000;
+    while (!settled && Date.now() < deadline) {
+      const [{ count }] = await prisma.$queryRaw<{ count: number }[]>`SELECT count(*)::int AS count FROM pg_stat_activity WHERE ${pid}::int = ANY(pg_blocking_pids(pid))`;
+      if (count) { blocked = true; break; }
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  } finally { release(); await Promise.all([holder, result]); }
+  assert.ok(blocked, "production writer waited on the animal lock");
+  return result;
+}
+test("production correction waits behind reversal and preserves its linked void", async () => {
+  const f = await activate("DECEASED", death());
+  const result = await productionWhileHeld(f,
+    () => recordOutcomeCorrection(f.outcomeId, formValues("DECEASED", { ...death(), bodyDisposition: "Late correction" }), editorId, { timeout: 20_000 }),
+    (tx) => recordOutcomeReversal(tx, f.outcomeId, "Wrong animal", recorderId));
+  assert.ok("error" in result && result.error instanceof ConflictError);
+  const saved = await state(f);
+  assert.equal(saved.events.length, 2);
+  assert.equal(saved.death[0].bodyDisposition, null);
+  assert.ok(saved.entries[0].voidedAt);
+});
+test("production reversal waits behind a clinical correction and voids the current day and details", async () => {
+  const f = await activate("DECEASED", death());
+  const result = await productionWhileHeld(f,
+    () => prisma.$transaction((tx) => recordOutcomeReversal(tx, f.outcomeId, "Wrong animal", editorId), { timeout: 20_000 }),
+    async (tx) => {
+      await tx.outcome.update({ where: { id: f.outcomeId }, data: { outcomeDate: "2026-01-02" } });
+      await correctOutcomeMedical(tx, f.outcomeId, f.animalId, { ...death(), bodyDisposition: "Corrected before reversal" }, recorderId);
+    });
+  assert.ok("value" in result);
+  const saved = await state(f);
+  assert.equal(saved.entries[0].completedDate, "2026-01-02");
+  assert.equal(saved.death[0].bodyDisposition, "Corrected before reversal");
+  assert.equal(saved.events.length, 3);
+  assert.equal(saved.events[2].action, "VOIDED");
+});
+
+test("a linked historical outcome correction uses its own stay and rolls back at the next intake boundary", async () => {
+  const f = await activate("DECEASED", death());
+  await prisma.intake.create({ data: { animalId: f.animalId, staffMemberId: recorderId, type: "STRAY", intakeDate: "2026-01-05" } });
+  await prisma.animal.update({ where: { id: f.animalId }, data: { listingStatus: "DRAFT", archiveReason: null } });
+  await recordOutcomeCorrection(f.outcomeId, formValues("DECEASED", undefined, "2026-01-04"), editorId);
+  const saved = await state(f);
+  assert.equal(saved.entries[0].completedDate, "2026-01-04");
+  assert.equal(saved.animal?.listingStatus, "DRAFT");
+  await refusedUnchanged(f, () => recordOutcomeCorrection(f.outcomeId, formValues("DECEASED", undefined, "2026-01-06"), editorId),
+    (error) => error instanceof Error && error.name === "TimelineOrderError");
 });

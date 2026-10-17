@@ -1,3 +1,4 @@
+import { voidOutcomeMedical } from "./outcome-medical";
 import type { TransactionClient } from "@/app/lib/prisma";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import { findLiveUnitForPlacement } from "@/app/lib/services/unit-housing";
@@ -160,10 +161,11 @@ export const recordOutcomeReversal = async (
 
   // Guarded as well as checked above, so that nothing reaching this without
   // the lock can overwrite a reversal already recorded.
+  const reversedAt = new Date();
   const reversed = await tx.outcome.updateMany({
     where: { id: outcomeId, reversedAt: null },
     data: {
-      reversedAt: new Date(),
+      reversedAt,
       reversedById: actorId,
       reversalReason: trimmedReason,
     },
@@ -171,6 +173,8 @@ export const recordOutcomeReversal = async (
   if (reversed.count === 0) {
     throw new ConflictError("This outcome has already been reversed.");
   }
+
+  await voidOutcomeMedical(tx, outcomeId, animalId);
 
   const effects: string[] = [];
   let restoredListingStatus: AnimalListingStatus | null = null;
@@ -279,6 +283,7 @@ export const recordOutcomeReversal = async (
     data: {
       animalId,
       activityType: AnimalActivityType.OUTCOME_REVERSED,
+      changedAt: reversedAt,
       changedById: actorId,
       changeSummary: `Outcome was reversed: ${describe(outcome.type)}. ${effectsText} Reason: ${trimmedReason}`,
     },

@@ -1,3 +1,4 @@
+import { fetchOutcomeMedicalClinics } from "@/app/lib/data/animals/outcome-medical.data";
 import {
   fetchPartners,
   fetchAnimalForOutcomeForm,
@@ -55,6 +56,9 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
     return notFound();
   }
 
+  const canManageOutcome = await hasPermission(AppPermissions.OUTCOMES_MANAGE);
+  const canManageMedical = canManageOutcome && await hasPermission(AppPermissions.MEDICAL_MANAGE) && await hasPermission(AppPermissions.MEDICAL_READ);
+  const clinics = canManageMedical ? await fetchOutcomeMedicalClinics() : [];
   const suggestedOwner = animal.intake[0]?.surrenderingPerson ?? undefined;
   const openPlacement = animal.fosterPlacements[0] ?? null;
 
@@ -136,6 +140,9 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
             suggestedOwnerId={suggestedOwner?.id}
             suggestedOwnerLabel={suggestedOwner?.name}
             canCreatePerson={canCreatePerson}
+            canManageOutcome={canManageOutcome}
+            canManageMedical={canManageMedical}
+            clinics={clinics}
             today={await getShelterToday()}
           />
         </>

@@ -135,6 +135,8 @@ const processOutcome = async (page: Page, animalId: string, day?: string) => {
   await page.goto(`/dashboard/outcomes/create?animalId=${animalId}`);
   await waitForFormHydration(page);
   await chooseOutcomeType(page, "Deceased");
+  await page.getByLabel("Circumstances").selectOption("FOUND_DEAD");
+  await page.getByLabel("Cause knowledge").selectOption("UNKNOWN");
   if (day) await pickOutcomeDay(page, day);
   await page.getByRole("button", { name: "Process Outcome" }).click();
   await page.waitForURL("**/dashboard/outcomes", { timeout: 60_000 });
@@ -173,11 +175,12 @@ const storedOutcomeDay = async (animalId: string) => {
   const client = new pg.Client({ connectionString: E2E_DATABASE_URL });
   await client.connect();
   try {
-    const { rows } = await client.query<{ stored: string }>(
-      `SELECT "outcomeDate" AS stored FROM outcomes WHERE "animalId" = $1`,
+    const { rows } = await client.query<{ stored: string; medicalDay: string }>(
+      `SELECT o."outcomeDate" AS stored, e.completed_date AS "medicalDay" FROM outcomes o JOIN medical_entries e ON e.outcome_id = o.id WHERE o."animalId" = $1`,
       [animalId],
     );
     expect(rows).toHaveLength(1);
+    expect(rows[0].medicalDay).toBe(rows[0].stored);
     return rows[0].stored;
   } finally {
     await client.end();

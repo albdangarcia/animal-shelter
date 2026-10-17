@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
@@ -70,7 +73,7 @@ type RowProps = Omit<Props, "entries" | "className"> & {
  * the due list, scheduled care also gets Record, Reschedule and Decline, and
  * the exemption open for review gets its own two actions.
  */
-export function MedicalEntryRow({
+export async function MedicalEntryRow({
   entry,
   names,
   today,
@@ -80,6 +83,8 @@ export function MedicalEntryRow({
   reviewId = null,
 }: RowProps) {
   const offer = conditionOffer(entry);
+  const canReadOutcome = entry.outcomeId && await hasPermission(AppPermissions.OUTCOMES_READ);
+  const canCorrectOutcome = canReadOutcome && !entry.voidedAt && await hasPermission(AppPermissions.OUTCOMES_MANAGE) && await hasPermission(AppPermissions.MEDICAL_MANAGE);
   return (
     <MedicalEntryItem
       entry={entry}
@@ -87,7 +92,7 @@ export function MedicalEntryRow({
       unitSystem={unitSystem}
       review={due && entry.id === reviewId}
       actions={
-        controls?.canManage && !entry.voidedAt ? (
+        controls?.canManage && !entry.voidedAt && !entry.outcomeId ? (
           <MedicalEntryActions
             animalId={controls.animalId}
             entry={entry}
@@ -132,7 +137,8 @@ export function MedicalEntryRow({
               />
             </div>
           )}
-          <MedicalEntryChanges events={entry.events} names={names} />
+          {canReadOutcome && <p className="mt-2 text-sm"><Link className="underline" href={`/dashboard/outcomes/${entry.outcomeId}/edit`}>{canCorrectOutcome ? "Correct through outcome" : "View outcome"}</Link></p>}
+          <MedicalEntryChanges events={entry.events} names={names} kind={entry.kind} />
         </>
       }
     />

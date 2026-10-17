@@ -10,6 +10,7 @@ import {
 import { AppPermissions } from "../auth/permissions";
 import {
   OutcomeFormSchema,
+  CreateOutcomeFormSchema,
   ReverseOutcomeSchema,
   type OutcomeFormInput,
   type ReverseOutcomeInput,
@@ -22,6 +23,11 @@ import {
   TimelineOrderError,
 } from "../utils/errors";
 import { z } from "zod";
+import { fieldErrorsByPath } from "../utils/form-result-utils";
+import { canWriteOutcomeMedical } from "../auth/outcome-medical-policy";
+import { ForbiddenError } from "../utils/errors";
+import { MedicalEntryRefusal } from "../services/medical-entry-values";
+
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import {
   recordOutcomeReversal,
@@ -33,6 +39,29 @@ import {
   type OutcomeCorrection,
   type RecordedOutcome,
 } from "../services/outcome-recording";
+
+const clinicalPermissionMessage = "Managing medical details is required for this outcome change.";
+const revalidateOutcomeSurfaces = (animalId: string, outcomeId?: string) => {
+  revalidatePath("/dashboard/outcomes");
+  if (outcomeId) revalidatePath(`/dashboard/outcomes/${outcomeId}/edit`);
+  revalidatePath("/dashboard/animals");
+  // Literal page paths do not refresh descendants. Name every affected read.
+  const animalPath = `/dashboard/animals/${animalId}`;
+  for (const suffix of ["", "/journey", "/adoption-applications", "/medical", "/medical/history",
+    "/medical/documents", "/medical/vaccines-tests", "/medical/conditions",
+    "/medical/medications", "/medical/vitals"]) {
+    revalidatePath(`${animalPath}${suffix}`);
+  }
+  revalidatePath("/dashboard/medical/due");
+  revalidatePath("/dashboard/medical/doses");
+  revalidatePath("/dashboard/my-foster-animals");
+  revalidatePath(`/dashboard/my-foster-animals/${animalId}`);
+  revalidatePath("/dashboard/locations");
+  revalidatePath("/dashboard/adoption-applications");
+  revalidatePath("/pets");
+  revalidatePath("/pets/favorites");
+  revalidatePath(`/pets/${animalId}`);
+};
 
 const OUTCOMES_PATH = "/dashboard/outcomes";
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
@@ -71,17 +100,19 @@ const _createOutcome = async (
     return { ok: false, message: "Invalid adoption application ID format." };
   }
 
-  const validatedFields = OutcomeFormSchema.safeParse(values);
+  const validatedFields = CreateOutcomeFormSchema.safeParse(values);
 
   if (!validatedFields.success) {
     return {
       ok: false,
       message: "Missing or Invalid Fields. Failed to Process Outcome.",
-      fieldErrors: z.flattenError(validatedFields.error)
-        .fieldErrors as FieldErrors<OutcomeFormInput>,
+      fieldErrors: fieldErrorsByPath<OutcomeFormInput>(validatedFields.error.issues),
     };
   }
 
+  if (!canWriteOutcomeMedical(user.role, { type: validatedFields.data.outcomeType, creating: true, medicalSupplied: validatedFields.data.medical !== undefined })) {
+    return { ok: false, message: clinicalPermissionMessage };
+  }
   let recorded: RecordedOutcome;
   try {
     recorded = await prisma.$transaction((tx) =>
@@ -92,12 +123,14 @@ const _createOutcome = async (
       ),
     );
   } catch (error) {
+    if (error instanceof MedicalEntryRefusal) return { ok: false, message: error.message, fieldErrors: { [error.field ?? "medical"]: [error.message] } };
+    if (error instanceof ForbiddenError) return { ok: false, message: error.message };
     if (error instanceof TimelineOrderError) {
       // Shown under the picker, and as the form's message.
       return {
         ok: false,
         message: error.message,
-        fieldErrors: { [error.field]: [error.message] },
+        fieldErrors: { [error.field ?? "medical"]: [error.message] },
       };
     }
     console.error("Database error processing outcome:", error);
@@ -113,8 +146,7 @@ const _createOutcome = async (
     };
   }
 
-  revalidatePath("/dashboard/animals");
-  revalidatePath(`/dashboard/animals/${animalId}`);
+  revalidateOutcomeSurfaces(animalId);
   revalidateFosterPages(recorded.fosterPersonId);
 
   if (adoptionApplicationId) {
@@ -132,7 +164,8 @@ const _createOutcome = async (
 };
 
 /**
- * Correct an outcome's day, notes, partner or owner. The work is in
+ * Correct an outcome's day, notes, partner, owner or linked medical facts.
+ * The work is in
  * `outcome-recording`; this is the authorization, the validation and the
  * cache invalidation around it.
  */
@@ -152,8 +185,7 @@ const _updateOutcome = async (
     return {
       ok: false,
       message: "Missing or Invalid Fields. Failed to Update Outcome.",
-      fieldErrors: z.flattenError(validatedFields.error)
-        .fieldErrors as FieldErrors<OutcomeFormInput>,
+      fieldErrors: fieldErrorsByPath<OutcomeFormInput>(validatedFields.error.issues),
     };
   }
 
@@ -163,14 +195,19 @@ const _updateOutcome = async (
       parsedId.data,
       validatedFields.data,
       user.personId,
+      { authorize: (operation) => {
+        if (!canWriteOutcomeMedical(user.role, operation)) throw new ForbiddenError(clinicalPermissionMessage);
+      } },
     );
   } catch (error) {
+    if (error instanceof MedicalEntryRefusal) return { ok: false, message: error.message, fieldErrors: { [error.field ?? "medical"]: [error.message] } };
+    if (error instanceof ForbiddenError) return { ok: false, message: error.message };
     if (error instanceof TimelineOrderError) {
       // Shown under the picker, and as the form's message.
       return {
         ok: false,
         message: error.message,
-        fieldErrors: { [error.field]: [error.message] },
+        fieldErrors: { [error.field ?? "medical"]: [error.message] },
       };
     }
     if (
@@ -192,8 +229,7 @@ const _updateOutcome = async (
     };
   }
 
-  revalidatePath(OUTCOMES_PATH);
-  revalidatePath(`/dashboard/animals/${correction.animalId}`);
+  revalidateOutcomeSurfaces(correction.animalId, outcomeId);
   revalidateFosterPages(correction.fosterPersonId);
 
   return {
@@ -253,9 +289,7 @@ const _reverseOutcome = async (
     };
   }
 
-  revalidatePath(OUTCOMES_PATH);
-  revalidatePath("/dashboard/animals");
-  revalidatePath(`/dashboard/animals/${reversal.animalId}`);
+  revalidateOutcomeSurfaces(reversal.animalId, outcomeId);
   // Every application on the animal can read differently now: the adopter's
   // is no longer adopted, and the ones the outcome closed are open again.
   revalidatePath(ADOPTION_APPLICATIONS_PATH);

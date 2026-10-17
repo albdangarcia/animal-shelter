@@ -11,6 +11,8 @@ import {
   SurgeryEvidence,
 } from "@/prisma/generated/enums";
 import {
+  DEATH_CIRCUMSTANCES_LABELS,
+  EUTHANASIA_REASON_CATEGORY_LABELS,
   EXAM_FINDING_STATUS_LABELS,
   EXAM_RESULT_LABELS,
   EXAM_TYPE_LABELS,
@@ -197,6 +199,21 @@ const detailPairs = (entry: MedicalEntryDisplay): [string, string][] => {
       "Reproductive status",
       REPRODUCTIVE_STATUS_LABELS[entry.exam.reproductiveStatus],
     ]);
+  }
+  if (entry.euthanasia) {
+    const e = entry.euthanasia;
+    pairs.push(["Reason category", EUTHANASIA_REASON_CATEGORY_LABELS[e.reasonCategory]],
+      ["Reason notes", e.reasonNotes], ["Authorized by", e.authorizedBy.name],
+      ["Performed by", e.performedBy?.name ?? e.performedByName], ["Drug", e.drug],
+      ["Dose including unit", e.dose], ["Route", e.route], ["Witness", e.witness],
+      ["Body disposition", e.bodyDisposition ?? "Unknown"]);
+  }
+  if (entry.death) {
+    const d = entry.death;
+    pairs.push(["Circumstances", DEATH_CIRCUMSTANCES_LABELS[d.circumstances]],
+      ["Circumstance notes", d.circumstanceNotes], ["Cause", d.cause ?? "Unknown"],
+      ["Necropsy requested", d.necropsyRequested === null ? "Unknown" : d.necropsyRequested ? "Yes" : "No"],
+      ["Body disposition", d.bodyDisposition ?? "Unknown"]);
   }
   return pairs.filter((pair): pair is [string, string] => !!pair[1]);
 };
@@ -423,7 +440,7 @@ export function MedicalEntryItem({
                     <dt className="inline text-xs text-muted-foreground">
                       {label}:{" "}
                     </dt>
-                    <dd className="inline font-medium">{value}</dd>
+                    <dd className="inline font-medium whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{value}</dd>
                   </div>
                 ))}
               </dl>

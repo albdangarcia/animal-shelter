@@ -34,6 +34,7 @@ interface Props {
   events: MedicalEntryDisplay["events"];
   /** Names for the ids the events hold, keyed by id. */
   names: Record<string, string>;
+  kind?: MedicalEntryDisplay["kind"];
 }
 
 /**
@@ -41,7 +42,7 @@ interface Props {
  * since: who, when, and each field's value before and after, or why it was
  * voided or declined.
  */
-export function MedicalEntryChanges({ events, names }: Props) {
+export function MedicalEntryChanges({ events, names, kind }: Props) {
   const created = events.find(
     (event) => event.action === MedicalEntryEventAction.CREATED,
   );
@@ -75,7 +76,7 @@ export function MedicalEntryChanges({ events, names }: Props) {
         changes:
           event.action === MedicalEntryEventAction.EDITED ||
           event.action === MedicalEntryEventAction.RESCHEDULED
-            ? describeEntryChanges(event.before, event.after, names)
+            ? describeEntryChanges(event.before, event.after, names, kind)
             : [],
       }))}
     />

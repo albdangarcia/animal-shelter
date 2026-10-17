@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { OutcomeType } from "@/prisma/generated/enums";
+import { OutcomeMedicalDetailsSchema } from "./outcome-medical.schemas";
 import { calendarDaySchema } from "./common.schemas";
 
 export const OutcomeFormSchema = z
@@ -12,6 +13,7 @@ export const OutcomeFormSchema = z
     destinationPartnerId: z.string().optional(),
     ownerId: z.string().optional(),
     notes: z.string().optional(),
+    medical: OutcomeMedicalDetailsSchema.optional(),
   })
   .refine(
     (data) => {
@@ -39,6 +41,12 @@ export const OutcomeFormSchema = z
       error: "An owner is required for return-to-owner outcomes.",
     }
   );
+
+export const CreateOutcomeFormSchema = OutcomeFormSchema.superRefine((value, ctx) => {
+  if ((value.outcomeType === "EUTHANIZED" || value.outcomeType === "DECEASED") && !value.medical) {
+    ctx.addIssue({ code: "custom", path: ["medical"], message: "Medical details are required for this outcome." });
+  }
+});
 
 export type OutcomeFormInput = z.input<typeof OutcomeFormSchema>;
 export type OutcomeFormOutput = z.output<typeof OutcomeFormSchema>;

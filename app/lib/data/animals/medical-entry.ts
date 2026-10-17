@@ -70,6 +70,7 @@ export const findLatestRabiesVaccine = async (
 export const MEDICAL_ENTRY_DISPLAY_SELECT = {
   id: true,
   animalId: true,
+  outcomeId: true,
   kind: true,
   status: true,
   dueDate: true,
@@ -106,6 +107,12 @@ export const MEDICAL_ENTRY_DISPLAY_SELECT = {
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: { id: true, name: true, type: true },
   },
+  euthanasia: { select: {
+    reasonCategory: true, reasonNotes: true, authorizedById: true, performedById: true,
+    performedByName: true, drug: true, dose: true, route: true, witness: true, bodyDisposition: true,
+    authorizedBy: { select: { id: true, name: true } }, performedBy: { select: { id: true, name: true } },
+  } },
+  death: { select: { circumstances: true, circumstanceNotes: true, cause: true, necropsyRequested: true, bodyDisposition: true } },
   vaccine: {
     select: {
       manufacturer: true,
@@ -406,7 +413,7 @@ export const findVaccinesAndTests = (db: Db, animalId: string) =>
 
 // The fields of an event's before and after that hold an id, and what reads
 // them: an event stores ids, a page shows names.
-const ID_FIELDS = ["itemId", "vetPartnerId", "administeredById", "protocolStepId"] as const;
+const ID_FIELDS = ["itemId", "vetPartnerId", "administeredById", "authorizedById", "performedById", "protocolStepId"] as const;
 
 /**
  * Names for every item, partner and person id the entries' events mention,
@@ -422,6 +429,8 @@ export const findEventNames = async (
     itemId: new Set<string>(),
     vetPartnerId: new Set<string>(),
     administeredById: new Set<string>(),
+    authorizedById: new Set<string>(),
+    performedById: new Set<string>(),
     protocolStepId: new Set<string>(),
   };
   for (const entry of entries) {
@@ -445,7 +454,7 @@ export const findEventNames = async (
       select: { id: true, name: true },
     }),
     db.person.findMany({
-      where: { id: { in: [...ids.administeredById] } },
+      where: { id: { in: [...ids.administeredById, ...ids.authorizedById, ...ids.performedById] } },
       select: { id: true, name: true },
     }),
     db.medicalProtocolStep.findMany({

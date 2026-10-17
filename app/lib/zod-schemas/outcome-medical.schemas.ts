@@ -43,7 +43,10 @@ export const EuthanasiaMedicalSchema = z.strictObject({
     ctx.addIssue({ code: "custom", path: ["reasonNotes"], message: "Describe the reason." });
   }
   if (!!value.performedById === !!value.performedByName) {
-    ctx.addIssue({ code: "custom", path: ["performedById"], message: "Pick a performer or give the outside vet's name, rather than both." });
+    // Either control can be active, so each alternative must carry the error.
+    for (const field of ["performedById", "performedByName"] as const) {
+      ctx.addIssue({ code: "custom", path: [field], message: "Pick a performer or give the outside vet's name, rather than both." });
+    }
   }
   if (value.source === "IN_HOUSE") {
     if (value.performedByName) {

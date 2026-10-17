@@ -78,6 +78,7 @@ before(async () => {
 });
 
 after(async () => {
+  await prisma.medicalEntry.deleteMany({ where: { createdById: staffId } });
   await prisma.fosterPlacement.deleteMany({ where: { fosterProfileId } });
   await prisma.outcome.deleteMany({ where: { staffMemberId: staffId } });
   await prisma.intake.deleteMany({ where: { staffMemberId: staffId } });
@@ -243,7 +244,7 @@ const record = (animalId: string, outcomeDate: string) =>
   prisma.$transaction((tx) =>
     recordOutcome(
       tx,
-      { animalId, values: outcomeValues(outcomeDate) },
+      { animalId, values: { ...outcomeValues(outcomeDate), medical: { kind: "DEATH" as const, source: null, cause: null, circumstanceNotes: null, bodyDisposition: null, circumstances: "FOUND_DEAD" as const, causeKnowledge: "UNKNOWN" as const, necropsyRequested: null } } },
       staffId,
     ),
   );

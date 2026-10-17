@@ -34,3 +34,18 @@ test("ReverseOutcomeSchema: a reason over 1000 characters is refused", () => {
     true,
   );
 });
+
+import { CreateOutcomeFormSchema, OutcomeFormSchema } from "./outcome.schema";
+import { fieldErrorsByPath } from "../utils/form-result-utils";
+test("outcome input keeps correction omission but creation requires clinical facts with dotted errors", () => {
+  const input = { outcomeDate: "2026-01-03", outcomeType: "DECEASED" };
+  assert.equal(OutcomeFormSchema.safeParse(input).success, true);
+  assert.equal(CreateOutcomeFormSchema.safeParse(input).success, false);
+  const bad = CreateOutcomeFormSchema.safeParse({ ...input, medical: { kind: "DEATH", circumstances: "OTHER", causeKnowledge: "KNOWN", necropsyRequested: null } });
+  assert.equal(bad.success, false);
+  if (!bad.success) {
+    const errors = fieldErrorsByPath<Record<string, unknown>>(bad.error.issues);
+    assert.ok(errors["medical.cause"]);
+    assert.ok(errors["medical.circumstanceNotes"]);
+  }
+});
