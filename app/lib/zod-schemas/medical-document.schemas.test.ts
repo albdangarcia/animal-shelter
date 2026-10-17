@@ -6,6 +6,7 @@ import {
   MedicalDocumentUploadSchema,
   RemoveMedicalDocumentFileSchema,
   VoidMedicalDocumentSchema,
+  medicalDocumentTypesParam,
   type MedicalDocumentUploadInput,
 } from "./medical-document.schemas";
 
@@ -155,4 +156,23 @@ test("VoidMedicalDocumentSchema and RemoveMedicalDocumentFileSchema need a reaso
     fieldErrorsOf(RemoveMedicalDocumentFileSchema, { reason: "x".repeat(1001) }).reason,
     ["The reason cannot exceed 1000 characters."],
   );
+});
+
+test("the type filter reads the types picked, however the URL carries them", () => {
+  assert.deepEqual(medicalDocumentTypesParam.parse(undefined), []);
+  assert.deepEqual(medicalDocumentTypesParam.parse(""), []);
+  assert.deepEqual(medicalDocumentTypesParam.parse("LAB_RESULT"), ["LAB_RESULT"]);
+  // The shared filter writes one comma-separated value; a link can repeat it.
+  assert.deepEqual(medicalDocumentTypesParam.parse("LAB_RESULT,IMAGING"), [
+    "LAB_RESULT",
+    "IMAGING",
+  ]);
+  assert.deepEqual(medicalDocumentTypesParam.parse(["IMAGING", "OTHER,IMAGING"]), [
+    "IMAGING",
+    "OTHER",
+  ]);
+  // An unknown type is ignored, not refused.
+  assert.deepEqual(medicalDocumentTypesParam.parse("lab_result,X-RAY,VET_RECORD"), [
+    "VET_RECORD",
+  ]);
 });

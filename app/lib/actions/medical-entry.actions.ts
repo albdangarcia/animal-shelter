@@ -95,9 +95,10 @@ const revalidateMedical = (animalId: string) => {
   revalidatePath(`${animalPath}/medical`);
   revalidatePath(`${animalPath}/medical/history`);
   revalidatePath(`${animalPath}/medical/vaccines-tests`);
-  // A condition names the test or exam it was found on, and says so once
-  // that entry is voided.
+  // A condition names the test or exam it was found on, and a document the
+  // entry it belongs to, and both say so once that entry is voided.
   revalidatePath(`${animalPath}/medical/conditions`);
+  revalidatePath(`${animalPath}/medical/documents`);
   revalidatePath(`${animalPath}/medical/vitals`);
   revalidatePath("/dashboard/medical/due");
   revalidatePath("/pets");

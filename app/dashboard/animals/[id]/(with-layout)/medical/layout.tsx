@@ -15,6 +15,7 @@ const sections = [
   { suffix: "/medications", label: "Medications" },
   { suffix: "/conditions", label: "Conditions" },
   { suffix: "/vitals", label: "Vitals" },
+  { suffix: "/documents", label: "Documents" },
 ];
 
 const Layout = async ({ children, params }: Props) => {

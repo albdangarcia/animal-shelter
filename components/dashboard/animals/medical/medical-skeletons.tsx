@@ -172,3 +172,20 @@ export const MedicationsSkeleton = () => (
     </Card>
   </div>
 );
+
+export const MedicalDocumentsSkeleton = () => (
+  <Card className="@container/card">
+    <CardHeader>
+      <CardTitle className="@[650px]/card:text-xl">Documents</CardTitle>
+      <CardDescription>
+        Lab results, vet records, imaging, prescriptions and consent forms,
+        newest upload first. Each opens in a new tab. Voided ones stay here,
+        struck through, with who voided them and why.
+      </CardDescription>
+      <Skeleton className="mt-4 h-8 w-20" />
+    </CardHeader>
+    <CardContent>
+      <EntryRowsSkeleton rows={2} />
+    </CardContent>
+  </Card>
+);

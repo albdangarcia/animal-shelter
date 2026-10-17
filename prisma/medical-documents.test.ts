@@ -42,6 +42,8 @@ import {
 } from "@/app/lib/storage/medical-document-store";
 import {
   findAnimalDocuments,
+  findDocumentEntryChoices,
+  findDocumentEventNames,
   findDocumentForFile,
 } from "@/app/lib/data/animals/medical-document";
 import {
@@ -1152,12 +1154,26 @@ test("an animal's documents read newest upload first, by type, voided ones only 
     lab.documentId,
   ]);
   assert.deepEqual(
-    ids(await findAnimalDocuments(prisma, animalId, { type: LAB_RESULT, includeVoided: true })),
+    ids(await findAnimalDocuments(prisma, animalId, { types: [LAB_RESULT], includeVoided: true })),
     [lab.documentId],
   );
   assert.deepEqual(
-    ids(await findAnimalDocuments(prisma, animalId, { type: OTHER, includeVoided: false })),
+    ids(
+      await findAnimalDocuments(prisma, animalId, {
+        types: [IMAGING, LAB_RESULT],
+        includeVoided: true,
+      }),
+    ),
+    [radiograph.documentId, lab.documentId],
+  );
+  assert.deepEqual(
+    ids(await findAnimalDocuments(prisma, animalId, { types: [OTHER], includeVoided: false })),
     [],
+  );
+  // No types picked lists every type.
+  assert.deepEqual(
+    ids(await findAnimalDocuments(prisma, animalId, { types: [], includeVoided: true })),
+    ids(all),
   );
 
   const [removed, sent, , labRow] = all;
@@ -1183,6 +1199,43 @@ test("an animal's documents read newest upload first, by type, voided ones only 
     voidedAt: null,
     item: { name: name("Heartworm antigen") },
   });
+});
+
+test("the form offers the animal's given and scheduled entries, latest first, and the change history names them", async () => {
+  const animalId = await makeAnimal("Choices");
+  const given = await makeEntry(animalId);
+  const scheduled = await makeEntry(animalId, { status: MedicalEntryStatus.SCHEDULED });
+  // Neither a voided nor a declined entry can hold a document, nor another
+  // animal's.
+  await makeEntry(animalId, { voided: true });
+  await makeEntry(animalId, { status: MedicalEntryStatus.DECLINED });
+  await makeEntry(await makeAnimal("Other choices"));
+
+  const testName = name("Heartworm antigen");
+  assert.deepEqual(await findDocumentEntryChoices(prisma, animalId), [
+    { id: scheduled, label: `${testName} test due Oct 20, 2026` },
+    { id: given, label: `${testName} test on Oct 12, 2026` },
+  ]);
+
+  const { documentId } = await create(animalId, { entryId: given });
+  await edit(documentId, { entryId: scheduled, notes: "Moved to the retest." });
+  await voidIt(documentId);
+  const [row] = await findAnimalDocuments(prisma, animalId, { includeVoided: true });
+  assert.deepEqual(
+    row.events.map((event) => [event.action, event.actor.name]),
+    [
+      [MedicalDocumentEventAction.CREATED, name("Olivia")],
+      [MedicalDocumentEventAction.EDITED, name("Benjamin")],
+      [MedicalDocumentEventAction.VOIDED, name("Benjamin")],
+    ],
+  );
+  assert.deepEqual(row.events[1].before, { entryId: given, notes: null });
+  assert.deepEqual(await findDocumentEventNames(prisma, [row]), {
+    [given]: `${testName} test on Oct 12, 2026`,
+    [scheduled]: `${testName} test due Oct 20, 2026`,
+  });
+  // Nothing to name without a correction of the entry.
+  assert.deepEqual(await findDocumentEventNames(prisma, []), {});
 });
 
 test("the file route's read says where the file is and whether it can be served", async () => {

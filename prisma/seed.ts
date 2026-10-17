@@ -42,6 +42,7 @@ import {
   DoseSlot,
   MedicalConditionStatus,
   MedicalConditionType,
+  MedicalDocumentType,
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalEntryStatus,
@@ -116,6 +117,16 @@ import {
   type MedicationOrderInput,
 } from "@/app/lib/services/medication-order";
 import { recordMedicationDose, voidMedicationDose } from "@/app/lib/services/medication-dose";
+import {
+  createMedicalDocument,
+  storeThenRecord,
+  voidMedicalDocument,
+  type MedicalDocumentInput,
+} from "@/app/lib/services/medical-document";
+import {
+  medicalDocumentStore,
+  seedDocumentPathname,
+} from "@/app/lib/storage/medical-document-store";
 import { ALTERED_ENTRY_WHERE } from "@/app/lib/data/animals/medical-status";
 import { recordOutcome } from "@/app/lib/services/outcome-recording";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
@@ -8283,6 +8294,132 @@ async function seedMedications() {
 
 let seedTimezone = fallbackShelterSettings().timezone;
 
+// =================================================================//
+//                       MEDICAL DOCUMENTS                           //
+// =================================================================//
+//
+// Paperwork on two hand-authored animals, uploaded by Olivia through the
+// document service, as staff upload it:
+// - Fido: "Heartworm antigen panel", a lab result for his positive heartworm
+//   test, dated the test's day; and "Intake paperwork (wrong animal)",
+//   voided by Benjamin with its file kept, so the list shows a void.
+// - Daisy: "Dental discharge sheet", a vet record for her dental, dated its
+//   day; and "Dental radiograph", imaging with no entry and no day.
+//
+// The files are the two small samples in prisma/seed-files. Each document
+// is written to its own fixed pathname, overwriting what a reseed left
+// there, so reseeding never piles up files in the store. The store is the
+// one the environment picks: the local folder in development and under
+// Playwright, the private Blob store where its token is set.
+//
+// No random draws: nothing earlier in the seed moves.
+async function seedMedicalDocuments() {
+  console.log("Seeding medical documents...");
+
+  const today = shelterToday(seedTimezone, new Date());
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  if (!olivia || !benjamin) {
+    throw new Error("seedMedicalDocuments: staff fixtures not found.");
+  }
+
+  const store = medicalDocumentStore({ overwrite: true });
+  const sample = (file: string) =>
+    new Uint8Array(fs.readFileSync(path.join(process.cwd(), "prisma/seed-files", file)));
+  const pdf = sample("sample-vet-record.pdf");
+  const png = sample("sample-radiograph.png");
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    if (!row) throw new Error(`seedMedicalDocuments: ${name} not found.`);
+    return row.id;
+  };
+  const upload = (
+    fileName: string,
+    bytes: Uint8Array,
+    input: MedicalDocumentInput,
+  ) =>
+    storeThenRecord(
+      store,
+      { pathname: seedDocumentPathname(fileName), bytes, fresh: false },
+      (stored) =>
+        prisma.$transaction((tx) =>
+          createMedicalDocument(tx, { ...input, ...stored }, olivia.id, today),
+        ),
+    );
+
+  // --- Fido: the lab report of his positive heartworm test -----------------
+  const fido = await animal("Fido");
+  const heartwormTest = await prisma.medicalEntry.findFirst({
+    where: {
+      animalId: fido,
+      kind: MedicalEntryKind.TEST,
+      status: MedicalEntryStatus.COMPLETED,
+      voidedAt: null,
+      item: { name: "Heartworm antigen" },
+      test: { results: { some: { result: TestResult.POSITIVE } } },
+    },
+    select: { id: true, completedDate: true },
+  });
+  if (!heartwormTest?.completedDate) {
+    throw new Error("seedMedicalDocuments: Fido's positive heartworm test was not seeded.");
+  }
+  await upload("fido-heartworm-antigen-panel.pdf", pdf, {
+    animalId: fido,
+    name: "Heartworm antigen panel",
+    type: MedicalDocumentType.LAB_RESULT,
+    documentDate: calendarDay(heartwormTest.completedDate),
+    entryId: heartwormTest.id,
+  });
+
+  // --- Daisy: her dental's discharge sheet and a radiograph ----------------
+  const daisy = await animal("Daisy");
+  const dental = await prisma.medicalEntry.findFirst({
+    where: {
+      animalId: daisy,
+      kind: MedicalEntryKind.SURGERY,
+      procedure: SurgeryProcedure.DENTAL,
+      status: MedicalEntryStatus.COMPLETED,
+      voidedAt: null,
+    },
+    select: { id: true, completedDate: true },
+  });
+  if (!dental?.completedDate) {
+    throw new Error("seedMedicalDocuments: Daisy's dental was not seeded.");
+  }
+  await upload("daisy-dental-discharge-sheet.pdf", pdf, {
+    animalId: daisy,
+    name: "Dental discharge sheet",
+    type: MedicalDocumentType.VET_RECORD,
+    documentDate: calendarDay(dental.completedDate),
+    entryId: dental.id,
+    notes: "Soft food for a week; recheck in ten days.",
+  });
+  await upload("daisy-dental-radiograph.png", png, {
+    animalId: daisy,
+    name: "Dental radiograph",
+    type: MedicalDocumentType.IMAGING,
+  });
+
+  // --- Fido: paperwork uploaded to the wrong animal, voided ----------------
+  const { documentId: wrongAnimal } = await upload("fido-intake-paperwork.pdf", pdf, {
+    animalId: fido,
+    name: "Intake paperwork (wrong animal)",
+    type: MedicalDocumentType.OTHER,
+  });
+  await prisma.$transaction((tx) =>
+    voidMedicalDocument(tx, wrongAnimal, "Uploaded to the wrong animal", benjamin.id),
+  );
+
+  console.log(`Seeded 4 medical documents (1 voided) in the ${store.kind} store.`);
+}
+
 export async function main() {
   const restoreRandom = installDeterministicRandom();
   // Drain any leftover deal queues so a second main() in the same process
@@ -8351,6 +8488,7 @@ async function seedAll() {
   await seedCareFixtures();
   await seedMedicalProtocols();
   await seedMedications();
+  await seedMedicalDocuments();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

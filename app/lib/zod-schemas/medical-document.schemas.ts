@@ -62,3 +62,23 @@ export const RemoveMedicalDocumentFileSchema = z.object({
 });
 
 export type RemoveMedicalDocumentFileInput = z.input<typeof RemoveMedicalDocumentFileSchema>;
+
+/**
+ * The Documents page's type filter, from the URL: the types picked, as the
+ * shared filter writes them (one comma-separated value, or the parameter
+ * repeated). An unknown type is ignored rather than refused; none means every
+ * type.
+ */
+export const medicalDocumentTypesParam = z
+  .union([z.string(), z.array(z.string())])
+  .optional()
+  .transform((value) => [
+    ...new Set(
+      [value ?? []]
+        .flat()
+        .flatMap((part) => part.split(","))
+        .filter((type): type is MedicalDocumentType =>
+          Object.values(MedicalDocumentType).includes(type as MedicalDocumentType),
+        ),
+    ),
+  ]);

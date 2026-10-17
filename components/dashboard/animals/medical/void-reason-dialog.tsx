@@ -31,10 +31,15 @@ interface Props {
   onCloseAutoFocus: (event: Event) => void;
   /** The dialog's id, for a caller that needs to find it. */
   contentId?: string;
+  /** The reason box's name, for something other than a void. */
+  reasonLabel?: string;
+  /** What the reason box asks before anything is typed. */
+  placeholder?: string;
 }
 
 /**
- * Asks why a medical record is being voided, and voids it. The button stays
+ * Asks why a medical record is being voided, and voids it (or, given its own
+ * words, does something else that needs a reason, such as removing a file). The button stays
  * off until a reason is given, and an over-long one is explained before
  * anything is sent.
  */
@@ -47,6 +52,8 @@ export function VoidReasonDialog({
   onVoid,
   onCloseAutoFocus,
   contentId,
+  reasonLabel = "Reason for voiding",
+  placeholder = "Why is this being voided?",
 }: Props) {
   const router = useRouter();
   const [reason, setReason] = useState("");
@@ -104,8 +111,8 @@ export function VoidReasonDialog({
               setReason(e.target.value);
               setReasonError(undefined);
             }}
-            placeholder="Why is this being voided?"
-            aria-label="Reason for voiding"
+            placeholder={placeholder}
+            aria-label={reasonLabel}
             aria-invalid={!!shownError}
             disabled={isPending}
           />

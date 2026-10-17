@@ -5,7 +5,9 @@ import {
   documentContentDisposition,
   documentDayIssue,
   documentFileIssue,
+  documentFormatLabel,
   documentNameFromFile,
+  formatFileSize,
   sniffDocumentType,
 } from "./medical-document-file";
 import { calendarDay } from "./shelter-day";
@@ -157,4 +159,25 @@ test("documentContentDisposition encodes every character the header can't carry"
     documentContentDisposition(`Ñoño's "scan" (1)*; a/b\r\nX: y`, "application/pdf", "inline"),
     "inline; filename*=UTF-8''%C3%91o%C3%B1o%27s%20%22scan%22%20%281%29%2A%3B%20a%2Fb%0D%0AX%3A%20y.pdf",
   );
+});
+
+test("formatFileSize: bytes, whole kilobytes, then megabytes to one place", () => {
+  assert.equal(formatFileSize(1), "1 byte");
+  assert.equal(formatFileSize(512), "512 bytes");
+  assert.equal(formatFileSize(1023), "1023 bytes");
+  assert.equal(formatFileSize(1024), "1 KB");
+  assert.equal(formatFileSize(1536), "2 KB");
+  assert.equal(formatFileSize(820 * 1024), "820 KB");
+  // Just under a megabyte rounds up into megabytes, never "1024 KB".
+  assert.equal(formatFileSize(1024 * 1024 - 1), "1 MB");
+  assert.equal(formatFileSize(1.25 * 1024 * 1024), "1.3 MB");
+  assert.equal(formatFileSize(4 * 1024 * 1024), "4 MB");
+});
+
+test("documentFormatLabel names each type the shelter keeps", () => {
+  assert.equal(documentFormatLabel("application/pdf"), "PDF");
+  assert.equal(documentFormatLabel("image/jpeg"), "JPEG");
+  assert.equal(documentFormatLabel("image/png"), "PNG");
+  assert.equal(documentFormatLabel("image/webp"), "WebP");
+  assert.equal(documentFormatLabel("text/plain"), "text/plain");
 });

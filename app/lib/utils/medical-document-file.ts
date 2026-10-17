@@ -137,3 +137,31 @@ export function documentContentDisposition(
   );
   return `${disposition}; filename*=UTF-8''${encoded}`;
 }
+
+// What each content type is called on a page.
+const FORMAT_LABELS: Record<MedicalDocumentContentType, string> = {
+  "application/pdf": "PDF",
+  "image/jpeg": "JPEG",
+  "image/png": "PNG",
+  "image/webp": "WebP",
+};
+
+/** "PDF", "JPEG", "PNG" or "WebP"; a type the shelter doesn't keep reads as
+ * it is stored. */
+export const documentFormatLabel = (contentType: string): string =>
+  FORMAT_LABELS[contentType as MedicalDocumentContentType] ?? contentType;
+
+/**
+ * A file's size as a page shows it: "512 bytes", "820 KB", "1.2 MB". A
+ * kilobyte is 1,024 bytes, as the 4 MB limit counts them; kilobytes are
+ * whole, megabytes to one decimal place.
+ */
+export const formatFileSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} ${bytes === 1 ? "byte" : "bytes"}`;
+  const kilobytes = bytes / 1024;
+  if (Math.round(kilobytes) < 1024) return `${Math.round(kilobytes)} KB`;
+  return `${(kilobytes / 1024).toFixed(1).replace(/\.0$/, "")} MB`;
+};
+
+/** Where a document's file is served from, to whoever may see it. */
+export const documentFileHref = (documentId: string) => `/api/medical-documents/${documentId}`;

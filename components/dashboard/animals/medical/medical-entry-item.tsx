@@ -15,6 +15,7 @@ import {
   EXAM_RESULT_LABELS,
   EXAM_TYPE_LABELS,
   MEDICAL_ENTRY_SOURCE_LABELS,
+  MEDICAL_DOCUMENT_TYPE_LABELS,
   MEDICAL_ENTRY_KIND_LABELS,
   MEDICAL_ROUTE_LABELS,
   REPRODUCTIVE_STATUS_LABELS,
@@ -35,6 +36,7 @@ import {
   medicalEntryName,
   type NameableMedicalEntry,
 } from "@/app/lib/utils/medical-entry-name";
+import { documentFileHref } from "@/app/lib/utils/medical-document-file";
 
 type EntryDay = Pick<MedicalEntryDisplay, "status" | "completedDate" | "dueDate"> &
   Partial<Pick<MedicalEntryDisplay, "exemptionReason" | "reviewDate">>;
@@ -462,6 +464,26 @@ export function MedicalEntryItem({
               <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">
                 {entry.notes}
               </p>
+            )}
+
+            {entry.documents.length > 0 && (
+              <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" aria-label="Documents">
+                {entry.documents.map((document) => (
+                  <li key={document.id}>
+                    <a
+                      href={documentFileHref(document.id)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline underline-offset-4"
+                    >
+                      {document.name}
+                    </a>{" "}
+                    <span className="text-xs text-muted-foreground">
+                      ({MEDICAL_DOCUMENT_TYPE_LABELS[document.type].toLowerCase()})
+                    </span>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
 
