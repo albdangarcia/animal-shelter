@@ -1,3 +1,4 @@
+import { submitVetVisitReport, reviewVetVisitReport } from "@/app/lib/services/vet-visit-report";
 import {
   fallbackShelterSettings,
   resolveShelterSettings,
@@ -8420,6 +8421,62 @@ async function seedMedicalDocuments() {
   console.log(`Seeded 4 medical documents (1 voided) in the ${store.kind} store.`);
 }
 
+/** A foster's medical record, after all earlier random draws are spent. */
+async function seedFosterMedical() {
+  const today = shelterToday(seedTimezone);
+  const olivia = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff1@example.com" } } });
+  const clinic = await prisma.partner.findFirstOrThrow({ where: { name: "Downtown Veterinary Clinic", type: PartnerType.VET_CLINIC, isActive: true } });
+  const species = await prisma.species.findMany({ where: { name: { in: ["Dog", "Cat"] } }, select: { id: true } });
+  const rosa = await prisma.person.create({ data: { name: "Rosa Lindqvist", email: "foster1@example.com" } });
+  const { user } = await seedAuth.api.signUpEmail({ body: { name: rosa.name, email: rosa.email!, password: "7dJbys5@?tMA" } });
+  await prisma.user.update({ where: { id: user.id }, data: { role: Role.USER } });
+  const profile = await prisma.fosterProfile.create({ data: { personId: rosa.id, status: FosterStatus.ACTIVE, maxAnimals: 2, canGiveOralMeds: true, speciesCapabilities: { connect: species }, approvedAt: new Date() } });
+  const dog = await prisma.animal.findFirstOrThrow({
+    where: {
+      species: { name: "Dog" }, listingStatus: AnimalListingStatus.PUBLISHED, currentUnitId: { not: null },
+      name: { notIn: HAND_AUTHORED_ANIMAL_NAMES }, fosterPlacements: { none: {} }, medicationOrders: { none: {} },
+      medicalEntries: { none: { protocolStepId: { not: null } } },
+      intake: { some: { intakeDate: { lte: shiftDayKey(today, -6) } } },
+    },
+    orderBy: [{ name: "desc" }, { id: "asc" }],
+    select: { id: true, name: true, currentUnitId: true, intake: { orderBy: [{ intakeDate: "desc" }, { id: "desc" }], take: 1, select: { intakeDate: true } } },
+  });
+  const afterIntake = shiftDayKey(calendarDay(dog.intake[0].intakeDate), 1);
+  const desiredStart = shiftDayKey(today, -5);
+  const startDate = afterIntake > desiredStart ? afterIntake : desiredStart;
+  const day = (daysBack: number) => { const candidate = shiftDayKey(today, -daysBack); return candidate < startDate ? startDate : candidate; };
+  await prisma.$transaction(async (tx) => {
+    await tx.fosterPlacement.create({ data: { animalId: dog.id, fosterProfileId: profile.id, type: FosterPlacementType.GENERAL, startDate, expectedEndDate: shiftDayKey(today, 9), previousUnitId: dog.currentUnitId, placedById: olivia.id } });
+    await tx.animal.update({ where: { id: dog.id }, data: { currentUnitId: null } });
+    await tx.animalActivityLog.create({ data: { animalId: dog.id, activityType: AnimalActivityType.FOSTER_PLACED, changedById: olivia.id, changedAt: shelterInstant(startDate, "12:00", seedTimezone), changeSummary: "Animal was placed with Rosa Lindqvist." } });
+  });
+  const medicine = await prisma.medicalItem.findFirstOrThrow({ where: { kind: MedicalItemKind.MEDICATION, name: "Amoxicillin-clavulanate", retiredAt: null } });
+  const dewormer = await prisma.medicalItem.findFirstOrThrow({ where: { kind: MedicalItemKind.TREATMENT, name: "Pyrantel pamoate", retiredAt: null } });
+  const treatment = await prisma.$transaction((tx) => createMedicalItem(tx, { kind: MedicalItemKind.TREATMENT, name: "Ear drops (clinic dose)", speciesIds: [], analytes: [], defaultRoute: MedicalRoute.OTIC }));
+  const orderStart = day(3);
+  const { orderId } = await prisma.$transaction((tx) => createMedicationOrder(tx, { animalId: dog.id, itemId: medicine.id, doseAmount: 125, doseUnit: DoseUnit.MG, route: MedicalRoute.ORAL, frequency: MedicationFrequency.BID, firstSlot: DoseSlot.AM, startDate: orderStart, endDate: shiftDayKey(orderStart, 6), prescribedBy: "Dr. Patel", instructions: "Give with food, morning and evening." }, olivia.id, today));
+  for (let slotDate = orderStart; slotDate < today; slotDate = shiftDayKey(slotDate, 1)) {
+    for (const slot of [DoseSlot.AM, DoseSlot.PM]) await prisma.$transaction((tx) => recordMedicationDose(tx, { orderId, slotDate, slot, result: MedicationDoseResult.GIVEN, administeredAt: shelterInstant(slotDate, slot === DoseSlot.AM ? "08:00" : "18:00", seedTimezone) }, rosa.id, today, new Date(), { foster: { personId: rosa.id } }));
+  }
+  await prisma.$transaction((tx) => scheduleMedicalEntry(tx, { animalId: dog.id, kind: MedicalEntryKind.TREATMENT, itemId: dewormer.id, dueDate: shiftDayKey(today, 1), notes: "Give the scheduled dewormer with food." }, olivia.id, today));
+  const reviewedDay = day(4);
+  const { reportId: reviewedId } = await prisma.$transaction((tx) => submitVetVisitReport(tx, { animalId: dog.id, visitDate: reviewedDay, vetPartnerId: clinic.id, summary: "Ear check: mild infection, drops given at the clinic." }, rosa.id, today));
+  const store = medicalDocumentStore({ overwrite: true });
+  const upload = async (reportId: string, fileName: string, source: string, name: string, documentDate: CalendarDay) => {
+    const bytes = new Uint8Array(fs.readFileSync(path.join(process.cwd(), "prisma/seed-files", source)));
+    await storeThenRecord(store, { pathname: seedDocumentPathname(fileName), bytes, fresh: false }, (stored) => prisma.$transaction((tx) => createMedicalDocument(tx, { animalId: dog.id, vetReportId: reportId, type: MedicalDocumentType.VET_RECORD, name, documentDate, ...stored }, rosa.id, today, { foster: { personId: rosa.id } })));
+  };
+  await upload(reviewedId, "foster-ear-check.png", "sample-radiograph.png", "Ear check record", reviewedDay);
+  await prisma.$transaction(async (tx) => {
+    await recordMedicalEntry(tx, { animalId: dog.id, kind: MedicalEntryKind.TREATMENT, itemId: treatment.id, completedDate: reviewedDay, source: MedicalEntrySource.OUTSIDE_VET, vetPartnerId: clinic.id, notes: "Ear drops administered at the clinic." }, olivia.id, today, { vetReportId: reviewedId });
+    await reviewVetVisitReport(tx, reviewedId, olivia.id);
+  });
+  const waitingDay = day(1);
+  const { reportId: waitingId } = await prisma.$transaction((tx) => submitVetVisitReport(tx, { animalId: dog.id, visitDate: waitingDay, vetPartnerId: clinic.id, summary: "Limping on the left front leg; the vet found a torn nail and trimmed it." }, rosa.id, today));
+  await upload(waitingId, "foster-torn-nail.pdf", "sample-vet-record.pdf", "Torn nail visit record", waitingDay);
+  console.log(`Seeded Rosa Lindqvist (foster1@example.com), fostering ${dog.name}: a medication course, dewormer, and two vet visit reports with paperwork.`);
+}
+
 export async function main() {
   const restoreRandom = installDeterministicRandom();
   // Drain any leftover deal queues so a second main() in the same process
@@ -8489,6 +8546,7 @@ async function seedAll() {
   await seedMedicalProtocols();
   await seedMedications();
   await seedMedicalDocuments();
+  await seedFosterMedical();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

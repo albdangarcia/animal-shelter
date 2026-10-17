@@ -1,3 +1,4 @@
+import { vetReportHref } from "@/app/lib/utils/vet-visit-report";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { AlertCircle } from "lucide-react";
@@ -21,7 +22,7 @@ import {
   SPAY_NEUTER_EXEMPTION_REASON_LABELS,
   SURGERY_PROCEDURE_LABELS,
 } from "@/app/lib/constants/medical";
-import { formatShelterDay } from "@/app/lib/utils/shelter-day";
+import { formatShelterDay, formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import { openEpisodeText, type CareStatus } from "@/app/lib/utils/care-status";
 import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { formatWeight } from "@/app/lib/utils/weight-format";
@@ -223,7 +224,10 @@ const MedicalOverview = ({ animalId, overview, todaysDoses, unitSystem, controls
         )}
       </CardHeader>
       <CardContent className="space-y-6">
-        <CareAlerts care={care} href={`${base}/conditions`} />
+        {overview.waitingReports.length > 0 && <section aria-label="Foster reports waiting for review" className="rounded-lg border p-4">
+        <ul className="space-y-2">{overview.waitingReports.map((report) => <li key={report.id}><Link href={vetReportHref(animalId, report.id)} className="text-sm font-medium underline">Foster report waiting for review: visit on {formatShelterDayOrNA(report.visitDate)}</Link></li>)}</ul>
+      </section>}
+      <CareAlerts care={care} href={`${base}/conditions`} />
 
         <dl
           aria-label="Medical status"

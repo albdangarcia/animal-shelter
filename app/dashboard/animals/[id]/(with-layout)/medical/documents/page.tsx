@@ -1,3 +1,6 @@
+import { VetVisitReports } from "@/components/dashboard/animals/medical/vet-visit-reports";
+import { fetchAnimalVetVisitReports, fetchReportScheduledCare } from "@/app/lib/data/vet-visit-reports.data";
+import { fetchMedicalControls } from "@/app/lib/data/medical-catalog.data";
 import { IDParamType } from "@/app/lib/types";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
@@ -35,18 +38,24 @@ const PageContent = async ({ params, searchParams }: Props) => {
     hasPermission(AppPermissions.MEDICAL_MANAGE),
     hasPermission(AppPermissions.MEDICAL_SETTINGS_MANAGE),
   ]);
-  const [page, choices] = await Promise.all([
+  const [page, choices, reports, controls, scheduled] = await Promise.all([
     fetchAnimalDocuments(animalId, type),
     canManage ? fetchDocumentFormChoices(animalId) : null,
+    fetchAnimalVetVisitReports(animalId),
+    fetchMedicalControls(animalId),
+    canManage ? fetchReportScheduledCare(animalId) : [],
   ]);
 
   return (
-    <MedicalDocuments
-      animalId={animalId}
-      page={page}
-      choices={choices}
-      canRemoveFile={canRemoveFile}
-    />
+    <div className="space-y-4">
+      <VetVisitReports reports={reports} options={controls?.canManage ? controls.options : null} scheduled={scheduled} />
+      <MedicalDocuments
+        animalId={animalId}
+        page={page}
+        choices={choices}
+        canRemoveFile={canRemoveFile}
+      />
+    </div>
   );
 };
 

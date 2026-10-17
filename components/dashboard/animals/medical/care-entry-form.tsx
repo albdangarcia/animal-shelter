@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReportEntryContext } from "@/app/lib/utils/vet-visit-report";
+
 import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryFormOptions } from "@/app/lib/data/medical-catalog.data";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry";
@@ -10,6 +12,7 @@ import { MicrochipEntryForm } from "./microchip-entry-form";
 import { ExamEntryForm } from "./exam-entry-form";
 
 interface Props {
+  report?: ReportEntryContext;
   animalId: string;
   kind: MedicalEntryKind;
   options: MedicalEntryFormOptions;

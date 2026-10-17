@@ -1,5 +1,7 @@
 "use client";
 
+import { reportCareDefaults, type ReportEntryContext } from "@/app/lib/utils/vet-visit-report";
+
 import { useImperativeHandle, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
@@ -157,6 +159,7 @@ const fromEntry = (entry: MedicalEntryDisplay): ExamFormState => ({
 const STATUSES = Object.values(ExamFindingStatus);
 
 interface Props {
+  report?: ReportEntryContext;
   animalId: string;
   options: MedicalEntryFormOptions;
   /** Present when editing. */
@@ -180,6 +183,7 @@ export function ExamEntryForm({
   options,
   entry,
   scheduled,
+  report,
   onFormSubmit,
   ref,
 }: Props) {
@@ -257,6 +261,7 @@ export function ExamEntryForm({
           ...blank(options.today, foundProcedure),
           examType: scheduled?.examType ?? "",
           notes: scheduled?.notes ?? "",
+          ...reportCareDefaults(report),
         },
   });
   const findings = useFieldArray({
@@ -283,10 +288,11 @@ export function ExamEntryForm({
   useImperativeHandle(
     ref,
     () => ({
+      isPending: () => isPending,
       isDirty: () =>
         haveFormValuesChanged(form.getValues(), initialValuesRef.current),
     }),
-    [form],
+    [form, isPending],
   );
 
   const onSubmit = (state: ExamFormState) => {
@@ -295,8 +301,8 @@ export function ExamEntryForm({
       const result = entry
         ? await editMedicalEntry(entry.id, values)
         : scheduled
-          ? await recordScheduledMedicalEntry(scheduled.id, values)
-          : await recordMedicalEntry(animalId, values);
+          ? await recordScheduledMedicalEntry(scheduled.id, values, report?.id)
+          : await recordMedicalEntry(animalId, values, report?.id);
       if (result.ok) {
         toast.success(result.message);
         onFormSubmit();

@@ -1,3 +1,5 @@
+import { VetVisitReportButton } from "./vet-visit-report-form";
+import { ReportPaperworkButton } from "./report-paperwork-button";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import type { FosterMedical as FosterMedicalData } from "@/app/lib/data/fosters/foster-medical";
@@ -51,6 +53,17 @@ export function FosterMedical({ data, canCare }: { data: FosterMedicalData; canC
         <p className="font-medium">{entry.name} · {entry.completedDate ? formatShelterDayOrNA(entry.completedDate) : "Date unknown"} · {entry.source}</p>
         {entry.results.map((result) => <p key={result.analyteName}>{result.analyteName}: {TEST_RESULT_LABELS[result.result]}</p>)}
       </li>)}</ul> : <p className="text-sm text-muted-foreground">No vaccines or tests given on record.</p>}
+      <Contact />
+    </Section>
+    <Section id="foster-reports" title="Your vet visit reports">
+      {canCare && <VetVisitReportButton data={data} />}
+      {data.reports.length ? <ul className="space-y-4">{data.reports.map((report) => <li key={report.id} className="min-w-0 space-y-2 rounded-lg border p-3">
+        <p className="font-medium">Visit on {formatShelterDayOrNA(report.visitDate)} · {report.vetPartner?.name ?? report.vetName}</p>
+        <p className="whitespace-pre-wrap text-sm">{report.summary}</p>
+        <p className="text-sm">{report.dismissReason ? `Dismissed: ${report.dismissReason}` : report.reviewedDate ? `Reviewed on ${formatShelterDayOrNA(report.reviewedDate)}` : "Waiting for the shelter"}</p>
+        {report.documents.length > 0 && <ul className="space-y-1 text-sm">{report.documents.map((document) => <li key={document.id}><a href={documentFileHref(document.id)} target="_blank" rel="noopener noreferrer" className="break-all underline">{document.name}</a></li>)}</ul>}
+        {!report.reviewedDate && canCare && <ReportPaperworkButton animalId={data.animalId} reportId={report.id} choices={{ entries: [], today: data.today, birthDate: data.birthDate }} />}
+      </li>)}</ul> : <p className="text-sm text-muted-foreground">No visits reported.</p>}
       <Contact />
     </Section>
     <Section id="foster-documents" title="Documents">

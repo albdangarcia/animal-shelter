@@ -1,3 +1,4 @@
+import { reportEntryData } from "./vet-visit-report-values";
 import type { TransactionClient } from "@/app/lib/prisma";
 import { Prisma } from "@/prisma/generated/client";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
@@ -203,6 +204,8 @@ export interface EntryWriteOptions {
   batch?: MedicalBatchTag | null;
   /** Given in foster care, or recorded from a foster's outside vet report. */
   reportedByFoster?: boolean;
+  /** The waiting report this recorded care came from. */
+  vetReportId?: string | null;
   /**
    * The medical protocol step that scheduled it, kept as provenance only:
    * the entry stands on its own. Applying a protocol writes one activity row
@@ -1591,6 +1594,7 @@ async function writeRecordedEntry(
   const { animalId } = input;
   await lockAnimal(tx, animalId);
 
+  const provenance = await reportEntryData(tx, animalId, input.source, options.vetReportId);
   const animal = await readAnimal(tx, animalId);
   const item = await checkCare(tx, input, animal);
   const values = await givenValues(
@@ -1614,6 +1618,7 @@ async function writeRecordedEntry(
         createdById: actorId,
         ...entryData(values),
         reportedByFoster: options.reportedByFoster ?? false,
+        ...provenance,
         ...batchData(options.batch),
         ...detailsCreate(input.kind, values, foundOn?.entryId),
       },
@@ -1660,6 +1665,7 @@ async function writeRecordedEntry(
         status: MedicalEntryStatus.COMPLETED,
         ...values,
         ...(options.reportedByFoster && { reportedByFoster: true }),
+        ...provenance,
         ...batchData(options.batch),
         ...(vitalsLogId && { vitalsLogId }),
         ...(foundOn && { foundOnExamId: foundOn.entryId }),
@@ -1735,6 +1741,7 @@ export async function recordScheduledMedicalEntry(
     );
   }
 
+  const provenance = await reportEntryData(tx, animalId, input.source, options.vetReportId);
   const animal = await readAnimal(tx, animalId);
   const item = await checkCare(tx, input, animal, entry);
   const values = await givenValues(tx, input, item, animal, actorId, today);
@@ -1748,6 +1755,7 @@ export async function recordScheduledMedicalEntry(
         status: MedicalEntryStatus.COMPLETED,
         ...entryData(values),
         reportedByFoster: options.reportedByFoster ?? false,
+        ...provenance,
         // The batch that gave it. One that scheduled it is kept in its
         // CREATED event.
         ...batchData(options.batch),
@@ -1792,6 +1800,7 @@ export async function recordScheduledMedicalEntry(
         status: MedicalEntryStatus.COMPLETED,
         ...values,
         ...(options.reportedByFoster && { reportedByFoster: true }),
+        ...provenance,
         ...batchData(options.batch),
         ...(vitalsLogId && { vitalsLogId }),
       }),

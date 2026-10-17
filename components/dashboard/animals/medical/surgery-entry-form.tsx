@@ -1,5 +1,7 @@
 "use client";
 
+import { reportCareDefaults, type ReportEntryContext } from "@/app/lib/utils/vet-visit-report";
+
 import { useImperativeHandle, useRef, useTransition } from "react";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
@@ -104,6 +106,7 @@ const fromEntry = (entry: MedicalEntryDisplay): SurgeryFormState => ({
 });
 
 interface Props {
+  report?: ReportEntryContext;
   animalId: string;
   options: MedicalEntryFormOptions;
   /** Present when editing. */
@@ -124,6 +127,7 @@ export function SurgeryEntryForm({
   options,
   entry,
   scheduled,
+  report,
   onFormSubmit,
   ref,
 }: Props) {
@@ -148,6 +152,7 @@ export function SurgeryEntryForm({
           ...blank(options.today),
           procedure: scheduled?.procedure ?? "",
           notes: scheduled?.notes ?? "",
+          ...reportCareDefaults(report),
         },
   });
   const source = useWatch({ control: form.control, name: "source" });
@@ -156,10 +161,11 @@ export function SurgeryEntryForm({
   useImperativeHandle(
     ref,
     () => ({
+      isPending: () => isPending,
       isDirty: () =>
         haveFormValuesChanged(form.getValues(), initialValuesRef.current),
     }),
-    [form],
+    [form, isPending],
   );
 
   const onSubmit = (state: SurgeryFormState) => {
@@ -168,8 +174,8 @@ export function SurgeryEntryForm({
       const result = entry
         ? await editMedicalEntry(entry.id, values)
         : scheduled
-          ? await recordScheduledMedicalEntry(scheduled.id, values)
-          : await recordMedicalEntry(animalId, values);
+          ? await recordScheduledMedicalEntry(scheduled.id, values, report?.id)
+          : await recordMedicalEntry(animalId, values, report?.id);
       if (result.ok) {
         toast.success(result.message);
         onFormSubmit();

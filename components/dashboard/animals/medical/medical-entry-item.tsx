@@ -103,12 +103,12 @@ export const dueState = (
 /** Who gave the care: the shelter (and who), or the outside vet. */
 const sourceText = (entry: MedicalEntryDisplay) =>
   [
-    entry.reportedByFoster && entry.source === "IN_HOUSE"
+    entry.reportedByFoster && !entry.vetReport && entry.source === "IN_HOUSE"
       ? `Given in foster${entry.administeredBy ? ` by ${entry.administeredBy.name}` : ""}`
       : entry.source && MEDICAL_ENTRY_SOURCE_LABELS[entry.source],
     entry.vetPartner?.name,
     entry.vetName,
-    entry.administeredBy && !(entry.reportedByFoster && entry.source === "IN_HOUSE")
+    entry.administeredBy && !(entry.reportedByFoster && !entry.vetReport && entry.source === "IN_HOUSE")
       ? `by ${entry.administeredBy.name}`
       : null,
     // Given care that was planned first keeps the day it was due, and so
@@ -397,6 +397,7 @@ export function MedicalEntryItem({
             {source && (
               <p className="mt-1 text-sm text-muted-foreground">{source}</p>
             )}
+            {entry.vetReport && <p className="mt-1 text-sm text-muted-foreground">From a foster&apos;s report of the visit on {formatShelterDayOrNA(entry.vetReport.visitDate)}.</p>}
             {entry.protocolStep && (
               <p className="mt-1 text-sm text-muted-foreground">
                 {protocolSourceText(entry.protocolStep.protocol.name)}

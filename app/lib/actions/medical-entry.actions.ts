@@ -58,6 +58,7 @@ import { NO_OP_EDIT_MESSAGE } from "../services/note-audit";
 import {
   getShelterSettings,
   getShelterToday,
+  getShelterNow,
 } from "../data/shelter-settings.data";
 import { examVitalsInstant } from "../utils/exam-vitals";
 import type { CalendarDay } from "../utils/shelter-day";
@@ -146,6 +147,7 @@ const toRecordInput = async (
   user: SessionUser,
   data: MedicalEntryFormValues,
   today: CalendarDay,
+  now: Date,
 ): Promise<
   | { ok: true; input: RecordMedicalEntryInput; options: RecordScheduledEntryOptions }
   | { ok: false; result: EntryResult }
@@ -180,7 +182,7 @@ const toRecordInput = async (
     data.completedDate ?? today,
     today,
     settings.timezone,
-    new Date(),
+    now,
   );
   return {
     ok: true,
@@ -193,18 +195,22 @@ const _recordMedicalEntry = async (
   user: SessionUser,
   animalId: string,
   values: MedicalEntryFormInput,
+  vetReportId?: string,
 ): Promise<EntryResult> => {
   const parsedAnimalId = cuidSchema.safeParse(animalId);
   if (!parsedAnimalId.success) {
     return { ok: false, message: "Invalid animal ID format." };
+  }
+  if (vetReportId !== undefined && (!cuidSchema.safeParse(vetReportId).success || !can(user.role, AppPermissions.MEDICAL_MANAGE))) {
+    return { ok: false, message: "Invalid report or permission to record care from it." };
   }
   const validated = MedicalEntryFormSchema.safeParse(values);
   if (!validated.success) {
     return invalidFields(validated.error);
   }
 
-  const today = await getShelterToday();
-  const recording = await toRecordInput(user, validated.data, today);
+  const { today, now } = await getShelterNow();
+  const recording = await toRecordInput(user, validated.data, today, now);
   if (!recording.ok) return recording.result;
   try {
     await prisma.$transaction((tx) =>
@@ -213,7 +219,7 @@ const _recordMedicalEntry = async (
         { ...recording.input, animalId: parsedAnimalId.data },
         user.personId,
         today,
-        recording.options,
+        { ...recording.options, vetReportId },
       ),
     );
   } catch (error) {
@@ -228,6 +234,10 @@ const _recordMedicalEntry = async (
   }
 
   revalidateMedical(parsedAnimalId.data);
+  if (vetReportId) {
+    revalidatePath("/dashboard/medical/due");
+    revalidatePath(`/dashboard/my-foster-animals/${parsedAnimalId.data}`);
+  }
   return { ok: true, message: "Entry recorded." };
 };
 
@@ -235,18 +245,22 @@ const _recordScheduledMedicalEntry = async (
   user: SessionUser,
   entryId: string,
   values: MedicalEntryFormInput,
+  vetReportId?: string,
 ): Promise<EntryResult> => {
   const parsedId = cuidSchema.safeParse(entryId);
   if (!parsedId.success) {
     return { ok: false, message: "Invalid entry ID format." };
+  }
+  if (vetReportId !== undefined && (!cuidSchema.safeParse(vetReportId).success || !can(user.role, AppPermissions.MEDICAL_MANAGE))) {
+    return { ok: false, message: "Invalid report or permission to record care from it." };
   }
   const validated = MedicalEntryFormSchema.safeParse(values);
   if (!validated.success) {
     return invalidFields(validated.error);
   }
 
-  const today = await getShelterToday();
-  const recording = await toRecordInput(user, validated.data, today);
+  const { today, now } = await getShelterNow();
+  const recording = await toRecordInput(user, validated.data, today, now);
   if (!recording.ok) return recording.result;
   let animalId: string;
   try {
@@ -257,7 +271,7 @@ const _recordScheduledMedicalEntry = async (
         recording.input,
         user.personId,
         today,
-        recording.options,
+        { ...recording.options, vetReportId },
       ),
     ));
   } catch (error) {
@@ -272,6 +286,10 @@ const _recordScheduledMedicalEntry = async (
   }
 
   revalidateMedical(animalId);
+  if (vetReportId) {
+    revalidatePath("/dashboard/medical/due");
+    revalidatePath(`/dashboard/my-foster-animals/${animalId}`);
+  }
   return { ok: true, message: "Entry recorded." };
 };
 

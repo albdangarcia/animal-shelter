@@ -59,7 +59,7 @@ type DocumentFormState = {
 
 /** What the form does: upload a new document, or correct a stored one. */
 export type DocumentFormMode =
-  | { upload: { animalId: string } }
+  | { upload: { animalId: string; vetReportId?: string } }
   | { edit: MedicalDocumentRow };
 
 /** The form, as its dialog sees it: whether it changed, and whether a save
@@ -84,7 +84,7 @@ const capitalised = (text: string) => text.charAt(0).toUpperCase() + text.slice(
 
 const startingState = (mode: DocumentFormMode): DocumentFormState => {
   if ("upload" in mode) {
-    return { file: null, name: "", type: null, documentDate: null, entryId: null, notes: "" };
+    return { file: null, name: "", type: mode.upload.vetReportId ? MedicalDocumentType.VET_RECORD : null, documentDate: null, entryId: null, notes: "" };
   }
   const stored = mode.edit;
   return {
@@ -113,6 +113,7 @@ const uploadDocument = async (
   animalId: string,
   file: File,
   values: Omit<DocumentFormState, "file">,
+  vetReportId?: string,
 ): Promise<FormResult<DocumentFormState>> => {
   const body = new FormData();
   body.set("file", file);
@@ -122,6 +123,7 @@ const uploadDocument = async (
   body.set("documentDate", values.documentDate ?? "");
   body.set("entryId", values.entryId ?? "");
   body.set("notes", values.notes);
+  if (vetReportId) body.set("vetReportId", vetReportId);
   try {
     const response = await fetch("/api/medical-documents", { method: "POST", body });
     return (await response.json()) as FormResult<DocumentFormState>;
@@ -218,7 +220,7 @@ export function MedicalDocumentForm({ mode, choices, onFormSubmit, ref }: Props)
           toast.error(issue);
           return;
         }
-        result = await uploadDocument(animalId, state.file, state);
+        result = await uploadDocument(animalId, state.file, state, "upload" in mode ? mode.upload.vetReportId : undefined);
       }
       if (result.ok) {
         toast.success(result.message);
@@ -318,14 +320,14 @@ export function MedicalDocumentForm({ mode, choices, onFormSubmit, ref }: Props)
             />
           </div>
 
-          <OptionalSelectField
+          {!("upload" in mode && mode.upload.vetReportId) && <OptionalSelectField
             control={form.control}
             name="entryId"
             label="Belongs to"
             noneLabel="No entry"
             options={entryOptions}
             disabled={isPending}
-          />
+          />}
 
           <MedicalTextareaField control={form.control} name="notes" label="Notes" />
         </fieldset>

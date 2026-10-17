@@ -6,6 +6,7 @@ import { findAnimalDocuments } from "../animals/medical-document";
 import { FOSTER_DOSE_PAST_DAYS } from "@/app/lib/constants/medical";
 import {
   calendarDay,
+  shelterDayKey,
   shiftDayKey,
   type ShelterClock,
 } from "@/app/lib/utils/shelter-day";
@@ -26,7 +27,7 @@ export async function findFosterMedical(
   const today = clock.day;
   const animal = await db.animal.findUniqueOrThrow({
     where: { id: animalId },
-    select: { name: true },
+    select: { name: true, birthDate: true },
   });
   const settings = resolveShelterSettings(
     await db.shelterSettings.findUnique({ where: { id: "shelter" } }),
@@ -110,7 +111,16 @@ export async function findFosterMedical(
     orderBy: [{ analyteName: "asc" }, { id: "asc" }],
   });
   const documents = await findAnimalDocuments(db, animalId, { includeVoided: false });
+  const vetClinics = await db.partner.findMany({ where: { type: "VET_CLINIC", isActive: true }, orderBy: [{ name: "asc" }, { id: "asc" }], select: { id: true, name: true } });
+  const reports = await db.vetVisitReport.findMany({
+    where: { animalId, reportedById: personId },
+    orderBy: [{ visitDate: "desc" }, { createdAt: "desc" }, { id: "asc" }],
+    select: { id: true, visitDate: true, summary: true, vetName: true, vetPartner: { select: { name: true } }, reviewedAt: true, dismissReason: true, documents: { where: { voidedAt: null }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { id: true, name: true, fileRemovedAt: true } } },
+  });
   return {
+    birthDate: calendarDay(animal.birthDate),
+    vetClinics,
+    reports: reports.map(({ reviewedAt, ...report }) => ({ ...report, reviewedDate: reviewedAt ? shelterDayKey(reviewedAt, settings.timezone) : null })),
     animalId,
     animalName: animal.name,
     placementStart: placement.startDate,

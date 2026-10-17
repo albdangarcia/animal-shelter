@@ -1,5 +1,7 @@
 "use client";
 
+import { reportCareDefaults, type ReportEntryContext } from "@/app/lib/utils/vet-visit-report";
+
 import { useImperativeHandle, useRef, useTransition } from "react";
 import { useForm, type Resolver } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
@@ -66,6 +68,7 @@ const fromEntry = (entry: MedicalEntryDisplay): MicrochipFormState => ({
 });
 
 interface Props {
+  report?: ReportEntryContext;
   animalId: string;
   options: MedicalEntryFormOptions;
   /** Present when editing. */
@@ -86,6 +89,7 @@ export function MicrochipEntryForm({
   options,
   entry,
   scheduled,
+  report,
   onFormSubmit,
   ref,
 }: Props) {
@@ -110,6 +114,7 @@ export function MicrochipEntryForm({
           vetPartnerId: null,
           vetName: "",
           notes: scheduled?.notes ?? "",
+          ...reportCareDefaults(report),
         },
   });
 
@@ -117,10 +122,11 @@ export function MicrochipEntryForm({
   useImperativeHandle(
     ref,
     () => ({
+      isPending: () => isPending,
       isDirty: () =>
         haveFormValuesChanged(form.getValues(), initialValuesRef.current),
     }),
-    [form],
+    [form, isPending],
   );
 
   const onSubmit = (state: MicrochipFormState) => {
@@ -129,8 +135,8 @@ export function MicrochipEntryForm({
       const result = entry
         ? await editMedicalEntry(entry.id, values)
         : scheduled
-          ? await recordScheduledMedicalEntry(scheduled.id, values)
-          : await recordMedicalEntry(animalId, values);
+          ? await recordScheduledMedicalEntry(scheduled.id, values, report?.id)
+          : await recordMedicalEntry(animalId, values, report?.id);
       if (result.ok) {
         toast.success(result.message);
         onFormSubmit();

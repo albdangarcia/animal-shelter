@@ -1,3 +1,5 @@
+import { fetchWaitingVetVisitReports } from "@/app/lib/data/vet-visit-reports.data";
+import { WaitingVetReports } from "@/components/dashboard/medical/waiting-vet-reports";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -23,20 +25,24 @@ const Page = async ({ searchParams }: Props) => {
 
 const PageContent = async ({ searchParams }: Props) => {
   const { kind } = await searchParams;
-  const [{ groups, today, kinds }, canManage, canAdminister] = await Promise.all([
+  const [{ groups, today, kinds }, canManage, canAdminister, reports] = await Promise.all([
     fetchMedicalDue(kind),
     hasPermission(AppPermissions.MEDICAL_MANAGE),
     hasPermission(AppPermissions.MEDICAL_ADMINISTER),
+    fetchWaitingVetVisitReports(),
   ]);
 
   return (
-    <MedicalDue
-      groups={groups}
-      today={today}
-      filtered={kinds.length > 0}
-      canManage={canManage}
-      canAdminister={canAdminister}
-    />
+    <div className="space-y-6">
+      <MedicalDue
+        groups={groups}
+        today={today}
+        filtered={kinds.length > 0}
+        canManage={canManage}
+        canAdminister={canAdminister}
+      />
+      <WaitingVetReports groups={reports} />
+    </div>
   );
 };
 

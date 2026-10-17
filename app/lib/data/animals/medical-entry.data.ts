@@ -45,6 +45,7 @@ const parseAnimalId = (animalId: string) => {
 export type EventNames = Record<string, string>;
 
 export interface MedicalOverview {
+  waitingReports: { id: string; visitDate: string }[];
   rabies: RabiesStatus;
   spayNeuter: SpayNeuterStatus;
   /** The chips the animal carries, newest first. */
@@ -91,7 +92,9 @@ const _fetchMedicalOverview = async (
           select: MEDICAL_ENTRY_DISPLAY_SELECT,
         })
       : null;
+    const reports = await prisma.vetVisitReport.findMany({ where: { animalId: id, reviewedAt: null }, orderBy: [{ visitDate: "asc" }, { id: "asc" }], select: { id: true, visitDate: true } });
     return {
+      waitingReports: reports,
       rabies: rabiesStatus(latestRabies, today),
       spayNeuter: status.spayNeuter,
       chips: status.chips,
