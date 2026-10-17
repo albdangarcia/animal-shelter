@@ -45,6 +45,7 @@ import {
 } from "@/app/lib/utils/spay-neuter";
 import {
   MEDICAL_REASON_MAX_LENGTH,
+  ORDINARY_CARE_KINDS,
   SURGERY_PROCEDURE_LABELS,
   isCatalogEntryKind,
   type CatalogEntryKind,
@@ -260,6 +261,15 @@ type StoredEntry = {
     }
 );
 
+/** Outcome ownership is enforced for direct service calls as well as forms. */
+const requireOrdinaryCare = (entry: { kind: string; outcomeId?: unknown }) => {
+  if (!ORDINARY_CARE_KINDS.some((kind) => kind === entry.kind) || entry.outcomeId != null) {
+    throw new MedicalEntryRefusal(
+      "Record and correct end-of-life medical details through the outcome. Only reversing the outcome can void its medical record.",
+    );
+  }
+};
+
 /**
  * The entry as stored, its given care flat behind its kind. Null when it
  * doesn't exist.
@@ -272,6 +282,7 @@ const readStoredEntry = async (
     where: { id: entryId },
     select: {
       kind: true,
+      outcomeId: true,
       status: true,
       dueDate: true,
       itemId: true,
@@ -288,6 +299,7 @@ const readStoredEntry = async (
     },
   });
   if (!entry) return null;
+  requireOrdinaryCare(entry);
   const {
     kind,
     status,
@@ -297,6 +309,7 @@ const readStoredEntry = async (
     procedure,
     chipNumber,
     examType,
+    outcomeId: _outcomeId,
     ...rest
   } = entry;
   if (status !== MedicalEntryStatus.COMPLETED) {
@@ -899,6 +912,7 @@ export async function scheduleMedicalEntry(
   today: CalendarDay,
   { batch, protocolStepId }: EntryWriteOptions = {},
 ): Promise<{ entryId: string; animalId: string }> {
+  requireOrdinaryCare(input);
   const { animalId } = input;
   await lockAnimal(tx, animalId);
 
@@ -986,6 +1000,7 @@ const lockScheduledEntry = async (
     where: { id: entryId },
     select: {
       kind: true,
+      outcomeId: true,
       status: true,
       itemId: true,
       procedure: true,
@@ -995,6 +1010,7 @@ const lockScheduledEntry = async (
       item: { select: { name: true } },
     },
   });
+  requireOrdinaryCare(entry);
   if (entry.voidedAt) {
     throw new ConflictError(`This entry was voided, so it can't be ${doing}.`);
   }
@@ -1594,6 +1610,7 @@ async function writeRecordedEntry(
   options: RecordEntryOptions,
   foundOn: FoundOnExam | null,
 ): Promise<RecordedMedicalEntry & { loggedAt: Date }> {
+  requireOrdinaryCare(input);
   const { animalId } = input;
   await lockAnimal(tx, animalId);
 
@@ -1730,6 +1747,7 @@ export async function recordScheduledMedicalEntry(
   today: CalendarDay,
   options: RecordScheduledEntryOptions = {},
 ): Promise<RecordedMedicalEntry> {
+  requireOrdinaryCare(input);
   const entry = await lockScheduledEntry(tx, entryId, "recorded as given");
   const { animalId } = entry;
   if (input.kind !== entry.kind) {
@@ -1859,6 +1877,7 @@ export async function editMedicalEntry(
   actorId: string,
   today: CalendarDay,
 ): Promise<MedicalEntryEdit> {
+  requireOrdinaryCare(input);
   // An entry's animal never changes, so it can be read before the lock.
   const located = await tx.medicalEntry.findUnique({
     where: { id: entryId },
@@ -2113,6 +2132,7 @@ export async function voidMedicalEntry(
     where: { id: entryId },
     select: {
       kind: true,
+      outcomeId: true,
       status: true,
       dueDate: true,
       completedDate: true,
@@ -2125,6 +2145,7 @@ export async function voidMedicalEntry(
       item: { select: { name: true } },
     },
   });
+  requireOrdinaryCare(entry);
   if (entry.voidedAt) {
     throw new ConflictError(
       "This entry has already been voided. A void can't be undone: if it was voided by mistake, record the entry again.",
