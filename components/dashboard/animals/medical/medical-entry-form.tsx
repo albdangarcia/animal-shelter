@@ -103,6 +103,8 @@ type EntryFormState = {
   vetPartnerId: string | null;
   vetName: string;
   notes: string;
+  veterinarianName: string;
+  veterinarianLicenseNumber: string;
   manufacturer: string;
   lotNumber: string;
   lotExpiryDate: string | null;
@@ -129,6 +131,8 @@ const fromEntry = (entry: MedicalEntryDisplay, kind: CatalogEntryKind): EntryFor
   vetPartnerId: entry.vetPartnerId,
   vetName: entry.vetName ?? "",
   notes: entry.notes ?? "",
+  veterinarianName: entry.vaccine?.veterinarianName ?? "",
+  veterinarianLicenseNumber: entry.vaccine?.veterinarianLicenseNumber ?? "",
   manufacturer: entry.vaccine?.manufacturer ?? "",
   lotNumber: entry.vaccine?.lotNumber ?? entry.test?.lotNumber ?? "",
   lotExpiryDate:
@@ -153,6 +157,8 @@ const blank = (kind: CatalogEntryKind, today: string): EntryFormState => ({
   vetPartnerId: null,
   vetName: "",
   notes: "",
+  veterinarianName: "",
+  veterinarianLicenseNumber: "",
   manufacturer: "",
   lotNumber: "",
   lotExpiryDate: null,
@@ -239,6 +245,8 @@ const itemChoices = (
 /** The fields picking an item fills in, for each kind. */
 const FILLED_FIELDS = {
   [MedicalEntryKind.VACCINE]: [
+    "veterinarianName",
+    "veterinarianLicenseNumber",
     "manufacturer",
     "route",
     "rabiesTagNumber",
@@ -253,6 +261,8 @@ type Fills = Pick<EntryFormState, FilledField | "results">;
 
 /** The item-filled fields of the form's state, rows copied. */
 const pickFills = (state: EntryFormState): Fills => ({
+  veterinarianName: state.veterinarianName,
+  veterinarianLicenseNumber: state.veterinarianLicenseNumber,
   manufacturer: state.manufacturer,
   route: state.route,
   rabiesTagNumber: state.rabiesTagNumber,
@@ -264,6 +274,8 @@ const pickFills = (state: EntryFormState): Fills => ({
 
 /** What picking `item` fills in: the catalog's defaults. */
 const fillsFor = (item: MedicalEntryFormItem): Fills => ({
+  veterinarianName: "",
+  veterinarianLicenseNumber: "",
   manufacturer: item.manufacturer ?? "",
   route: item.defaultRoute,
   rabiesTagNumber: "",
@@ -436,6 +448,8 @@ export function MedicalEntryForm({
     }
     // The rabies fields are hidden for any other vaccine, so go with it.
     if (kind === MedicalEntryKind.VACCINE && !next.isRabies) {
+      form.setValue("veterinarianName", "");
+      form.setValue("veterinarianLicenseNumber", "");
       form.setValue("rabiesTagNumber", "");
       form.setValue("durationMonths", null);
     }
@@ -564,6 +578,11 @@ export function MedicalEntryForm({
               />
               {item?.isRabies && (
                 <>
+                  <MedicalTextField control={form.control} name="veterinarianName" label="Veterinarian name" />
+                  <MedicalTextField control={form.control} name="veterinarianLicenseNumber" label="Veterinarian license number" />
+                  <p className="text-sm text-muted-foreground md:col-span-2">
+                    Record the administering veterinarian’s credentials when known. Both are needed for a certificate; neither is required to record care.
+                  </p>
                   <MedicalTextField
                     control={form.control}
                     name="rabiesTagNumber"

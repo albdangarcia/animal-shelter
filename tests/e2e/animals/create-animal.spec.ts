@@ -166,10 +166,10 @@ test("an animal created with the required fields is saved and listed", async ({
 
   // The chip is on its Medical Overview, as the record holds it.
   await page.goto(`${await animalLink.getAttribute("href")}/medical`);
-  await expect(
-    page
-      .locator('dl[aria-label="Medical status"] div')
-      .filter({ has: page.locator("dt", { hasText: "Microchip" }) })
-      .locator("dd"),
-  ).toHaveText(chipNumber);
+  const chipSummary = page
+    .locator('dl[aria-label="Medical status"] div')
+    .filter({ has: page.locator("dt", { hasText: "Microchip" }) })
+    .locator("dd");
+  await expect(chipSummary).toContainText(chipNumber);
+  await expect(chipSummary).toContainText("Registration: Unknown");
 });

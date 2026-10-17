@@ -746,6 +746,8 @@ test("recording scheduled care writes its details, keeps the due day and fills t
     rabiesTagNumber: null,
     durationMonths: null,
     validUntilDate: null,
+    veterinarianName: null,
+    veterinarianLicenseNumber: null,
   });
 
   // Given a day early: the due day is named beside the day given.

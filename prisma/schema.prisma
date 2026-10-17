@@ -1382,6 +1382,10 @@ model VaccineDetails {
   durationMonths  Int?    @map(name: "duration_months")
   validUntilDate  String? @map(name: "valid_until_date")
 
+  /// Recorded credentials, independent of the giver or later directory edits.
+  veterinarianName          String? @map(name: "veterinarian_name")
+  veterinarianLicenseNumber String? @map(name: "veterinarian_license_number")
+
   createdAt DateTime @default(now()) @map(name: "created_at")
   updatedAt DateTime @updatedAt @map(name: "updated_at")
 
@@ -1472,6 +1476,13 @@ model SurgeryDetails {
   @@map("surgery_details")
 }
 
+enum MicrochipRegistrationStatus {
+  UNKNOWN
+  NOT_REGISTERED
+  PENDING
+  REGISTERED
+}
+
 /// A microchip's details. The number is on the entry, so one index keeps
 /// numbers unique among entries that aren't voided. Who implanted it is the
 /// entry's source: in house, the shelter did; an outside vet did during the
@@ -1482,6 +1493,11 @@ model MicrochipDetails {
   entry   MedicalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
 
   brand String?
+
+  registrationStatus MicrochipRegistrationStatus @default(UNKNOWN) @map(name: "registration_status")
+  registryName       String? @map(name: "registry_name")
+  registrationDate   String? @map(name: "registration_date")
+  registrationNotes  String? @map(name: "registration_notes")
 
   createdAt DateTime @default(now()) @map(name: "created_at")
   updatedAt DateTime @updatedAt @map(name: "updated_at")

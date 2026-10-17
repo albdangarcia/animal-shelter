@@ -306,3 +306,21 @@ test("describeEntryChanges: the protocol step an entry came from is never listed
     ["dueDate"],
   );
 });
+
+test("credential and registration changes have labels, dates and truthful legacy unknowns", () => {
+  const changes = describeEntryChanges(
+    { veterinarianName: null, veterinarianLicenseNumber: null, registrationStatus: "UNKNOWN", registryName: null, registrationDate: null, registrationNotes: null },
+    { veterinarianName: "Dr Vet", veterinarianLicenseNumber: "LIC-123", registrationStatus: "REGISTERED", registryName: "Registry", registrationDate: "2028-02-29", registrationNotes: "Staff note" },
+    {},
+  );
+  assert.deepEqual(changes.map(({ label }) => label), [
+    "Registration status", "Registry", "Registration date", "Registration notes", "Veterinarian name", "Veterinarian license number",
+  ]);
+  assert.equal(changes.find(({ field }) => field === "registrationStatus")!.to, "Registered");
+  assert.equal(changes.find(({ field }) => field === "registrationDate")!.to, "Feb 29, 2028");
+  assert.equal(changes.find(({ field }) => field === "registrationDate")!.from, "unknown");
+  assert.equal(formatEntryFieldValue("registrationStatus", undefined, {}), "Unknown");
+  assert.deepEqual(describeEntryChanges({ notes: "old" }, { notes: "new" }, {}), [
+    { field: "notes", label: "Notes", from: "old", to: "new" },
+  ]);
+});

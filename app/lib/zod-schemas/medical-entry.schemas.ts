@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { optionalText, optionalDay } from "./medical-field.schemas";
+import { MicrochipRegistrationSchema, VaccineCredentialsSchema } from "./medical-output.schemas";
 import {
   DoseUnit,
   ExamFindingStatus,
@@ -35,28 +37,7 @@ import {
 
 export const RABIES_MAX_MONTHS = 36;
 
-export const optionalText = (max: number) =>
-  z
-    .string()
-    .trim()
-    .max(max, `Must be ${max} characters or fewer.`)
-    .nullish()
-    .transform((value) => (value ? value : null));
-
-/** A day that may be left empty: "" and null both read as no day. */
-export const optionalDay = (label: string) =>
-  z
-    .string()
-    .nullish()
-    .transform((value, ctx): CalendarDay | null => {
-      if (!value) return null;
-      const day = parseCalendarDay(value);
-      if (day === null) {
-        ctx.addIssue({ code: "custom", message: `${label} isn't a valid date.` });
-        return z.NEVER;
-      }
-      return day;
-    });
+export { optionalText, optionalDay } from "./medical-field.schemas";
 
 /** A day that must be given. */
 export const requiredDay = (label: string) =>
@@ -173,6 +154,8 @@ export const optionalChoice = <T extends z.ZodType>(schema: T) =>
 const VaccineEntrySchema = z.object({
   kind: z.literal(MedicalEntryKind.VACCINE),
   ...common,
+  veterinarianName: VaccineCredentialsSchema.shape.veterinarianName.optional(),
+  veterinarianLicenseNumber: VaccineCredentialsSchema.shape.veterinarianLicenseNumber.optional(),
   manufacturer: optionalText(100),
   lotNumber: optionalText(100),
   lotExpiryDate: optionalDay("The lot expiry"),
@@ -247,6 +230,20 @@ const MicrochipEntrySchema = z.object({
   ...given,
   chipNumber,
   brand: optionalText(100),
+  registrationStatus: MicrochipRegistrationSchema.shape.registrationStatus.optional(),
+  registryName: MicrochipRegistrationSchema.shape.registryName.optional(),
+  registrationDate: MicrochipRegistrationSchema.shape.registrationDate.optional(),
+  registrationNotes: MicrochipRegistrationSchema.shape.registrationNotes.optional(),
+}).superRefine((value, ctx) => {
+  // Partial corrections need the stored group; the writer validates after
+  // merging it. Full forms submit every key and can show errors immediately.
+  if ([value.registrationStatus, value.registryName, value.registrationDate, value.registrationNotes]
+    .some((field) => field === undefined)) return;
+  const result = MicrochipRegistrationSchema.safeParse({
+    registrationStatus: value.registrationStatus, registryName: value.registryName,
+    registrationDate: value.registrationDate, registrationNotes: value.registrationNotes,
+  });
+  if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: "custom", path: issue.path, message: issue.message });
 });
 
 /**

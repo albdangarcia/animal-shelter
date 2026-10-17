@@ -1,3 +1,4 @@
+import { microchipRegistrationDayIssue, microchipRegistrationReplacementIssue } from "@/app/lib/utils/microchip-registration";
 import { reportEntryData } from "./vet-visit-report-values";
 import type { TransactionClient } from "@/app/lib/prisma";
 import { Prisma } from "@/prisma/generated/client";
@@ -331,6 +332,8 @@ const readStoredEntry = async (
       });
       const values: EntryValues = {
         ...common,
+        veterinarianName: vaccine.veterinarianName,
+        veterinarianLicenseNumber: vaccine.veterinarianLicenseNumber,
         manufacturer: vaccine.manufacturer,
         lotNumber: vaccine.lotNumber,
         lotExpiryDate: vaccine.lotExpiryDate,
@@ -395,7 +398,15 @@ const readStoredEntry = async (
       const microchip = await tx.microchipDetails.findUniqueOrThrow({
         where: { entryId },
       });
-      const values: EntryValues = { ...common, chipNumber, brand: microchip.brand };
+      const values: EntryValues = {
+        ...common,
+        chipNumber,
+        brand: microchip.brand,
+        registrationStatus: microchip.registrationStatus,
+        registryName: microchip.registryName,
+        registrationDate: microchip.registrationDate,
+        registrationNotes: microchip.registrationNotes,
+      };
       return { ...stored, values };
     }
     case MedicalEntryKind.EXAM: {
@@ -1358,7 +1369,7 @@ const givenValues = async (
         ? actorId
         : null;
 
-  return valuesFor(
+  const values = valuesFor(
     input,
     item,
     {
@@ -1376,6 +1387,22 @@ const givenValues = async (
       foundOnExam,
     },
   );
+  checkRegistrationDay(values, animal, today);
+  return values;
+};
+
+const checkRegistrationDay = (values: EntryValues, animal: AnimalFacts, today: CalendarDay) => {
+  if (values.registrationStatus === undefined) return;
+  const issue = microchipRegistrationDayIssue(
+    values.registrationDate ? calendarDay(values.registrationDate) : null,
+    {
+      today, birthDate: animal.birthDate,
+      // Before-intake care records a scan, never a known implantation day.
+      implantationDate: values.source === MedicalEntrySource.BEFORE_INTAKE || !values.completedDate
+        ? null : calendarDay(values.completedDate),
+    },
+  );
+  if (issue) throw new MedicalEntryRefusal(issue.message, issue.field);
 };
 
 /**
@@ -1916,6 +1943,16 @@ export async function editMedicalEntry(
   }
 
   const before = entry.values;
+  if (input.kind === MedicalEntryKind.MICROCHIP) {
+    const issue = microchipRegistrationReplacementIssue({
+      chipNumber: before.chipNumber!,
+      registrationStatus: before.registrationStatus!,
+      registryName: before.registryName ?? null,
+      registrationDate: before.registrationDate ? calendarDay(before.registrationDate) : null,
+      registrationNotes: before.registrationNotes ?? null,
+    }, input);
+    if (issue) throw new MedicalEntryRefusal(issue.message, issue.field);
+  }
   input = withStoredValues(input, before);
   // A surgery an exam found keeps how it was found: its link to that exam is
   // its evidence.
@@ -1988,6 +2025,7 @@ export async function editMedicalEntry(
     { itemDefaults: false, ...terms, foundOnExam: entry.foundOnExamId !== null },
   );
 
+  checkRegistrationDay(after, animal, today);
   const changed = (Object.keys(after) as EntryField[]).filter(
     (field) => !sameValue(before[field], after[field]),
   );

@@ -12,6 +12,7 @@ import type { Prisma } from "@/prisma/generated/client";
 import {
   MedicalEntryKind,
   MedicalEntryStatus,
+  MicrochipRegistrationStatus,
   SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import {
@@ -30,6 +31,12 @@ import {
   latestReproductiveFinding,
   type ExamFact,
 } from "@/app/lib/utils/exams";
+
+import { RECORDED_VACCINATION_FACT } from "@/app/lib/utils/medical-output";
+
+/** Ready for the public projection; no current-coverage assertion. */
+export const RECORDED_VACCINATION_WHERE =
+  RECORDED_VACCINATION_FACT satisfies Prisma.MedicalEntryWhereInput;
 
 type Db = TransactionClient | typeof prisma;
 
@@ -117,6 +124,9 @@ export interface CurrentChip {
   entryId: string;
   chipNumber: string;
   brand: string | null;
+  registrationStatus: MicrochipRegistrationStatus;
+  registryName: string | null;
+  registrationDate: CalendarDay | null;
   /** Null when it was found on the animal on a day nobody knows. */
   completedDate: CalendarDay | null;
 }
@@ -141,7 +151,7 @@ export const findCurrentChips = async (
       animalId: true,
       chipNumber: true,
       completedDate: true,
-      microchip: { select: { brand: true } },
+      microchip: { select: { brand: true, registrationStatus: true, registryName: true, registrationDate: true } },
     },
   });
   const byAnimal = new Map<string, CurrentChip[]>(animalIds.map((id) => [id, []]));
@@ -151,6 +161,9 @@ export const findCurrentChips = async (
       // A completed chip always has its number.
       chipNumber: row.chipNumber!,
       brand: row.microchip?.brand ?? null,
+      registrationStatus: row.microchip?.registrationStatus ?? MicrochipRegistrationStatus.UNKNOWN,
+      registryName: row.microchip?.registryName ?? null,
+      registrationDate: parseCalendarDay(row.microchip?.registrationDate),
       completedDate: parseCalendarDay(row.completedDate),
     });
   }

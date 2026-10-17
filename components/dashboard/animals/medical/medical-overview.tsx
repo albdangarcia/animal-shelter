@@ -1,3 +1,4 @@
+import { MICROCHIP_REGISTRATION_LABELS } from "@/app/lib/utils/microchip-registration";
 import { vetReportHref } from "@/app/lib/utils/vet-visit-report";
 import Link from "next/link";
 import { clsx } from "clsx";
@@ -263,8 +264,13 @@ const MedicalOverview = ({ animalId, overview, todaysDoses, unitSystem, controls
               {chips.length > 0 ? (
                 <ul>
                   {chips.map((chip) => (
-                    <li key={chip.entryId} className="font-mono">
-                      {chip.chipNumber}
+                    <li key={chip.entryId} className="break-words">
+                      <span className="font-mono">{chip.chipNumber}</span>
+                      <span className="block text-xs font-normal text-muted-foreground">
+                        Registration: {MICROCHIP_REGISTRATION_LABELS[chip.registrationStatus]}
+                        {chip.registryName && ` · ${chip.registryName}`}
+                        {chip.registrationStatus === "REGISTERED" && ` · ${chip.registrationDate ? formatShelterDayOrNA(chip.registrationDate) : "Date unknown"}`}
+                      </span>
                     </li>
                   ))}
                 </ul>

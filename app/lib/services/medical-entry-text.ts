@@ -26,6 +26,7 @@ import {
   formatDose,
 } from "@/app/lib/constants/medical";
 import { examBodySystemLabel } from "@/app/lib/constants/exam";
+import { MICROCHIP_REGISTRATION_LABELS } from "@/app/lib/utils/microchip-registration";
 import { orderFindings } from "@/app/lib/utils/exam-findings";
 import {
   KIND_NOUN,
@@ -150,6 +151,7 @@ const PROSE_FIELDS = {
   notes: "notes",
   findings: "findings",
   anesthesiaNotes: "anesthesia notes",
+  registrationNotes: "registration notes",
 } as const satisfies Partial<Record<EntryField, string>>;
 
 type ProseField = keyof typeof PROSE_FIELDS;
@@ -164,6 +166,11 @@ const FIELD_LABELS: Record<Exclude<EntryField, ProseField>, string> = {
   vetPartnerId: "vet clinic",
   vetName: "vet",
   administeredById: "person who gave it",
+  veterinarianName: "veterinarian name",
+  veterinarianLicenseNumber: "veterinarian license number",
+  registrationStatus: "registration status",
+  registryName: "registry",
+  registrationDate: "registration date",
   manufacturer: "manufacturer",
   lotNumber: "lot number",
   lotExpiryDate: "lot expiry",
@@ -233,6 +240,11 @@ const displayValue = (
       return values.itemId ? (names.items.get(values.itemId) ?? null) : null;
     case "completedDate":
       return values.completedDate ? dayText(values.completedDate) : "unknown";
+    case "registrationStatus":
+      return values.registrationStatus
+        ? MICROCHIP_REGISTRATION_LABELS[values.registrationStatus].toLowerCase()
+        : "unknown";
+    case "registrationDate":
     case "lotExpiryDate":
     case "validUntilDate":
       return values[field] ? dayText(values[field]) : null;

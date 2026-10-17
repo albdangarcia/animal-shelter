@@ -6,6 +6,7 @@ import {
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalRoute,
+  MicrochipRegistrationStatus,
   ReproductiveStatus,
   SurgeryEvidence,
   SurgeryProcedure,
@@ -20,6 +21,7 @@ import {
   orderFindings,
   type ExamFindingInput,
 } from "@/app/lib/utils/exam-findings";
+import { MicrochipRegistrationSchema, VaccineCredentialsSchema } from "@/app/lib/zod-schemas/medical-output.schemas";
 import { EXAM_BODY_SYSTEM_KEYS } from "@/app/lib/constants/exam";
 
 /**
@@ -69,6 +71,8 @@ export interface VaccineEntryInput extends CatalogEntryCommonInput {
   site?: string | null;
   rabiesTagNumber?: string | null;
   durationMonths?: number | null;
+  veterinarianName?: string | null;
+  veterinarianLicenseNumber?: string | null;
 }
 
 export interface TestEntryInput extends CatalogEntryCommonInput {
@@ -111,6 +115,10 @@ export interface MicrochipEntryInput extends MedicalEntryCommonInput {
   /** As typed: it is stored normalised. */
   chipNumber: string;
   brand?: string | null;
+  registrationStatus?: MicrochipRegistrationStatus;
+  registryName?: string | null;
+  registrationDate?: CalendarDay | null;
+  registrationNotes?: string | null;
 }
 
 /**
@@ -170,6 +178,8 @@ export interface EntryValues {
   rabiesTagNumber?: string | null;
   durationMonths?: number | null;
   validUntilDate?: string | null;
+  veterinarianName?: string | null;
+  veterinarianLicenseNumber?: string | null;
   // Vaccine and test
   lotNumber?: string | null;
   lotExpiryDate?: string | null;
@@ -189,6 +199,10 @@ export interface EntryValues {
   // Microchip. The number is on the entry; the brand is its details.
   chipNumber?: string;
   brand?: string | null;
+  registrationStatus?: MicrochipRegistrationStatus;
+  registryName?: string | null;
+  registrationDate?: string | null;
+  registrationNotes?: string | null;
   // Exam. The type is on the entry; the rest are its details. The findings
   // are `examFindings`, since a surgery's `findings` are its notes in words.
   examType?: ExamType;
@@ -290,6 +304,14 @@ export const valuesFor = (
   const base: EntryValues = { itemId: item.id, ...common };
 
   if (input.kind === MedicalEntryKind.VACCINE) {
+    const credentials = VaccineCredentialsSchema.safeParse({
+      veterinarianName: input.veterinarianName,
+      veterinarianLicenseNumber: input.veterinarianLicenseNumber,
+    });
+    if (!credentials.success) {
+      const issue = credentials.error.issues[0];
+      throw new MedicalEntryRefusal(issue.message, String(issue.path[0]));
+    }
     const rabiesTagNumber = tidy(input.rabiesTagNumber);
     const durationMonths = input.durationMonths ?? null;
     if (options.isRabies) {
@@ -320,6 +342,10 @@ export const valuesFor = (
       : null;
     return {
       ...base,
+      veterinarianName: options.isRabies ? credentials.data.veterinarianName : null,
+      veterinarianLicenseNumber: options.isRabies
+        ? credentials.data.veterinarianLicenseNumber
+        : null,
       manufacturer:
         tidy(input.manufacturer) ??
         (options.itemDefaults ? item.manufacturer : null),
@@ -452,12 +478,17 @@ const microchipValues = (
   if (issue) {
     throw new MedicalEntryRefusal(issue, "chipNumber");
   }
-  return {
-    itemId: null,
-    ...common,
-    chipNumber,
-    brand: tidy(input.brand),
-  };
+  const registration = MicrochipRegistrationSchema.safeParse({
+    registrationStatus: input.registrationStatus === undefined ? MicrochipRegistrationStatus.UNKNOWN : input.registrationStatus,
+    registryName: input.registryName,
+    registrationDate: input.registrationDate,
+    registrationNotes: input.registrationNotes,
+  });
+  if (!registration.success) {
+    const issue = registration.error.issues[0];
+    throw new MedicalEntryRefusal(issue.message, String(issue.path[0]));
+  }
+  return { itemId: null, ...common, chipNumber, brand: tidy(input.brand), ...registration.data };
 };
 
 /**
@@ -523,6 +554,12 @@ const KEPT_WHEN_LEFT_OUT = [
   "evidence",
   "brand",
   "reproductiveStatus",
+  "veterinarianName",
+  "veterinarianLicenseNumber",
+  "registrationStatus",
+  "registryName",
+  "registrationDate",
+  "registrationNotes",
 ] as const;
 
 export const withStoredValues = (
@@ -543,6 +580,8 @@ export const withStoredValues = (
 // ---------------------------------------------------------------------------
 
 export const vaccineData = (values: EntryValues) => ({
+  veterinarianName: values.veterinarianName ?? null,
+  veterinarianLicenseNumber: values.veterinarianLicenseNumber ?? null,
   manufacturer: values.manufacturer ?? null,
   lotNumber: values.lotNumber ?? null,
   lotExpiryDate: values.lotExpiryDate ?? null,
@@ -572,6 +611,10 @@ export const surgeryData = (values: EntryValues) => ({
 });
 
 export const microchipData = (values: EntryValues) => ({
+  registrationStatus: values.registrationStatus ?? MicrochipRegistrationStatus.UNKNOWN,
+  registryName: values.registryName ?? null,
+  registrationDate: values.registrationDate ?? null,
+  registrationNotes: values.registrationNotes ?? null,
   brand: values.brand ?? null,
 });
 

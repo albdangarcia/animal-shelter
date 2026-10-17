@@ -14,6 +14,7 @@ import type {
   MedicalEntrySource,
   MedicalEntryStatus,
   MedicalRoute,
+  MicrochipRegistrationStatus,
   ReproductiveStatus,
   SpayNeuterExemptionReason,
   SurgeryEvidence,
@@ -39,6 +40,7 @@ import {
 import { examBodySystemLabel } from "@/app/lib/constants/exam";
 import { orderFindings } from "@/app/lib/utils/exam-findings";
 import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
+import { MICROCHIP_REGISTRATION_LABELS } from "./microchip-registration";
 import { protocolTitle } from "@/app/lib/utils/medical-protocol-text";
 
 export const MEDICAL_ENTRY_FIELD_LABELS: Record<string, string> = {
@@ -47,6 +49,10 @@ export const MEDICAL_ENTRY_FIELD_LABELS: Record<string, string> = {
   chipNumber: "Chip number",
   examType: "Exam type",
   brand: "Brand",
+  registrationStatus: "Registration status",
+  registryName: "Registry",
+  registrationDate: "Registration date",
+  registrationNotes: "Registration notes",
   status: "Status",
   dueDate: "Due date",
   completedDate: "Date given",
@@ -65,6 +71,8 @@ export const MEDICAL_ENTRY_FIELD_LABELS: Record<string, string> = {
   declineReason: "Reason declined",
   exemptionReason: "Reason for the exemption",
   reviewDate: "Review date",
+  veterinarianName: "Veterinarian name",
+  veterinarianLicenseNumber: "Veterinarian license number",
   manufacturer: "Manufacturer",
   lotNumber: "Lot number",
   lotExpiryDate: "Lot expiry",
@@ -111,9 +119,12 @@ export const formatEntryFieldValue = (
   kind?: MedicalEntryKind,
 ): string => {
   if (value === null || value === undefined || value === "") {
-    return ["completedDate", "cause", "necropsyRequested", "bodyDisposition"].includes(field) ? "unknown" : NONE;
+    if (field === "registrationStatus") return MICROCHIP_REGISTRATION_LABELS.UNKNOWN;
+    return ["registrationDate", "completedDate", "cause", "necropsyRequested", "bodyDisposition"].includes(field) ? "unknown" : NONE;
   }
   switch (field) {
+    case "registrationStatus":
+      return MICROCHIP_REGISTRATION_LABELS[value as MicrochipRegistrationStatus] ?? String(value);
     case "authorizedById":
     case "performedById":
       return names[value as string] ?? "a person no longer on record";
@@ -132,6 +143,7 @@ export const formatEntryFieldValue = (
     case "lotExpiryDate":
     case "validUntilDate":
     case "reviewDate":
+    case "registrationDate":
       return formatShelterDayOrNA(value as string);
     case "procedure":
       return SURGERY_PROCEDURE_LABELS[value as SurgeryProcedure] ?? String(value);

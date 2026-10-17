@@ -612,9 +612,12 @@ test("the medical status reads Altered, Exempt or Unknown, with the chips the an
       entryId: newer,
       chipNumber: `${base}000002`,
       brand: null,
+      registrationStatus: "UNKNOWN",
+      registryName: null,
+      registrationDate: null,
       completedDate: "2026-09-01",
     },
-    { entryId: older, chipNumber: `${base}000001`, brand: null, completedDate: null },
+    { entryId: older, chipNumber: `${base}000001`, brand: null, registrationStatus: "UNKNOWN", registryName: null, registrationDate: null, completedDate: null },
   ]);
 });
 

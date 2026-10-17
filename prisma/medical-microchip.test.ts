@@ -28,6 +28,7 @@ import {
   type RecordMedicalEntryInput,
 } from "@/app/lib/services/medical-entry";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
+import { findCurrentChips } from "@/app/lib/data/animals/medical-status";
 import { animalSearchWhere } from "@/app/lib/data/search/global-search";
 
 // Random, not the time: the files run in parallel.
@@ -207,6 +208,10 @@ test("a chip implanted in house stores its number normalised, its brand and who 
     notes: null,
     chipNumber: number,
     brand: "HomeAgain",
+    registrationStatus: "UNKNOWN",
+    registryName: null,
+    registrationDate: null,
+    registrationNotes: null,
   });
   assert.deepEqual(await activityOf(animalId), [
     {
@@ -525,13 +530,16 @@ test("a chip is scheduled with no number, and needs one when it is recorded", as
     /required/,
   );
   const number = chipNumber();
-  await recordScheduled(microchip({ chipNumber: number, brand: "AVID" }));
+  await recordScheduled(microchip({ chipNumber: number, brand: "AVID", registrationStatus: "PENDING", registryName: "Scheduled Registry" }));
 
   const given = await entryOf(entryId);
   assert.equal(given.status, MedicalEntryStatus.COMPLETED);
   assert.equal(given.chipNumber, number);
   assert.equal(given.dueDate, "2026-10-14");
   assert.equal(given.microchip?.brand, "AVID");
+  assert.equal(given.microchip?.registrationStatus, "PENDING");
+  assert.equal(given.microchip?.registryName, "Scheduled Registry");
+  assert.equal(((await eventsOf(entryId)).at(-1)!.after as Record<string, unknown>).registryName, "Scheduled Registry");
   assert.deepEqual(
     (await activityOf(animalId)).map((row) => row.changeSummary),
     [
@@ -635,4 +643,209 @@ test("global search finds an animal by a chip it carries, typed however it was r
   assert.deepEqual(await found(typed), [twoChips]);
   assert.deepEqual(await found(voided), []);
   assert.deepEqual(await found(planned), []);
+});
+
+test("older microchip callers leave registration unknown", async () => {
+  const animalId = await makeAnimal("Unknown registration");
+  const { entryId } = await record(animalId, microchip());
+  const chip = (await entryOf(entryId)).microchip!;
+  assert.equal(chip.registrationStatus, "UNKNOWN");
+  assert.equal(chip.registryName, null);
+  assert.equal(chip.registrationDate, null);
+  assert.equal(chip.registrationNotes, null);
+});
+
+test("ordinary chip corrections preserve registration and no-op audit", async () => {
+  const animalId = await makeAnimal("Preserved registration");
+  const input = microchip();
+  const { entryId } = await record(animalId, input);
+  const registration = {
+    registrationStatus: "REGISTERED" as const,
+    registryName: "Recorded registry",
+    registrationDate: "2026-10-04",
+    registrationNotes: "Staff registration note",
+  };
+  await prisma.microchipDetails.update({ where: { entryId }, data: registration });
+  const before = await entryOf(entryId);
+  const events = await eventsOf(entryId);
+  const activity = await prisma.animalActivityLog.findMany({ where: { animalId } });
+  assert.equal((await edit(entryId, input)).status, "unchanged");
+  assert.deepEqual(await entryOf(entryId), before);
+  assert.deepEqual(await eventsOf(entryId), events);
+  assert.deepEqual(await prisma.animalActivityLog.findMany({ where: { animalId } }), activity);
+
+  await edit(entryId, { ...input, brand: "Corrected brand" });
+  const after = (await entryOf(entryId)).microchip!;
+  for (const field of Object.keys(registration) as (keyof typeof registration)[]) {
+    assert.equal(after[field], registration[field]);
+  }
+  const correction = (await eventsOf(entryId)).at(-1)!;
+  assert.equal(correction.action, MedicalEntryEventAction.EDITED);
+  assert.deepEqual(Object.keys(correction.before as object), ["brand"]);
+  assert.deepEqual(Object.keys(correction.after as object), ["brand"]);
+});
+
+const registrationReset = { registrationStatus: "UNKNOWN" as const, registryName: null, registrationDate: null, registrationNotes: null };
+const registered = { registrationStatus: "REGISTERED" as const, registryName: " Recorded Registry ", registrationDate: day("2026-10-04"), registrationNotes: " Staff-only note " };
+const chipSnapshot = async (entryId: string, animalId: string) => ({ row: await entryOf(entryId), events: await eventsOf(entryId), activity: await activityOf(animalId) });
+
+for (const state of ["UNKNOWN", "NOT_REGISTERED", "PENDING", "REGISTERED"] as const) test(`chip registration stores ${state} with truthful optional facts and snapshots`, async () => {
+  const animalId = await makeAnimal(`Registration ${state}`);
+  const input = microchip({ registrationStatus: state, registryName: state === "REGISTERED" || state === "PENDING" ? " Registry " : null, registrationNotes: " staff note " });
+  const { entryId } = await record(animalId, input);
+  const row = (await entryOf(entryId)).microchip!;
+  assert.equal(row.registrationStatus, state); assert.equal(row.registryName, state === "REGISTERED" || state === "PENDING" ? "Registry" : null);
+  assert.equal(row.registrationDate, null); assert.equal(row.registrationNotes, "staff note");
+  assert.equal(((await eventsOf(entryId))[0].after as Record<string, unknown>).registrationStatus, state);
+  const snapshot = await chipSnapshot(entryId, animalId);
+  assert.equal((await edit(entryId, input)).status, "unchanged");
+  assert.deepEqual(await chipSnapshot(entryId, animalId), snapshot);
+});
+
+for (const [label, fields, field] of [
+  ["missing registry", { registrationStatus: "REGISTERED" }, "registryName"],
+  ["blank registry", { registrationStatus: "REGISTERED", registryName: " " }, "registryName"],
+  ["pending completed day", { registrationStatus: "PENDING", registryName: "Registry", registrationDate: "2026-10-04" }, "registrationDate"],
+  ["unknown registry", { registryName: "Registry" }, "registryName"],
+  ["not registered day", { registrationStatus: "NOT_REGISTERED", registrationDate: "2026-10-04" }, "registrationDate"],
+  ["forged state", { registrationStatus: "TRANSFERRED" }, "registrationStatus"],
+  ["null state", { registrationStatus: null }, "registrationStatus"],
+  ["forged text", { registrationNotes: 123 }, "registrationNotes"],
+  ["long registry", { registrationStatus: "REGISTERED", registryName: "x".repeat(101) }, "registryName"],
+  ["long note", { registrationNotes: "x".repeat(2001) }, "registrationNotes"],
+  ["invalid day", { registrationStatus: "REGISTERED", registryName: "Registry", registrationDate: "2026-02-29" }, "registrationDate"],
+] as const) test(`direct registration writer refuses ${label} without writing`, async () => {
+  const animalId = await makeAnimal(`Invalid registration ${label}`);
+  await refusedOn(record(animalId, microchip(fields as Partial<MicrochipEntryInput>)), field, /./);
+  assert.equal(await prisma.medicalEntry.count({ where: { animalId } }), 0);
+  assert.deepEqual(await activityOf(animalId), []);
+  const input = microchip(), { entryId } = await record(animalId, input);
+  const snapshot = await chipSnapshot(entryId, animalId);
+  await refusedOn(edit(entryId, { ...input, ...fields } as MicrochipEntryInput), field, /./);
+  assert.deepEqual(await chipSnapshot(entryId, animalId), snapshot);
+});
+
+for (const [label, registrationDate, extra] of [
+  ["future", "2026-10-11", {}],
+  ["before birth", "2023-12-31", { source: MedicalEntrySource.BEFORE_INTAKE, completedDate: null }],
+  ["before implantation", "2026-10-02", {}],
+] as const) test(`registration refuses a day ${label} on create and correction`, async () => {
+  const animalId = await makeAnimal(`Registration day ${label}`);
+  const values = microchip({ ...registered, registrationDate: day(registrationDate), ...extra });
+  await refusedOn(record(animalId, values), "registrationDate", /can't be/);
+  const input = microchip(extra), { entryId } = await record(animalId, input);
+  const snapshot = await chipSnapshot(entryId, animalId);
+  await refusedOn(edit(entryId, { ...values, chipNumber: input.chipNumber }), "registrationDate", /can't be/);
+  assert.deepEqual(await chipSnapshot(entryId, animalId), snapshot);
+});
+
+test("registration accepts the implantation day, before-intake days and a day preceding a known scan", async () => {
+  const animalId = await makeAnimal("Registration day boundaries");
+  for (const extra of [
+    { registrationDate: day("2026-10-03") },
+    { source: MedicalEntrySource.BEFORE_INTAKE, completedDate: null, registrationDate: day("2026-06-01") },
+    { source: MedicalEntrySource.BEFORE_INTAKE, completedDate: day("2026-07-01"), registrationDate: day("2026-06-01") },
+  ]) {
+    const { entryId } = await record(animalId, microchip({ ...registered, ...extra }));
+    assert.equal((await entryOf(entryId)).microchip!.registrationDate, extra.registrationDate);
+  }
+});
+
+test("a corrected implantation day rechecks the retained registration day", async () => {
+  const animalId = await makeAnimal("Later implantation");
+  const input = microchip({ ...registered }), { entryId } = await record(animalId, input);
+  const snapshot = await chipSnapshot(entryId, animalId);
+  await refusedOn(edit(entryId, { ...microchip({ chipNumber: input.chipNumber }), completedDate: day("2026-10-05") }), "registrationDate", /implantation/);
+  assert.deepEqual(await chipSnapshot(entryId, animalId), snapshot);
+});
+
+test("two chips keep independent registration, explicit clearing is audited, and re-recording never copies it", async () => {
+  const animalId = await makeAnimal("Independent registrations");
+  const input = microchip({ ...registered }), first = await record(animalId, input);
+  const secondInput = microchip({ registrationStatus: "PENDING", registryName: "Other Registry" }), second = await record(animalId, secondInput);
+  const current = (await findCurrentChips(prisma, [animalId])).get(animalId)!;
+  assert.equal(current.length, 2);
+  assert.equal(current.find((row) => row.entryId === first.entryId)!.registrationStatus, "REGISTERED");
+  assert.equal(current.find((row) => row.entryId === second.entryId)!.registryName, "Other Registry");
+  assert.equal(JSON.stringify(current).includes("Staff-only"), false);
+  await edit(first.entryId, { ...input, ...registrationReset });
+  const event = (await eventsOf(first.entryId)).at(-1)!;
+  assert.equal((event.before as Record<string, unknown>).registrationStatus, "REGISTERED");
+  assert.deepEqual(event.after, registrationReset);
+  assert.match((await activityOf(animalId)).at(-1)!.changeSummary!, /registration status changed from registered to unknown/);
+  assert.match((await activityOf(animalId)).at(-1)!.changeSummary!, /registration notes were removed/);
+  assert.equal((await entryOf(second.entryId)).microchip!.registrationStatus, "PENDING");
+  await voidEntry(second.entryId, "Wrong chip record");
+  const again = await record(animalId, microchip({ chipNumber: secondInput.chipNumber }));
+  assert.equal((await entryOf(again.entryId)).microchip!.registrationStatus, "UNKNOWN");
+});
+
+for (const notesOnly of [false, true]) test(`number replacement requires every explicit registration key (${notesOnly ? "notes only" : "registered"})`, async () => {
+  const animalId = await makeAnimal("Replacement registration");
+  const input = microchip(notesOnly ? { registrationNotes: "Unknown registry note" } : registered), { entryId } = await record(animalId, input);
+  const changed = microchip();
+  const snapshot = await chipSnapshot(entryId, animalId);
+  await refusedOn(edit(entryId, changed), "registrationStatus", /this chip number/);
+  for (const key of Object.keys(registrationReset)) {
+    const group: Record<string, unknown> = { ...registrationReset }; delete group[key];
+    await refusedOn(edit(entryId, { ...changed, ...group }), "registrationStatus", /this chip number/);
+  }
+  assert.deepEqual(await chipSnapshot(entryId, animalId), snapshot);
+  const formatting = input.chipNumber.toLowerCase().split("").join("-");
+  assert.equal((await edit(entryId, microchip({ chipNumber: formatting }))).status, "unchanged");
+  await edit(entryId, { ...changed, ...registrationReset });
+  const event = (await eventsOf(entryId)).at(-1)!;
+  assert.equal((event.before as Record<string, unknown>).chipNumber, input.chipNumber);
+  assert.equal((event.after as Record<string, unknown>).chipNumber, changed.chipNumber);
+  assert.equal((event.after as Record<string, unknown>).registrationNotes, null);
+});
+
+test("archived chips can be corrected, voided chips cannot, and registration does not bypass uniqueness", async () => {
+  const animalId = await makeAnimal("Archived registration"), otherId = await makeAnimal("Chip holder registration");
+  const input = microchip(), { entryId } = await record(animalId, input);
+  const held = microchip({ ...registered }); await record(otherId, held);
+  await refusedOn(edit(entryId, { ...input, ...registered, chipNumber: held.chipNumber }), "chipNumber", /already on/);
+  await prisma.animal.update({ where: { id: animalId }, data: { listingStatus: "ARCHIVED" } });
+  await edit(entryId, { ...input, ...registered });
+  assert.equal((await entryOf(entryId)).microchip!.registrationStatus, "REGISTERED");
+  await voidEntry(entryId, "Incorrect chip");
+  const snapshot = await chipSnapshot(entryId, animalId);
+  await assert.rejects(edit(entryId, { ...input, ...registrationReset }), /voided/);
+  assert.deepEqual(await chipSnapshot(entryId, animalId), snapshot);
+});
+
+test("failure writing registration audit rolls back changed chip and details", async () => {
+  const animalId = await makeAnimal("Registration audit rollback");
+  const input = microchip(), { entryId } = await record(animalId, input);
+  const snapshot = await chipSnapshot(entryId, animalId);
+  await assert.rejects(prisma.$transaction((tx) => editMedicalEntry(tx, entryId, { ...input, ...registered, chipNumber: chipNumber() }, "missing-registration-actor", TODAY)));
+  assert.deepEqual(await chipSnapshot(entryId, animalId), snapshot);
+});
+
+for (const operation of ["correct", "void", "replace"] as const) test(`a registration correction waits behind ${operation} and reads the latest locked values`, async () => {
+  const animalId = await makeAnimal(`Serialized registration ${operation}`);
+  const input = microchip(), { entryId } = await record(animalId, input);
+  let release!: () => void; const gate = new Promise<void>((resolve) => { release = resolve; });
+  let ready!: (pid: number) => void; const started = new Promise<number>((resolve) => { ready = resolve; });
+  const holder = prisma.$transaction(async (tx) => {
+    if (operation === "void") await voidMedicalEntry(tx, entryId, "Voided while correcting", editorId);
+    else await editMedicalEntry(tx, entryId, { ...input, ...registered }, editorId, TODAY);
+    ready(await backendPid(tx)); await gate;
+  }, { timeout: 20_000 });
+  const pid = await Promise.race([started, holder as Promise<never>]);
+  const second = prisma.$transaction((tx) => editMedicalEntry(tx, entryId,
+    operation === "replace" ? microchip() : { ...input, registrationNotes: "Later correction" }, staffId, TODAY), { timeout: 20_000 });
+  void second.catch(() => {});
+  try { await waitForSessionBlockedBy(pid); } finally { release(); await Promise.allSettled([holder, second]); }
+  await holder;
+  if (operation === "correct") {
+    assert.equal((await second).status, "edited");
+    const row = (await entryOf(entryId)).microchip!;
+    assert.equal(row.registryName, "Recorded Registry"); assert.equal(row.registrationNotes, "Later correction");
+    assert.deepEqual((await eventsOf(entryId)).at(-1)!.before, { registrationNotes: "Staff-only note" });
+  } else {
+    await assert.rejects(second, operation === "void" ? /voided/ : /this chip number/);
+    assert.equal((await eventsOf(entryId)).length, 2);
+    assert.equal((await entryOf(entryId)).chipNumber, input.chipNumber);
+  }
 });

@@ -84,7 +84,7 @@ test.describe("as staff", () => {
   test.use({ storageState: staffStatePath });
 
   test("recording, correcting and voiding a rabies vaccine", async ({
-    page,
+    page, browser,
   }, testInfo) => {
     // A retry runs against the database the failed attempt wrote to, so each
     // attempt uses its own lot numbers and compares against what it found.
@@ -107,6 +107,11 @@ test.describe("as staff", () => {
     await dialog.getByRole("combobox", { name: /^Vaccine/ }).click();
     await page.getByRole("option", { name: "Rabies 1-year" }).click();
     await fillStable(dialog.getByLabel("Lot number"), lot);
+    await dialog.getByLabel("Veterinarian name", { exact: true }).fill("x".repeat(201));
+    await dialog.getByRole("button", { name: "Record Vaccine" }).click();
+    await expect(dialog.getByText("Must be 200 characters or fewer.")).toBeVisible();
+    await dialog.getByLabel("Veterinarian name", { exact: true }).fill("Dr Browser Vet");
+    await dialog.getByLabel("Veterinarian license number").fill("VET-E2E-1");
     await dialog.getByLabel("Rabies tag number").fill("T-E2E");
     await dialog.getByLabel(/Duration \(months\)/).fill("12");
     // Rabies 1-year repeats, so recording offers to schedule the next one.
@@ -120,6 +125,8 @@ test.describe("as staff", () => {
     await expect(rabiesLine(page)).toHaveText(/^Valid until \w{3} \d{1,2}, \d{4}$/);
     const entry = entryCard(page, "Rabies 1-year", lot);
     await expect(entry).toContainText("Valid until:");
+    await expect(entry).toContainText("Dr Browser Vet");
+    await expect(entry).toContainText("VET-E2E-1");
 
     // Correct the lot number; the history shows it before and after.
     await pickFromMenu(
@@ -129,14 +136,18 @@ test.describe("as staff", () => {
     );
     const edit = page.getByRole("dialog", { name: "Edit vaccine" });
     // Trying another vaccine and coming back puts back what was recorded:
-    // the history below shows the lot alone.
+    // credentials return with the recorded item too.
     const vaccinePicker = edit.getByRole("combobox", { name: /^Vaccine/ });
     await vaccinePicker.click();
     await page.getByRole("option", { name: "DHPP" }).click();
     await expect(edit.getByLabel("Rabies tag number")).toHaveCount(0);
+    await expect(edit.getByLabel("Veterinarian name", { exact: true })).toHaveCount(0);
     await vaccinePicker.click();
     await page.getByRole("option", { name: "Rabies 1-year" }).click();
     await expect(edit.getByLabel("Rabies tag number")).toHaveValue("T-E2E");
+    await expect(edit.getByLabel("Veterinarian name", { exact: true })).toHaveValue("Dr Browser Vet");
+    await expect(edit.getByLabel("Veterinarian license number")).toHaveValue("VET-E2E-1");
+    await edit.getByLabel("Veterinarian license number").fill("VET-E2E-2");
     const lotField = edit.getByLabel("Lot number");
     await fillStable(lotField, correctedLot);
     // Closing with unsaved changes asks first; Cancel goes back to the field.
@@ -157,6 +168,18 @@ test.describe("as staff", () => {
     await expect(
       corrected.getByRole("list", { name: "Change history" }),
     ).toContainText(`Lot number: ${lot} → ${correctedLot}`);
+
+    await expect(corrected).toContainText("Veterinarian license number: VET-E2E-1 → VET-E2E-2");
+
+    const reader = await browser.newContext({ storageState: volunteerStatePath });
+    try {
+      const readerPage = await reader.newPage();
+      await readerPage.goto(`/dashboard/animals/${id}/medical/vaccines-tests`);
+      const readerEntry = entryCard(readerPage, "Rabies 1-year", correctedLot);
+      await expect(readerEntry).toContainText("VET-E2E-2");
+      await expect(readerEntry.getByRole("button", { name: /^Actions for/ })).toHaveCount(0);
+      await expect(readerPage.getByRole("button", { name: "Add entry" })).toHaveCount(0);
+    } finally { await reader.close(); }
 
     // Void it. The reason is required, and the entry stops counting.
     await pickFromMenu(

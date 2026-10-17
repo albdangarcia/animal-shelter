@@ -364,6 +364,8 @@ test("a vaccine is recorded with the item's defaults, a CREATED event and an act
     rabiesTagNumber: null,
     durationMonths: null,
     validUntilDate: null,
+    veterinarianName: null,
+    veterinarianLicenseNumber: null,
   });
 
   assert.deepEqual(await activityOf(animalId), [
@@ -1126,4 +1128,102 @@ test("the latest rabies vaccine ignores voided entries and counts an unknown day
     completedDate: "2026-08-10",
     validUntilDate: "2027-08-10",
   });
+});
+
+test("older vaccine callers record no veterinarian credentials", async () => {
+  const animalId = await makeAnimal("No credential default");
+  const { entryId } = await record(animalId, rabies());
+  const entry = await readEntry(entryId);
+  assert.equal(entry.vaccine!.veterinarianName, null);
+  assert.equal(entry.vaccine!.veterinarianLicenseNumber, null);
+});
+
+test("ordinary vaccine corrections preserve stored credentials and no-op audit", async () => {
+  const animalId = await makeAnimal("Preserved credentials");
+  const input = rabies();
+  const { entryId } = await record(animalId, input);
+  const credentials = {
+    veterinarianName: "Dr Recorded Vet",
+    veterinarianLicenseNumber: "VET-123",
+  };
+  await prisma.vaccineDetails.update({ where: { entryId }, data: credentials });
+  const before = await readEntry(entryId);
+  const events = await eventsOf(entryId);
+  const activity = await activityOf(animalId);
+  assert.equal((await edit(entryId, input)).status, "unchanged");
+  assert.deepEqual(await readEntry(entryId), before);
+  assert.deepEqual(await eventsOf(entryId), events);
+  assert.deepEqual(await activityOf(animalId), activity);
+
+  await edit(entryId, { ...input, notes: "Unrelated correction" });
+  const after = await readEntry(entryId);
+  assert.equal(after.vaccine!.veterinarianName, credentials.veterinarianName);
+  assert.equal(after.vaccine!.veterinarianLicenseNumber, credentials.veterinarianLicenseNumber);
+  const correction = (await eventsOf(entryId)).at(-1)!;
+  assert.equal(correction.action, MedicalEntryEventAction.EDITED);
+  assert.deepEqual(Object.keys(correction.before as object), ["notes"]);
+  assert.deepEqual(Object.keys(correction.after as object), ["notes"]);
+});
+
+test("rabies credentials are normalized, audited, independently optional and explicitly clearable", async () => {
+  const animalId = await makeAnimal("Audited veterinarian");
+  const { entryId } = await record(animalId, rabies({ veterinarianName: " Dr Recorded ", veterinarianLicenseNumber: " LIC-12 " }));
+  let row = await readEntry(entryId);
+  assert.equal(row.vaccine!.veterinarianName, "Dr Recorded");
+  assert.equal(row.vaccine!.veterinarianLicenseNumber, "LIC-12");
+  assert.equal((await eventsOf(entryId))[0].after && ((await eventsOf(entryId))[0].after as Record<string, unknown>).veterinarianName, "Dr Recorded");
+  assert.equal((await edit(entryId, rabies({ veterinarianName: "Dr Recorded", veterinarianLicenseNumber: " LIC-12 " }))).status, "unchanged");
+  await edit(entryId, rabies({ veterinarianLicenseNumber: "LIC-13" }));
+  const event = (await eventsOf(entryId)).at(-1)!;
+  assert.deepEqual(event.before, { veterinarianLicenseNumber: "LIC-12" });
+  assert.deepEqual(event.after, { veterinarianLicenseNumber: "LIC-13" });
+  assert.match((await activityOf(animalId)).at(-1)!.changeSummary!, /veterinarian license number changed from LIC-12 to LIC-13/);
+  await edit(entryId, rabies({ veterinarianName: " ", veterinarianLicenseNumber: null }));
+  row = await readEntry(entryId);
+  assert.equal(row.vaccine!.veterinarianName, null);
+  assert.equal(row.vaccine!.veterinarianLicenseNumber, null);
+  await edit(entryId, rabies({ veterinarianLicenseNumber: "License only" }));
+  assert.equal((await readEntry(entryId)).vaccine!.veterinarianName, null);
+});
+
+for (const [field, value] of [["veterinarianName", "x".repeat(201)], ["veterinarianLicenseNumber", "x".repeat(101)], ["veterinarianName", 123]] as const) {
+  test(`direct credential writer refuses invalid ${field} without rows or audit changes (${typeof value})`, async () => {
+    const animalId = await makeAnimal("Bounded veterinarian");
+    const bad = { ...rabies(), [field]: value } as VaccineEntryInput;
+    await refusedOn(record(animalId, bad), field);
+    assert.equal(await prisma.medicalEntry.count({ where: { animalId } }), 0);
+    const { entryId } = await record(animalId, rabies());
+    const before = await readEntry(entryId), events = await eventsOf(entryId), activity = await activityOf(animalId);
+    await refusedOn(edit(entryId, bad), field);
+    assert.deepEqual(await readEntry(entryId), before);
+    assert.deepEqual(await eventsOf(entryId), events);
+    assert.deepEqual(await activityOf(animalId), activity);
+  });
+}
+
+test("changing a rabies item to an ordinary vaccine clears credentials in the same audit", async () => {
+  const animalId = await makeAnimal("Changed vaccine kind");
+  const { entryId } = await record(animalId, rabies({ veterinarianName: "Recorded vet", veterinarianLicenseNumber: "LIC-1" }));
+  await edit(entryId, vaccine({ durationMonths: null, rabiesTagNumber: null }));
+  const row = await readEntry(entryId);
+  assert.equal(row.vaccine!.veterinarianName, null);
+  assert.equal(row.vaccine!.veterinarianLicenseNumber, null);
+  const event = (await eventsOf(entryId)).at(-1)!;
+  assert.equal((event.before as Record<string, unknown>).veterinarianName, "Recorded vet");
+  assert.equal((event.after as Record<string, unknown>).veterinarianName, null);
+  const ordinary = await record(animalId, vaccine({ veterinarianName: "Unrelated vet", veterinarianLicenseNumber: "LIC-2" }));
+  assert.equal((await readEntry(ordinary.entryId)).vaccine!.veterinarianName, null);
+});
+
+test("a failed transaction rolls credential corrections and both audits back", async () => {
+  const animalId = await makeAnimal("Rolled back credentials");
+  const { entryId } = await record(animalId, rabies());
+  const before = await readEntry(entryId), events = await eventsOf(entryId), activity = await activityOf(animalId);
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    await editMedicalEntry(tx, entryId, rabies({ veterinarianName: "Dr Never Saved" }), editorId, TODAY);
+    throw new Error("Rollback credential edit");
+  }), /Rollback credential edit/);
+  assert.deepEqual(await readEntry(entryId), before);
+  assert.deepEqual(await eventsOf(entryId), events);
+  assert.deepEqual(await activityOf(animalId), activity);
 });

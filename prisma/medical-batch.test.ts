@@ -811,3 +811,25 @@ test("two batches over the same animals, listed in opposite orders, both finish"
   assert.equal(second.status, "fulfilled");
   assert.equal((await entriesOf(animalIds)).length, 6);
 });
+
+for (const scheduled of [false, true]) test(`${scheduled ? "scheduled" : "ad hoc"} rabies batch stores shared credentials in every entry and snapshot`, async () => {
+  const animals = await makeAnimals("Shared veterinarian", 2);
+  const entry = { kind: MedicalEntryKind.VACCINE, itemId: rabiesId, completedDate: day("2026-10-09"), source: MedicalEntrySource.IN_HOUSE, durationMonths: 12, veterinarianName: " Dr Batch ", veterinarianLicenseNumber: " B-12 " } as const;
+  const plans = scheduled ? await Promise.all(animals.map((id) => schedule(id, rabiesId, MedicalEntryKind.VACCINE))) : [];
+  const result = scheduled
+    ? await scheduledBatch({ entries: plans.map((p) => ({ entryId: p.entryId })), details: entry })
+    : await batch({ mode: "RECORD", animals: animals.map((animalId) => ({ animalId })), entry });
+  for (const { entryId } of result.entries) {
+    const row = await prisma.medicalEntry.findUniqueOrThrow({ where: { id: entryId }, include: { vaccine: true, events: { orderBy: { createdAt: "asc" } } } });
+    assert.equal(row.vaccine!.veterinarianName, "Dr Batch");
+    assert.equal(row.vaccine!.veterinarianLicenseNumber, "B-12");
+    assert.equal((row.events.at(-1)!.after as Record<string, unknown>).veterinarianLicenseNumber, "B-12");
+  }
+});
+
+test("invalid shared veterinarian credentials refuse a batch without entries or activity", async () => {
+  const animals = await makeAnimals("Refused veterinarian", 2);
+  await assert.rejects(batch({ mode: "RECORD", animals: animals.map((animalId) => ({ animalId })), entry: { kind: MedicalEntryKind.VACCINE, itemId: rabiesId, completedDate: TODAY, source: MedicalEntrySource.IN_HOUSE, durationMonths: 12, veterinarianLicenseNumber: "x".repeat(101) } }), MedicalBatchRefusal);
+  assert.equal(await prisma.medicalEntry.count({ where: { animalId: { in: animals } } }), 0);
+  assert.equal(await prisma.animalActivityLog.count({ where: { animalId: { in: animals } } }), 0);
+});

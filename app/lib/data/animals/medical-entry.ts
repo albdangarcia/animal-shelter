@@ -115,6 +115,8 @@ export const MEDICAL_ENTRY_DISPLAY_SELECT = {
   death: { select: { circumstances: true, circumstanceNotes: true, cause: true, necropsyRequested: true, bodyDisposition: true } },
   vaccine: {
     select: {
+      veterinarianName: true,
+      veterinarianLicenseNumber: true,
       manufacturer: true,
       lotNumber: true,
       lotExpiryDate: true,
@@ -151,7 +153,7 @@ export const MEDICAL_ENTRY_DISPLAY_SELECT = {
       },
     },
   },
-  microchip: { select: { brand: true } },
+  microchip: { select: { brand: true, registrationStatus: true, registryName: true, registrationDate: true, registrationNotes: true } },
   exam: {
     select: {
       overallResult: true,

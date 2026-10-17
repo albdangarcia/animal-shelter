@@ -159,7 +159,7 @@ test.describe("as staff", () => {
   test.use({ storageState: staffStatePath });
 
   test("a chip, a spay scheduled then declined as an exemption, and a spay given then voided", async ({
-    page,
+    page, browser,
   }, testInfo) => {
     const today = todayIn(SHELTER_ZONE);
     const reviewDay = shiftDay(today, 30);
@@ -204,22 +204,86 @@ test.describe("as staff", () => {
     await pickFromMenu(page, page.getByRole("button", { name: "Add entry" }), "Microchip");
     const chipForm = page.getByRole("dialog", { name: "Record a microchip" });
     await chipForm.getByLabel(/^Chip number/).fill(chipNumber);
+    await chooseOption(page, chipForm.getByRole("combobox", { name: "Registration status" }), /^Registered$/);
+    await chipForm.getByRole("button", { name: "Record Microchip" }).click();
+    await expect(chipForm.getByText("A registered chip needs its registry name.")).toBeVisible();
+    await expect(chipForm.getByLabel("Registry name")).toBeFocused();
+    await chipForm.getByLabel("Registry name").fill("Journey Registry");
+    await pickDay(page, chipForm.getByRole("button", { name: /^Registration date:/ }), today);
+    const registrationDateLabel = await chipForm.getByRole("button", { name: /^Registration date:/ }).getAttribute("aria-label");
+    await chipForm.getByLabel("Registration notes (staff only)").fill("Journey private registration note");
     await chipForm.getByRole("button", { name: "Record Microchip" }).click();
     await expect(chipForm).toBeHidden();
     await expect(microchip).toContainText(chipNumber);
+    await expect(microchip).toContainText("Registration: Registered · Journey Registry");
+
+    const chipRow = page.locator("li[aria-label]").filter({ hasText: chipNumber });
+    await pickFromMenu(page, chipRow.getByRole("button", { name: /^Actions for/ }), "Edit");
+    const editChip = page.getByRole("dialog", { name: "Edit microchip" });
+    await expect(editChip.getByLabel("Registry name")).toHaveValue("Journey Registry");
+    await expect(editChip.getByRole("button", { name: /^Registration date:/ })).toHaveAttribute("aria-label", registrationDateLabel!);
+    await editChip.getByLabel("Brand", { exact: true }).fill("Journey Brand");
+    await editChip.getByRole("button", { name: "Save Changes" }).click();
+    await expect(editChip).toBeHidden();
+    await expect(chipRow).toContainText("Journey private registration note");
+    const reader = await browser.newContext({ storageState: volunteerStatePath, timezoneId: "Pacific/Kiritimati" });
+    try {
+      const readerPage = await reader.newPage();
+      await readerPage.goto(overview);
+      await expect(statusLine(readerPage, "Microchip")).toContainText("Journey Registry");
+      await expect(statusLine(readerPage, "Microchip")).toContainText(printedDay(today));
+      const readChip = readerPage.locator("li[aria-label]").filter({ hasText: chipNumber });
+      await expect(readChip).toContainText("Registration: Registered");
+      await expect(readChip.getByRole("button", { name: /^Actions for/ })).toHaveCount(0);
+    } finally { await reader.close(); }
+    await pickFromMenu(page, chipRow.getByRole("button", { name: /^Actions for/ }), "Edit");
+    await editChip.getByLabel(/^Chip number/).fill(chipNumber.split("").join("-"));
+    await expect(editChip.getByLabel("Registry name")).toHaveValue("Journey Registry");
+    const replacementNumber = `${chipPrefix}9${testInfo.retry}`;
+    await editChip.getByLabel(/^Chip number/).fill(replacementNumber);
+    await expect(editChip.getByText(/The chip number changed/)).toBeVisible();
+    await expect(editChip.getByRole("combobox", { name: "Registration status" })).toHaveText("Unknown");
+    await expect(editChip.getByLabel("Registry name")).toHaveCount(0);
+    await expect(editChip.getByLabel("Registration notes (staff only)")).toHaveValue("");
+    await chooseOption(page, editChip.getByRole("combobox", { name: "Registration status" }), /^Registered$/);
+    await editChip.getByRole("button", { name: "Save Changes" }).click();
+    await expect(editChip.getByText("A registered chip needs its registry name.")).toBeVisible();
+    await expect(editChip.getByLabel("Registry name")).toBeFocused();
+    await expect(editChip.getByLabel(/^Chip number/)).toHaveValue(replacementNumber);
+    await editChip.getByLabel("Registry name").fill("Replacement Registry for Companion Animals and National Recovery Services");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("chip-registration-form-390.png"), fullPage: true, animations: "disabled" });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("chip-registration-form-1280.png"), fullPage: true, animations: "disabled" });
+    await editChip.getByRole("button", { name: "Save Changes" }).click();
+    await expect(editChip).toBeHidden();
+    const replacedChip = page.locator("li[aria-label]").filter({ hasText: replacementNumber });
+    await replacedChip.getByRole("button", { name: "Show 2 changes" }).click();
+    await expect(replacedChip.getByRole("list", { name: "Change history" })).toContainText(`Chip number: ${chipNumber} → ${replacementNumber}`);
+    await expect(replacedChip).toContainText("Registry: Journey Registry → Replacement Registry");
+    await expect(replacedChip).toContainText("Registration date: Unknown");
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("chip-registration-390.png"), fullPage: true, animations: "disabled" });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("chip-registration-1280.png"), fullPage: true, animations: "disabled" });
 
     // The same number again is refused, under the field.
     await pickFromMenu(page, page.getByRole("button", { name: "Add entry" }), "Microchip");
-    await chipForm.getByLabel(/^Chip number/).fill(chipNumber);
+    await chipForm.getByLabel(/^Chip number/).fill(replacementNumber);
     await chipForm.getByRole("button", { name: "Record Microchip" }).click();
     await expect(
       chipForm.getByText("That chip number is already on this animal's record."),
     ).toBeVisible();
-    await chipForm.getByRole("button", { name: "Cancel" }).click();
-    await page
-      .getByRole("alertdialog", { name: "Discard unsaved entry?" })
-      .getByRole("button", { name: "Discard" })
-      .click();
+    const discardChip = page.getByRole("alertdialog", { name: "Discard unsaved entry?" });
+    await expect(async () => {
+      if (!(await discardChip.isVisible())) await chipForm.getByRole("button", { name: "Cancel" }).click();
+      await expect(discardChip).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
+    await discardChip.getByRole("button", { name: "Discard" }).click();
     await expect(chipForm).toBeHidden();
 
     // Schedule a spay, then decline it as an exemption with a review day.
@@ -278,7 +342,9 @@ test.describe("as staff", () => {
     await expect(feed.nth(1)).toContainText("recorded a medical entry");
     await expect(feed.nth(2)).toContainText("declined a medical entry");
     await expect(feed.nth(3)).toContainText("scheduled a medical entry");
-    await expect(feed.nth(4)).toContainText("recorded a medical entry");
+    await expect(feed.nth(4)).toContainText("edited a medical entry");
+    await expect(feed.nth(5)).toContainText("edited a medical entry");
+    await expect(feed.nth(6)).toContainText("recorded a medical entry");
   });
 });
 

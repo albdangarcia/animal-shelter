@@ -1,3 +1,4 @@
+import { MICROCHIP_REGISTRATION_LABELS } from "@/app/lib/utils/microchip-registration";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
@@ -146,6 +147,10 @@ const detailPairs = (entry: MedicalEntryDisplay): [string, string][] => {
   if (entry.vaccine) {
     const v = entry.vaccine;
     pairs.push(
+      ["Veterinarian name", v.veterinarianName],
+      ["Veterinarian license number", v.veterinarianLicenseNumber],
+      ["Certificate", v.durationMonths && (!entry.completedDate || !v.validUntilDate || !v.veterinarianName || !v.veterinarianLicenseNumber)
+        ? "Incomplete: needs a known vaccination day, validity and both veterinarian credentials" : null],
       ["Manufacturer", v.manufacturer],
       ["Lot", v.lotNumber],
       ["Lot expiry", v.lotExpiryDate && formatShelterDayOrNA(v.lotExpiryDate)],
@@ -192,7 +197,11 @@ const detailPairs = (entry: MedicalEntryDisplay): [string, string][] => {
     );
   }
   if (entry.microchip) {
-    pairs.push(["Brand", entry.microchip.brand]);
+    const chip = entry.microchip;
+    pairs.push(["Brand", chip.brand], ["Registration", MICROCHIP_REGISTRATION_LABELS[chip.registrationStatus]],
+      ["Registry", chip.registryName], ["Registration date", chip.registrationStatus === "REGISTERED"
+        ? chip.registrationDate ? formatShelterDayOrNA(chip.registrationDate) : "Unknown" : null],
+      ["Registration notes", chip.registrationNotes]);
   }
   if (entry.exam?.reproductiveStatus) {
     pairs.push([

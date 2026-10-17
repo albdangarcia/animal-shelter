@@ -56,6 +56,8 @@ export type BatchFormState = {
   source: MedicalEntrySource;
   vetPartnerId: string | null;
   vetName: string;
+  veterinarianName: string;
+  veterinarianLicenseNumber: string;
   manufacturer: string;
   lotNumber: string;
   lotExpiryDate: string | null;
@@ -79,6 +81,8 @@ export const blankBatchForm = (today: CalendarDay): BatchFormState => ({
   source: MedicalEntrySource.IN_HOUSE,
   vetPartnerId: null,
   vetName: "",
+  veterinarianName: "",
+  veterinarianLicenseNumber: "",
   manufacturer: "",
   lotNumber: "",
   lotExpiryDate: null,
@@ -98,8 +102,10 @@ export const batchItemFills = (
   item: MedicalBatchItem | undefined,
 ): Pick<
   BatchFormState,
-  "manufacturer" | "route" | "doseAmount" | "doseUnit" | "durationMonths"
+  "manufacturer" | "route" | "doseAmount" | "doseUnit" | "durationMonths" | "veterinarianName" | "veterinarianLicenseNumber"
 > => ({
+  veterinarianName: "",
+  veterinarianLicenseNumber: "",
   manufacturer: item?.manufacturer ?? "",
   route: item?.defaultRoute ?? null,
   doseAmount: item?.defaultDoseAmount ?? null,
@@ -179,6 +185,8 @@ export const batchGivenValues = (
   notes: state.notes,
   ...(kind === MedicalEntryKind.VACCINE
     ? {
+        veterinarianName: state.veterinarianName,
+        veterinarianLicenseNumber: state.veterinarianLicenseNumber,
         manufacturer: state.manufacturer,
         lotNumber: state.lotNumber,
         lotExpiryDate: state.lotExpiryDate,
@@ -335,6 +343,10 @@ export function BatchGivenFields({
             placeholder="e.g. Right shoulder"
           />
           {item?.isRabies && (
+            <>
+            <MedicalTextField control={form.control} name="veterinarianName" label="Veterinarian name" />
+            <MedicalTextField control={form.control} name="veterinarianLicenseNumber" label="Veterinarian license number" />
+            <p className="text-sm text-muted-foreground md:col-span-2">These recorded credentials apply to every vaccine in this batch. Leave unknown facts blank.</p>
             <NumberField
               control={form.control}
               name="durationMonths"
@@ -344,6 +356,7 @@ export function BatchGivenFields({
               max={RABIES_MAX_MONTHS}
               placeholder="12 or 36"
             />
+            </>
           )}
         </>
       ) : (

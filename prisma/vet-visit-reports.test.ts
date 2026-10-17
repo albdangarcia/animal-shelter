@@ -221,3 +221,27 @@ test("waiting visits from two fosters stay in separate groups ordered by their o
     { fosterId: strangerId, reports: [middle.reportId] },
   ]);
 });
+
+for (const scheduled of [false, true]) test(`${scheduled ? "scheduled" : "ad hoc"} report credentials are staff-recorded facts and do not reach the foster DTO`, async () => {
+  const { animalId } = await fixture(); const { reportId } = await submit(animalId);
+  const plan = scheduled ? await prisma.medicalEntry.create({ data: { animalId, kind: "VACCINE", itemId: vaccineId, status: "SCHEDULED", dueDate: today, createdById: staffId } }) : null;
+  const values = { ...vaccine(animalId), veterinarianName: " Dr Private Credential ", veterinarianLicenseNumber: " PRIVATE-LICENSE " };
+  const result = await prisma.$transaction((tx) => plan ? recordScheduledMedicalEntry(tx, plan.id, values, staffId, today, { vetReportId: reportId }) : recordMedicalEntry(tx, values, staffId, today, { vetReportId: reportId }));
+  const row = await prisma.medicalEntry.findUniqueOrThrow({ where: { id: result.entryId }, include: { vaccine: true, events: true } });
+  assert.equal(row.vetReportId, reportId); assert.equal(row.reportedByFoster, true);
+  assert.equal(row.vaccine!.veterinarianName, "Dr Private Credential");
+  assert.equal(row.vaccine!.veterinarianLicenseNumber, "PRIVATE-LICENSE");
+  assert.equal((row.events.at(-1)!.after as Record<string, unknown>).veterinarianLicenseNumber, "PRIVATE-LICENSE");
+  const foster = JSON.stringify(await findFosterMedical(prisma, fosterId, animalId, { day: today, time: "12:00" }));
+  assert.equal(foster.includes("Private Credential"), false); assert.equal(foster.includes("PRIVATE-LICENSE"), false);
+});
+
+test("a report-linked chip's registration stays out of foster reads", async () => {
+  const { animalId } = await fixture(); const { reportId } = await submit(animalId);
+  await prisma.$transaction((tx) => recordMedicalEntry(tx, {
+    animalId, kind: "MICROCHIP", chipNumber: runId.replaceAll("-", "").slice(0, 15).toUpperCase(), completedDate: today, source: "OUTSIDE_VET", vetPartnerId: clinicId,
+    registrationStatus: "REGISTERED", registryName: "Private Chip Registry", registrationDate: today, registrationNotes: "Private registry note",
+  }, staffId, today, { vetReportId: reportId }));
+  const dto = JSON.stringify(await findFosterMedical(prisma, fosterId, animalId, { day: today, time: "12:00" }));
+  for (const value of ["Private Chip Registry", "Private registry note", "registrationStatus", "registryName", "registrationDate", "registrationNotes"]) assert.equal(dto.includes(value), false);
+});
