@@ -1,7 +1,8 @@
 import type prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
+import type { TransactionClient } from "@/app/lib/prisma";
 import { calendarDay, parseCalendarDay, type CalendarDay } from "../../utils/shelter-day";
-import { medicalOutputProvenance, type CompletedMedicalOutput, type MedicalHistoryOutput } from "../../utils/medical-output";
+import { medicalOutputProvenance, rabiesCertificateEligibility, type CompletedMedicalOutput, type MedicalHistoryOutput, type MedicalOutputAnimal, type RabiesCertificateEligibility, type RabiesCertificateOutput } from "../../utils/medical-output";
 import { spayNeuterStatus, openExemptionReview } from "../../utils/spay-neuter";
 import { latestReproductiveFinding } from "../../utils/exams";
 import { rabiesStatus } from "../../utils/medical-days";
@@ -16,6 +17,61 @@ const ENTRY_SELECT = {
   reviewDate: true, updatedAt: true, createdAt: true,
 } satisfies Prisma.MedicalEntrySelect;
 
+async function findOutputAnimal(tx: TransactionClient, animalId: string): Promise<MedicalOutputAnimal | null> {
+  const animal = await tx.animal.findUnique({ where: { id: animalId }, select: {
+    id: true, name: true, birthDate: true, sex: true, speciesId: true, primaryColorId: true,
+  } });
+  if (!animal) return null;
+  const species = await tx.species.findUniqueOrThrow({ where: { id: animal.speciesId }, select: { name: true } });
+  const color = await tx.color.findUniqueOrThrow({ where: { id: animal.primaryColorId }, select: { name: true } });
+  const breeds = await tx.animal.findUniqueOrThrow({ where: { id: animalId }, select: {
+    breeds: { select: { name: true }, orderBy: [{ name: "asc" }, { id: "asc" }] },
+  } });
+  return { id: animal.id, name: animal.name, species: species.name, breeds: breeds.breeds.map((b) => b.name),
+    sex: animal.sex, birthDate: calendarDay(animal.birthDate), primaryColor: color.name };
+}
+
+export type RabiesCertificateResult =
+  | { available: true; output: RabiesCertificateOutput }
+  | Extract<RabiesCertificateEligibility, { available: false }>;
+
+/** Only the explicitly selected entry, read with its identity and details in one snapshot. */
+export async function findRabiesCertificateOutput(
+  db: typeof prisma,
+  animalId: string,
+  entryId: string,
+  clock: { today: CalendarDay; now: Date },
+): Promise<RabiesCertificateResult> {
+  return db.$transaction(async (tx) => {
+    await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+    const entry = await tx.medicalEntry.findFirst({ where: { id: entryId, animalId }, select: {
+      id: true, animalId: true, kind: true, status: true, voidedAt: true, outcomeId: true,
+      completedDate: true, itemId: true, source: true, reportedByFoster: true, vetReportId: true,
+    } });
+    const vaccine = entry ? await tx.vaccineDetails.findUnique({ where: { entryId }, select: {
+      manufacturer: true, lotNumber: true, lotExpiryDate: true, route: true, site: true,
+      rabiesTagNumber: true, durationMonths: true, validUntilDate: true,
+      veterinarianName: true, veterinarianLicenseNumber: true,
+    } }) : null;
+    const certificate = rabiesCertificateEligibility(entry ? {
+      ...entry, completedDate: parseCalendarDay(entry.completedDate),
+      vaccine: vaccine ? { ...vaccine, validUntilDate: parseCalendarDay(vaccine.validUntilDate) } : null,
+    } : null, { animalId, entryId }, clock.today);
+    if (!certificate.available) return certificate;
+    const animal = await findOutputAnimal(tx, animalId);
+    if (!animal) return { available: false, reason: "NOT_FOUND", message: "This vaccination record is unavailable for this animal." };
+    const item = entry!.itemId ? await tx.medicalItem.findUnique({ where: { id: entry!.itemId }, select: { name: true } }) : null;
+    return { available: true, output: {
+      animal, generatedDate: clock.today, generatedAt: clock.now, certificate,
+      vaccination: { kind: "VACCINE", product: item?.name ?? "Product not recorded",
+        completedDate: certificate.completedDate, provenance: medicalOutputProvenance({ ...entry!, source: entry!.source! }),
+        manufacturer: vaccine!.manufacturer, lotNumber: vaccine!.lotNumber, lotExpiryDate: parseCalendarDay(vaccine!.lotExpiryDate),
+        route: vaccine!.route, site: vaccine!.site, rabiesTagNumber: vaccine!.rabiesTagNumber,
+        durationMonths: vaccine!.durationMonths, validUntilDate: certificate.validUntilDate },
+    } };
+  }, { isolationLevel: "RepeatableRead", timeout: 15_000 });
+}
+
 /** Full available history, across stays, from one snapshot. No staff DTO or file read. */
 export async function findMedicalHistoryOutput(
   db: typeof prisma,
@@ -24,15 +80,8 @@ export async function findMedicalHistoryOutput(
 ): Promise<MedicalHistoryOutput | null> {
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SET TRANSACTION READ ONLY`;
-    const animal = await tx.animal.findUnique({ where: { id: animalId }, select: {
-      id: true, name: true, birthDate: true, sex: true, speciesId: true, primaryColorId: true,
-    } });
+    const animal = await findOutputAnimal(tx, animalId);
     if (!animal) return null;
-    const species = await tx.species.findUniqueOrThrow({ where: { id: animal.speciesId }, select: { name: true } });
-    const color = await tx.color.findUniqueOrThrow({ where: { id: animal.primaryColorId }, select: { name: true } });
-    const breeds = await tx.animal.findUniqueOrThrow({ where: { id: animalId }, select: {
-      breeds: { select: { name: true }, orderBy: [{ name: "asc" }, { id: "asc" }] },
-    } });
     const entries = await tx.medicalEntry.findMany({
       where: { animalId, voidedAt: null, outcomeId: null, kind: { notIn: ["EUTHANASIA", "DEATH"] } },
       select: ENTRY_SELECT,
@@ -125,8 +174,7 @@ export async function findMedicalHistoryOutput(
     if (review) plannedCare.push({ name: "Spay/neuter exemption review", dueDate: parseCalendarDay(review.reviewDate), overdue: review.reviewDate! < clock.today });
     plannedCare.sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") || a.name.localeCompare(b.name));
     return {
-      animal: { id: animal.id, name: animal.name, species: species.name, breeds: breeds.breeds.map((b) => b.name),
-        sex: animal.sex, birthDate: calendarDay(animal.birthDate), primaryColor: color.name },
+      animal,
       generatedDate: clock.today, generatedAt: clock.now,
       summary: { altered: safeAltered, rabies: rabiesStatus(rabies ? { validUntilDate: parseCalendarDay(vaccines.get(rabies.id)?.validUntilDate) } : null, clock.today),
         chips: completed.filter((e) => e.kind === "MICROCHIP").map((e) => {

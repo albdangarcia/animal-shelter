@@ -10,6 +10,7 @@ import {
 import { examBodySystemLabel } from "@/app/lib/constants/exam";
 import { MICROCHIP_REGISTRATION_LABELS } from "@/app/lib/utils/microchip-registration";
 import { PrintButton } from "./print-button";
+import { OutputIdentity } from "./identity";
 import styles from "./history.module.css";
 
 function Care({ care: c }: { care: CompletedMedicalOutput }) {
@@ -43,10 +44,7 @@ export function MedicalHistoryHandout({ output: o }: { output: MedicalHistoryOut
       <PrintButton /><a href={`/dashboard/animals/${o.animal.id}/medical`}>Return to medical record</a>
     </nav>
     <header><h1>Medical history — {o.animal.name}</h1>
-      <dl><dt>Animal ID</dt><dd>{o.animal.id}</dd><dt>Species</dt><dd>{o.animal.species}</dd>
-        <dt>Breeds</dt><dd>{o.animal.breeds.join(", ") || "Not recorded"}</dd><dt>Sex</dt><dd>{{ MALE: "Male", FEMALE: "Female", UNKNOWN: "Unknown" }[o.animal.sex]}</dd>
-        <dt>Birth date</dt><dd>{day(o.animal.birthDate)}</dd><dt>Color</dt><dd>{o.animal.primaryColor}</dd>
-        <dt>Generated day</dt><dd>{day(o.generatedDate)} (shelter calendar)</dd><dt>Generated at</dt><dd>{o.generatedAt.toISOString()} (UTC instant)</dd></dl>
+      <OutputIdentity animal={o.animal} generatedDate={o.generatedDate} generatedAt={o.generatedAt} />
       <p className={styles.note}>{MEDICAL_HISTORY_SCOPE_TEXT}</p><p className={styles.note}>{MEDICAL_OUTPUT_COPY_TEXT}</p>
     </header>
     <Section title="Current recorded summary">

@@ -15,8 +15,8 @@ import {
   effectiveApplicationStatuses,
 } from "./application-status.data";
 import {
-  ALTERED_OR_CHIPPED_SELECT,
-  alteredAndChipped,
+  PUBLIC_MEDICAL_FACTS_SELECT,
+  publicMedicalFacts,
 } from "./animals/medical-status";
 
 export type PetsPayload = Prisma.AnimalGetPayload<{
@@ -418,11 +418,11 @@ export const fetchPublicPagePetById = async (id: string) => {
         sex: true,
         size: true,
         // Server-side only: read from the medical record, mapped to the
-        // `isAltered` and `hasMicrochip` booleans below, and never included in
+        // medical-fact booleans below, and never included in
         // what this function returns. Same contract as fetchSpotlightAnimals —
         // the detail page only needs to know whether to show the "Neutered"
-        // and "Microchipped" pills, not the record or the chip number.
-        medicalEntries: ALTERED_OR_CHIPPED_SELECT,
+        // and other positive pills, not the record or the chip number.
+        medicalEntries: PUBLIC_MEDICAL_FACTS_SELECT,
         species: {
           select: {
             name: true,
@@ -490,7 +490,7 @@ export const fetchPublicPagePetById = async (id: string) => {
 
     return {
       ...flattenCharacteristics(rest),
-      ...alteredAndChipped(medicalEntries),
+      ...publicMedicalFacts(medicalEntries),
       ...(personId && { adoptionApplications: blockingApplications }),
     };
   } catch (error) {
@@ -564,6 +564,8 @@ export type SpotlightAnimal = {
   /** The medical record has a chip the animal carries. The number itself
    *  never leaves the server. */
   hasMicrochip: boolean;
+  /** At least one vaccine recorded as given; no coverage or series assertion. */
+  hasRecordedVaccination: boolean;
   /** Days of the current open stay. Null when the animal is not in care. */
   waitingDays: number | null;
   imageUrl: string | null;
@@ -613,9 +615,9 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
         birthDate: true,
         description: true,
         currentWeightGrams: true,
-        // Server-side only: mapped to the `isAltered` and `hasMicrochip`
+        // Server-side only: mapped to the positive medical-fact
         // booleans below and never included in what this function returns.
-        medicalEntries: ALTERED_OR_CHIPPED_SELECT,
+        medicalEntries: PUBLIC_MEDICAL_FACTS_SELECT,
         publishedAt: true,
         breeds: { where: { deletedAt: null }, select: { name: true } },
         animalImages: {
@@ -706,7 +708,7 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
       }),
       description: animal.description,
       weightGrams: animal.currentWeightGrams,
-      ...alteredAndChipped(animal.medicalEntries),
+      ...publicMedicalFacts(animal.medicalEntries),
       waitingDays: currentStayDays,
       imageUrl: animal.animalImages[0]?.url ?? null,
       isFavoritedByCurrentUser: (animal.favorites?.length ?? 0) > 0,

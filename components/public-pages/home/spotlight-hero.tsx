@@ -55,10 +55,11 @@ const SpotlightHero = ({
   const remainingCount = Math.max(availableCount - animals.length, 0);
 
   // Never assert the negative: an animal that isn't neutered simply drops the
-  // word, and an animal with neither flag renders no badge at all.
+  // word, and an animal with no positive facts renders no badge at all.
   const badges = [
     animal.isAltered && "Neutered",
     animal.hasMicrochip && "Chipped",
+    animal.hasRecordedVaccination && "Vaccinations recorded",
   ].filter((badge): badge is string => Boolean(badge));
 
   // The mockup's flat 104px is sized for "Sadie". Caprasimo averages ~0.653em
@@ -171,11 +172,11 @@ const SpotlightHero = ({
               </div>
 
               {badges.length > 0 && (
-                <div className="absolute top-[14px] right-[6px] flex items-center gap-2 rounded-full bg-background px-[18px] py-[9px] text-[13px] shadow-organic-md">
+                <div className="absolute top-[14px] right-[6px] flex max-w-[calc(100%-12px)] flex-wrap items-center gap-2 rounded-2xl bg-background px-[18px] py-[9px] text-[13px] shadow-organic-md">
                   {badges.map((badge, index) => (
                     <span
                       key={badge}
-                      className="inline-flex items-center gap-2"
+                      className="inline-flex items-center gap-2 whitespace-nowrap"
                     >
                       {index > 0 && (
                         <span

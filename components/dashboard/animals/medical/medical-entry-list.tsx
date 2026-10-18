@@ -11,6 +11,8 @@ import { MedicalEntryChanges } from "./medical-entry-changes";
 import { ScheduledEntryActions } from "./scheduled-entry-actions";
 import { ExemptionReviewActions } from "./exemption-review-actions";
 import { AddConditionButton } from "./add-condition-buttons";
+import { rabiesCertificateEligibility } from "@/app/lib/utils/medical-output";
+import { parseCalendarDay } from "@/app/lib/utils/shelter-day";
 import {
   MedicalConditionType,
   MedicalEntryKind,
@@ -61,6 +63,7 @@ interface Props {
    */
   reviewId?: string | null;
   className?: string;
+  certificates?: boolean;
 }
 
 type RowProps = Omit<Props, "entries" | "className"> & {
@@ -81,10 +84,16 @@ export async function MedicalEntryRow({
   controls,
   due = false,
   reviewId = null,
+  certificates = false,
 }: RowProps) {
   const offer = conditionOffer(entry);
   const canReadOutcome = entry.outcomeId && await hasPermission(AppPermissions.OUTCOMES_READ);
   const canCorrectOutcome = canReadOutcome && !entry.voidedAt && await hasPermission(AppPermissions.OUTCOMES_MANAGE) && await hasPermission(AppPermissions.MEDICAL_MANAGE);
+  const certificate = certificates && entry.kind === "VACCINE" && entry.vaccine?.durationMonths != null
+    && entry.status === "COMPLETED" && !entry.voidedAt && !entry.outcomeId
+    ? rabiesCertificateEligibility({ ...entry, completedDate: parseCalendarDay(entry.completedDate),
+      vaccine: { ...entry.vaccine, validUntilDate: parseCalendarDay(entry.vaccine.validUntilDate) },
+    }, { animalId: entry.animalId, entryId: entry.id }, today) : null;
   return (
     <MedicalEntryItem
       entry={entry}
@@ -102,6 +111,11 @@ export async function MedicalEntryRow({
       }
       footer={
         <>
+          {certificate && <div className="mt-3 text-sm space-y-1">
+            {certificate.available ? <a className="underline" href={`/medical-outputs/animals/${entry.animalId}/rabies/${entry.id}`}>Print rabies certificate</a>
+              : <><p>Certificate unavailable: {certificate.message}</p>
+                {controls?.canManage && <p>Use Actions → Edit to correct this vaccination record.</p>}</>}
+          </div>}
           {due &&
             controls?.canManage &&
             entry.id === reviewId &&

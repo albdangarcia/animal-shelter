@@ -3,7 +3,7 @@ import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
-import { findMedicalHistoryOutput } from "@/app/lib/data/animals/medical-output";
+import { findMedicalHistoryOutput, findRabiesCertificateOutput } from "@/app/lib/data/animals/medical-output";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
 import { editMedicalEntry, voidMedicalEntry } from "@/app/lib/services/medical-entry";
 
@@ -233,4 +233,116 @@ test("intact, unknown and lapsed exemptions reuse the existing derivation withou
   assert.deepEqual((await read(a.id))!.summary.altered, { status: "INTACT", examDate: "2026-01-01", lapsedOn: "2026-10-16" });
   await prisma.examDetails.update({ where: { entryId: exam.id }, data: { reproductiveStatus: "UNDETERMINED" } });
   assert.deepEqual((await read(a.id))!.summary.altered, { status: "UNKNOWN", lapsedOn: "2026-10-16" });
+});
+
+const certificateRead = (animalId: string, entryId: string, today = clock.today) =>
+  findRabiesCertificateOutput(prisma, animalId, entryId, { ...clock, today });
+const certificateVaccine = { durationMonths: 12, validUntilDate: "2026-10-17",
+  veterinarianName: "Dr Recorded", veterinarianLicenseNumber: "LICENSE-RECORDED" };
+
+test("certificate refuses missing, mismatched, non-rabies, non-completed, voided and outcome-linked selections", async () => {
+  const a = await animal(), other = await animal();
+  assert.equal((await certificateRead(a.id, "missing")).available, false);
+  for (const data of [
+    { kind: "TEST" }, { status: "SCHEDULED" }, { status: "DECLINED" }, { voidedAt: clock.now },
+  ] as Partial<Prisma.MedicalEntryUncheckedCreateInput>[]) {
+    const e = await entry(a.id, { ...data, vaccine: { create: certificateVaccine } });
+    assert.deepEqual(await certificateRead(a.id, e.id), { available: false, reason: "NOT_COMPLETED_RABIES", message: "A certificate requires a completed, non-voided rabies vaccination record." });
+  }
+  const ordinary = await entry(a.id, { vaccine: { create: { ...certificateVaccine, durationMonths: null } } });
+  assert.equal((await certificateRead(a.id, ordinary.id)).available, false);
+  const missingDetails = await entry(a.id);
+  assert.equal((await certificateRead(a.id, missingDetails.id)).available, false);
+  const outcome = await prisma.outcome.create({ data: { animalId: a.id, outcomeDate: "2026-01-01", type: "DECEASED", staffMemberId: actorId, previousListingStatus: "DRAFT" } });
+  const linked = await entry(a.id, { outcomeId: outcome.id, vaccine: { create: certificateVaccine } });
+  assert.equal((await certificateRead(a.id, linked.id)).available, false);
+  const result = await certificateRead(other.id, ordinary.id);
+  assert.ok(!result.available);
+  assert.equal(result.reason, "NOT_FOUND");
+  assert.doesNotMatch(JSON.stringify(result), /Dr Recorded|LICENSE|animalId|veterinarian/);
+});
+
+test("incomplete certificate facts remain in history without borrowing actor or clinic credentials", async () => {
+  const a = await animal();
+  for (const [completedDate, validUntilDate, veterinarianName, veterinarianLicenseNumber, reason] of [
+    [null, null, "Dr Recorded", "LICENSE", "DAY_UNKNOWN"],
+    ["2026-01-01", null, "Dr Recorded", "LICENSE", "VALIDITY_UNKNOWN"],
+    ["2026-01-01", "2027-01-01", null, "LICENSE", "CREDENTIALS_MISSING"],
+    ["2026-01-01", "2027-01-01", "Dr Recorded", null, "CREDENTIALS_MISSING"],
+  ] as const) {
+    const e = await entry(a.id, { completedDate, vaccine: { create: { durationMonths: 12, validUntilDate, veterinarianName, veterinarianLicenseNumber } } });
+    const result = await certificateRead(a.id, e.id);
+    assert.ok(!result.available);
+    assert.equal(result.reason, reason);
+    assert.doesNotMatch(JSON.stringify(result), /PRIVATE|LICENSE|Dr Recorded/);
+  }
+  assert.equal((await read(a.id))!.completedCare.length, 4);
+});
+
+test("certificate prints the selected historical record and stored facts regardless of catalog changes", async () => {
+  const a = await animal();
+  const e = await entry(a.id, { completedDate: "2025-10-17", vaccine: { create: {
+    ...certificateVaccine, manufacturer: "Recorded manufacturer", lotNumber: "Selected lot", lotExpiryDate: "2025-12-01",
+    route: "SUBCUTANEOUS", site: "Right shoulder", rabiesTagNumber: "TAG-SELECTED",
+  } } });
+  await entry(a.id, { completedDate: "2026-10-16", vaccine: { create: { ...certificateVaccine, validUntilDate: "2029-10-16", lotNumber: "Newer lot" } } });
+  await prisma.medicalItem.update({ where: { id: itemId }, data: { isRabies: false, retiredAt: clock.now } });
+  await prisma.animal.update({ where: { id: a.id }, data: { listingStatus: "ARCHIVED", archiveReason: "ADOPTION" } });
+  const result = await certificateRead(a.id, e.id);
+  assert.ok(result.available);
+  assert.equal(result.output.vaccination.lotNumber, "Selected lot");
+  assert.equal(result.output.vaccination.durationMonths, 12);
+  assert.equal(result.output.certificate.completedDate, "2025-10-17");
+  assert.equal(result.output.certificate.validUntilDate, "2026-10-17");
+  assert.equal(result.output.certificate.expired, false);
+  assert.doesNotMatch(JSON.stringify(result), /PRIVATE|Newer lot|createdBy|notes|events|entryId|pathname/);
+  const expired = await certificateRead(a.id, e.id, calendarDay("2026-10-18"));
+  assert.ok(expired.available);
+  assert.equal(expired.output.certificate.expired, true);
+  assert.equal(await prisma.medicalEntryEvent.count({ where: { entryId: e.id } }), 0);
+  assert.equal(await prisma.medicalDocument.count({ where: { animalId: a.id } }), 0);
+  assert.equal(await prisma.animalActivityLog.count({ where: { animalId: a.id } }), 0);
+});
+
+test("fresh certificate reflects audited day, duration and veterinarian corrections and refuses a subsequent void", async () => {
+  const a = await animal();
+  const e = await entry(a.id, { vaccine: { create: certificateVaccine } });
+  await prisma.$transaction((tx) => editMedicalEntry(tx, e.id, {
+    kind: "VACCINE", itemId, source: "BEFORE_INTAKE", completedDate: calendarDay("2026-02-28"),
+    durationMonths: 36, veterinarianName: "Dr Corrected", veterinarianLicenseNumber: "LICENSE-CORRECTED",
+  }, actorId, clock.today));
+  const result = await certificateRead(a.id, e.id);
+  assert.ok(result.available);
+  assert.equal(result.output.certificate.completedDate, "2026-02-28");
+  assert.equal(result.output.certificate.validUntilDate, "2029-02-28");
+  assert.equal(result.output.certificate.veterinarianName, "Dr Corrected");
+  assert.equal(result.output.certificate.veterinarianLicenseNumber, "LICENSE-CORRECTED");
+  assert.equal(result.output.vaccination.durationMonths, 36);
+  await prisma.$transaction((tx) => voidMedicalEntry(tx, e.id, "Wrong animal", actorId));
+  assert.equal((await certificateRead(a.id, e.id)).available, false);
+});
+
+test("certificate identity and details share the eligibility snapshot across a concurrent void and correction", async () => {
+  const a = await animal();
+  const e = await entry(a.id, { vaccine: { create: certificateVaccine } });
+  let changed = false;
+  const observed = prisma.$extends({ query: { medicalEntry: { async findFirst({ args, query }) {
+    const row = await query(args);
+    if (!changed) {
+      changed = true;
+      await prisma.$transaction(async (tx) => {
+        await tx.vaccineDetails.update({ where: { entryId: e.id }, data: { veterinarianName: "Dr Concurrent", validUntilDate: "2029-01-01" } });
+        await tx.medicalEntry.update({ where: { id: e.id }, data: { voidedAt: clock.now } });
+        await tx.animal.update({ where: { id: a.id }, data: { name: "Concurrent identity" } });
+      });
+    }
+    return row;
+  } } } });
+  const result = await findRabiesCertificateOutput(observed as typeof prisma, a.id, e.id, clock);
+  assert.equal(changed, true);
+  assert.ok(result.available);
+  assert.equal(result.output.certificate.veterinarianName, "Dr Recorded");
+  assert.equal(result.output.certificate.validUntilDate, "2026-10-17");
+  assert.equal(result.output.animal.name, a.name);
+  assert.equal((await certificateRead(a.id, e.id)).available, false);
 });

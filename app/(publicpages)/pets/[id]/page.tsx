@@ -83,15 +83,12 @@ const Page = async ({ params }: Props) => {
     formatWeight(animal.currentWeightGrams, unitSystem),
   ].filter(Boolean);
 
-  // Neutered and Microchipped are facts about the animal's body, but they read
-  // as reassurances rather than measurements — so they join the characteristic
-  // pills instead of sitting in the facts list as Yes/No rows. Both come from
-  // the medical record: "Neutered" only once a spay or neuter was done (an
-  // exemption isn't one), "Microchipped" while it carries a chip. Never assert
-  // the negative: an animal that isn't neutered simply drops the word.
+  // Positive medical facts join the characteristic pills. A recorded vaccine
+  // establishes care given, without asserting current coverage or a full series.
   const pills = [
     animal.isAltered && "Neutered",
     animal.hasMicrochip && "Microchipped",
+    animal.hasRecordedVaccination && "Vaccinations recorded",
     ...(animal.characteristics?.map((char) => char.name) ?? []),
   ].filter((pill): pill is string => Boolean(pill));
 

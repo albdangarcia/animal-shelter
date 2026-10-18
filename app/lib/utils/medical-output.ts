@@ -185,3 +185,10 @@ export interface RabiesCertificateOutput {
   vaccination: Extract<CompletedMedicalOutput, { kind: "VACCINE" }>;
   certificate: Extract<RabiesCertificateEligibility, { available: true }>;
 }
+
+export const rabiesCertificateValidityText = (
+  certificate: Extract<RabiesCertificateEligibility, { available: true }>,
+  generatedDate: CalendarDay,
+): string => certificate.expired
+  ? `Expired as of ${formatShelterDay(generatedDate)}. Recorded validity ended ${formatShelterDay(certificate.validUntilDate)}.`
+  : `Recorded valid through ${formatShelterDay(certificate.validUntilDate)} (inclusive).`;

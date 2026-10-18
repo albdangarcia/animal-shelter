@@ -384,6 +384,7 @@ export function MedicalEntryItem({
 
   return (
     <li
+      id={`medical-entry-${entry.id}`}
       className="border rounded-lg p-4"
       aria-label={`${entryTitle(entry)}, ${entryDayText(entry)}${voided ? ", voided" : ""}`}
     >

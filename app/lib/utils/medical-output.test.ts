@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   isRecordedVaccination, medicalOutputProvenance, medicalOutputDayText,
-  rabiesCertificateEligibility, vaccineCredentialsIssue,
+  rabiesCertificateEligibility, rabiesCertificateValidityText, vaccineCredentialsIssue,
   MEDICAL_HISTORY_EMPTY_TEXT, MEDICAL_HISTORY_SCOPE_TEXT, MEDICAL_OUTPUT_COPY_TEXT,
   type RabiesCertificateEntry,
 } from "./medical-output";
@@ -74,6 +74,15 @@ test("public vaccination predicate includes only completed non-voided vaccines, 
   for (const kind of ["TEST", "TREATMENT", "SURGERY", "EXAM", "MICROCHIP", "EUTHANASIA", "DEATH"] as const) assert.equal(isRecordedVaccination({ kind, status: "COMPLETED", voidedAt: null }), false);
   for (const status of ["SCHEDULED", "DECLINED"] as const) assert.equal(isRecordedVaccination({ kind: "VACCINE", status, voidedAt: null }), false);
   assert.equal(isRecordedVaccination({ kind: "VACCINE", status: "COMPLETED", voidedAt: new Date() }), false);
+});
+
+test("certificate validity wording names the generation day for expired records and the inclusive last day", () => {
+  const current = rabiesCertificateEligibility(certificateEntry(), requested, day("2029-02-28"));
+  assert.ok(current.available);
+  assert.equal(rabiesCertificateValidityText(current, day("2029-02-28")), "Recorded valid through Feb 28, 2029 (inclusive).");
+  const expired = rabiesCertificateEligibility(certificateEntry(), requested, day("2029-03-01"));
+  assert.ok(expired.available);
+  assert.equal(rabiesCertificateValidityText(expired, day("2029-03-01")), "Expired as of Mar 1, 2029. Recorded validity ended Feb 28, 2029.");
 });
 
 test("output provenance prioritizes a foster report over a corrected source and hides foster identity", () => {

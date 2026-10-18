@@ -181,3 +181,124 @@ test("medical readers print the full safe handout, with private direct access an
     expect(await counts(f.animalId)).toEqual(before);
   } finally { await context.close(); await cleanup(f); }
 });
+
+test("medical readers print a selected rabies certificate only after its missing facts are corrected", async ({ browser }, testInfo) => {
+  test.setTimeout(150_000);
+  const f = await fixture();
+  const selected = f.entries[0];
+  const route = `/medical-outputs/animals/${f.animalId}/rabies/${selected}`;
+  const record = `/dashboard/animals/${f.animalId}/medical/vaccines-tests`;
+  const vet = `Dr Recorded ${"Long veterinarian name ".repeat(8)}`;
+  const license = `LICENSE-${"X".repeat(90)}`;
+  await withDb(async (db) => {
+    await db.query(`UPDATE medical_entries SET completed_date='2025-02-28' WHERE id=$1`, [selected]);
+    await db.query(`UPDATE vaccine_details SET veterinarian_name=null, veterinarian_license_number=null, valid_until_date='2026-02-28' WHERE entry_id=$1`, [selected]);
+  });
+  const context = await browser.newContext({ storageState: states.staff, timezoneId: "America/New_York", viewport: { width: 1280, height: 900 } });
+  const page = await context.newPage();
+  try {
+    await page.goto(route);
+    await expect(page.getByRole("heading", { name: "Rabies certificate unavailable" })).toBeVisible();
+    await expect(page.getByText("Record the veterinarian's name and license number before printing a certificate.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Print / Save as PDF" })).toHaveCount(0);
+    await page.getByRole("link", { name: "Correct this vaccination record" }).click();
+    await expect(page).toHaveURL(`${record}#medical-entry-${selected}`);
+    const row = page.locator(`[id="medical-entry-${selected}"]`);
+    await expect(row).toContainText("Certificate unavailable:");
+    await row.getByRole("button", { name: /^Actions for/ }).click();
+    await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    const edit = page.getByRole("dialog", { name: "Edit vaccine", exact: true });
+    await edit.getByLabel("Veterinarian name", { exact: true }).fill(vet);
+    await edit.getByLabel("Veterinarian license number").fill(license);
+    await edit.getByRole("button", { name: "Save Changes", exact: true }).click();
+    await expect(edit).toBeHidden();
+    await row.getByRole("link", { name: "Print rabies certificate", exact: true }).click();
+    await expect(page).toHaveURL(route);
+    await expect(page.getByRole("heading", { name: `Rabies vaccination certificate — ${f.name}`, exact: true })).toBeVisible();
+    const before = await counts(f.animalId);
+    const response = await page.reload();
+    expect(response!.headers()["cache-control"]).toMatch(/no-cache.*must-revalidate/);
+    expect(response!.headers()["cache-control"]).not.toMatch(/public|s-maxage/);
+    expect(await response!.text()).not.toContain(f.marker);
+    const payload = await context.request.get(route, { headers: { RSC: "1" } });
+    expect(payload.status()).toBe(200);
+    expect(await payload.text()).toContain(license);
+    expect(await payload.text()).not.toContain(f.marker);
+    const vaccination = page.getByRole("region", { name: "Recorded vaccination", exact: true });
+    await expect(vaccination).toContainText("Lot-0");
+    await expect(vaccination).not.toContainText("Lot-24");
+    await expect(vaccination).toContainText("Feb 28, 2025");
+    await expect(vaccination).toContainText("Feb 28, 2026");
+    await expect(vaccination).toContainText("Expired as of");
+    await expect(page.getByText(vet, { exact: true })).toBeVisible();
+    await expect(page.getByText(license, { exact: true })).toBeVisible();
+    await expect(page.getByText("Veterinarian signature:", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Blank signature line")).toBeVisible();
+    await page.evaluate(() => { (window as Window & { printed?: boolean }).printed = false; window.print = () => { (window as Window & { printed?: boolean }).printed = true; }; });
+    await page.getByRole("button", { name: "Print / Save as PDF" }).click();
+    expect(await page.evaluate(() => (window as Window & { printed?: boolean }).printed)).toBe(true);
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+      await page.screenshot({ path: testInfo.outputPath(`certificate-screen-${width}.png`), fullPage: true });
+    }
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.emulateMedia({ media: "print" });
+    await expect(page.getByRole("navigation", { name: "Print controls" })).toBeHidden();
+    await page.screenshot({ path: testInfo.outputPath("certificate-print.png"), fullPage: true });
+    for (const format of ["Letter", "A4"] as const) await page.pdf({ path: testInfo.outputPath(`certificate-${format}.pdf`), format, printBackground: true });
+    await page.emulateMedia({ media: "screen" });
+    await page.getByRole("link", { name: "Return to medical record" }).click();
+    await expect(page).toHaveURL(record);
+    expect(await counts(f.animalId)).toEqual(before);
+    const reader = await browser.newContext({ storageState: states.volunteer, timezoneId: "Pacific/Kiritimati" });
+    try {
+      const other = await reader.newPage();
+      await other.goto(route);
+      await expect(other.getByRole("region", { name: "Recorded vaccination" })).toContainText("Feb 28, 2025");
+      await expect(other.getByRole("region", { name: "Recorded vaccination" })).toContainText("Feb 28, 2026");
+      await other.goto(`/medical-outputs/animals/${f.animalId}/rabies/${f.entries[25]}`);
+      await expect(other.getByRole("heading", { name: "Rabies certificate unavailable" })).toBeVisible();
+      await expect(other.getByRole("link", { name: "Correct this vaccination record" })).toHaveCount(0);
+    } finally { await reader.close(); }
+    for (const state of [undefined, states.foster, states.adopter]) {
+      const denied = await browser.newContext(state ? { storageState: state } : {});
+      try {
+        for (const headers of [{}, { RSC: "1" }] as Record<string, string>[]) {
+          const res = await denied.request.get(route, { headers });
+          if (!headers.RSC) expect(res.status()).toBe(404);
+          const text = await res.text();
+          if (headers.RSC) expect(text).toContain("NEXT_HTTP_ERROR_FALLBACK;404");
+          for (const fact of [f.product, f.name, vet, license, f.marker]) expect(text).not.toContain(fact);
+        }
+      } finally { await denied.close(); }
+    }
+    for (const url of [
+      `/medical-outputs/animals/${f.emptyId}/rabies/${selected}`,
+      `/medical-outputs/animals/${f.animalId}/rabies/${id()}`,
+      `/medical-outputs/animals/${f.animalId}/rabies/invalid`,
+      `/medical-outputs/animals/invalid/rabies/${selected}`,
+    ]) expect((await context.request.get(url)).status()).toBe(404);
+    // A subsequent audited correction reaches a fresh certificate request.
+    await row.getByRole("button", { name: /^Actions for/ }).click();
+    await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    await edit.getByLabel("Veterinarian license number").fill("CORRECTED-LICENSE");
+    await edit.getByRole("button", { name: "Save Changes", exact: true }).click();
+    await expect(edit).toBeHidden();
+    await row.getByRole("link", { name: "Print rabies certificate", exact: true }).click();
+    await expect(page.getByText("CORRECTED-LICENSE", { exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Return to medical record" }).click();
+    await row.getByRole("button", { name: /^Actions for/ }).click();
+    await page.getByRole("menuitem", { name: /Void/ }).click();
+    const voidDialog = page.getByRole("alertdialog");
+    await voidDialog.getByLabel("Reason for voiding").fill("Wrong animal");
+    await voidDialog.getByRole("button", { name: "Void Entry", exact: true }).click();
+    await expect(voidDialog).toBeHidden();
+    await page.goto(route);
+    await expect(page.getByRole("heading", { name: "Rabies certificate unavailable" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Print / Save as PDF" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Correct this vaccination record" })).toHaveCount(0);
+    const refused = await context.request.get(route, { headers: { RSC: "1" } });
+    expect(await refused.text()).not.toContain("CORRECTED-LICENSE");
+  } finally { await context.close(); await cleanup(f); }
+});

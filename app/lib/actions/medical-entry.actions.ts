@@ -90,9 +90,10 @@ type EntryResult = FormResult<MedicalEntryFormInput>;
 // from the record. The home page and the readiness board render per request
 // (both read the session, and the board its search params), so neither has a
 // cached copy to refresh.
-const revalidateMedical = (animalId: string) => {
+const revalidateMedical = (animalId: string, entryId?: string) => {
   const animalPath = `/dashboard/animals/${animalId}`;
   revalidatePath(`/medical-outputs/animals/${animalId}/history`);
+  if (entryId) revalidatePath(`/medical-outputs/animals/${animalId}/rabies/${entryId}`);
   revalidatePath(animalPath);
   revalidatePath(`${animalPath}/medical`);
   revalidatePath(`${animalPath}/medical/history`);
@@ -286,7 +287,7 @@ const _recordScheduledMedicalEntry = async (
     return { ok: false, message: "Database Error: Failed to record entry." };
   }
 
-  revalidateMedical(animalId);
+  revalidateMedical(animalId, parsedId.data);
   if (vetReportId) {
     revalidatePath("/dashboard/medical/due");
     revalidatePath(`/dashboard/my-foster-animals/${animalId}`);
@@ -396,7 +397,7 @@ const _editMedicalEntry = async (
     return { ok: false, message: "Database Error: Failed to update entry." };
   }
 
-  revalidateMedical(animalId);
+  revalidateMedical(animalId, parsedId.data);
   return { ok: true, message: "Entry updated." };
 };
 
@@ -431,7 +432,7 @@ const _voidMedicalEntry = async (
     return { ok: false, message: "Database Error: Failed to void entry." };
   }
 
-  revalidateMedical(animalId);
+  revalidateMedical(animalId, parsedId.data);
   return { ok: true, message: "Entry voided." };
 };
 

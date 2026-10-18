@@ -82,6 +82,18 @@ export const alteredAndChipped = (rows: { kind: MedicalEntryKind }[]) => ({
   hasMicrochip: rows.some((row) => row.kind === MedicalEntryKind.MICROCHIP),
 });
 
+/** At most one kind per positive public fact, without clinical fields or identifiers. */
+export const PUBLIC_MEDICAL_FACTS_SELECT = {
+  where: { OR: [ALTERED_ENTRY_WHERE, CURRENT_CHIP_WHERE, RECORDED_VACCINATION_WHERE] },
+  distinct: "kind",
+  select: { kind: true },
+} satisfies Prisma.Animal$medicalEntriesArgs;
+
+export const publicMedicalFacts = (rows: { kind: MedicalEntryKind }[]) => ({
+  ...alteredAndChipped(rows),
+  hasRecordedVaccination: rows.some((row) => row.kind === MedicalEntryKind.VACCINE),
+});
+
 /**
  * The spay and neuter entries that aren't voided, for each of `animalIds`,
  * read in one query. An animal with none has an empty list.

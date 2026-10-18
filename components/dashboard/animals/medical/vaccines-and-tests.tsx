@@ -83,6 +83,7 @@ const VaccinesAndTests = ({
                   today={today}
                   unitSystem={unitSystem}
                   controls={controls}
+                  certificates
                   className="space-y-2"
                 />
               </section>
