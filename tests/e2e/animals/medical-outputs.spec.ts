@@ -302,3 +302,58 @@ test("medical readers print a selected rabies certificate only after its missing
     expect(await refused.text()).not.toContain("CORRECTED-LICENSE");
   } finally { await context.close(); await cleanup(f); }
 });
+
+test("seeded output examples retain unknown facts and show printable care and per-chip registration", async ({ browser }, testInfo) => {
+  test.setTimeout(90_000);
+  const examples = await withDb(async (db) => (await db.query<{
+    animalId: string; entryId: string; name: string; complete: boolean;
+  }>(`SELECT a.id AS "animalId", e.id AS "entryId", a.name,
+      COALESCE(v.lot_number = 'RB-DEMO-104', false) AS complete
+    FROM vaccine_details v JOIN medical_entries e ON e.id = v.entry_id
+    JOIN animals a ON a.id = e.animal_id
+    WHERE v.lot_number = 'RB-DEMO-104' OR v.rabies_tag_number = 'R-LEGACY-105'
+    ORDER BY complete DESC`)).rows);
+  expect(examples).toHaveLength(2);
+  const before = await Promise.all(examples.map((example) => counts(example.animalId)));
+  const context = await browser.newContext({ storageState: states.volunteer });
+  const page = await context.newPage();
+  try {
+    for (const width of [1280, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const example of examples) {
+        const key = example.complete ? "complete" : "legacy";
+        await page.goto(`/medical-outputs/animals/${example.animalId}/history`);
+        await expect(page.getByRole("heading", { name: `Medical history — ${example.name}`, exact: true })).toBeVisible();
+        await expect(page.locator("main")).toContainText(example.name);
+        await expect(page.locator("main")).toContainText("Date unknown");
+        await expect(page.locator("main")).toContainText("Unknown");
+        if (example.complete) {
+          for (const text of ["PetLink", "HomeAgain", "Registered", "Pending", "Seasonal pollen allergy", "Give with food morning and evening.", "Recheck"]) {
+            await expect(page.locator("main")).toContainText(text);
+          }
+          await expect(page.locator("main")).not.toContainText("Registry confirmation retained by staff.");
+        } else {
+          await expect(page.locator("main")).toContainText("Not registered");
+        }
+        await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.screenshot({ path: testInfo.outputPath(`seeded-${key}-history-${width}.png`), fullPage: true });
+        await page.goto(`/medical-outputs/animals/${example.animalId}/rabies/${example.entryId}`);
+        if (example.complete) {
+          await expect(page.getByRole("heading", { name: `Rabies vaccination certificate — ${example.name}`, exact: true })).toBeVisible();
+          await expect(page.locator("main")).toContainText("Dr. Amara Okafor");
+          await expect(page.locator("main")).toContainText("DEMO-1041");
+        } else {
+          await expect(page.getByRole("heading", { name: "Rabies certificate unavailable" })).toBeVisible();
+          await expect(page.locator("main")).toContainText("Record the vaccination date");
+          await expect(page.getByRole("button", { name: "Print / Save as PDF" })).toHaveCount(0);
+        }
+        await page.screenshot({ path: testInfo.outputPath(`seeded-${key}-certificate-${width}.png`), fullPage: true });
+        await page.goto(`/pets/${example.animalId}`);
+        await expect(page.getByText("Vaccinations recorded", { exact: true })).toBeVisible();
+        await expect(page.getByText("Microchipped", { exact: true })).toBeVisible();
+        await expect(page.locator("body")).not.toContainText("977200009020");
+      }
+    }
+    expect(await Promise.all(examples.map((example) => counts(example.animalId)))).toEqual(before);
+  } finally { await context.close(); }
+});

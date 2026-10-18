@@ -48,6 +48,7 @@ import {
   MedicalEntryKind,
   MedicalEntrySource,
   MedicalEntryStatus,
+  MicrochipRegistrationStatus,
   MedicalItemKind,
   MedicalProtocolStepKind,
   MedicalRoute,
@@ -130,6 +131,8 @@ import {
   seedDocumentPathname,
 } from "@/app/lib/storage/medical-document-store";
 import { ALTERED_ENTRY_WHERE } from "@/app/lib/data/animals/medical-status";
+import { PUBLIC_MEDICAL_FACTS_SELECT, publicMedicalFacts } from "@/app/lib/data/animals/medical-status";
+import { findMedicalHistoryOutput, findRabiesCertificateOutput } from "@/app/lib/data/animals/medical-output";
 import { recordOutcome } from "@/app/lib/services/outcome-recording";
 import { correctOutcomeMedical } from "@/app/lib/services/outcome-medical";
 import { recordOutcomeReversal } from "@/app/lib/services/outcome-reversal";
@@ -8641,6 +8644,160 @@ async function assertEndOfLifeConsistency() {
   console.log("Verified end-of-life links, days, provenance, retained documents and reversal symmetry; legacy gaps remain.");
 }
 
+/** Output examples use otherwise unscripted animals and leave their intake facts intact. */
+async function seedMedicalOutputExamples() {
+  const today = shelterToday(seedTimezone);
+  const olivia = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff1@example.com" } } });
+  const benjamin = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff2@example.com" } } });
+  const eligible = {
+    name: { notIn: [...HAND_AUTHORED_ANIMAL_NAMES, "Peanut", "Rango", "Rex", "Bear"] },
+    species: { name: { in: ["Dog", "Cat"] } },
+    listingStatus: AnimalListingStatus.PUBLISHED, archiveReason: null,
+    intake: { some: {}, every: { intakeDate: { lte: shiftDayKey(today, -7) } } },
+    Outcome: { none: {} }, adoptionApplications: { none: {} }, fosterPlacements: { none: {} },
+    medicationOrders: { none: {} }, medicalConditions: { none: {} }, careEpisodes: { none: {} },
+    medicalDocuments: { none: {} }, vetVisitReports: { none: {} },
+    medicalEntries: {
+      some: { kind: MedicalEntryKind.MICROCHIP },
+      every: {
+        kind: { in: [MedicalEntryKind.MICROCHIP, MedicalEntryKind.SURGERY] },
+        status: MedicalEntryStatus.COMPLETED, source: MedicalEntrySource.BEFORE_INTAKE,
+        completedDate: null, voidedAt: null, outcomeId: null, protocolStepId: null,
+      },
+    },
+  } satisfies Prisma.AnimalWhereInput;
+  const subjects = await prisma.animal.findMany({
+    where: eligible, orderBy: [{ name: "asc" }, { id: "asc" }], take: 2,
+  });
+  assert.equal(subjects.length, 2, "seedMedicalOutputExamples: two unscripted animals with intake chip facts are required.");
+  const [complete, legacy] = subjects;
+  const ids = subjects.map((animal) => animal.id);
+  assert.equal(await prisma.animal.count({ where: { ...eligible, id: { in: ids } } }), 2);
+  const originalFacts = await prisma.medicalEntry.findMany({
+    where: { animalId: { in: ids } }, orderBy: { id: "asc" },
+    include: { microchip: true, surgery: true, events: { orderBy: { id: "asc" } } },
+  });
+  const rabies = await prisma.medicalItem.findFirstOrThrow({ where: { name: "Rabies 1-year", retiredAt: null } });
+  const dewormer = await prisma.medicalItem.findFirstOrThrow({ where: { name: "Pyrantel pamoate", retiredAt: null } });
+  const medicine = await prisma.medicalItem.findFirstOrThrow({ where: { name: "Amoxicillin-clavulanate", retiredAt: null } });
+  const day = shiftDayKey(today, -2);
+  const record = (animalId: string, input: MedicalEntryInput) => prisma.$transaction((tx) =>
+    recordMedicalEntry(tx, { ...input, animalId }, olivia.id, today));
+  const { entryId: certificateId } = await record(complete.id, {
+    kind: MedicalEntryKind.VACCINE, itemId: rabies.id, completedDate: day,
+    source: MedicalEntrySource.IN_HOUSE, durationMonths: 12,
+    manufacturer: "Boehringer Ingelheim", lotNumber: "RB-DEMO-104",
+    lotExpiryDate: shiftDayKey(today, 180), route: MedicalRoute.SUBCUTANEOUS,
+    site: "Right hind leg", rabiesTagNumber: "R-DEMO-104",
+    veterinarianName: "Dr. Amara Okafor", veterinarianLicenseNumber: "DEMO-1040",
+  });
+  await prisma.$transaction((tx) => editMedicalEntry(tx, certificateId, {
+    kind: MedicalEntryKind.VACCINE, itemId: rabies.id, completedDate: day,
+    source: MedicalEntrySource.IN_HOUSE,
+    veterinarianLicenseNumber: "DEMO-1041",
+  }, benjamin.id, today));
+  const { entryId: legacyId } = await record(legacy.id, {
+    kind: MedicalEntryKind.VACCINE, itemId: rabies.id, completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE, durationMonths: 12,
+    rabiesTagNumber: "R-LEGACY-105",
+  });
+
+  // Existing scanned chips retain UNKNOWN; these separate numbers show the other states.
+  const { entryId: registeredId } = await record(complete.id, {
+    kind: MedicalEntryKind.MICROCHIP, chipNumber: "977200009020001",
+    completedDate: day, source: MedicalEntrySource.IN_HOUSE, brand: "Datamars",
+    registrationStatus: MicrochipRegistrationStatus.PENDING, registryName: "PetLink",
+  });
+  await prisma.$transaction((tx) => editMedicalEntry(tx, registeredId, {
+    kind: MedicalEntryKind.MICROCHIP, chipNumber: "977200009020001",
+    completedDate: day, source: MedicalEntrySource.IN_HOUSE,
+    registrationStatus: MicrochipRegistrationStatus.REGISTERED, registryName: "PetLink",
+    registrationDate: shiftDayKey(today, -1), registrationNotes: "Registry confirmation retained by staff.",
+  }, benjamin.id, today));
+  await record(complete.id, {
+    kind: MedicalEntryKind.MICROCHIP, chipNumber: "977200009020002",
+    completedDate: null, source: MedicalEntrySource.BEFORE_INTAKE, brand: "HomeAgain",
+    registrationStatus: MicrochipRegistrationStatus.PENDING, registryName: "HomeAgain",
+  });
+  await record(legacy.id, {
+    kind: MedicalEntryKind.MICROCHIP, chipNumber: "977200009020003",
+    completedDate: null, source: MedicalEntrySource.BEFORE_INTAKE,
+    registrationStatus: MicrochipRegistrationStatus.NOT_REGISTERED,
+  });
+  await record(complete.id, {
+    kind: MedicalEntryKind.TREATMENT, itemId: dewormer.id, completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE, doseAmount: 2,
+    notes: "Historical paperwork reviewed by staff; treatment day was not supplied.",
+  });
+  await prisma.$transaction(async (tx) => {
+    await addMedicalCondition(tx, { animalId: complete.id,
+      type: MedicalConditionType.ALLERGY, name: "Seasonal pollen allergy",
+      status: MedicalConditionStatus.CHRONIC, onsetDate: day,
+    }, olivia.id, today);
+    await openCareEpisode(tx, { animalId: complete.id,
+      type: CareEpisodeType.UNDER_VET_CARE, startDate: day, reason: "Skin irritation follow-up",
+    }, olivia.id, today);
+    await createMedicationOrder(tx, {
+      animalId: complete.id, itemId: medicine.id, doseAmount: 1, doseUnit: DoseUnit.TABLET,
+      route: MedicalRoute.ORAL, frequency: MedicationFrequency.BID, firstSlot: DoseSlot.AM,
+      startDate: today, endDate: shiftDayKey(today, 6),
+      instructions: "Give with food morning and evening. Finish the recorded course.",
+    }, olivia.id, today);
+    await scheduleMedicalEntry(tx, {
+      animalId: complete.id, kind: MedicalEntryKind.EXAM,
+      examType: ExamType.RECHECK, dueDate: shiftDayKey(today, 7),
+    }, olivia.id, today);
+  });
+
+  assert.deepEqual(await prisma.animal.findMany({ where: { id: { in: ids } }, orderBy: [{ name: "asc" }, { id: "asc" }] }), subjects);
+  assert.deepEqual(await prisma.medicalEntry.findMany({
+    where: { id: { in: originalFacts.map((entry) => entry.id) } }, orderBy: { id: "asc" },
+    include: { microchip: true, surgery: true, events: { orderBy: { id: "asc" } } },
+  }), originalFacts, "seedMedicalOutputExamples: original intake facts and audit must remain unchanged.");
+  const clock = { today, now: new Date() };
+  const certificate = await findRabiesCertificateOutput(prisma, complete.id, certificateId, clock);
+  assert(certificate.available);
+  assert.equal(certificate.output.certificate.veterinarianLicenseNumber, "DEMO-1041");
+  const unavailable = await findRabiesCertificateOutput(prisma, legacy.id, legacyId, clock);
+  assert(!unavailable.available);
+  assert.equal(unavailable.reason, "DAY_UNKNOWN");
+  const legacyVaccine = await prisma.vaccineDetails.findUniqueOrThrow({ where: { entryId: legacyId } });
+  assert.equal(legacyVaccine.validUntilDate, null);
+  assert.equal(legacyVaccine.veterinarianName, null);
+  assert.equal(legacyVaccine.veterinarianLicenseNumber, null);
+  for (const [entryId, field, before, after] of [
+    [certificateId, "veterinarianLicenseNumber", "DEMO-1040", "DEMO-1041"],
+    [registeredId, "registrationStatus", "PENDING", "REGISTERED"],
+  ]) {
+    const events = await prisma.medicalEntryEvent.findMany({ where: { entryId } });
+    assert.equal(events.length, 2);
+    const correction = events.find((event) => event.action === "EDITED");
+    assert(correction);
+    assert.equal(correction.actorId, benjamin.id);
+    assert.equal((correction.before as Record<string, unknown>)[field], before);
+    assert.equal((correction.after as Record<string, unknown>)[field], after);
+  }
+  const histories = [];
+  for (const subject of subjects) {
+    const history = await findMedicalHistoryOutput(prisma, subject.id, clock);
+    assert(history);
+    histories.push(history);
+    const facts = await prisma.animal.findUniqueOrThrow({ where: { id: subject.id }, select: { medicalEntries: PUBLIC_MEDICAL_FACTS_SELECT } });
+    assert.equal(publicMedicalFacts(facts.medicalEntries).hasRecordedVaccination, true);
+    assert.equal(publicMedicalFacts(facts.medicalEntries).hasMicrochip, true);
+  }
+  assert.deepEqual([...new Set(histories.flatMap((history) => history.summary.chips.map((chip) => chip.registrationStatus)))].sort(), Object.values(MicrochipRegistrationStatus).sort());
+  const history = histories[0];
+  assert(history.completedCare.some((entry) => entry.completedDate === null));
+  assert.equal(history.conditions.length, 1);
+  assert.equal(history.careEpisodes.length, 1);
+  assert.equal(history.medications.length, 1);
+  assert.equal(history.plannedCare.length, 1);
+  assert(!JSON.stringify(histories).includes("Registry confirmation retained by staff."));
+  await assertEndOfLifeConsistency();
+  console.log(`Seeded output examples: ${complete.name} (printable rabies, corrected credentials, history/current/planned care), ${legacy.name} (unknown-day rabies); all four chip registration states, original intake facts and earlier clinical examples preserved.`);
+}
+
 export async function main() {
   const restoreRandom = installDeterministicRandom();
   // Drain any leftover deal queues so a second main() in the same process
@@ -8712,6 +8869,7 @@ async function seedAll() {
   await seedMedicalDocuments();
   await seedFosterMedical();
   await seedEndOfLife();
+  await seedMedicalOutputExamples();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }
