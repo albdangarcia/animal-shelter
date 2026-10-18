@@ -209,6 +209,7 @@ const MedicalOverview = ({ animalId, overview, todaysDoses, unitSystem, controls
     <Card className="@container/card">
       <CardHeader>
         <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
+        <a className="text-sm underline" href={`/medical-outputs/animals/${animalId}/history`}>Print adopter medical history</a>
         <CardDescription>
           Vaccines, tests, treatments, surgeries, microchips and exams: what
           is due, and what this animal has been given, and today&apos;s

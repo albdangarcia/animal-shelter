@@ -34,6 +34,7 @@ const kindOptions = [
 ];
 
 interface Props {
+  animalId: string;
   animalName: string;
   /** Entries, problem-list rows and care episodes, newest first. */
   items: MedicalHistoryItem[];
@@ -46,6 +47,7 @@ interface Props {
 }
 
 const MedicalHistory = ({
+  animalId,
   animalName,
   items,
   totalPages,
@@ -58,6 +60,7 @@ const MedicalHistory = ({
     <Card className="@container/card">
       <CardHeader>
         <CardTitle className="@[650px]/card:text-xl">History</CardTitle>
+        <a className="text-sm underline" href={`/medical-outputs/animals/${animalId}/history`}>Print adopter medical history</a>
         <CardDescription>
           Every entry, condition, care episode and medication order, newest
           first by the day given or due, the onset or the start, so care

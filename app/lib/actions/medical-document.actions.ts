@@ -41,6 +41,7 @@ import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 // page it was called from only for a path it revalidates.
 const revalidateDocuments = (animalId: string) => {
   const animalPath = `/dashboard/animals/${animalId}`;
+  revalidatePath(`/medical-outputs/animals/${animalId}/history`);
   revalidatePath(animalPath);
   revalidatePath(`${animalPath}/medical`);
   revalidatePath(`${animalPath}/medical/documents`);

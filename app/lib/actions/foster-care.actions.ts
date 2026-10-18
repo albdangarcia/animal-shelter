@@ -29,6 +29,7 @@ const refused = <T>(error: unknown): FormResult<T> | null => {
 
 const revalidateFosterCare = (animalId: string, treatment = false) => {
   const path = `/dashboard/animals/${animalId}`;
+  revalidatePath(`/medical-outputs/animals/${animalId}/history`);
   revalidatePath(path);
   revalidatePath(`${path}/medical`);
   revalidatePath(`${path}/medical/history`);

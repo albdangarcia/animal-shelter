@@ -42,6 +42,7 @@ type EpisodeResult = FormResult<CareEpisodeFormInput>;
 // copy to refresh.
 const revalidateCareEpisodes = (animalId: string) => {
   const animalPath = `/dashboard/animals/${animalId}`;
+  revalidatePath(`/medical-outputs/animals/${animalId}/history`);
   revalidatePath(animalPath);
   revalidatePath(`${animalPath}/medical`);
   revalidatePath(`${animalPath}/medical/conditions`);

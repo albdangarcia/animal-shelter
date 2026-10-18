@@ -14,6 +14,7 @@ import { fieldErrorsByPath } from "../utils/form-result-utils";
 import type { FormResult, FieldErrors } from "../action-result";
 
 function revalidateReports(animalId: string) {
+  revalidatePath(`/medical-outputs/animals/${animalId}/history`);
   revalidatePath(`/dashboard/animals/${animalId}/medical`);
   revalidatePath(`/dashboard/animals/${animalId}/medical/documents`);
   revalidatePath("/dashboard/medical/due");

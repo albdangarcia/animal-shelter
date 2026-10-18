@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import prisma from "@/app/lib/prisma";
 import { getCachedSession } from "@/app/lib/auth/session";
@@ -93,8 +94,8 @@ const refused = (error: unknown) => {
  * the file is stored and the row written; if the row is refused, the file is
  * removed again.
  *
- * Answers JSON shaped as a form result. The pages showing documents render
- * per request, so nothing is revalidated: the form refreshes the page.
+ * Answers JSON shaped as a form result. The form refreshes its document list;
+ * invalidate the handout too for subsequent navigation.
  */
 export async function POST(request: Request) {
   const declared = request.headers.get("content-length");
@@ -194,6 +195,7 @@ export async function POST(request: Request) {
           ),
         ),
     );
+    revalidatePath(`/medical-outputs/animals/${values.animalId}/history`);
     return answer({ ok: true, message: "Document uploaded.", data: { documentId } }, 201);
   } catch (error) {
     const refusal = refused(error);

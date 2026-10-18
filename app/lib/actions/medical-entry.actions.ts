@@ -92,6 +92,7 @@ type EntryResult = FormResult<MedicalEntryFormInput>;
 // cached copy to refresh.
 const revalidateMedical = (animalId: string) => {
   const animalPath = `/dashboard/animals/${animalId}`;
+  revalidatePath(`/medical-outputs/animals/${animalId}/history`);
   revalidatePath(animalPath);
   revalidatePath(`${animalPath}/medical`);
   revalidatePath(`${animalPath}/medical/history`);

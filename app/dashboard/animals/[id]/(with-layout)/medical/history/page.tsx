@@ -38,6 +38,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
 
   return (
     <MedicalHistory
+      animalId={animalId}
       animalName={animalName}
       items={items}
       totalPages={totalPages}
