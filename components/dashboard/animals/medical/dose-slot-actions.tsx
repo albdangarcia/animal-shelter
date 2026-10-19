@@ -241,7 +241,7 @@ function DoseForm({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
         <fieldset disabled={isPending} className="m-0 min-w-0 space-y-6 border-0 p-0">
           {details && (
             <FormField

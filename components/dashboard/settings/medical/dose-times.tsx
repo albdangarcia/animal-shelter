@@ -53,7 +53,7 @@ export default function DoseTimes({ ends }: Props) {
             onOpenChange={(next) => !formRef.current?.isPending() && guardedOnOpenChange(next)}
           >
             <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
+              <Button size="sm">
                 <Pencil className="size-4 mr-2" />
                 Edit dose times
               </Button>

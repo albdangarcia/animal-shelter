@@ -27,7 +27,8 @@ const sections = [
 ];
 
 // Compare positions within each card: record counts legitimately change the
-// position of subsequent cards, but their own headers must remain stable.
+// position of subsequent cards. Headers stay stable except when the unavailable
+// care-episode action row collapses after loading.
 const geometry = (card: Locator) => card.evaluate((element) => {
   const origin = element.getBoundingClientRect();
   return [
@@ -42,7 +43,7 @@ const geometry = (card: Locator) => card.evaluate((element) => {
 
 for (const role of ["staff", "volunteer"] as const) {
   for (const width of [1280, 390, 320]) {
-    test(`${role}: all medical headers stay in place after loading at ${width}px`, async ({ browser }, testInfo) => {
+    test(`${role}: medical headers keep their layout and unavailable care actions collapse at ${width}px`, async ({ browser }, testInfo) => {
       test.setTimeout(120_000);
       const context = await browser.newContext({ storageState: states[role], viewport: { width, height: 900 } });
       const db = new pg.Client({ connectionString: E2E_DATABASE_URL });
@@ -91,6 +92,14 @@ for (const role of ["staff", "volunteer"] as const) {
             await expect(cards[0]).toBeVisible();
             await expect(cards[0].locator('[data-slot="skeleton"]')).not.toHaveCount(0);
             const loading = await Promise.all(cards.map(geometry));
+            const careActionHeight = section.suffix === "/conditions"
+              ? await cards[1].locator('[data-slot="card-header"]').evaluate((header) => {
+                  const row = header.lastElementChild!;
+                  return row.getBoundingClientRect().height
+                    + parseFloat(getComputedStyle(row).marginTop)
+                    + parseFloat(getComputedStyle(header).rowGap);
+                })
+              : 0;
             const observed = await page.evaluate(() =>
               (window as Window & { medicalLoadingAudit?: { snapshots: string[][] } }).medicalLoadingAudit?.snapshots ?? []);
             expect(observed.length, `${section.label}: observed loading headers`).toBeGreaterThan(0);
@@ -102,6 +111,12 @@ for (const role of ["staff", "volunteer"] as const) {
             await expect(cards[0].locator('[data-slot="skeleton"]')).toHaveCount(0);
             const loaded = await Promise.all(cards.map(geometry));
             for (let card = 0; card < cards.length; card++) {
+              if (section.titles[card] === "Care episodes"
+                && await cards[card].getByRole("button", { name: "Open care episode", exact: true }).count() === 0) {
+                await expect(cards[card].locator('[data-slot="card-header"] > *')).toHaveCount(2);
+                loading[card][0].height -= careActionHeight;
+                loading[card][3].y -= careActionHeight;
+              }
               for (let element = 0; element < loading[card].length; element++) {
                 for (const axis of ["x", "y", "width", "height"] as const) {
                   expect(Math.abs(loaded[card][element][axis] - loading[card][element][axis]), `${section.titles[card]}, element ${element}, ${axis}`).toBeLessThanOrEqual(1);

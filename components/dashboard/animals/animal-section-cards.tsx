@@ -245,7 +245,7 @@ const AnimalSectionCards = async ({ params }: Props) => {
                   <div className="rounded-md p-2.5">
                     <p className="text-xs text-muted-foreground mb-0.5">Size</p>
                     <p className="font-semibold">
-                      {formatAnimalSize(animal.size)}
+                      {formatAnimalSize(animal.size) ?? "Not specified"}
                     </p>
                   </div>
                 </div>

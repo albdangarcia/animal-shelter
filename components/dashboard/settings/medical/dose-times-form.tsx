@@ -75,7 +75,7 @@ export function DoseTimesForm({ ends, onFormSubmit, ref }: Props) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-6">
         {/* Nothing changes while a save is out: the dialog closes when it
             succeeds, so an edit made meanwhile would be lost unsaved. */}
         <fieldset disabled={isPending} className="m-0 min-w-0 border-0 p-0">

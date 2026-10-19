@@ -87,9 +87,10 @@ export function MedicalRecordHeader({ section, action, headingId, loading = fals
   loading?: boolean;
 }) {
   const definition = headers[section];
-  // Keep the sizing layer even after loading. An outlined/disabled action can
-  // be slightly wider than its filled version, and permissions may hide it.
-  const actions = definition.actions ? (
+  // Keep the sizing layer for visible actions and loading placeholders. Care
+  // episodes need no action row once opening another episode is unavailable.
+  const hideCareEpisodeAction = section === "care-episodes" && !loading && !action;
+  const actions = hideCareEpisodeAction ? null : definition.actions ? (
     <div className={definition.actionsBelow ? "grid min-w-0 w-full" : "grid min-w-0"}>
       <div className="col-start-1 row-start-1">
         <ActionSpace actions={definition.actions} loading={loading} />
