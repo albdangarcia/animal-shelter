@@ -1,11 +1,5 @@
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { MedicalRecordHeader } from "./medical-record-header";
+import { Card, CardContent } from "@/components/ui/card";
 import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalEntryDisplay } from "@/app/lib/data/animals/medical-entry.data";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
@@ -47,21 +41,12 @@ const VaccinesAndTests = ({
 
   return (
     <Card className="@container/card">
-      <CardHeader>
-        <CardTitle className="@[650px]/card:text-xl">Vaccines & Tests</CardTitle>
-        <CardDescription>
-          Each vaccine with its doses, latest first, and every test with its
-          results. Voided entries are only in History.
-        </CardDescription>
-        {controls?.canManage && (
-          <CardAction>
-            <AddMedicalEntryMenu
-              animalId={controls.animalId}
-              options={controls.options}
-            />
-          </CardAction>
-        )}
-      </CardHeader>
+      <MedicalRecordHeader
+        section="vaccines-tests"
+        action={controls?.canManage ? (
+          <AddMedicalEntryMenu animalId={controls.animalId} options={controls.options} />
+        ) : undefined}
+      />
       <CardContent className="space-y-6">
         <section aria-labelledby="vaccines-heading" className="space-y-3">
           <h3 id="vaccines-heading" className="font-medium">

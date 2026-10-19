@@ -1,10 +1,5 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { MedicalRecordHeader } from "./medical-record-header";
+import { Card, CardContent } from "@/components/ui/card";
 import type { ConditionsPage } from "@/app/lib/data/animals/medical-condition.data";
 import type { MedicalControls } from "@/app/lib/data/medical-catalog.data";
 import { isOpenEpisode } from "@/app/lib/utils/problem-list";
@@ -32,30 +27,13 @@ const MedicalConditions = ({ page, controls }: Props) => {
   return (
     <div className="flex flex-col gap-4">
       <Card className="@container/card">
-        <CardHeader>
-          <CardTitle className="@[650px]/card:text-xl">
-            {/* Takes focus when a row's menu goes, after a void. */}
-            <h2 id={PROBLEM_LIST_HEADING_ID} tabIndex={-1}>
-              Problem list
-            </h2>
-          </CardTitle>
-          <CardDescription>
-            Allergies, then the conditions the animal lives with, then those
-            resolved. Voided rows stay here, struck through, with who voided
-            them and why.
-          </CardDescription>
-          {/* On a row of their own: beside the description, two buttons
-              squeeze it into a column on a phone. */}
-          {controls && choices && (
-            <div className="mt-2">
-              <AddConditionButtons
-                animalId={controls.animalId}
-                choices={choices}
-                today={controls.options.today}
-              />
-            </div>
-          )}
-        </CardHeader>
+        <MedicalRecordHeader
+          section="conditions"
+          headingId={PROBLEM_LIST_HEADING_ID}
+          action={controls && choices ? (
+            <AddConditionButtons animalId={controls.animalId} choices={choices} today={controls.options.today} />
+          ) : undefined}
+        />
         <CardContent>
           {conditions.length > 0 ? (
             <ConditionList
@@ -73,27 +51,13 @@ const MedicalConditions = ({ page, controls }: Props) => {
       </Card>
 
       <Card className="@container/card">
-        <CardHeader>
-          <CardTitle className="@[650px]/card:text-xl">
-            {/* Takes focus when a row's control goes, after a close or a void. */}
-            <h2 id={CARE_EPISODES_HEADING_ID} tabIndex={-1}>
-              Care episodes
-            </h2>
-          </CardTitle>
-          <CardDescription>
-            When the animal was under vet care or hospitalised, here or at a
-            clinic. The open episode comes first.
-          </CardDescription>
-          {controls && choices && !hasOpenEpisode && (
-            <div className="mt-2">
-              <OpenCareEpisodeButton
-                animalId={controls.animalId}
-                vetClinics={choices.vetClinics}
-                today={controls.options.today}
-              />
-            </div>
-          )}
-        </CardHeader>
+        <MedicalRecordHeader
+          section="care-episodes"
+          headingId={CARE_EPISODES_HEADING_ID}
+          action={controls && choices && !hasOpenEpisode ? (
+            <OpenCareEpisodeButton animalId={controls.animalId} vetClinics={choices.vetClinics} today={controls.options.today} />
+          ) : undefined}
+        />
         <CardContent>
           {episodes.length > 0 ? (
             <CareEpisodeList

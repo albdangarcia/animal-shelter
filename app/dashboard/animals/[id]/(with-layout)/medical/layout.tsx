@@ -24,8 +24,9 @@ const Layout = async ({ children, params }: Props) => {
 
   return (
     <div className="flex flex-col gap-4">
-      <nav aria-label="Medical sections" className="overflow-x-auto">
+      <nav aria-label="Medical sections" className="min-w-0">
         <LinkTabs
+          scrollable
           links={sections.map((section) => ({
             href: `${base}${section.suffix}`,
             label: section.label,

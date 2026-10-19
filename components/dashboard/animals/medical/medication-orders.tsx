@@ -1,11 +1,5 @@
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { MedicalRecordHeader } from "./medical-record-header";
+import { Card, CardContent } from "@/components/ui/card";
 import { DOSE_SHEET_PAST_DAYS, DOSE_SLOT_LABELS } from "@/app/lib/constants/medical";
 import type {
   MedicationOrderFormOptions,
@@ -122,28 +116,13 @@ const MedicationOrders = ({ page, controls }: Props) => {
   return (
     <div className="flex flex-col gap-4">
       <Card className="@container/card">
-        <CardHeader>
-          <CardTitle className="@[650px]/card:text-xl">
-            {/* Takes focus when an order's menu goes, after a discontinue
-                or a void moves it to the past orders. */}
-            <h2 id={CURRENT_MEDICATIONS_HEADING_ID} tabIndex={-1}>
-              Current orders
-            </h2>
-          </CardTitle>
-          <CardDescription>
-            Medications being given or about to start, with today&apos;s doses.
-            A dose not recorded by the end of its slot reads Missed.
-          </CardDescription>
-          {orderOptions?.inCare && animalId && (
-            <CardAction>
-              <OrderMedicationButton
-                animalId={animalId}
-                options={orderOptions}
-                fallbackId={CURRENT_MEDICATIONS_HEADING_ID}
-              />
-            </CardAction>
-          )}
-        </CardHeader>
+        <MedicalRecordHeader
+          section="current-orders"
+          headingId={CURRENT_MEDICATIONS_HEADING_ID}
+          action={orderOptions?.inCare && animalId ? (
+            <OrderMedicationButton animalId={animalId} options={orderOptions} fallbackId={CURRENT_MEDICATIONS_HEADING_ID} />
+          ) : undefined}
+        />
         <CardContent>
           {page.current.length > 0 ? (
             <ul className="space-y-3">
@@ -158,15 +137,7 @@ const MedicationOrders = ({ page, controls }: Props) => {
       </Card>
 
       <Card className="@container/card">
-        <CardHeader>
-          <CardTitle className="@[650px]/card:text-xl">
-            <h2>Dose sheet</h2>
-          </CardTitle>
-          <CardDescription>
-            The {DOSE_SHEET_PAST_DAYS} days before today, newest first: each
-            slot&apos;s dose, or Missed. A missed dose can still be given late.
-          </CardDescription>
-        </CardHeader>
+        <MedicalRecordHeader section="dose-sheet" />
         <CardContent>
           {page.sheet.length > 0 ? (
             <div className="space-y-6">
@@ -192,17 +163,7 @@ const MedicationOrders = ({ page, controls }: Props) => {
       </Card>
 
       <Card className="@container/card">
-        <CardHeader>
-          <CardTitle className="@[650px]/card:text-xl">
-            <h2 id={PAST_MEDICATIONS_HEADING_ID} tabIndex={-1}>
-              Past orders
-            </h2>
-          </CardTitle>
-          <CardDescription>
-            Orders that ended, were discontinued or voided, latest first. Voided
-            ones stay here, struck through, with who voided them and why.
-          </CardDescription>
-        </CardHeader>
+        <MedicalRecordHeader section="past-orders" headingId={PAST_MEDICATIONS_HEADING_ID} />
         <CardContent>
           {page.past.length > 0 ? (
             <ul className="space-y-3">

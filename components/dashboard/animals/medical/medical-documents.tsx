@@ -1,19 +1,10 @@
+import { MedicalRecordHeader } from "./medical-record-header";
+import { DocumentTypeFilter } from "./document-type-filter";
 import { clsx } from "clsx";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { TimeAgo } from "@/components/common/time-ago";
-import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
-import {
-  MedicalDocumentEventAction,
-  MedicalDocumentType,
-} from "@/prisma/generated/enums";
+import { MedicalDocumentEventAction } from "@/prisma/generated/enums";
 import { MEDICAL_DOCUMENT_TYPE_LABELS } from "@/app/lib/constants/medical";
 import type {
   AnimalDocuments,
@@ -33,11 +24,6 @@ import {
   MedicalDocumentActions,
   UploadDocumentButton,
 } from "./medical-document-actions";
-
-const typeOptions = Object.values(MedicalDocumentType).map((value) => ({
-  value,
-  label: MEDICAL_DOCUMENT_TYPE_LABELS[value],
-}));
 
 // What each later event reads as, before its actor.
 const EVENT_VERB = {
@@ -210,29 +196,13 @@ const MedicalDocuments = ({ animalId, page, choices, canRemoveFile }: Props) => 
 
   return (
     <Card className="@container/card">
-      <CardHeader>
-        <CardTitle className="@[650px]/card:text-xl">
-          {/* Takes focus when a row's control goes, after a void or a file
-              removed. */}
-          <h2 id={DOCUMENTS_HEADING_ID} tabIndex={-1}>
-            Documents
-          </h2>
-        </CardTitle>
-        <CardDescription>
-          Lab results, vet records, imaging, prescriptions and consent forms,
-          newest upload first. Each opens in a new tab. Voided ones stay here,
-          struck through, with who voided them and why.
-        </CardDescription>
-        {choices && (
-          <CardAction>
-            <UploadDocumentButton animalId={animalId} choices={choices} />
-          </CardAction>
-        )}
-        <div className="mt-4 flex flex-row flex-wrap items-center gap-3">
-          <ServerSideFacetedFilter title="Type" paramKey="type" options={typeOptions} />
-        </div>
-      </CardHeader>
-      <CardContent>
+      <MedicalRecordHeader
+        section="documents"
+        headingId={DOCUMENTS_HEADING_ID}
+        action={choices ? <UploadDocumentButton animalId={animalId} choices={choices} /> : undefined}
+      />
+      <CardContent className="space-y-6">
+        <DocumentTypeFilter />
         {documents.length > 0 ? (
           <ul className="space-y-3">
             {documents.map((document) => (

@@ -1,15 +1,13 @@
+import { MedicalRecordHeader } from "./medical-record-header";
 import { MICROCHIP_REGISTRATION_LABELS } from "@/app/lib/utils/microchip-registration";
 import { vetReportHref } from "@/app/lib/utils/vet-visit-report";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Printer } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
   Card,
-  CardAction,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import type { MedicalOverview as MedicalOverviewData } from "@/app/lib/data/animals/medical-entry.data";
 import type { RabiesStatus } from "@/app/lib/utils/medical-days";
@@ -207,25 +205,24 @@ const MedicalOverview = ({ animalId, overview, todaysDoses, unitSystem, controls
 
   return (
     <Card className="@container/card">
-      <CardHeader>
-        <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
-        <a className="text-sm underline" href={`/medical-outputs/animals/${animalId}/history`}>Print adopter medical history</a>
-        <CardDescription>
-          Vaccines, tests, treatments, surgeries, microchips and exams: what
-          is due, and what this animal has been given, and today&apos;s
-          medication doses. Its orders are on Medications, its conditions and
-          care episodes on Conditions.
-        </CardDescription>
-        {controls?.canManage && (
-          <CardAction>
-            <AddMedicalEntryMenu
-              animalId={controls.animalId}
-              options={controls.options}
-            />
-          </CardAction>
-        )}
-      </CardHeader>
+      <MedicalRecordHeader
+        section="overview"
+        action={controls?.canManage ? (
+          <AddMedicalEntryMenu
+            animalId={controls.animalId}
+            options={controls.options}
+          />
+        ) : undefined}
+      />
       <CardContent className="space-y-6">
+        <div className="flex flex-wrap items-center">
+          <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+            <a href={`/medical-outputs/animals/${animalId}/history`}>
+              <Printer aria-hidden="true" />
+              Print adopter medical history
+            </a>
+          </Button>
+        </div>
         {overview.waitingReports.length > 0 && <section aria-label="Foster reports waiting for review" className="rounded-lg border p-4">
         <ul className="space-y-2">{overview.waitingReports.map((report) => <li key={report.id}><Link href={vetReportHref(animalId, report.id)} className="text-sm font-medium underline">Foster report waiting for review: visit on {formatShelterDayOrNA(report.visitDate)}</Link></li>)}</ul>
       </section>}

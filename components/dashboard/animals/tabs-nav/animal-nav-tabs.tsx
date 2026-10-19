@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { Menu } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 
 // Define the tabs with their unique suffix and label.
 // The default tab ('Activity') has an empty suffix to match the base route.
@@ -41,34 +41,37 @@ export function AnimalNavTabs() {
     href: `${basePath}${tab.suffix}`,
     label: tab.label,
   }));
+  const activeLink = dynamicLinks
+    .filter((link) => pathname === link.href || pathname.startsWith(`${link.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0];
 
   return (
     <div className="@container/tabs">
       <DropdownMenu>
-        <DropdownMenuTrigger asChild className="w-32 @[700px]/tabs:hidden">
-          <Button variant="outline">
-            <Menu className="mr-2 h-4 w-4" />
-            Navigation
+        <DropdownMenuTrigger asChild className="@[700px]/tabs:hidden">
+          <Button variant="outline" aria-label={`Animal sections: ${activeLink?.label ?? "Activity"}`}>
+            {activeLink?.label ?? "Activity"}
+            <ChevronDown aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56" align="start">
           <DropdownMenuGroup>
             {dynamicLinks.map((link) => {
-              const isActive =
-                link.href === basePath
-                  ? pathname === link.href
-                  : pathname.startsWith(link.href);
+              const isActive = link.href === activeLink?.href;
               return (
-                <Link key={link.href} href={link.href} passHref>
-                  <DropdownMenuItem
-                    className={cn(
-                      "cursor-pointer",
-                      isActive ? "bg-accent font-semibold" : ""
-                    )}
-                  >
+                <DropdownMenuItem
+                  key={link.href}
+                  asChild
+                  className={cn(
+                    "cursor-pointer",
+                    isActive ? "bg-accent font-semibold" : ""
+                  )}
+                >
+                  <Link href={link.href} aria-current={isActive ? "page" : undefined}>
                     {link.label}
-                  </DropdownMenuItem>
-                </Link>
+                    {isActive && <Check className="ml-auto size-4" aria-hidden="true" />}
+                  </Link>
+                </DropdownMenuItem>
               );
             })}
           </DropdownMenuGroup>

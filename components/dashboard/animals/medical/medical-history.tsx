@@ -1,13 +1,12 @@
+import { MedicalRecordHeader } from "./medical-record-header";
 import {
   Card,
-  CardAction,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { SimplePagination } from "@/components/simple-pagination";
+import { Button } from "@/components/ui/button";
+import { Printer } from "lucide-react";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { MedicalEntryKind } from "@/prisma/generated/enums";
 import type { MedicalHistoryItem } from "@/app/lib/data/animals/medical-entry.data";
@@ -58,32 +57,34 @@ const MedicalHistory = ({
 }: Props) => {
   return (
     <Card className="@container/card">
-      <CardHeader>
-        <CardTitle className="@[650px]/card:text-xl">History</CardTitle>
-        <a className="text-sm underline" href={`/medical-outputs/animals/${animalId}/history`}>Print adopter medical history</a>
-        <CardDescription>
-          Every entry, condition, care episode and medication order, newest
-          first by the day given or due, the onset or the start, so care
-          still to come is at the top. Voided ones stay here, struck through,
-          with who voided them and why. Doses are on Medications.
-        </CardDescription>
-        {controls?.canManage && (
-          <CardAction>
-            <AddMedicalEntryMenu
-              animalId={controls.animalId}
-              options={controls.options}
-            />
-          </CardAction>
-        )}
-        <div className="mt-4 flex flex-row flex-wrap items-center gap-3">
+      <MedicalRecordHeader
+        section="history"
+        action={controls?.canManage ? (
+          <AddMedicalEntryMenu
+            animalId={controls.animalId}
+            options={controls.options}
+          />
+        ) : undefined}
+      />
+      <CardContent className="space-y-6">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
           <ServerSideFacetedFilter
             title="Kind"
             paramKey="kind"
             options={kindOptions}
           />
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+          >
+            <a href={`/medical-outputs/animals/${animalId}/history`}>
+              <Printer aria-hidden="true" />
+              Print adopter medical history
+            </a>
+          </Button>
         </div>
-      </CardHeader>
-      <CardContent>
         {items.length > 0 ? (
           <ul className="space-y-3">
             {items.map((item) => {

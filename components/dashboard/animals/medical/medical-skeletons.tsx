@@ -1,12 +1,24 @@
+import { DocumentTypeFilter } from "./document-type-filter";
+import { VitalsToolbar } from "../vitals/vitals-toolbar";
+import { PlusCircle, Printer } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { MedicalRecordHeader } from "./medical-record-header";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+
+// Use the real button geometry so the toolbar wraps at the same width while loading.
+const PrintHistorySkeleton = () => (
+  <Skeleton className="flex shrink-0">
+    <Button variant="ghost" size="sm" className="invisible" disabled>
+      <Printer />
+      Print adopter medical history
+    </Button>
+  </Skeleton>
+);
 
 // The loading states of the Medical pages, shaped like the pages.
 
@@ -31,16 +43,11 @@ export const EntryRowsSkeleton = ({ rows = 3 }: { rows?: number }) => (
 
 export const MedicalOverviewSkeleton = () => (
   <Card className="@container/card">
-    <CardHeader>
-      <CardTitle className="@[650px]/card:text-xl">Medical</CardTitle>
-      <CardDescription>
-        Vaccines, tests, treatments, surgeries, microchips and exams: what
-        is due, and what this animal has been given, and today&apos;s
-        medication doses. Its orders are on Medications, its conditions and
-        care episodes on Conditions.
-      </CardDescription>
-    </CardHeader>
+    <MedicalRecordHeader section="overview" loading />
     <CardContent className="space-y-6">
+      <div className="flex flex-wrap items-center">
+        <PrintHistorySkeleton />
+      </div>
       <div className="grid grid-cols-1 gap-4 rounded-lg border p-4 sm:grid-cols-2">
         {/* Rabies, spay/neuter, microchip, last exam and current weight. */}
         {[0, 1, 2, 3, 4].map((cell) => (
@@ -63,19 +70,17 @@ export const MedicalOverviewSkeleton = () => (
 
 export const MedicalHistorySkeleton = () => (
   <Card className="@container/card">
-    <CardHeader>
-      <CardTitle className="@[650px]/card:text-xl">History</CardTitle>
-      <CardDescription>
-        Every entry, condition, care episode and medication order, newest
-        first by the day given or due, the onset or the start, so care still
-        to come is at the top. Voided ones stay here, struck through, with who
-        voided them and why. Doses are on Medications.
-      </CardDescription>
-      <div className="mt-4">
-        <Skeleton className="h-8 w-24" />
+    <MedicalRecordHeader section="history" loading />
+    <CardContent className="space-y-6">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        <Skeleton className="flex shrink-0">
+          <Button variant="outline" size="sm" className="invisible" disabled>
+            <PlusCircle className="mr-2 size-4" />
+            Kind
+          </Button>
+        </Skeleton>
+        <PrintHistorySkeleton />
       </div>
-    </CardHeader>
-    <CardContent>
       <EntryRowsSkeleton rows={4} />
     </CardContent>
     <CardFooter>
@@ -86,13 +91,7 @@ export const MedicalHistorySkeleton = () => (
 
 export const VaccinesAndTestsSkeleton = () => (
   <Card className="@container/card">
-    <CardHeader>
-      <CardTitle className="@[650px]/card:text-xl">Vaccines & Tests</CardTitle>
-      <CardDescription>
-        Each vaccine with its doses, latest first, and every test with its
-        results. Voided entries are only in History.
-      </CardDescription>
-    </CardHeader>
+    <MedicalRecordHeader section="vaccines-tests" loading />
     <CardContent className="space-y-6">
       {["Vaccines", "Tests"].map((heading) => (
         <div key={heading} className="space-y-3">
@@ -107,26 +106,13 @@ export const VaccinesAndTestsSkeleton = () => (
 export const MedicalConditionsSkeleton = () => (
   <div className="flex flex-col gap-4">
     <Card className="@container/card">
-      <CardHeader>
-        <CardTitle className="@[650px]/card:text-xl">Problem list</CardTitle>
-        <CardDescription>
-          Allergies, then the conditions the animal lives with, then those
-          resolved. Voided rows stay here, struck through, with who voided
-          them and why.
-        </CardDescription>
-      </CardHeader>
+      <MedicalRecordHeader section="conditions" loading />
       <CardContent>
         <EntryRowsSkeleton rows={2} />
       </CardContent>
     </Card>
     <Card className="@container/card">
-      <CardHeader>
-        <CardTitle className="@[650px]/card:text-xl">Care episodes</CardTitle>
-        <CardDescription>
-          When the animal was under vet care or hospitalised, here or at a
-          clinic. The open episode comes first.
-        </CardDescription>
-      </CardHeader>
+      <MedicalRecordHeader section="care-episodes" loading />
       <CardContent>
         <EntryRowsSkeleton rows={1} />
       </CardContent>
@@ -137,21 +123,13 @@ export const MedicalConditionsSkeleton = () => (
 export const MedicationsSkeleton = () => (
   <div className="flex flex-col gap-4">
     <Card className="@container/card">
-      <CardHeader>
-        <CardTitle className="@[650px]/card:text-xl">Current orders</CardTitle>
-        <CardDescription>
-          Medications being given or about to start, with today&apos;s doses.
-          A dose not recorded by the end of its slot reads Missed.
-        </CardDescription>
-      </CardHeader>
+      <MedicalRecordHeader section="current-orders" loading />
       <CardContent>
         <EntryRowsSkeleton rows={1} />
       </CardContent>
     </Card>
     <Card className="@container/card">
-      <CardHeader>
-        <CardTitle className="@[650px]/card:text-xl">Dose sheet</CardTitle>
-      </CardHeader>
+      <MedicalRecordHeader section="dose-sheet" loading />
       <CardContent className="space-y-2">
         {[0, 1, 2].map((row) => (
           <div key={row} className="grid grid-cols-3 gap-2">
@@ -163,9 +141,7 @@ export const MedicationsSkeleton = () => (
       </CardContent>
     </Card>
     <Card className="@container/card">
-      <CardHeader>
-        <CardTitle className="@[650px]/card:text-xl">Past orders</CardTitle>
-      </CardHeader>
+      <MedicalRecordHeader section="past-orders" loading />
       <CardContent>
         <EntryRowsSkeleton rows={1} />
       </CardContent>
@@ -175,17 +151,21 @@ export const MedicationsSkeleton = () => (
 
 export const MedicalDocumentsSkeleton = () => (
   <Card className="@container/card">
-    <CardHeader>
-      <CardTitle className="@[650px]/card:text-xl">Documents</CardTitle>
-      <CardDescription>
-        Lab results, vet records, imaging, prescriptions and consent forms,
-        newest upload first. Each opens in a new tab. Voided ones stay here,
-        struck through, with who voided them and why.
-      </CardDescription>
-      <Skeleton className="mt-4 h-8 w-20" />
-    </CardHeader>
-    <CardContent>
+    <MedicalRecordHeader section="documents" loading />
+    <CardContent className="space-y-6">
+      <DocumentTypeFilter />
       <EntryRowsSkeleton rows={2} />
     </CardContent>
+  </Card>
+);
+
+export const MedicalVitalsSkeleton = () => (
+  <Card className="@container/card">
+    <MedicalRecordHeader section="vitals" loading />
+    <CardContent className="space-y-6">
+      <VitalsToolbar />
+      <EntryRowsSkeleton rows={4} />
+    </CardContent>
+    <CardFooter><Skeleton className="h-8 w-64" /></CardFooter>
   </Card>
 );
