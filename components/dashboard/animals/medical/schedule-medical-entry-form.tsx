@@ -43,7 +43,8 @@ import {
   MEDICAL_ENTRY_KIND_LABELS,
   SURGERY_PROCEDURE_LABELS,
 } from "@/app/lib/constants/medical";
-import { proceduresFor } from "@/app/lib/utils/spay-neuter";
+import { surgeryProcedureChoices } from "@/app/lib/utils/spay-neuter";
+import { SpayNeuterHeldNote } from "./spay-neuter-held-note";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { dueDateIssue, latestDueDate } from "@/app/lib/utils/medical-days";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
@@ -94,6 +95,13 @@ export function ScheduleMedicalEntryForm({
   const [isPending, startSubmitTransition] = useTransition();
   const { today } = options;
   const latest = latestDueDate(today);
+  // A spay or neuter only as the animal's sex allows, and not when one is
+  // given or scheduled already.
+  const { procedures, heldBy } = surgeryProcedureChoices(
+    options.sex,
+    options.spayNeuter,
+    { scheduling: true },
+  );
   const form = useForm<ScheduleFormState>({
     // The schema turns the state into what the action takes: a kind, and the
     // day as a calendar day.
@@ -103,12 +111,10 @@ export function ScheduleMedicalEntryForm({
     defaultValues: {
       kind: initial?.kind ?? "",
       itemId: "",
-      // Scheduling checks the sex rule, so a procedure the animal's sex no
-      // longer allows (it was corrected since) isn't filled in.
+      // Scheduling checks the sex rule and the one already held, so a
+      // procedure they no longer allow isn't filled in.
       procedure:
-        initial && proceduresFor(options.sex).includes(initial.procedure)
-          ? initial.procedure
-          : "",
+        initial && procedures.includes(initial.procedure) ? initial.procedure : "",
       examType: "",
       dueDate: null,
       notes: "",
@@ -116,8 +122,6 @@ export function ScheduleMedicalEntryForm({
   });
   const kind = useWatch({ control: form.control, name: "kind" });
   const items = options.items.filter((item) => item.kind === kind);
-  // A spay or neuter only as the animal's sex allows.
-  const procedures = proceduresFor(options.sex);
 
   const initialValuesRef = useRef(form.getValues());
   useImperativeHandle(
@@ -165,7 +169,7 @@ export function ScheduleMedicalEntryForm({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2">
           <FormField
             control={form.control}
             name="kind"
@@ -224,6 +228,9 @@ export function ScheduleMedicalEntryForm({
                       ))}
                     </SelectContent>
                   </Select>
+                  {heldBy && (
+                    <SpayNeuterHeldNote animalId={animalId} heldBy={heldBy} />
+                  )}
                   <FormMessage />
                 </FormItem>
               )}

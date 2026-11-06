@@ -14,8 +14,8 @@ import {
 } from "./medical-catalog";
 import type { CalendarDay } from "../utils/shelter-day";
 import type { WeightUnitSystem } from "../utils/shelter-settings";
-import { spayNeuterStatus } from "../utils/spay-neuter";
-import { findSpayNeuterEntries } from "./animals/medical-status";
+import type { SpayNeuterOnRecord } from "../utils/spay-neuter";
+import { findSpayNeuterOnRecord } from "./animals/medical-status";
 import {
   fetchConditionFormChoices,
   type ConditionFormChoices,
@@ -90,6 +90,11 @@ export interface MedicalEntryFormOptions {
    * exempt, so no exemption is offered.
    */
   altered: boolean;
+  /**
+   * The spay or neuter given and the one scheduled, if any: the surgery forms
+   * don't offer another, and say which entry holds the place.
+   */
+  spayNeuter: SpayNeuterOnRecord;
   /** Active vet clinics. */
   vetClinics: { id: string; name: string }[];
   /** The shelter's today: the date given starts there, and can't pass it. */
@@ -119,7 +124,7 @@ const _fetchMedicalEntryFormOptions = async (
         findMedicalEntryFormItems(prisma, animal),
         findActiveVetClinics(prisma),
         getShelterToday(),
-        findSpayNeuterEntries(prisma, [animal.id]),
+        findSpayNeuterOnRecord(prisma, animal.id),
         getShelterSettings(),
       ]);
     return {
@@ -127,9 +132,10 @@ const _fetchMedicalEntryFormOptions = async (
       scheduledItems,
       inCare: animal.listingStatus !== AnimalListingStatus.ARCHIVED,
       sex: animal.sex,
-      altered:
-        spayNeuterStatus(spayNeuter.get(animal.id) ?? [], today).status ===
-        "ALTERED",
+      // Altered exactly when a spay or neuter is given: it beats an
+      // exemption or an exam's finding.
+      altered: spayNeuter.given !== null,
+      spayNeuter,
       vetClinics,
       today,
       weightUnitSystem: settings.weightUnitSystem,

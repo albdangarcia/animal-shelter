@@ -345,6 +345,7 @@ test("a spay is refused for a male and a neuter for a female; an animal of unkno
   const male = await makeAnimal("Male", Sex.MALE);
   const female = await makeAnimal("Female", Sex.FEMALE);
   const unknown = await makeAnimal("Unknown sex", Sex.UNKNOWN);
+  const alsoUnknown = await makeAnimal("Also unknown sex", Sex.UNKNOWN);
 
   await refusedOn(record(male, surgery()), "procedure", /spay is for a female/);
   await refusedOn(schedule(male, SurgeryProcedure.SPAY), "procedure", /spay is for a female/);
@@ -357,11 +358,13 @@ test("a spay is refused for a male and a neuter for a female; an animal of unkno
 
   // Other procedures suit either sex.
   await record(male, surgery({ procedure: SurgeryProcedure.DENTAL }));
+  // One each: a second spay or neuter is refused whatever the sex.
   await record(unknown, surgery({ procedure: SurgeryProcedure.SPAY }));
-  await record(unknown, surgery({ procedure: SurgeryProcedure.NEUTER }));
+  await record(alsoUnknown, surgery({ procedure: SurgeryProcedure.NEUTER }));
   assert.equal(await prisma.medicalEntry.count({ where: { animalId: male } }), 1);
   assert.equal(await prisma.medicalEntry.count({ where: { animalId: female } }), 0);
-  assert.equal(await prisma.medicalEntry.count({ where: { animalId: unknown } }), 2);
+  assert.equal(await prisma.medicalEntry.count({ where: { animalId: unknown } }), 1);
+  assert.equal(await prisma.medicalEntry.count({ where: { animalId: alsoUnknown } }), 1);
 });
 
 test("a correction can change the procedure, under the sex rule, and keeps what it leaves out", async () => {

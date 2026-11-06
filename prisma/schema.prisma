@@ -1302,6 +1302,13 @@ model MedicalEntry {
   updatedAt DateTime @updatedAt @map(name: "updated_at")
 
   @@unique([chipNumber], where: { voidedAt: null })
+  // One spay or neuter given per animal, and one scheduled. The entry service
+  // refuses a second with its reason; these catch a writer that skips it.
+  // Written as Postgres stores the predicate (casts, = ANY): Prisma compares
+  // this text with the stored one, and any other spelling reads as a change,
+  // so `migrate diff` would drop and recreate the index every time.
+  @@unique([animalId], map: "medical_entries_one_spay_neuter_given", where: raw("(kind = 'SURGERY'::\"MedicalEntryKind\") AND (procedure = ANY (ARRAY['SPAY'::\"SurgeryProcedure\", 'NEUTER'::\"SurgeryProcedure\"])) AND (status = 'COMPLETED'::\"MedicalEntryStatus\") AND (voided_at IS NULL)"))
+  @@unique([animalId], map: "medical_entries_one_spay_neuter_scheduled", where: raw("(kind = 'SURGERY'::\"MedicalEntryKind\") AND (procedure = ANY (ARRAY['SPAY'::\"SurgeryProcedure\", 'NEUTER'::\"SurgeryProcedure\"])) AND (status = 'SCHEDULED'::\"MedicalEntryStatus\") AND (voided_at IS NULL)"))
   @@index([animalId, kind])
   @@index([animalId, procedure])
   @@index([itemId])

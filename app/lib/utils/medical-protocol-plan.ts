@@ -352,23 +352,30 @@ export const planProtocol = (
   const steps = [...protocol.steps].sort((a, b) => a.sortOrder - b.sortOrder);
   const planned: (PlannedProtocolEntry & { order: number })[] = [];
   const skipped: SkippedProtocolStep[] = [];
+  // A spay or neuter this plan schedules is scheduled for the steps after it:
+  // the entry service allows one open at a time, so a second spay/neuter step
+  // is left out rather than refused, which would undo the whole intake.
+  let open = facts;
 
   steps.forEach((step, order) => {
     const skip = (reason: ProtocolSkipReason) =>
       skipped.push({ stepId: step.id, label: protocolStepLabel(step), reason });
 
-    const care = stepCare(step, facts);
+    const care = stepCare(step, open);
     if ("reason" in care) {
       skip(care.reason);
       return;
     }
-    const days = planStepDays(step, facts, today);
+    const days = planStepDays(step, open, today);
     if ("reason" in days) {
       skip(days.reason);
       return;
     }
     for (const dueDate of days.days) {
       planned.push({ stepId: step.id, care: care.care, dueDate, notes: step.notes, order });
+    }
+    if (step.kind === MedicalProtocolStepKind.SPAY_NEUTER) {
+      open = { ...open, openScheduled: { ...open.openScheduled, spayNeuter: true } };
     }
   });
 

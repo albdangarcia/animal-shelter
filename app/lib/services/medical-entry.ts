@@ -39,10 +39,16 @@ import {
 } from "@/app/lib/services/vitals";
 import { lockMedicalItemForUse } from "@/app/lib/services/medical-catalog";
 import { findOpenScheduledItemIds } from "@/app/lib/data/animals/medical-entry";
-import { findSpayNeuterEntries } from "@/app/lib/data/animals/medical-status";
 import {
+  findSpayNeuterEntries,
+  findSpayNeuterOnRecord,
+} from "@/app/lib/data/animals/medical-status";
+import {
+  ALTERED_WORDS,
+  isSpayOrNeuter,
   procedureSexIssue,
   spayNeuterStatus,
+  voidAppointmentInstead,
 } from "@/app/lib/utils/spay-neuter";
 import {
   MEDICAL_REASON_MAX_LENGTH,
@@ -934,6 +940,9 @@ export async function scheduleMedicalEntry(
     );
   }
   const item = await checkCare(tx, input, animal);
+  if (input.kind === MedicalEntryKind.SURGERY) {
+    await refuseSecondSpayNeuter(tx, animalId, input.procedure, "schedule");
+  }
   checkDueDate(input.dueDate, today);
 
   // What is planned: the item, the surgery's procedure, or a microchip.
@@ -1057,6 +1066,13 @@ export async function rescheduleMedicalEntry(
   today: CalendarDay,
 ): Promise<{ entryId: string; animalId: string }> {
   const entry = await lockScheduledEntry(tx, entryId, "rescheduled");
+  await refuseSecondSpayNeuter(
+    tx,
+    entry.animalId,
+    entry.procedure,
+    "move",
+    entry.procedure,
+  );
   if (dueDate === entry.dueDate) {
     throw new MedicalEntryRefusal(
       "That is already its due date. Pick another day.",
@@ -1100,8 +1116,6 @@ export interface DeclineAsExemption extends SpayNeuterExemptionTerms {
   today: CalendarDay;
 }
 
-const isSpayOrNeuter = (procedure: SurgeryProcedure | null | undefined) =>
-  procedure === SurgeryProcedure.SPAY || procedure === SurgeryProcedure.NEUTER;
 
 /**
  * The values an exemption stores, after its rules: a reason from the list,
@@ -1158,6 +1172,58 @@ const refuseExemptionWhenAltered = async (
 };
 
 /**
+ * Refuses a spay or neuter for an animal that already has one: a spay or
+ * neuter given, from any source and on any day (one done before intake on a
+ * day nobody knows counts), and, when one is being scheduled, another one
+ * scheduled. A spay and a neuter are the same surgery here. `doing` says what
+ * is being written:
+ *
+ * - `record`: a spay or neuter recorded as given, or an entry corrected into
+ *   one. An open appointment doesn't stop it.
+ * - `schedule`: a new appointment.
+ * - `move`: the appointment for `planned` rescheduled or recorded as given. A
+ *   spay or neuter appointment is voided instead once the surgery is on the
+ *   record.
+ *
+ * Call it behind the animal's lock; the partial unique indexes on
+ * `MedicalEntry` back it.
+ */
+const refuseSecondSpayNeuter = async (
+  tx: TransactionClient,
+  animalId: string,
+  procedure: SurgeryProcedure | null | undefined,
+  doing: "record" | "schedule" | "move",
+  planned?: SurgeryProcedure | null,
+) => {
+  if (!isSpayOrNeuter(procedure)) return;
+  const { given, scheduled } = await findSpayNeuterOnRecord(tx, animalId);
+  if (given) {
+    const already = `This animal is already ${ALTERED_WORDS[given.procedure]} on its record`;
+    if (doing === "schedule") {
+      throw new MedicalEntryRefusal(
+        `${already}, so no spay or neuter can be scheduled.`,
+        "procedure",
+      );
+    }
+    if (doing === "move" && isSpayOrNeuter(planned)) {
+      throw new MedicalEntryRefusal(
+        `${already}. ${voidAppointmentInstead(planned!)}`,
+      );
+    }
+    throw new MedicalEntryRefusal(
+      `${already}, so another spay or neuter can't be recorded. Correct that entry, or record a follow-up surgery as Other.`,
+      "procedure",
+    );
+  }
+  if (doing === "schedule" && scheduled) {
+    throw new MedicalEntryRefusal(
+      `A ${SURGERY_PROCEDURE_LABELS[scheduled.procedure].toLowerCase()} is already scheduled for this animal, due ${dayText(scheduled.day)}. Reschedule that one instead.`,
+      "procedure",
+    );
+  }
+};
+
+/**
  * Declines scheduled care, with the reason it won't be given. The entry stays
  * on the record as declined, and is final: one declined in error is voided
  * and scheduled again.
@@ -1196,7 +1262,7 @@ export async function declineMedicalEntry(
       tx,
       entry.animalId,
       exemption.today,
-      ` Void this scheduled ${SURGERY_PROCEDURE_LABELS[entry.procedure!].toLowerCase()} instead.`,
+      ` ${voidAppointmentInstead(entry.procedure!)}`,
     );
     declined = values;
     summary = `${entry.subject} due ${dayText(entry.dueDate)} was declined as an exemption: ${exemptionText(values)}`;
@@ -1644,6 +1710,9 @@ async function writeRecordedEntry(
   const provenance = await reportEntryData(tx, animalId, input.source, options.vetReportId);
   const animal = await readAnimal(tx, animalId);
   const item = await checkCare(tx, input, animal);
+  if (input.kind === MedicalEntryKind.SURGERY) {
+    await refuseSecondSpayNeuter(tx, animalId, input.procedure, "record");
+  }
   const values = await givenValues(
     tx,
     input,
@@ -1792,6 +1861,11 @@ export async function recordScheduledMedicalEntry(
   const provenance = await reportEntryData(tx, animalId, input.source, options.vetReportId);
   const animal = await readAnimal(tx, animalId);
   const item = await checkCare(tx, input, animal, entry);
+  // Even when the procedure planned is the one given: the surgery may have
+  // been recorded since it was scheduled.
+  if (input.kind === MedicalEntryKind.SURGERY) {
+    await refuseSecondSpayNeuter(tx, animalId, input.procedure, "move", entry.procedure);
+  }
   const values = await givenValues(tx, input, item, animal, actorId, today);
   await checkRecordExtras(tx, input, animalId, animal, today);
   await checkChipNumberFree(tx, values.chipNumber, animalId, entryId);
@@ -1968,6 +2042,11 @@ export async function editMedicalEntry(
   }
   const animal = await readAnimal(tx, animalId);
   const item = await checkCare(tx, input, animal, before);
+  // Only a correction into a spay or neuter can add one: a spay corrected to
+  // the neuter it was is still the one surgery.
+  if (input.kind === MedicalEntryKind.SURGERY && !isSpayOrNeuter(before.procedure)) {
+    await refuseSecondSpayNeuter(tx, animalId, input.procedure, "record");
+  }
   // What the entry is held to: see `valuesFor`.
   const terms = {
     ...(!item || item.id !== before.itemId

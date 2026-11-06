@@ -46,7 +46,8 @@ import {
   SURGERY_EVIDENCE_LABELS,
   SURGERY_PROCEDURE_LABELS,
 } from "@/app/lib/constants/medical";
-import { proceduresFor } from "@/app/lib/utils/spay-neuter";
+import { surgeryProcedureChoices } from "@/app/lib/utils/spay-neuter";
+import { SpayNeuterHeldNote } from "./spay-neuter-held-note";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import type { FieldErrors } from "@/app/lib/action-result";
 import {
@@ -134,11 +135,16 @@ export function SurgeryEntryForm({
   const [isPending, startSubmitTransition] = useTransition();
   const vetClinics = vetClinicChoices(options.vetClinics, entry);
   const own = entry?.procedure ?? scheduled?.procedure ?? null;
-  // A spay or neuter only as the animal's sex allows. The procedure already
-  // on the entry stays on offer: the animal's sex may have been corrected
-  // since, and the entry is only checked again if its procedure changes.
-  const procedures = proceduresFor(options.sex);
-  if (own && !procedures.includes(own)) procedures.unshift(own);
+  // A spay or neuter only as the animal's sex allows, and not when one is on
+  // its record already, unless it is the entry corrected here. The procedure
+  // already on the entry stays on offer otherwise: the animal's sex may have
+  // been corrected since, and the entry is only checked again if its
+  // procedure changes.
+  const { procedures, heldBy } = surgeryProcedureChoices(
+    options.sex,
+    options.spayNeuter,
+    { entryId: entry?.id, own },
+  );
 
   const form = useForm<SurgeryFormState>({
     // The schema reads the state as a surgery and drops `dateUnknown`, so
@@ -150,7 +156,10 @@ export function SurgeryEntryForm({
       ? fromEntry(entry)
       : {
           ...blank(options.today),
-          procedure: scheduled?.procedure ?? "",
+          procedure:
+            scheduled?.procedure && procedures.includes(scheduled.procedure)
+              ? scheduled.procedure
+              : "",
           notes: scheduled?.notes ?? "",
           ...reportCareDefaults(report),
         },
@@ -227,6 +236,13 @@ export function SurgeryEntryForm({
                     ))}
                   </SelectContent>
                 </Select>
+                {heldBy && (
+                  <SpayNeuterHeldNote
+                    animalId={animalId}
+                    heldBy={heldBy}
+                    planned={scheduled?.procedure}
+                  />
+                )}
                 <FormMessage />
               </FormItem>
             )}

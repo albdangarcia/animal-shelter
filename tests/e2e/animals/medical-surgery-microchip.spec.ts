@@ -323,6 +323,39 @@ test.describe("as staff", () => {
     await expect(surgery).toBeHidden();
     await expect(spayNeuter).toHaveText(`Altered (spay, ${printedDay(today)})`);
 
+    // Altered now, so neither form offers another spay or neuter: each says
+    // which entry holds the place and links to her surgeries. Other surgery
+    // is still on offer. Closing either writes nothing.
+    const held = `Already spayed on its record (${printedDay(today)}), so spay and neuter aren't offered.`;
+    const surgeries = `${overview}/history?kind=SURGERY`;
+    const offersNoSpay = async (form: Locator) => {
+      await form.getByRole("combobox", { name: /^Procedure/ }).click();
+      await expect(page.getByRole("option", { name: "Other" })).toBeVisible();
+      await expect(page.getByRole("option", { name: "Spay", exact: true })).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("option", { name: "Other" })).toBeHidden();
+    };
+    await pickFromMenu(page, page.getByRole("button", { name: "Add entry" }), "Surgery");
+    await offersNoSpay(surgery);
+    await expect(surgery.getByText(held)).toBeVisible();
+    await expect(
+      surgery.getByRole("link", { name: "See its surgeries" }),
+    ).toHaveAttribute("href", surgeries);
+    await surgery.getByRole("button", { name: "Cancel" }).click();
+    await expect(surgery).toBeHidden();
+
+    await pickFromMenu(page, page.getByRole("button", { name: "Add entry" }), /Schedule/);
+    await chooseOption(page, schedule.getByRole("combobox", { name: /^Kind/ }), "Surgery");
+    await offersNoSpay(schedule);
+    await expect(schedule.getByText(held)).toBeVisible();
+    const discardSchedule = page.getByRole("alertdialog", { name: "Discard unsaved entry?" });
+    await expect(async () => {
+      if (!(await discardSchedule.isVisible())) await schedule.getByRole("button", { name: "Cancel" }).click();
+      await expect(discardSchedule).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
+    await discardSchedule.getByRole("button", { name: "Discard" }).click();
+    await expect(schedule).toBeHidden();
+
     // Void it: the exemption holds again.
     const given = page
       .getByRole("region", { name: "Recent entries" })

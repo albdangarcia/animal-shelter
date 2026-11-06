@@ -12,8 +12,11 @@ import {
   openExemptionReview,
   procedureSexIssue,
   proceduresFor,
+  spayNeuterHeldText,
   spayNeuterStatus,
+  surgeryProcedureChoices,
   type SpayNeuterEntry,
+  type SpayNeuterOnRecord,
 } from "./spay-neuter";
 
 const TODAY = calendarDay("2026-10-12");
@@ -210,4 +213,70 @@ test("a spay is for a female and a neuter for a male; unknown sex can have eithe
   assert.deepEqual(proceduresFor(Sex.FEMALE), [SurgeryProcedure.SPAY, ...others]);
   assert.deepEqual(proceduresFor(Sex.MALE), [SurgeryProcedure.NEUTER, ...others]);
   assert.deepEqual(proceduresFor(Sex.UNKNOWN), Object.values(SurgeryProcedure));
+});
+
+const NOTHING_HELD: SpayNeuterOnRecord = { given: null, scheduled: null };
+const SPAYED: SpayNeuterOnRecord = {
+  given: { entryId: "spay", procedure: SurgeryProcedure.SPAY, day: null },
+  scheduled: null,
+};
+const BOOKED: SpayNeuterOnRecord = {
+  given: null,
+  scheduled: {
+    entryId: "booked",
+    procedure: SurgeryProcedure.NEUTER,
+    day: calendarDay("2026-10-14"),
+  },
+};
+const WITHOUT_SPAY_NEUTER = Object.values(SurgeryProcedure).filter(
+  (procedure) =>
+    procedure !== SurgeryProcedure.SPAY && procedure !== SurgeryProcedure.NEUTER,
+);
+
+test("a surgery picker offers spay and neuter only while none is on the record", () => {
+  assert.deepEqual(surgeryProcedureChoices(Sex.UNKNOWN, NOTHING_HELD), {
+    procedures: Object.values(SurgeryProcedure),
+    heldBy: null,
+  });
+  // One given, even on a day nobody knows, takes both off.
+  assert.deepEqual(surgeryProcedureChoices(Sex.UNKNOWN, SPAYED), {
+    procedures: WITHOUT_SPAY_NEUTER,
+    heldBy: { ...SPAYED.given, status: "given" },
+  });
+  // Correcting that entry itself keeps them, under the sex rule.
+  assert.deepEqual(
+    surgeryProcedureChoices(Sex.FEMALE, SPAYED, { entryId: "spay", own: SurgeryProcedure.SPAY }),
+    { procedures: proceduresFor(Sex.FEMALE), heldBy: null },
+  );
+  // A stale appointment's own spay isn't kept on offer.
+  assert.deepEqual(
+    surgeryProcedureChoices(Sex.FEMALE, SPAYED, { own: SurgeryProcedure.SPAY }).procedures,
+    WITHOUT_SPAY_NEUTER,
+  );
+});
+
+test("one scheduled holds the place only when scheduling", () => {
+  assert.deepEqual(surgeryProcedureChoices(Sex.MALE, BOOKED).heldBy, null);
+  assert.deepEqual(surgeryProcedureChoices(Sex.MALE, BOOKED, { scheduling: true }), {
+    procedures: WITHOUT_SPAY_NEUTER,
+    heldBy: { ...BOOKED.scheduled, status: "scheduled" },
+  });
+});
+
+test("the note says what holds the place, and what to do instead", () => {
+  assert.equal(
+    spayNeuterHeldText({ ...SPAYED.given!, status: "given" }),
+    "Already spayed on its record (date unknown), so spay and neuter aren't offered. Correct that entry, or record a follow-up surgery as Other.",
+  );
+  assert.equal(
+    spayNeuterHeldText(
+      { ...SPAYED.given!, day: calendarDay("2026-10-03"), status: "given" },
+      SurgeryProcedure.SPAY,
+    ),
+    "Already spayed on its record (Oct 3, 2026). Void this scheduled spay instead.",
+  );
+  assert.equal(
+    spayNeuterHeldText({ ...BOOKED.scheduled!, status: "scheduled" }),
+    "A neuter is already scheduled for Oct 14, 2026, so spay and neuter aren't offered. Reschedule that one instead.",
+  );
 });

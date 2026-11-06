@@ -19,6 +19,8 @@ import {
   openExemptionReview,
   spayNeuterStatus,
   type SpayNeuterEntry,
+  type SpayNeuterHeld,
+  type SpayNeuterOnRecord,
   type SpayNeuterStatus,
 } from "@/app/lib/utils/spay-neuter";
 import {
@@ -130,6 +132,46 @@ export const findSpayNeuterEntries = async (
     byAnimal.get(animalId)?.push({ ...entry, procedure: procedure! });
   }
   return byAnimal;
+};
+
+/**
+ * The spay or neuter on the animal's record that another one would repeat:
+ * the one given and the one scheduled, neither voided. The entry service
+ * refuses a second of either, reading this behind the animal's lock; the
+ * entry forms read it to leave spay and neuter off their pickers.
+ */
+export const findSpayNeuterOnRecord = async (
+  db: Db,
+  animalId: string,
+): Promise<SpayNeuterOnRecord> => {
+  const rows = await db.medicalEntry.findMany({
+    where: {
+      animalId,
+      kind: MedicalEntryKind.SURGERY,
+      procedure: { in: SPAY_NEUTER },
+      status: { in: [MedicalEntryStatus.COMPLETED, MedicalEntryStatus.SCHEDULED] },
+      voidedAt: null,
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, status: true, procedure: true, completedDate: true, dueDate: true },
+  });
+  const held = (status: MedicalEntryStatus): SpayNeuterHeld | null => {
+    const row = rows.find((entry) => entry.status === status);
+    return row
+      ? {
+          entryId: row.id,
+          // The query reads only spays and neuters.
+          procedure: row.procedure!,
+          day: parseCalendarDay(
+            status === MedicalEntryStatus.COMPLETED ? row.completedDate : row.dueDate,
+          ),
+        }
+      : null;
+  };
+  return {
+    given: held(MedicalEntryStatus.COMPLETED),
+    scheduled: held(MedicalEntryStatus.SCHEDULED),
+  };
 };
 
 export interface CurrentChip {

@@ -337,6 +337,27 @@ test("planProtocol: spay/neuter is skipped for an unknown sex and for an animal 
   ]);
 });
 
+test("planProtocol: a second spay/neuter step is skipped as already scheduled by the first", () => {
+  const first = spayNeuter({ offsetDays: 0 });
+  const second = spayNeuter({ offsetDays: 7 });
+  const result = plan([first, second]);
+  assert.deepEqual(
+    result.entries.map((entry) => [entry.stepId, entry.dueDate]),
+    [[first.id, TODAY]],
+  );
+  assert.deepEqual(result.skipped, [
+    { stepId: second.id, label: "spay/neuter", reason: "ALREADY_SCHEDULED" },
+  ]);
+  // One the first step couldn't plan, past the scheduling ceiling, doesn't
+  // hold the place.
+  const tooLate = spayNeuter({ offsetDays: 365 * 50 });
+  const next = spayNeuter({ offsetDays: 7 });
+  assert.deepEqual(
+    plan([tooLate, next]).entries.map((entry) => entry.stepId),
+    [next.id],
+  );
+});
+
 test("planProtocol: spay/neuter is skipped while an exemption holds, and altered is named first", () => {
   const exempt = spayNeuter();
   assert.deepEqual(plan([exempt], facts({ exempt: true })).skipped, [
@@ -469,7 +490,6 @@ test("planProtocol: entries by due day, then step order; skips in step order; no
     [
       ["2026-10-14", "EXAM", "Weigh on arrival."],
       ["2026-10-14", "VACCINE", null],
-      ["2026-10-14", "SURGERY", null],
       ["2026-10-21", "SURGERY", "Fasted from midnight."],
       ["2026-10-28", "VACCINE", null],
     ],
@@ -479,6 +499,9 @@ test("planProtocol: entries by due day, then step order; skips in step order; no
     [
       ["Bordetella", "ITEM_RETIRED"],
       ["microchip", "ALREADY_CHIPPED"],
+      // The first spay/neuter step by order holds the place, though the
+      // second would be due sooner.
+      ["spay/neuter", "ALREADY_SCHEDULED"],
     ],
   );
   assert.deepEqual(result.protocol, { id: "puppy", name: "Puppy" });
