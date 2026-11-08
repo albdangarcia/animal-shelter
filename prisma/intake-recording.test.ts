@@ -480,7 +480,8 @@ test("a re-intake applies the animal's protocol, logged after the intake", async
   assert.deepEqual(
     await prisma.medicalEntry.findMany({
       where: { animalId },
-      orderBy: { createdAt: "asc" },
+      // Both rows share one createdAt (the clock is frozen), so order by the step.
+      orderBy: { protocolStep: { sortOrder: "asc" } },
       select: { kind: true, status: true, dueDate: true, protocolStepId: true },
     }),
     [
