@@ -1,13 +1,13 @@
 import type prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import type { TransactionClient } from "@/app/lib/prisma";
-import { calendarDay, parseCalendarDay, type CalendarDay } from "../../utils/shelter-day";
-import { medicalOutputProvenance, rabiesCertificateEligibility, type CompletedMedicalOutput, type MedicalHistoryOutput, type MedicalOutputAnimal, type RabiesCertificateEligibility, type RabiesCertificateOutput } from "../../utils/medical-output";
+import { calendarDay, parseCalendarDay, type ShelterNow } from "../../utils/shelter-day";
+import { medicalOutputExamLabel, medicalOutputProvenance, rabiesCertificateEligibility, type CompletedMedicalOutput, type MedicalHistoryOutput, type MedicalOutputAnimal, type RabiesCertificateEligibility, type RabiesCertificateOutput } from "../../utils/medical-output";
 import { spayNeuterStatus, openExemptionReview } from "../../utils/spay-neuter";
 import { latestReproductiveFinding } from "../../utils/exams";
 import { rabiesStatus } from "../../utils/medical-days";
 import { orderState, slotOrderOf } from "../../utils/medication-slots";
-import { EXAM_TYPE_LABELS, SURGERY_PROCEDURE_LABELS } from "../../constants/medical";
+import { SURGERY_PROCEDURE_LABELS } from "../../constants/medical";
 
 // Root scalars only. Details are read sequentially on the transaction's connection.
 const ENTRY_SELECT = {
@@ -40,7 +40,7 @@ export async function findRabiesCertificateOutput(
   db: typeof prisma,
   animalId: string,
   entryId: string,
-  clock: { today: CalendarDay; now: Date },
+  clock: Pick<ShelterNow, "today" | "now" | "clock">,
 ): Promise<RabiesCertificateResult> {
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SET TRANSACTION READ ONLY`;
@@ -62,7 +62,7 @@ export async function findRabiesCertificateOutput(
     if (!animal) return { available: false, reason: "NOT_FOUND", message: "This vaccination record is unavailable for this animal." };
     const item = entry!.itemId ? await tx.medicalItem.findUnique({ where: { id: entry!.itemId }, select: { name: true } }) : null;
     return { available: true, output: {
-      animal, generatedDate: clock.today, generatedAt: clock.now, certificate,
+      animal, generatedDate: clock.today, generatedTime: clock.clock.time, generatedAt: clock.now, certificate,
       vaccination: { kind: "VACCINE", product: item?.name ?? "Product not recorded",
         completedDate: certificate.completedDate, provenance: medicalOutputProvenance({ ...entry!, source: entry!.source! }),
         manufacturer: vaccine!.manufacturer, lotNumber: vaccine!.lotNumber, lotExpiryDate: parseCalendarDay(vaccine!.lotExpiryDate),
@@ -76,7 +76,7 @@ export async function findRabiesCertificateOutput(
 export async function findMedicalHistoryOutput(
   db: typeof prisma,
   animalId: string,
-  clock: { today: CalendarDay; now: Date },
+  clock: Pick<ShelterNow, "today" | "now" | "clock">,
 ): Promise<MedicalHistoryOutput | null> {
   return db.$transaction(async (tx) => {
     await tx.$executeRaw`SET TRANSACTION READ ONLY`;
@@ -168,14 +168,14 @@ export async function findMedicalHistoryOutput(
     const review = openExemptionReview(spayEntries);
     const plannedCare = entries.filter((e) => e.status === "SCHEDULED").map((e) => ({
       name: e.itemId ? itemNames.get(e.itemId)! : e.procedure ? SURGERY_PROCEDURE_LABELS[e.procedure]
-        : e.examType ? `${EXAM_TYPE_LABELS[e.examType]} exam` : "Microchip",
+        : e.examType ? medicalOutputExamLabel(e.examType) : "Microchip",
       dueDate: parseCalendarDay(e.dueDate), overdue: e.dueDate !== null && e.dueDate < clock.today,
     }));
     if (review) plannedCare.push({ name: "Spay/neuter exemption review", dueDate: parseCalendarDay(review.reviewDate), overdue: review.reviewDate! < clock.today });
     plannedCare.sort((a, b) => (a.dueDate ?? "9999").localeCompare(b.dueDate ?? "9999") || a.name.localeCompare(b.name));
     return {
       animal,
-      generatedDate: clock.today, generatedAt: clock.now,
+      generatedDate: clock.today, generatedTime: clock.clock.time, generatedAt: clock.now,
       summary: { altered: safeAltered, rabies: rabiesStatus(rabies ? { validUntilDate: parseCalendarDay(vaccines.get(rabies.id)?.validUntilDate) } : null, clock.today),
         chips: completed.filter((e) => e.kind === "MICROCHIP").map((e) => {
           const chip = chips.get(e.id);

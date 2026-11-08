@@ -71,6 +71,7 @@ import {
   calendarDay,
   shelterDayKey,
   shelterDaysBetweenKeys,
+  shelterNow,
   shelterToday,
   shelterInstant,
   shiftDayKey,
@@ -8646,7 +8647,9 @@ async function assertEndOfLifeConsistency() {
 
 /** Output examples use otherwise unscripted animals and leave their intake facts intact. */
 async function seedMedicalOutputExamples() {
-  const today = shelterToday(seedTimezone);
+  // One reading of the shelter's time, so the day, the clock and the instant agree.
+  const clock = shelterNow(new Date(), seedTimezone);
+  const today = clock.today;
   const olivia = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff1@example.com" } } });
   const benjamin = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff2@example.com" } } });
   const eligible = {
@@ -8754,7 +8757,6 @@ async function seedMedicalOutputExamples() {
     where: { id: { in: originalFacts.map((entry) => entry.id) } }, orderBy: { id: "asc" },
     include: { microchip: true, surgery: true, events: { orderBy: { id: "asc" } } },
   }), originalFacts, "seedMedicalOutputExamples: original intake facts and audit must remain unchanged.");
-  const clock = { today, now: new Date() };
   const certificate = await findRabiesCertificateOutput(prisma, complete.id, certificateId, clock);
   assert(certificate.available);
   assert.equal(certificate.output.certificate.veterinarianLicenseNumber, "DEMO-1041");

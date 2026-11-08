@@ -4,7 +4,8 @@ import type {
   MedicalEntryKind, MedicalEntrySource, MedicalEntryStatus, MedicalRoute,
   MedicationFrequency, Sex, SurgeryEvidence, SurgeryProcedure, TestResult,
 } from "@/prisma/generated/enums";
-import { formatShelterDay, type CalendarDay } from "./shelter-day";
+import { EXAM_TYPE_LABELS } from "../constants/medical";
+import { formatShelterDay, formatTimeOfDay, type CalendarDay } from "./shelter-day";
 import type { MicrochipRegistration } from "./microchip-registration";
 import type { RabiesStatus } from "./medical-days";
 import type { SpayNeuterStatus } from "./spay-neuter";
@@ -49,6 +50,20 @@ export const MEDICAL_HISTORY_EMPTY_TEXT = {
 
 export const medicalOutputDayText = (day: CalendarDay | null): string =>
   day ? formatShelterDay(day) : "Date unknown";
+
+/**
+ * When a handout was generated, as the shelter's wall clock read: the day and
+ * the time on it, e.g. "Oct 17, 2026, 11:00 AM". Both come from one reading of
+ * the shelter's clock, so no viewer's own zone enters.
+ */
+export const medicalOutputGeneratedText = (day: CalendarDay, time: string): string =>
+  `${formatShelterDay(day)}, ${formatTimeOfDay(time)}`;
+
+/** An exam's name. The type's label may already end in "exam"; it is said once. */
+export const medicalOutputExamLabel = (examType: ExamType): string => {
+  const label = EXAM_TYPE_LABELS[examType];
+  return /\bexam$/i.test(label) ? label : `${label} exam`;
+};
 
 /** Explicit output shapes: never extend the staff record or spread its DTO. */
 export interface MedicalOutputAnimal {
@@ -96,6 +111,8 @@ export type CompletedMedicalOutput = CompletedCareCommon & (
 export interface MedicalHistoryOutput {
   animal: MedicalOutputAnimal;
   generatedDate: CalendarDay;
+  /** The shelter clock's time of day at generation, `"HH:mm"`. */
+  generatedTime: string;
   generatedAt: Date;
   summary: { altered: OutputAlteredStatus; chips: MedicalOutputChip[]; rabies: RabiesStatus };
   completedCare: CompletedMedicalOutput[];
@@ -181,6 +198,8 @@ export const rabiesCertificateEligibility = (
 export interface RabiesCertificateOutput {
   animal: MedicalOutputAnimal;
   generatedDate: CalendarDay;
+  /** The shelter clock's time of day at generation, `"HH:mm"`. */
+  generatedTime: string;
   generatedAt: Date;
   vaccination: Extract<CompletedMedicalOutput, { kind: "VACCINE" }>;
   certificate: Extract<RabiesCertificateEligibility, { available: true }>;

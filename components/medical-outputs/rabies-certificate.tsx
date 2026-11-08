@@ -13,7 +13,7 @@ export function RabiesCertificate({ output: o }: { output: RabiesCertificateOutp
       <PrintButton /><a href={`/dashboard/animals/${o.animal.id}/medical/vaccines-tests`}>Return to medical record</a>
     </nav>
     <header><h1>Rabies vaccination certificate — {o.animal.name}</h1>
-      <OutputIdentity animal={o.animal} generatedDate={o.generatedDate} generatedAt={o.generatedAt} />
+      <OutputIdentity animal={o.animal} generatedDate={o.generatedDate} generatedTime={o.generatedTime} />
       <p className={styles.note}>{MEDICAL_OUTPUT_COPY_TEXT}</p>
     </header>
     <section aria-label="Recorded vaccination"><h2>Recorded vaccination</h2>

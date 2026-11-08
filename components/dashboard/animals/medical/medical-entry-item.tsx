@@ -149,8 +149,6 @@ const detailPairs = (entry: MedicalEntryDisplay): [string, string][] => {
     pairs.push(
       ["Veterinarian name", v.veterinarianName],
       ["Veterinarian license number", v.veterinarianLicenseNumber],
-      ["Certificate", v.durationMonths && (!entry.completedDate || !v.validUntilDate || !v.veterinarianName || !v.veterinarianLicenseNumber)
-        ? "Incomplete: needs a known vaccination day, validity and both veterinarian credentials" : null],
       ["Manufacturer", v.manufacturer],
       ["Lot", v.lotNumber],
       ["Lot expiry", v.lotExpiryDate && formatShelterDayOrNA(v.lotExpiryDate)],

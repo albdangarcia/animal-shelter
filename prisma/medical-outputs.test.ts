@@ -4,11 +4,13 @@ import assert from "node:assert/strict";
 import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import { findMedicalHistoryOutput, findRabiesCertificateOutput } from "@/app/lib/data/animals/medical-output";
-import { calendarDay } from "@/app/lib/utils/shelter-day";
+import { calendarDay, shelterNow } from "@/app/lib/utils/shelter-day";
 import { editMedicalEntry, voidMedicalEntry } from "@/app/lib/services/medical-entry";
 
 const run = randomUUID();
-const clock = { today: calendarDay("2026-10-17"), now: new Date("2026-10-17T16:00:00Z") };
+const TIMEZONE = "America/Chicago";
+// 11:00 on the shelter's clock.
+const clock = shelterNow(new Date("2026-10-17T16:00:00Z"), TIMEZONE);
 let speciesId: string, colorId: string, actorId: string, itemId: string;
 before(async () => {
   speciesId = (await prisma.species.create({ data: { name: `Output species ${run}` } })).id;
@@ -51,6 +53,7 @@ test("empty and missing histories do not invent clinical facts or legacy clinica
   for (const key of ["completedCare", "conditions", "careEpisodes", "medications", "plannedCare", "documents"] as const) assert.deepEqual(output[key], []);
   assert.equal(output.animal.birthDate, "2020-01-01");
   assert.equal(output.generatedAt.toISOString(), clock.now.toISOString());
+  assert.equal(output.generatedTime, "11:00");
 });
 
 test("history is unpaginated across stays, deterministic with unknown days last, and read-only", async () => {
@@ -235,8 +238,8 @@ test("intact, unknown and lapsed exemptions reuse the existing derivation withou
   assert.deepEqual((await read(a.id))!.summary.altered, { status: "UNKNOWN", lapsedOn: "2026-10-16" });
 });
 
-const certificateRead = (animalId: string, entryId: string, today = clock.today) =>
-  findRabiesCertificateOutput(prisma, animalId, entryId, { ...clock, today });
+const certificateRead = (animalId: string, entryId: string, reading = clock) =>
+  findRabiesCertificateOutput(prisma, animalId, entryId, reading);
 const certificateVaccine = { durationMonths: 12, validUntilDate: "2026-10-17",
   veterinarianName: "Dr Recorded", veterinarianLicenseNumber: "LICENSE-RECORDED" };
 
@@ -296,7 +299,7 @@ test("certificate prints the selected historical record and stored facts regardl
   assert.equal(result.output.certificate.validUntilDate, "2026-10-17");
   assert.equal(result.output.certificate.expired, false);
   assert.doesNotMatch(JSON.stringify(result), /PRIVATE|Newer lot|createdBy|notes|events|entryId|pathname/);
-  const expired = await certificateRead(a.id, e.id, calendarDay("2026-10-18"));
+  const expired = await certificateRead(a.id, e.id, shelterNow(new Date("2026-10-18T16:00:00Z"), TIMEZONE));
   assert.ok(expired.available);
   assert.equal(expired.output.certificate.expired, true);
   assert.equal(await prisma.medicalEntryEvent.count({ where: { entryId: e.id } }), 0);

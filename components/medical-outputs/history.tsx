@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import type { CompletedMedicalOutput, MedicalHistoryOutput } from "@/app/lib/utils/medical-output";
-import { MEDICAL_HISTORY_SCOPE_TEXT, MEDICAL_OUTPUT_COPY_TEXT, MEDICAL_HISTORY_EMPTY_TEXT as empty, medicalOutputDayText as day } from "@/app/lib/utils/medical-output";
+import { medicalOutputExamLabel, MEDICAL_HISTORY_SCOPE_TEXT, MEDICAL_OUTPUT_COPY_TEXT, MEDICAL_HISTORY_EMPTY_TEXT as empty, medicalOutputDayText as day } from "@/app/lib/utils/medical-output";
 import {
   CARE_EPISODE_TYPE_LABELS, DOSE_UNIT_LABELS, EXAM_FINDING_STATUS_LABELS, EXAM_RESULT_LABELS,
-  EXAM_TYPE_LABELS, MEDICAL_CONDITION_STATUS_LABELS, MEDICAL_CONDITION_TYPE_LABELS,
+  MEDICAL_CONDITION_STATUS_LABELS, MEDICAL_CONDITION_TYPE_LABELS,
   MEDICAL_DOCUMENT_TYPE_LABELS, MEDICAL_ROUTE_LABELS, MEDICATION_FREQUENCY_LABELS,
   SPAY_NEUTER_EXEMPTION_REASON_LABELS, SURGERY_EVIDENCE_LABELS, SURGERY_PROCEDURE_LABELS, TEST_RESULT_LABELS,
 } from "@/app/lib/constants/medical";
@@ -22,7 +22,7 @@ function Care({ care: c }: { care: CompletedMedicalOutput }) {
     case "TEST": return <><strong>Test: {c.product}</strong><p>{c.results.length ? c.results.map((r) => `${r.analyteName}: ${TEST_RESULT_LABELS[r.result]}`).join("; ") : "No analyte results recorded."}</p></>;
     case "TREATMENT": return <><strong>Treatment: {c.product}</strong><p>Dose: {c.doseAmount ?? "Not recorded"} {c.doseUnit ? DOSE_UNIT_LABELS[c.doseUnit] : ""} · Route: {c.route ? MEDICAL_ROUTE_LABELS[c.route] : "Not recorded"}</p></>;
     case "SURGERY": return <><strong>Surgery: {SURGERY_PROCEDURE_LABELS[c.procedure]}</strong><p>Evidence: {c.evidence ? SURGERY_EVIDENCE_LABELS[c.evidence] : "Not recorded"}</p></>;
-    case "EXAM": return <><strong>{EXAM_TYPE_LABELS[c.examType]} exam: {EXAM_RESULT_LABELS[c.overallResult]}</strong><ul>{c.findings.map((f) => <li key={f.bodySystem}>{examBodySystemLabel(f.bodySystem)}: {EXAM_FINDING_STATUS_LABELS[f.status]}</li>)}</ul></>;
+    case "EXAM": return <><strong>{medicalOutputExamLabel(c.examType)}: {EXAM_RESULT_LABELS[c.overallResult]}</strong><ul>{c.findings.map((f) => <li key={f.bodySystem}>{examBodySystemLabel(f.bodySystem)}: {EXAM_FINDING_STATUS_LABELS[f.status]}</li>)}</ul></>;
     case "MICROCHIP": return <><strong>Microchip: {c.chipNumber}</strong><p>Brand: {c.brand ?? "Not recorded"}</p></>;
   }
 }
@@ -44,7 +44,7 @@ export function MedicalHistoryHandout({ output: o }: { output: MedicalHistoryOut
       <PrintButton /><a href={`/dashboard/animals/${o.animal.id}/medical`}>Return to medical record</a>
     </nav>
     <header><h1>Medical history — {o.animal.name}</h1>
-      <OutputIdentity animal={o.animal} generatedDate={o.generatedDate} generatedAt={o.generatedAt} />
+      <OutputIdentity animal={o.animal} generatedDate={o.generatedDate} generatedTime={o.generatedTime} />
       <p className={styles.note}>{MEDICAL_HISTORY_SCOPE_TEXT}</p><p className={styles.note}>{MEDICAL_OUTPUT_COPY_TEXT}</p>
     </header>
     <Section title="Current recorded summary">

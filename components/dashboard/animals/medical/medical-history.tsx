@@ -98,6 +98,7 @@ const MedicalHistory = ({
                       today={today}
                       unitSystem={unitSystem}
                       controls={controls}
+                      certificates
                     />
                   );
                 case "CONDITION":

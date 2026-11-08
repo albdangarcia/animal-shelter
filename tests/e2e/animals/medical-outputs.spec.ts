@@ -205,6 +205,7 @@ test("medical readers print a selected rabies certificate only after its missing
     await expect(page).toHaveURL(`${record}#medical-entry-${selected}`);
     const row = page.locator(`[id="medical-entry-${selected}"]`);
     await expect(row).toContainText("Certificate unavailable:");
+    await expect(row).not.toContainText("Certificate: Incomplete");
     await row.getByRole("button", { name: /^Actions for/ }).click();
     await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
     const edit = page.getByRole("dialog", { name: "Edit vaccine", exact: true });
@@ -251,6 +252,11 @@ test("medical readers print a selected rabies certificate only after its missing
     await page.getByRole("link", { name: "Return to medical record" }).click();
     await expect(page).toHaveURL(record);
     expect(await counts(f.animalId)).toEqual(before);
+    // History lists the same vaccinations and offers the same print link.
+    await page.goto(`/dashboard/animals/${f.animalId}/medical/history`);
+    await expect(page.locator(`[id="medical-entry-${f.entries[24]}"]`).getByRole("link", { name: "Print rabies certificate", exact: true }))
+      .toHaveAttribute("href", `/medical-outputs/animals/${f.animalId}/rabies/${f.entries[24]}`);
+    await page.goto(record);
     const reader = await browser.newContext({ storageState: states.volunteer, timezoneId: "Pacific/Kiritimati" });
     try {
       const other = await reader.newPage();

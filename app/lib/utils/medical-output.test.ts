@@ -2,11 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   isRecordedVaccination, medicalOutputProvenance, medicalOutputDayText,
+  medicalOutputExamLabel, medicalOutputGeneratedText,
   rabiesCertificateEligibility, rabiesCertificateValidityText, vaccineCredentialsIssue,
   MEDICAL_HISTORY_EMPTY_TEXT, MEDICAL_HISTORY_SCOPE_TEXT, MEDICAL_OUTPUT_COPY_TEXT,
   type RabiesCertificateEntry,
 } from "./medical-output";
 import { calendarDay as day } from "./shelter-day";
+import { ExamType } from "@/prisma/generated/enums";
 
 const requested = { animalId: "animal-a", entryId: "vaccine-a" };
 const certificateEntry = (): RabiesCertificateEntry => ({
@@ -105,4 +107,19 @@ test("output wording keeps unknown clinical days and absent records explicit", (
   }
   assert.match(MEDICAL_HISTORY_SCOPE_TEXT, /excludes internal audit history and end-of-life/i);
   assert.match(MEDICAL_OUTPUT_COPY_TEXT, /copies do not update/);
+});
+
+test("every exam type reads as one exam, never a doubled word", () => {
+  assert.deepEqual(Object.values(ExamType).map(medicalOutputExamLabel), [
+    "Intake exam", "Vet exam", "Recheck exam", "Pre-adoption exam",
+  ]);
+  for (const type of Object.values(ExamType)) {
+    assert.doesNotMatch(medicalOutputExamLabel(type), /\bexam\b.*\bexam\b/i);
+  }
+});
+
+test("the generated time reads as the shelter's day and wall clock, not an ISO instant", () => {
+  assert.equal(medicalOutputGeneratedText(day("2026-10-17"), "11:00"), "Oct 17, 2026, 11:00 AM");
+  assert.equal(medicalOutputGeneratedText(day("2026-10-17"), "00:05"), "Oct 17, 2026, 12:05 AM");
+  assert.equal(medicalOutputGeneratedText(day("2026-10-17"), "23:59"), "Oct 17, 2026, 11:59 PM");
 });
