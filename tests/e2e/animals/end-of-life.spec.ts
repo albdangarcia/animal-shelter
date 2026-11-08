@@ -132,7 +132,7 @@ test("staff records and corrects euthanasia; only outcome reversal voids it and 
     });
     await page.getByRole("button", { name: "Process Outcome", exact: true }).click();
     await expect(outsidePerformer).toHaveAttribute("aria-invalid", "true");
-    await expect(outsidePerformer.locator("..").getByText("Pick a performer or give the outside vet's name, rather than both.", { exact: true })).toBeVisible();
+    await expect(outsidePerformer.locator("..").getByText("Pick a performer or give the outside vet's name.", { exact: true })).toBeVisible();
     await expect(outsidePerformer).toBeFocused();
     expect(createPosts).toBe(0);
     await outsidePerformer.fill("Outside clinician");
@@ -273,6 +273,19 @@ test("staff explicitly adds missing legacy details with current provenance", asy
     expect(saved.medicalDay).toBe(f.yesterday);
     await page.goto(`/dashboard/animals/${f.animalId}/medical/history`);
     await expect(page.getByRole("listitem", { name: /^Death,/ })).toContainText("Recorded historical cause");
+  } finally { await context.close(); await cleanup(f); }
+});
+
+test("an account with no outcome access sees the same 403 page on the edit and create URLs as on the list", async ({ browser }) => {
+  const f = await fixture(false, true);
+  const context = await browser.newContext({ storageState: states.foster });
+  const page = await context.newPage();
+  try {
+    for (const path of ["/dashboard/outcomes", `/dashboard/outcomes/${f.outcomeId}/edit`, `/dashboard/outcomes/create?animalId=${f.animalId}`]) {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { name: "Access Denied" }), path).toBeVisible();
+      await expect(page.getByText("Something Went Wrong"), path).toHaveCount(0);
+    }
   } finally { await context.close(); await cleanup(f); }
 });
 

@@ -106,6 +106,118 @@ test("an invalid performer choice marks both alternatives so the active control 
   }
 });
 
+// What the outcome form submits when nothing has been filled in, plus the
+// blank values a picker or select holds after being cleared. Every message
+// for a field is kept, so a second message on the same field would show up.
+const messagesFor = (schema: typeof EuthanasiaMedicalSchema | typeof DeathMedicalSchema, input: unknown) => {
+  const result = schema.safeParse(input);
+  assert.equal(result.success, false);
+  if (result.success) throw new Error("Expected validation errors");
+  const byField: Record<string, string[]> = {};
+  for (const issue of result.error.issues) (byField[issue.path.join(".")] ??= []).push(issue.message);
+  return byField;
+};
+const blankEuthanasia = { kind: "EUTHANASIA", source: "IN_HOUSE", authorizedById: "", performedById: "", drug: "", dose: "", route: "" };
+const blankDeath = { kind: "DEATH", necropsyRequested: null };
+
+const noDefaultWording = (messages: Record<string, string[]>) => {
+  for (const list of Object.values(messages)) for (const message of list) assert.doesNotMatch(message, /Invalid|expected|CUID|"/);
+};
+
+test("an empty euthanasia form says what to pick, with no default validation wording", () => {
+  const messages = messagesFor(EuthanasiaMedicalSchema, blankEuthanasia);
+  // The performer rule is a refinement, which Zod skips while a field has the
+  // wrong type; the missing reason category (undefined) is that error here.
+  assert.deepEqual(messages, {
+    reasonCategory: ["Pick a reason category."],
+    authorizedById: ["Pick who authorized it."],
+    drug: ["The drug is required."],
+    dose: ["The dose with its unit is required."],
+    route: ["The route is required."],
+  });
+  noDefaultWording(messages);
+});
+
+test("with a reason category picked, an empty euthanasia form also asks for the performer", () => {
+  const messages = messagesFor(EuthanasiaMedicalSchema, { ...blankEuthanasia, reasonCategory: "MEDICAL" });
+  assert.deepEqual(messages.performedById, ["Pick who performed the procedure."]);
+  assert.deepEqual(messages.performedByName, ["Pick who performed the procedure."]);
+  noDefaultWording(messages);
+});
+
+test("an empty death form says what to pick, with no default validation wording", () => {
+  const messages = messagesFor(DeathMedicalSchema, blankDeath);
+  assert.deepEqual(messages, {
+    circumstances: ["Pick the circumstances."],
+    causeKnowledge: ["Say whether the cause is known."],
+  });
+  noDefaultWording(messages);
+});
+
+test("a missing reason category asks for one, whether unset or cleared", () => {
+  for (const reasonCategory of [undefined, "", null]) {
+    assert.deepEqual(messagesFor(EuthanasiaMedicalSchema, { ...euthanasia, reasonCategory }).reasonCategory, ["Pick a reason category."]);
+  }
+});
+
+test("a missing authorizer asks for one, whether unset, cleared or malformed", () => {
+  for (const authorizedById of [undefined, "", "   ", "invalid ID"]) {
+    assert.deepEqual(messagesFor(EuthanasiaMedicalSchema, { ...euthanasia, authorizedById }).authorizedById, ["Pick who authorized it."]);
+  }
+});
+
+test("a malformed performer id asks for a valid performer", () => {
+  assert.deepEqual(messagesFor(EuthanasiaMedicalSchema, { ...euthanasia, performedById: "invalid ID" }).performedById, ["Pick a valid performer."]);
+});
+
+test("a malformed clinic id asks for a clinic from the list, and a blank one clears", () => {
+  assert.deepEqual(messagesFor(EuthanasiaMedicalSchema, { ...euthanasia, source: "OUTSIDE_VET", vetPartnerId: "invalid ID" }).vetPartnerId, ["Pick a clinic from the list."]);
+  for (const vetPartnerId of ["", "  ", null, undefined]) {
+    assert.equal(EuthanasiaMedicalSchema.parse({ ...euthanasia, source: "OUTSIDE_VET", vetPartnerId }).vetPartnerId, null);
+  }
+});
+
+test("a missing source asks for one", () => {
+  for (const source of [undefined, ""]) {
+    assert.deepEqual(messagesFor(EuthanasiaMedicalSchema, { ...euthanasia, source }).source, ["Pick where the procedure was done."]);
+  }
+});
+
+test("missing death circumstances ask for a pick, whether unset or cleared", () => {
+  for (const circumstances of [undefined, ""]) {
+    assert.deepEqual(messagesFor(DeathMedicalSchema, { ...death, circumstances }).circumstances, ["Pick the circumstances."]);
+  }
+});
+
+test("a missing cause choice asks for an answer, whether unset or cleared", () => {
+  for (const causeKnowledge of [undefined, ""]) {
+    assert.deepEqual(messagesFor(DeathMedicalSchema, { ...death, causeKnowledge }).causeKnowledge, ["Say whether the cause is known."]);
+  }
+});
+
+test("a missing necropsy answer asks for one", () => {
+  assert.deepEqual(messagesFor(DeathMedicalSchema, { ...death, necropsyRequested: undefined }).necropsyRequested, ["Say whether a necropsy was requested."]);
+});
+
+test("an in-house procedure with no performer asks who performed it, on both alternatives", () => {
+  const messages = messagesFor(EuthanasiaMedicalSchema, { ...euthanasia, performedById: "" });
+  assert.deepEqual(messages, { performedById: ["Pick who performed the procedure."], performedByName: ["Pick who performed the procedure."] });
+});
+
+test("an outside procedure with no performer asks for a performer or the vet's name, on both alternatives", () => {
+  const message = "Pick a performer or give the outside vet's name.";
+  for (const performer of [{ performedById: "" }, { performedById: null, performedByName: "   " }]) {
+    const messages = messagesFor(EuthanasiaMedicalSchema, { ...euthanasia, source: "OUTSIDE_VET", ...performer });
+    assert.deepEqual(messages, { performedById: [message], performedByName: [message] });
+  }
+});
+
+test("an outside procedure with a performer and a vet's name is told to give only one, on both alternatives", () => {
+  const message = "Pick a performer or give the outside vet's name, not both.";
+  const messages = messagesFor(EuthanasiaMedicalSchema, { ...euthanasia, source: "OUTSIDE_VET", performedByName: "Dr Example" });
+  assert.deepEqual(messages, { performedById: [message], performedByName: [message] });
+});
+
 test("euthanasia source excludes before-intake and in-house care excludes clinic or vet fields", () => {
   for (const source of ["BEFORE_INTAKE", null, ""]) {
     assert.equal(EuthanasiaMedicalSchema.safeParse({ ...euthanasia, source }).success, false);

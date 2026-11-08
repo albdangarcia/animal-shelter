@@ -20,12 +20,27 @@ import ActionBlockedMessage from "@/components/action-blocked-message";
 import { OutcomeFosterNotice } from "@/components/dashboard/outcomes/outcome-foster-notice";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { Authorize } from "@/components/auth/authorize";
+import StatusPage from "@/components/StatusPage";
 
 interface Props {
   searchParams: SearchParamsType;
 }
 
 const CreateOutcomePage = async ({ searchParams }: Props) => {
+  // The form is only any use to someone who can save it, and the reads below
+  // throw for anyone without access, so turn them away here.
+  return (
+    <Authorize
+      permission={AppPermissions.OUTCOMES_MANAGE}
+      fallback={<StatusPage type="accessDenied" />}
+    >
+      <PageContent searchParams={searchParams} />
+    </Authorize>
+  );
+};
+
+const PageContent = async ({ searchParams }: Props) => {
   const { animalId, applicationId } = (await searchParams) || {};
 
   let animal: Awaited<ReturnType<typeof fetchAnimalForOutcomeForm>> = null;
@@ -56,8 +71,8 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
     return notFound();
   }
 
-  const canManageOutcome = await hasPermission(AppPermissions.OUTCOMES_MANAGE);
-  const canManageMedical = canManageOutcome && await hasPermission(AppPermissions.MEDICAL_MANAGE) && await hasPermission(AppPermissions.MEDICAL_READ);
+  // Only someone who may manage outcomes gets this far (see the wrapper).
+  const canManageMedical = await hasPermission(AppPermissions.MEDICAL_MANAGE) && await hasPermission(AppPermissions.MEDICAL_READ);
   const clinics = canManageMedical ? await fetchOutcomeMedicalClinics() : [];
   const suggestedOwner = animal.intake[0]?.surrenderingPerson ?? undefined;
   const openPlacement = animal.fosterPlacements[0] ?? null;
@@ -140,7 +155,7 @@ const CreateOutcomePage = async ({ searchParams }: Props) => {
             suggestedOwnerId={suggestedOwner?.id}
             suggestedOwnerLabel={suggestedOwner?.name}
             canCreatePerson={canCreatePerson}
-            canManageOutcome={canManageOutcome}
+            canManageOutcome
             canManageMedical={canManageMedical}
             clinics={clinics}
             today={await getShelterToday()}

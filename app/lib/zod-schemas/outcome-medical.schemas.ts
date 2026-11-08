@@ -9,7 +9,6 @@ import {
   MEDICAL_REASON_MAX_LENGTH,
   OUTCOME_MEDICAL_TEXT_MAX_LENGTH,
 } from "@/app/lib/constants/medical";
-import { cuidSchema } from "./common.schemas";
 import { optionalText } from "./medical-entry.schemas";
 
 const text = (label: string) => z.string({ error: `${label} is required.` })
@@ -17,24 +16,27 @@ const text = (label: string) => z.string({ error: `${label} is required.` })
   .min(1, `${label} is required.`)
   .max(OUTCOME_MEDICAL_TEXT_MAX_LENGTH, `Must be ${OUTCOME_MEDICAL_TEXT_MAX_LENGTH} characters or fewer.`);
 
-const referenceId = z.string().trim().pipe(cuidSchema);
-const optionalReferenceId = z.string().trim().nullish()
+// A picker holds "" until something is chosen, which is not a CUID, so the
+// readable message covers both a missing and a malformed id.
+const referenceId = (message: string) => z.string({ error: message }).trim()
+  .pipe(z.cuid2({ error: message }));
+const optionalReferenceId = (message: string) => z.string().trim().nullish()
   .transform((value) => value || null)
-  .pipe(referenceId.nullable());
+  .pipe(referenceId(message).nullable());
 
 /** Complete clinical payloads. Optional blanks clear values, including on correction. */
 export const EuthanasiaMedicalSchema = z.strictObject({
   kind: z.literal("EUTHANASIA"),
-  source: z.enum([MedicalEntrySource.IN_HOUSE, MedicalEntrySource.OUTSIDE_VET]),
-  vetPartnerId: optionalReferenceId,
+  source: z.enum([MedicalEntrySource.IN_HOUSE, MedicalEntrySource.OUTSIDE_VET], { error: "Pick where the procedure was done." }),
+  vetPartnerId: optionalReferenceId("Pick a clinic from the list."),
   vetName: optionalText(OUTCOME_MEDICAL_TEXT_MAX_LENGTH),
-  reasonCategory: z.enum(EuthanasiaReasonCategory),
+  reasonCategory: z.enum(EuthanasiaReasonCategory, { error: "Pick a reason category." }),
   reasonNotes: optionalText(MEDICAL_REASON_MAX_LENGTH),
-  authorizedById: referenceId,
-  performedById: optionalReferenceId,
+  authorizedById: referenceId("Pick who authorized it."),
+  performedById: optionalReferenceId("Pick a valid performer."),
   performedByName: optionalText(OUTCOME_MEDICAL_TEXT_MAX_LENGTH),
   drug: text("The drug"),
-  dose: text("The dose, including its unit"),
+  dose: text("The dose with its unit"),
   route: text("The route"),
   witness: optionalText(OUTCOME_MEDICAL_TEXT_MAX_LENGTH),
   bodyDisposition: optionalText(OUTCOME_MEDICAL_TEXT_MAX_LENGTH),
@@ -43,9 +45,15 @@ export const EuthanasiaMedicalSchema = z.strictObject({
     ctx.addIssue({ code: "custom", path: ["reasonNotes"], message: "Describe the reason." });
   }
   if (!!value.performedById === !!value.performedByName) {
+    // Neither and both are different mistakes, so each says which it is.
     // Either control can be active, so each alternative must carry the error.
+    const message = value.performedById
+      ? "Pick a performer or give the outside vet's name, not both."
+      : value.source === "IN_HOUSE"
+        ? "Pick who performed the procedure."
+        : "Pick a performer or give the outside vet's name.";
     for (const field of ["performedById", "performedByName"] as const) {
-      ctx.addIssue({ code: "custom", path: [field], message: "Pick a performer or give the outside vet's name, rather than both." });
+      ctx.addIssue({ code: "custom", path: [field], message });
     }
   }
   if (value.source === "IN_HOUSE") {
@@ -64,11 +72,11 @@ export const EuthanasiaMedicalSchema = z.strictObject({
 export const DeathMedicalSchema = z.strictObject({
   kind: z.literal("DEATH"),
   source: z.null().optional().transform(() => null),
-  circumstances: z.enum(DeathCircumstances),
+  circumstances: z.enum(DeathCircumstances, { error: "Pick the circumstances." }),
   circumstanceNotes: optionalText(MEDICAL_REASON_MAX_LENGTH),
-  causeKnowledge: z.enum(["KNOWN", "UNKNOWN"]),
+  causeKnowledge: z.enum(["KNOWN", "UNKNOWN"], { error: "Say whether the cause is known." }),
   cause: optionalText(MEDICAL_REASON_MAX_LENGTH),
-  necropsyRequested: z.boolean().nullable(),
+  necropsyRequested: z.boolean({ error: "Say whether a necropsy was requested." }).nullable(),
   bodyDisposition: optionalText(OUTCOME_MEDICAL_TEXT_MAX_LENGTH),
 }).superRefine((value, ctx) => {
   if (value.circumstances === "OTHER" && !value.circumstanceNotes) {

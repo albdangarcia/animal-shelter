@@ -17,6 +17,8 @@ import { formatDateOrNA } from "@/app/lib/utils/date-utils";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { Authorize } from "@/components/auth/authorize";
+import StatusPage from "@/components/StatusPage";
 
 interface Props {
   params: Promise<{ outcomeId: string }>;
@@ -25,6 +27,19 @@ interface Props {
 const EditOutcomePage = async ({ params }: Props) => {
   const { outcomeId } = await params;
 
+  // Read access is enough to look at an outcome (the form is then read-only),
+  // and the reads below throw for anyone without it, so turn them away here.
+  return (
+    <Authorize
+      permission={AppPermissions.OUTCOMES_READ}
+      fallback={<StatusPage type="accessDenied" />}
+    >
+      <PageContent outcomeId={outcomeId} />
+    </Authorize>
+  );
+};
+
+const PageContent = async ({ outcomeId }: { outcomeId: string }) => {
   const [outcome, partners, canCreatePerson] = await Promise.all([
     fetchOutcomeById(outcomeId),
     fetchPartners(),
