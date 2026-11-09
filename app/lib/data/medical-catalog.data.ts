@@ -75,9 +75,9 @@ export interface MedicalEntryFormOptions {
    */
   scheduledItems: MedicalEntryFormItem[];
   /**
-   * Whether the animal is in the shelter's care. Care already scheduled can
-   * still be recorded after it leaves, but nothing new is scheduled for it,
-   * so recording doesn't offer the next dose.
+   * Whether the animal is in the shelter's care. Nothing new is scheduled for
+   * an animal that has left, so recording doesn't offer the next dose, and
+   * its leftover scheduled care offers only Decline and Void.
    */
   inCare: boolean;
   /**

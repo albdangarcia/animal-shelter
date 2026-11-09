@@ -1121,7 +1121,7 @@ test("the next dose is refused when the item is retired or already scheduled", a
   assert.equal((await entryNow(scheduled.entryId)).status, MedicalEntryStatus.COMPLETED);
 });
 
-test("care scheduled before the animal left can still be cleared, but nothing new scheduled", async () => {
+test("care scheduled before the animal left can still be cleared, but not moved, and nothing new scheduled", async () => {
   const animalId = await makeAnimal("Left with care due");
   const toReschedule = await schedule(animalId);
   const toDecline = await schedule(animalId);
@@ -1145,7 +1145,21 @@ test("care scheduled before the animal left can still be cleared, but nothing ne
     data: { listingStatus: AnimalListingStatus.ARCHIVED },
   });
 
-  await reschedule(toReschedule.entryId, day("2026-10-20"));
+  // Moving it plans care the animal can't have now: refused, nothing written.
+  await refusedOn(
+    reschedule(toReschedule.entryId, day("2026-10-20")),
+    undefined,
+    "This animal has left the shelter's care, so its scheduled care can't be rescheduled. Decline or void it instead.",
+  );
+  const unmoved = await entryNow(toReschedule.entryId);
+  assert.equal(unmoved.dueDate, "2026-10-14");
+  assert.equal((await eventsOf(toReschedule.entryId)).length, 1);
+  assert.equal(
+    (await activityOf(animalId)).filter(
+      (row) => row.activityType === AnimalActivityType.MEDICAL_ENTRY_RESCHEDULED,
+    ).length,
+    0,
+  );
   await decline(toDecline.entryId, "Transferred out before it was due.");
   await voidEntry(toVoid.entryId, "Entered twice.");
 
@@ -1165,6 +1179,13 @@ test("care scheduled before the animal left can still be cleared, but nothing ne
   assert.equal((await eventsOf(toRecord.entryId)).length, 1);
 
   await recordScheduled(toRecord.entryId, given);
+
+  // Back in care, as an outcome reversal leaves it: the same care moves.
+  await prisma.animal.update({
+    where: { id: animalId },
+    data: { listingStatus: AnimalListingStatus.DRAFT },
+  });
+  await reschedule(toReschedule.entryId, day("2026-10-20"));
 
   const rows = await prisma.medicalEntry.findMany({
     where: { animalId },

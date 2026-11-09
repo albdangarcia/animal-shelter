@@ -307,6 +307,30 @@ test("certificate prints the selected historical record and stored facts regardl
   assert.equal(await prisma.animalActivityLog.count({ where: { animalId: a.id } }), 0);
 });
 
+test("certificate names the animal's current chips, newest first, and no voided, planned or other animal's chip", async () => {
+  const a = await animal(), other = await animal();
+  const e = await entry(a.id, { vaccine: { create: certificateVaccine } });
+  const none = await certificateRead(a.id, e.id);
+  assert.ok(none.available);
+  assert.deepEqual(none.output.chipNumbers, []);
+  const chip = (animalId: string, suffix: string, data: Partial<Prisma.MedicalEntryUncheckedCreateInput> = {}) =>
+    entry(animalId, { kind: "MICROCHIP", itemId: null, chipNumber: `${run.replaceAll("-", "").slice(0, 12)}${suffix}`, ...data });
+  const older = await chip(a.id, "OLD", { completedDate: "2025-06-01" });
+  const newer = await chip(a.id, "NEW", { completedDate: "2026-02-01" });
+  const unknownDay = await chip(a.id, "UNK", { completedDate: null });
+  await chip(a.id, "VOID", { voidedAt: clock.now });
+  // A chip number on care that isn't completed is left out by its status, not
+  // only by the number being missing.
+  await chip(a.id, "PLAN", { status: "SCHEDULED", completedDate: null, dueDate: "2026-11-01" });
+  await chip(a.id, "DECL", { status: "DECLINED", completedDate: null, dueDate: "2026-11-01" });
+  await chip(other.id, "OTHER");
+  const result = await certificateRead(a.id, e.id);
+  assert.ok(result.available);
+  assert.deepEqual(result.output.chipNumbers, [newer.chipNumber, older.chipNumber, unknownDay.chipNumber]);
+  // The same chips, in the same order, as the history's summary.
+  assert.deepEqual((await read(a.id))!.summary.chips.map((c) => c.chipNumber), result.output.chipNumbers);
+});
+
 test("fresh certificate reflects audited day, duration and veterinarian corrections and refuses a subsequent void", async () => {
   const a = await animal();
   const e = await entry(a.id, { vaccine: { create: certificateVaccine } });

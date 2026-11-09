@@ -199,12 +199,16 @@ export function MedicalEntryActions({ animalId, entry, options }: Props) {
                     such as care scheduled for the wrong animal or the wrong
                     item.
                     {entry.status === MedicalEntryStatus.SCHEDULED &&
-                      " To move it to another day, reschedule it instead."}
+                      (options.inCare
+                        ? " To move it to another day, reschedule it instead."
+                        : " If it was right but won't be given now that the animal has left, decline it instead.")}
                   </p>
                   <p>
                     The entry stays in the history, struck through, and stops
-                    counting. A void can&apos;t be undone: if it was right
-                    after all, schedule it again.
+                    counting.{" "}
+                    {options.inCare
+                      ? "A void can't be undone: if it was right after all, schedule it again."
+                      : "A void can't be undone."}
                   </p>
                 </div>
               )}

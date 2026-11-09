@@ -82,6 +82,11 @@ interface Props {
   today: CalendarDay;
   /** The submit button's text. */
   submitLabel: string;
+  /**
+   * Whether the exemption can have a review day. Not once the animal has
+   * left the shelter's care: nothing reviews it then.
+   */
+  reviewable?: boolean;
   onFormSubmit: () => void;
   ref?: React.Ref<DirtyFormHandle>;
 }
@@ -101,6 +106,7 @@ export function SpayNeuterExemptionForm({
   mode,
   today,
   submitLabel,
+  reviewable = true,
   onFormSubmit,
   ref,
 }: Props) {
@@ -285,17 +291,19 @@ export function SpayNeuterExemptionForm({
           )}
         />
 
-        <DayField
-          control={form.control}
-          name="reviewDate"
-          label="Review date"
-          triggerClassName="w-full sm:w-64"
-          description="Left empty, the exemption holds until it is voided. Once the day comes, it is due for review."
-          disabledDates={(date) => {
-            const day = format(date, "yyyy-MM-dd");
-            return day < today || day > latest;
-          }}
-        />
+        {reviewable && (
+          <DayField
+            control={form.control}
+            name="reviewDate"
+            label="Review date"
+            triggerClassName="w-full sm:w-64"
+            description="Left empty, the exemption holds until it is voided. Once the day comes, it is due for review."
+            disabledDates={(date) => {
+              const day = format(date, "yyyy-MM-dd");
+              return day < today || day > latest;
+            }}
+          />
+        )}
 
         <DialogFooter>
           <DialogClose asChild>

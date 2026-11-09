@@ -54,7 +54,8 @@ type Mode = { record: OrdinaryCareKind } | "schedule" | "exemption";
  * "+ Add entry": pick a kind and record care already given, schedule care
  * for a due day, or record that the animal is exempt from a spay or neuter,
  * in a dialog. An animal already spayed or neutered can't be exempt, so it
- * isn't offered one.
+ * isn't offered one. An animal that has left the shelter's care has nothing
+ * new planned for it, so it is offered only care already given.
  */
 export function AddMedicalEntryMenu({ animalId, options }: Props) {
   const [mode, setMode] = useState<Mode | null>(null);
@@ -91,16 +92,20 @@ export function AddMedicalEntryMenu({ animalId, options }: Props) {
               {MEDICAL_ENTRY_KIND_LABELS[value]}
             </DropdownMenuItem>
           ))}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => setMode("schedule")}>
-            <CalendarPlus className="mr-2 size-4" />
-            Schedule…
-          </DropdownMenuItem>
-          {!options.altered && (
-            <DropdownMenuItem onSelect={() => setMode("exemption")}>
-              <ShieldOff className="mr-2 size-4" />
-              Spay/neuter exemption…
-            </DropdownMenuItem>
+          {options.inCare && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setMode("schedule")}>
+                <CalendarPlus className="mr-2 size-4" />
+                Schedule…
+              </DropdownMenuItem>
+              {!options.altered && (
+                <DropdownMenuItem onSelect={() => setMode("exemption")}>
+                  <ShieldOff className="mr-2 size-4" />
+                  Spay/neuter exemption…
+                </DropdownMenuItem>
+              )}
+            </>
           )}
         </DropdownMenuContent>
       </DropdownMenu>

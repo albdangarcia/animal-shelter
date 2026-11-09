@@ -503,6 +503,41 @@ test("a scheduled spay can't be declined as an exemption once the animal is spay
   assert.equal((await entryOf(entryId)).status, MedicalEntryStatus.DECLINED);
 });
 
+test("a leftover spay is declined after the animal leaves, but with no review day", async () => {
+  const animalId = await makeAnimal("Adopted with a spay due");
+  const { entryId } = await schedule(animalId, SurgeryProcedure.SPAY);
+  // The outcome that archived it is not this file's subject; only the
+  // listing status is read by the entry rules.
+  await prisma.animal.update({
+    where: { id: animalId },
+    data: { listingStatus: AnimalListingStatus.ARCHIVED },
+  });
+  const terms = { exemptionReason: SpayNeuterExemptionReason.PARTNER_WILL_ALTER };
+
+  // Nothing reviews it once the animal has left: refused, nothing written.
+  await refusedOn(
+    decline(entryId, null, { ...terms, reviewDate: day("2027-01-15") }),
+    "reviewDate",
+    /^This animal has left the shelter's care, so the exemption can't have a review date\.$/,
+  );
+  assert.equal((await entryOf(entryId)).status, MedicalEntryStatus.SCHEDULED);
+  assert.deepEqual(
+    (await eventsOf(entryId)).map((event) => event.action),
+    [MedicalEntryEventAction.CREATED],
+  );
+
+  await decline(entryId, "Adopter's vet will spay.", terms);
+  const entry = await entryOf(entryId);
+  assert.equal(entry.status, MedicalEntryStatus.DECLINED);
+  assert.equal(entry.exemptionReason, SpayNeuterExemptionReason.PARTNER_WILL_ALTER);
+  assert.equal(entry.reviewDate, null);
+
+  // The refusal is the animal's leaving: in care, the same terms take it.
+  const inCare = await schedule(await makeAnimal("Still in care"), SurgeryProcedure.SPAY);
+  await decline(inCare.entryId, null, { ...terms, reviewDate: day("2027-01-15") });
+  assert.equal((await entryOf(inCare.entryId)).reviewDate, "2027-01-15");
+});
+
 test("a scheduled neuter declined as an exemption keeps the words given", async () => {
   const animalId = await makeAnimal("Declined neuter", Sex.MALE);
   const { entryId } = await schedule(animalId, SurgeryProcedure.NEUTER);

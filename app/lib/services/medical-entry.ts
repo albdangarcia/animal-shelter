@@ -1066,6 +1066,13 @@ export async function rescheduleMedicalEntry(
   today: CalendarDay,
 ): Promise<{ entryId: string; animalId: string }> {
   const entry = await lockScheduledEntry(tx, entryId, "rescheduled");
+  // As nothing new is scheduled for an animal that has left, its leftover
+  // care isn't moved either: it is only declined or voided.
+  if ((await readAnimal(tx, entry.animalId)).archived) {
+    throw new MedicalEntryRefusal(
+      "This animal has left the shelter's care, so its scheduled care can't be rescheduled. Decline or void it instead.",
+    );
+  }
   await refuseSecondSpayNeuter(
     tx,
     entry.animalId,
@@ -1258,6 +1265,14 @@ export async function declineMedicalEntry(
       );
     }
     const values = exemptionValues(exemption, reason, exemption.today, "reason");
+    // Declining closes a leftover spay or neuter once the animal has left,
+    // but nothing reviews an exemption then: it has no review day.
+    if (values.reviewDate && (await readAnimal(tx, entry.animalId)).archived) {
+      throw new MedicalEntryRefusal(
+        "This animal has left the shelter's care, so the exemption can't have a review date.",
+        "reviewDate",
+      );
+    }
     await refuseExemptionWhenAltered(
       tx,
       entry.animalId,

@@ -61,8 +61,15 @@ export async function findRabiesCertificateOutput(
     const animal = await findOutputAnimal(tx, animalId);
     if (!animal) return { available: false, reason: "NOT_FOUND", message: "This vaccination record is unavailable for this animal." };
     const item = entry!.itemId ? await tx.medicalItem.findUnique({ where: { id: entry!.itemId }, select: { name: true } }) : null;
+    // The chips the history's summary lists, in its order.
+    const chips = await tx.medicalEntry.findMany({
+      where: { animalId, kind: "MICROCHIP", status: "COMPLETED", voidedAt: null, outcomeId: null, chipNumber: { not: null } },
+      select: { chipNumber: true },
+      orderBy: [{ completedDate: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }, { id: "desc" }],
+    });
     return { available: true, output: {
       animal, generatedDate: clock.today, generatedTime: clock.clock.time, generatedAt: clock.now, certificate,
+      chipNumbers: chips.map((chip) => chip.chipNumber!),
       vaccination: { kind: "VACCINE", product: item?.name ?? "Product not recorded",
         completedDate: certificate.completedDate, provenance: medicalOutputProvenance({ ...entry!, source: entry!.source! }),
         manufacturer: vaccine!.manufacturer, lotNumber: vaccine!.lotNumber, lotExpiryDate: parseCalendarDay(vaccine!.lotExpiryDate),

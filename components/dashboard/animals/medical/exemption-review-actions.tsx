@@ -52,7 +52,10 @@ interface Props {
  * The buttons on a spay/neuter exemption that is due for review: schedule
  * the spay or neuter, or record a new exemption to extend it. Either one
  * replaces the exemption under review, so it leaves the due list. Both plan
- * the animal's care, so they are for a viewer who may manage it.
+ * the animal's care, so they are for a viewer who may manage it. Neither is
+ * offered once the animal has left the shelter's care: nothing new is planned
+ * for it. A page that lists many animals' care leaves out `options`, and
+ * lists only animals in care.
  */
 export function ExemptionReviewActions({
   animalId,
@@ -60,6 +63,7 @@ export function ExemptionReviewActions({
   options,
   animalName,
 }: Props) {
+  if (options && !options.inCare) return null;
   const forName = animalName ? ` for ${animalName}` : "";
   return (
     <div className="mt-3 flex flex-wrap gap-2">
