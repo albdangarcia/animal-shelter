@@ -83,9 +83,17 @@ for (const role of ["staff", "volunteer"] as const) {
               new MutationObserver(capture).observe(document.body, { childList: true, subtree: true, attributes: true });
               Object.assign(window, { medicalLoadingAudit: audit });
             }, `${base}${section.suffix}`);
+            // The checks above pass on the server HTML. A click that lands while
+            // React is still hydrating is dropped, and hydration's reveal of the
+            // active tab scrolls the row back over the link Playwright scrolled
+            // to (only when the row overflows, at 390px and 320px). React marks
+            // each node it has attached to, so wait for that on the link.
+            const link = page.getByRole("navigation", { name: "Medical sections" }).getByRole("link", { name: section.label, exact: true });
+            await expect.poll(() => link.evaluate((el) =>
+              Object.keys(el).some((key) => key.startsWith("__reactProps")))).toBe(true);
             await db.query("BEGIN");
             await db.query(`LOCK TABLE ${section.table} IN ACCESS EXCLUSIVE MODE`);
-            await page.getByRole("navigation", { name: "Medical sections" }).getByRole("link", { name: section.label, exact: true }).click();
+            await link.click();
             const cards = section.titles.map((title) => page.locator('[data-slot="card"]:visible').filter({
               has: page.locator('[data-slot="card-title"]').filter({ hasText: new RegExp(`^${title}$`) }),
             }));
