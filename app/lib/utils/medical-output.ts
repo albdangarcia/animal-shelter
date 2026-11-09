@@ -201,6 +201,9 @@ export interface RabiesCertificateOutput {
   /** The shelter clock's time of day at generation, `"HH:mm"`. */
   generatedTime: string;
   generatedAt: Date;
+  /** The animal's chips on record now (completed, not voided), newest first:
+   * a vet or adopter reads them beside the rabies tag. */
+  chipNumbers: string[];
   vaccination: Extract<CompletedMedicalOutput, { kind: "VACCINE" }>;
   certificate: Extract<RabiesCertificateEligibility, { available: true }>;
 }

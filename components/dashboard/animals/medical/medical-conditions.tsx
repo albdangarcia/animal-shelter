@@ -22,6 +22,9 @@ interface Props {
 const MedicalConditions = ({ page, controls }: Props) => {
   const { animalName, conditions, episodes, names } = page;
   const choices = controls?.canManage ? controls.conditionChoices : null;
+  // Nothing is added for an animal that has left the shelter's care; its rows
+  // can still be corrected and voided.
+  const canAdd = !!choices && !!controls?.options.inCare;
   const hasOpenEpisode = episodes.some(isOpenEpisode);
 
   return (
@@ -30,7 +33,7 @@ const MedicalConditions = ({ page, controls }: Props) => {
         <MedicalRecordHeader
           section="conditions"
           headingId={PROBLEM_LIST_HEADING_ID}
-          action={controls && choices ? (
+          action={controls && choices && canAdd ? (
             <AddConditionButtons animalId={controls.animalId} choices={choices} today={controls.options.today} />
           ) : undefined}
         />
@@ -54,7 +57,7 @@ const MedicalConditions = ({ page, controls }: Props) => {
         <MedicalRecordHeader
           section="care-episodes"
           headingId={CARE_EPISODES_HEADING_ID}
-          action={controls && choices && !hasOpenEpisode ? (
+          action={controls && choices && canAdd && !hasOpenEpisode ? (
             <OpenCareEpisodeButton animalId={controls.animalId} vetClinics={choices.vetClinics} today={controls.options.today} />
           ) : undefined}
         />

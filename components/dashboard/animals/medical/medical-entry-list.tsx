@@ -140,7 +140,7 @@ export async function MedicalEntryRow({
               canAdminister={controls.canAdminister}
             />
           )}
-          {controls?.canManage && controls.conditionChoices && offer && (
+          {controls?.canManage && controls.conditionChoices && controls.options.inCare && offer && (
             <div className="mt-3">
               <AddConditionButton
                 animalId={controls.animalId}

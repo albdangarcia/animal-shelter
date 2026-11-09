@@ -97,6 +97,11 @@ const isSpayOrNeuter = (entry: DueCare) =>
  * Reschedule to plan it for another day, and Decline when it won't be given.
  * Declining a spay or neuter records an exemption, which plans the animal's
  * care rather than gives it, so it is for a viewer who may manage care.
+ *
+ * Once the animal has left the shelter's care, its leftover scheduled care is
+ * only closed: Decline here, or Void from the row's menu. Record and
+ * Reschedule would invite care that can't happen now. A page that lists many
+ * animals' care leaves out `options`, and lists only animals in care.
  */
 export function ScheduledEntryActions({
   animalId,
@@ -108,13 +113,16 @@ export function ScheduledEntryActions({
   canAdminister,
 }: Props) {
   if ((!canManage && !canAdminister) || !isOrdinaryCareKind(entry.kind)) return null;
+  const inCare = options?.inCare ?? true;
+  const canDecline = isSpayOrNeuter(entry) ? canManage : canAdminister;
+  if (!inCare && !canDecline) return null;
   // "DHPP (Due Oct 14, 2026)", or "DHPP (Due Oct 14, 2026) for Fido".
   const what = animalName
     ? `${entryLabel(entry)} for ${animalName}`
     : entryLabel(entry);
   return (
     <div className="mt-3 flex flex-wrap gap-2">
-      {canAdminister && (
+      {inCare && canAdminister && (
         <RecordButton
           animalId={animalId}
           entry={entry}
@@ -123,7 +131,7 @@ export function ScheduledEntryActions({
           what={what}
         />
       )}
-      {canManage && (
+      {inCare && canManage && (
         <RescheduleButton
           entry={entry}
           today={today}
@@ -131,16 +139,18 @@ export function ScheduledEntryActions({
           what={what}
         />
       )}
-      {isSpayOrNeuter(entry)
-        ? canManage && (
-            <DeclineAsExemptionButton
-              animalId={animalId}
-              entry={entry}
-              today={today}
-              what={what}
-            />
-          )
-        : canAdminister && <DeclineButton entry={entry} what={what} />}
+      {canDecline &&
+        (isSpayOrNeuter(entry) ? (
+          <DeclineAsExemptionButton
+            animalId={animalId}
+            entry={entry}
+            today={today}
+            what={what}
+            inCare={inCare}
+          />
+        ) : (
+          <DeclineButton entry={entry} what={what} inCare={inCare} />
+        ))}
     </div>
   );
 }
@@ -348,7 +358,17 @@ function RescheduleButton({
   );
 }
 
-function DeclineButton({ entry, what }: { entry: DueCare; what: string }) {
+function DeclineButton({
+  entry,
+  what,
+  inCare,
+}: {
+  entry: DueCare;
+  what: string;
+  /** Whether the animal is still in care, so the entry can be scheduled
+   * again after a mistaken decline is voided. */
+  inCare: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -418,8 +438,9 @@ function DeclineButton({ entry, what }: { entry: DueCare; what: string }) {
                   declined, with your reason.
                 </p>
                 <p>
-                  A decline is final. If it was a mistake, void the entry and
-                  schedule it again.
+                  {inCare
+                    ? "A decline is final. If it was a mistake, void the entry and schedule it again."
+                    : "A decline is final. If it was a mistake, void the entry."}
                 </p>
               </div>
             </AlertDialogDescription>
@@ -464,11 +485,15 @@ function DeclineAsExemptionButton({
   entry,
   today,
   what,
+  inCare,
 }: {
   animalId: string;
   entry: DueCare;
   today: CalendarDay;
   what: string;
+  /** Whether the animal is still in care. Once it has left, the exemption
+   * closes leftover care: it has no review day, and nothing new is planned. */
+  inCare: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const formRef = useRef<DirtyFormHandle>(null);
@@ -500,15 +525,17 @@ function DeclineAsExemptionButton({
             <DialogTitle>Decline {what}</DialogTitle>
             <DialogDescription>
               Declining a {procedure} records that the animal is exempt from
-              it, and why. The entry stays on the record as declined. A decline
-              is final: to extend the exemption, record a new one, and to end
-              it, schedule or record the {procedure}.
+              it, and why. The entry stays on the record as declined.{" "}
+              {inCare
+                ? `A decline is final: to extend the exemption, record a new one, and to end it, schedule or record the ${procedure}.`
+                : `A decline is final. The animal has left the shelter's care, so the exemption has no review date; if the ${procedure} is done, record it.`}
             </DialogDescription>
           </DialogHeader>
           <SpayNeuterExemptionForm
             animalId={animalId}
             mode={{ decline: { entryId: entry.id } }}
             today={today}
+            reviewable={inCare}
             submitLabel="Decline Entry"
             onFormSubmit={() => setOpen(false)}
             ref={formRef}

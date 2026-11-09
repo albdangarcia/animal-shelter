@@ -92,7 +92,7 @@ Add the following variables to your `.env` file. See `.env.example` for a full r
 | `GITHUB_CLIENT_SECRET`       | ⚪ Optional | GitHub OAuth client secret, from your [GitHub Developer settings](https://github.com/settings/developers).            |
 | `GOOGLE_CLIENT_ID`           | ⚪ Optional | Google OAuth client ID, from your [Google Cloud Console](https://console.cloud.google.com/apis/credentials).          |
 | `GOOGLE_CLIENT_SECRET`       | ⚪ Optional | Google OAuth client secret, from your [Google Cloud Console](https://console.cloud.google.com/apis/credentials).      |
-| `ADMIN_PASSWORD`             | ✅ Required | Password for the default admin user, used when seeding the database. Also the password for all other seeded accounts. |
+| `ADMIN_PASSWORD`             | ✅ Required | Password for the default admin user, used when seeding the database. Other seeded accounts use a fixed password (see Other Seeded Accounts). |
 
 Typical values per environment:
 
@@ -185,15 +185,18 @@ Sign-in supports email and password as well as GitHub OAuth. There is no self-se
 
 ### Other Seeded Accounts
 
-All non-admin accounts use the same password as `ADMIN_PASSWORD`.
+All non-admin accounts use the fixed seed password `7dJbys5@?tMA` (set in `prisma/seed.ts`), not `ADMIN_PASSWORD`.
 
-| Email                      | Name            | Role      |
-| -------------------------- | --------------- | --------- |
-| `staff1@example.com`       | Olivia Chen     | Staff     |
-| `staff2@example.com`       | Benjamin Carter | Staff     |
-| `surrenderer1@example.com` | Jane Doe        | User      |
-| `finder1@example.com`      | John Smith      | User      |
-| `volunteer1@example.com`   | Sam Rivera      | Volunteer |
+| Email                           | Name              | Role      | Notes                                                  |
+| ------------------------------- | ----------------- | --------- | ------------------------------------------------------ |
+| `staff1@example.com`            | Olivia Chen       | Staff     |                                                        |
+| `staff2@example.com`            | Benjamin Carter   | Staff     |                                                        |
+| `volunteer1@example.com`        | Sam Rivera        | Volunteer |                                                        |
+| `surrenderer1@example.com`      | Jane Doe          | User      |                                                        |
+| `finder1@example.com`           | John Smith        | User      |                                                        |
+| `foster1@example.com`           | Rosa Lindqvist    | User      | An active foster                                       |
+| `pat.mislinked@example.com`     | Pat Mislinked     | User      | Fixture for the account-unlink repair                  |
+| `casey.deactivated@example.com` | Casey Deactivated | User      | Deactivated: can't sign in                             |
 
 > **Live demo password:** `7dJbys5@?tMA`
 
@@ -224,7 +227,7 @@ First, clone the repository and set up your environment variables.
 
 3.  **Fill out the `.env` file**:
     - `DATABASE_URL` and `DATABASE_URL_UNPOOLED` are already set to matching local values in `.env.example`, which work as-is for both the Docker setup and a host-run `npm run dev` (see Option 1 below).
-    - Set `ADMIN_PASSWORD` to a password of your choice. This will be the password for all seeded accounts.
+    - Set `ADMIN_PASSWORD` to a password of your choice. This will be the seeded admin's password; the other seeded accounts use a fixed one (see Other Seeded Accounts).
     - Generate a `BETTER_AUTH_SECRET` by running `openssl rand -base64 32`.
     - Set `BETTER_AUTH_URL` to `http://localhost:3000` and leave `BETTER_AUTH_ALLOWED_HOSTS` as `localhost:*`.
     - Log into your Vercel account, create a new Blob store, and get your `BLOB_READ_WRITE_TOKEN`. **This is required for all image upload/delete functionality.**

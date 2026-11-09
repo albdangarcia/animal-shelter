@@ -38,8 +38,8 @@ async function fixture() {
       await db.query(`INSERT INTO vaccine_details (id, entry_id, manufacturer, lot_number, duration_months, valid_until_date, veterinarian_name, veterinarian_license_number, updated_at)
         VALUES ($1, $2, 'Recorded manufacturer', $3, 12, $4, $5, $5, now())`, [id(), entryId, `Lot-${i}`, i === 25 ? null : "2027-02-01", marker]);
     }
-    const chipId = id();
-    await db.query(`INSERT INTO medical_entries (id, animal_id, kind, status, source, completed_date, chip_number, created_by_id, updated_at) VALUES ($1, $2, 'MICROCHIP', 'COMPLETED', 'BEFORE_INTAKE', null, $3, $4, now())`, [chipId, animalId, `OUTPUT${randomBytes(6).toString("hex").toUpperCase()}`, actorId]);
+    const chipId = id(), chipNumber = `OUTPUT${randomBytes(6).toString("hex").toUpperCase()}`;
+    await db.query(`INSERT INTO medical_entries (id, animal_id, kind, status, source, completed_date, chip_number, created_by_id, updated_at) VALUES ($1, $2, 'MICROCHIP', 'COMPLETED', 'BEFORE_INTAKE', null, $3, $4, now())`, [chipId, animalId, chipNumber, actorId]);
     await db.query(`INSERT INTO microchip_details (id, entry_id, brand, registration_status, registry_name, registration_date, registration_notes, updated_at) VALUES ($1, $2, 'Recorded brand', 'REGISTERED', $3, '2026-02-28', $4, now())`, [id(), chipId, registry, marker]);
     await db.query(`INSERT INTO medical_conditions (id, animal_id, type, name, status, onset_date, notes, diagnosed_by, created_by_id, updated_at) VALUES ($1, $2, 'ALLERGY', 'Recorded allergy', 'CHRONIC', '2026-02-28', $3, $3, $4, now())`, [id(), animalId, marker, actorId]);
     await db.query(`INSERT INTO care_episodes (id, animal_id, type, start_date, reason, notes, opened_by_id, updated_at) VALUES ($1, $2, 'UNDER_VET_CARE', '2026-02-28', $3, $3, $4, now())`, [id(), animalId, marker, actorId]);
@@ -54,7 +54,7 @@ async function fixture() {
     await db.query(`INSERT INTO outcomes (id, "animalId", "outcomeDate", type, "staffMemberId", "previousListingStatus", "updatedAt") VALUES ($1, $2, '2026-03-02', 'ADOPTION', $3, 'DRAFT', now())`, [id(), animalId, actorId]);
     await db.query(`UPDATE animals SET "listingStatus" = 'ARCHIVED', "archiveReason" = 'ADOPTION' WHERE id = $1`, [animalId]);
     await db.query("COMMIT");
-    return { animalId, emptyId, itemId, medicationId, entries, marker, registry, name, product };
+    return { animalId, emptyId, itemId, medicationId, entries, marker, registry, name, product, chipNumber };
   });
 }
 const counts = (animalId: string) => withDb(async (db) => (await db.query(`SELECT
@@ -84,6 +84,33 @@ test("medical readers print the full safe handout, with private direct access an
   const route = `/medical-outputs/animals/${f.animalId}/history`;
   try {
     const before = await counts(f.animalId);
+    await page.goto(`/dashboard/animals/${f.animalId}/medical`);
+    // The adopted animal's leftover vaccine can only be closed: declined
+    // here or voided from its menu, never recorded or moved.
+    const due = page.getByRole("region", { name: "Due", exact: true });
+    await expect(due.getByRole("button", { name: /^Decline / })).toBeVisible();
+    await expect(due.getByRole("button", { name: /^(Record|Reschedule) / })).toHaveCount(0);
+    // Nothing new is planned for it: Add entry offers only care already
+    // given, and the problem list takes no new rows.
+    const addEntry = page.getByRole("button", { name: "Add entry", exact: true });
+    const given = page.getByRole("menuitem", { name: "Vaccine", exact: true });
+    await expect(async () => {
+      if (!await given.isVisible()) await addEntry.click();
+      await expect(given).toBeVisible({ timeout: 2_000 });
+    }).toPass({ timeout: 20_000 });
+    await expect(page.getByRole("menuitem", { name: /^(Schedule|Spay\/neuter exemption)/ })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    // Its open episode alone would hide "Open care episode", so it is closed
+    // for this look, and opened again for the history printed below.
+    await withDb((db) => db.query(`UPDATE care_episodes SET end_date='2026-03-01' WHERE animal_id=$1`, [f.animalId]));
+    try {
+      await page.goto(`/dashboard/animals/${f.animalId}/medical/conditions`);
+      await expect(page.getByText("Recorded allergy", { exact: false }).first()).toBeVisible();
+      await expect(page.getByText("Feb 28, 2026 to Mar 1, 2026", { exact: false }).first()).toBeVisible();
+      await expect(page.getByRole("button", { name: /^(Add condition|Add allergy|Open care episode)$/ })).toHaveCount(0);
+    } finally {
+      await withDb((db) => db.query(`UPDATE care_episodes SET end_date=NULL WHERE animal_id=$1`, [f.animalId]));
+    }
     await page.goto(`/dashboard/animals/${f.animalId}/medical`);
     await page.getByRole("link", { name: "Print adopter medical history", exact: true }).click();
     await expect(page.getByRole("heading", { name: `Medical history — ${f.name}`, exact: true })).toBeVisible();
@@ -231,6 +258,7 @@ test("medical readers print a selected rabies certificate only after its missing
     await expect(vaccination).toContainText("Feb 28, 2025");
     await expect(vaccination).toContainText("Feb 28, 2026");
     await expect(vaccination).toContainText("Expired as of");
+    await expect(page.locator("header dt", { hasText: "Microchip" }).locator("+ dd")).toHaveText(f.chipNumber);
     await expect(page.getByText(vet, { exact: true })).toBeVisible();
     await expect(page.getByText(license, { exact: true })).toBeVisible();
     await expect(page.getByText("Veterinarian signature:", { exact: true })).toBeVisible();
