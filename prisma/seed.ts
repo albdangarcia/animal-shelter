@@ -1,5 +1,11 @@
-import { fallbackShelterSettings, resolveShelterSettings } from "@/app/lib/utils/shelter-settings";
+import { submitVetVisitReport, reviewVetVisitReport } from "@/app/lib/services/vet-visit-report";
+import {
+  fallbackShelterSettings,
+  resolveShelterSettings,
+  shelterSettingsColumns,
+} from "@/app/lib/utils/shelter-settings";
 import fs from "node:fs";
+import assert from "node:assert/strict";
 import path from "node:path";
 import { betterAuth } from "better-auth";
 import { authOptions } from "@/auth.options";
@@ -12,7 +18,6 @@ import {
   PartnerType,
   AnimalListingStatus,
   IntakeType,
-  AnimalHealthStatus,
   NoteCategory,
   TaskCategory,
   TaskPriority,
@@ -31,6 +36,29 @@ import {
   FosterPlacementType,
   FosterReturnReason,
   AssessmentSignal,
+  CareEpisodeType,
+  DoseUnit,
+  ExamFindingStatus,
+  ExamResult,
+  ExamType,
+  DoseSlot,
+  MedicalConditionStatus,
+  MedicalConditionType,
+  MedicalDocumentType,
+  MedicalEntryKind,
+  MedicalEntrySource,
+  MedicalEntryStatus,
+  MicrochipRegistrationStatus,
+  MedicalItemKind,
+  MedicalProtocolStepKind,
+  MedicalRoute,
+  MedicationDoseResult,
+  MedicationFrequency,
+  ReproductiveStatus,
+  SpayNeuterExemptionReason,
+  SurgeryEvidence,
+  SurgeryProcedure,
+  TestResult,
 } from "@/prisma/generated/enums";
 import {
   getRandomDate,
@@ -43,12 +71,74 @@ import {
   calendarDay,
   shelterDayKey,
   shelterDaysBetweenKeys,
+  shelterNow,
   shelterToday,
+  shelterInstant,
   shiftDayKey,
   startOfShelterDay,
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
 import { recordNoteMutation } from "@/app/lib/services/note-audit";
+import {
+  createMedicalItem,
+  retireMedicalItem,
+  type MedicalItemInput,
+} from "@/app/lib/services/medical-catalog";
+import {
+  declineMedicalEntry,
+  editMedicalEntry,
+  recordMedicalEntry,
+  recordScheduledMedicalEntry,
+  recordSpayNeuterExemption,
+  rescheduleMedicalEntry,
+  scheduleMedicalEntry,
+  voidMedicalEntry,
+  type ExamEntryInput,
+  type MedicalEntryInput,
+  type RecordMedicalEntryInput,
+} from "@/app/lib/services/medical-entry";
+import { EXAM_BODY_SYSTEM_KEYS } from "@/app/lib/constants/exam";
+import { examVitalsInstant } from "@/app/lib/utils/exam-vitals";
+import { nextDueDate } from "@/app/lib/utils/medical-days";
+import type { CatalogEntryKind } from "@/app/lib/constants/medical";
+import { recordMedicalBatch } from "@/app/lib/services/medical-batch";
+import {
+  addMedicalCondition,
+  editMedicalCondition,
+  voidMedicalCondition,
+} from "@/app/lib/services/medical-condition";
+import { openCareEpisode } from "@/app/lib/services/care-episode";
+import {
+  createMedicalProtocol,
+  retireMedicalProtocol,
+  type MedicalProtocolInput,
+} from "@/app/lib/services/medical-protocol";
+import { applyIntakeProtocol } from "@/app/lib/services/medical-protocol-application";
+import {
+  createMedicationOrder,
+  discontinueMedicationOrder,
+  voidMedicationOrder,
+  type MedicationOrderInput,
+} from "@/app/lib/services/medication-order";
+import { recordMedicationDose, voidMedicationDose } from "@/app/lib/services/medication-dose";
+import {
+  createMedicalDocument,
+  storeThenRecord,
+  voidMedicalDocument,
+  type MedicalDocumentInput,
+} from "@/app/lib/services/medical-document";
+import {
+  medicalDocumentStore,
+  seedDocumentPathname,
+} from "@/app/lib/storage/medical-document-store";
+import { ALTERED_ENTRY_WHERE } from "@/app/lib/data/animals/medical-status";
+import { PUBLIC_MEDICAL_FACTS_SELECT, publicMedicalFacts } from "@/app/lib/data/animals/medical-status";
+import { findMedicalHistoryOutput, findRabiesCertificateOutput } from "@/app/lib/data/animals/medical-output";
+import { recordOutcome } from "@/app/lib/services/outcome-recording";
+import { correctOutcomeMedical } from "@/app/lib/services/outcome-medical";
+import { recordOutcomeReversal } from "@/app/lib/services/outcome-reversal";
+import { lockAnimal } from "@/app/lib/data/application-status.data";
+import { EuthanasiaMedicalSchema, type OutcomeMedicalDetailsInput } from "@/app/lib/zod-schemas/outcome-medical.schemas";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { LATEST_ENTRY_ORDER } from "@/app/lib/utils/vitals-order";
 import { PrismaPg } from "@prisma/adapter-pg";
@@ -625,6 +715,20 @@ let pendingCharacteristicAssignments: {
   characteristicIds: string[];
 }[] = [];
 
+// Whether each animal arrived spayed or neutered, and its microchip number,
+// collected while animals are created, then written as medical records by
+// seedMedicalFacts()
+// at the tail of seedAll(). Deferred for the same reason as
+// pendingCharacteristicAssignments: a medical entry written here would draw
+// cuid()s from the shared mulberry32 stream and shift every draw after it.
+let pendingMedicalFacts: {
+  animalId: string;
+  altered: boolean;
+  chipNumber: string | null;
+  sex: Sex;
+  intakeType: IntakeType;
+}[] = [];
+
 function dealIndividual(speciesKey: keyof typeof allSpecies): SpeciesIndividual {
   let queue = individualDealQueues[speciesKey];
   if (!queue || queue.length === 0) {
@@ -729,6 +833,22 @@ type Archetype =
   | "ADOPTED"
   | "RETURN_READOPT";
 
+// How an animal arrived, as its blueprint says or the seed draws it, in the
+// words of the old health-status field. Seed-only: nothing writes it to the
+// animal. It words the intake note and decides whether intake opens a
+// "Schedule Vet Examination" task, and it is still drawn for every generated
+// animal so the random stream after it doesn't move. The care itself is
+// recorded on the medical record (seedCareFixtures).
+type ArrivalHealth =
+  | "HEALTHY"
+  | "AWAITING_VET_EXAM"
+  | "AWAITING_TRIAGE"
+  | "UNDER_VET_CARE"
+  | "HOSPITALISED"
+  | "AWAITING_SPAY_NEUTER"
+  | "AWAITING_OTHER_SURGERY"
+  | "RECOVERING_FROM_SURGERY";
+
 interface AnimalBlueprint {
   name: string;
   sex: Sex;
@@ -737,7 +857,8 @@ interface AnimalBlueprint {
   size: AnimalSize | null;
   weightGrams: number;
   heightCm: number;
-  microchipNumber?: string;
+  // Recorded as a chip found before intake (see pendingMedicalFacts).
+  chipNumber?: string;
   species: { name: string };
   breeds: { name: string }[];
   colors: { name: string }[];
@@ -747,18 +868,19 @@ interface AnimalBlueprint {
   unitName: string | null;
   archetype: Archetype;
   intakeType: IntakeType;
-  healthStatus: AnimalHealthStatus;
+  arrivalHealth: ArrivalHealth;
   listingStatus: AnimalListingStatus;
   // A minority of open stays run long (90-160 days) so the length-of-stay
   // report's "over 90 days" bucket has real entries.
   longStay?: boolean;
   // Suppresses the automatic "Schedule Vet Examination" follow-up task that
-  // intake creates for any non-healthy in-care animal. That auto-task is
-  // realistic — staff really do open one at triage — but it means an acute
-  // animal is never *untasked*, so signal 2 of the attention queue
-  // (acute health + no open task) would have nothing to match. A few
-  // blueprints set this to deliberately model the shelter dropping the ball:
-  // an animal that needs care and nobody has planned anything.
+  // intake creates for any in-care animal not arriving healthy. That auto-task is
+  // realistic — staff really do open one at triage — but it means such an
+  // animal is never *untasked*, so the attention queue's care signal (an open
+  // care episode with no open task and no scheduled care) would have nothing
+  // to match. A few blueprints set this to deliberately model the shelter
+  // dropping the ball: an animal that needs care and nobody has planned
+  // anything. seedCareFixtures opens the episodes.
   skipIntakeFollowUpTask?: boolean;
   // Pins the birth date. When absent, `resolveBlueprintDerivedFields` fills it
   // before creation (a random spread for most animals, an adult range for
@@ -767,10 +889,12 @@ interface AnimalBlueprint {
   // disambiguation pair needs two same-named animals a human can tell apart by
   // birth date alone, every reseed.
   birthDate?: CalendarDay;
-  // Whether the animal has been spayed/neutered. Normally derived from age by
+  // Whether the animal arrived spayed/neutered. Normally derived from age by
   // `resolveBlueprintDerivedFields`; set here only to pin it against the age
-  // gate. Read by the public pet detail page and the redesigned homepage badge.
-  isSpayedNeutered?: boolean;
+  // gate. Recorded as a spay or neuter done before intake (see
+  // pendingMedicalFacts), which the public pet page and the homepage badge
+  // read.
+  altered?: boolean;
   // Public-facing copy, shown on the homepage hero and the pet detail page.
   // Only the hero six set this; everything else keeps the generic literal.
   description?: string;
@@ -786,7 +910,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 30000,
     heightCm: 58,
-    microchipNumber: "985141000100001",
+    chipNumber: "985141000100001",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.GOLDEN_RETRIEVER],
     colors: [allColors.GOLDEN, allColors.WHITE],
@@ -796,7 +920,7 @@ const animalSeedData: AnimalBlueprint[] = [
       allCharacteristics.GOOD_WITH_DOGS,
     ],
     intakeType: IntakeType.OWNER_SURRENDER,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/dog/dog-01-1.webp`, `${baseUrl}/dog/dog-01-2.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A1.name,
     archetype: "IN_CARE",
@@ -813,7 +937,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.XLARGE,
     weightGrams: 8000,
     heightCm: 32,
-    microchipNumber: "985141000100002",
+    chipNumber: "985141000100002",
     species: allSpecies.DOG,
     breeds: [
       allSpecies.DOG.breeds.AMERICAN_ESKIMO,
@@ -823,7 +947,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.WHITE,
     characteristics: [allCharacteristics.NEEDS_QUIET_HOME],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
+    arrivalHealth: "AWAITING_VET_EXAM",
     images: [`${baseUrl}/dog/dog-02-1.webp`, `${baseUrl}/dog/dog-02-2.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A2.name,
     archetype: "IN_CARE",
@@ -835,14 +959,14 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.MEDIUM,
     weightGrams: 18000,
     heightCm: 45,
-    microchipNumber: "985141000100003",
+    chipNumber: "985141000100003",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.AIREDALE_TERRIER],
     colors: [allColors.BROWN, allColors.BLACK],
     primaryColor: allColors.BROWN,
     characteristics: [allCharacteristics.HOUSEBROKEN],
     intakeType: IntakeType.TRANSFER_IN,
-    healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
+    arrivalHealth: "UNDER_VET_CARE",
     images: [`${baseUrl}/dog/dog-03-1.webp`, `${baseUrl}/dog/dog-03-2.webp`],
     unitName: allLocations.MEDICAL_WING.units.MED1.name,
     archetype: "IN_CARE",
@@ -857,14 +981,14 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.SMALL,
     weightGrams: 3500,
     heightCm: 24,
-    microchipNumber: "985141000100004",
+    chipNumber: "985141000100004",
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.SIAMESE],
     colors: [allColors.WHITE, allColors.BROWN],
     primaryColor: allColors.WHITE,
     characteristics: [allCharacteristics.GOOD_WITH_CATS],
     intakeType: IntakeType.OWNER_SURRENDER,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [
       `${baseUrl}/cat/cat-07-1.webp`,
       `${baseUrl}/cat/cat-07-2.webp`,
@@ -885,14 +1009,14 @@ const animalSeedData: AnimalBlueprint[] = [
     size: null,
     weightGrams: 3000,
     heightCm: 23,
-    microchipNumber: "985141000100005",
+    chipNumber: "985141000100005",
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.DOMESTIC_SHORTHAIR],
     colors: [allColors.GRAY, allColors.TABBY, allColors.WHITE],
     primaryColor: allColors.GRAY,
     characteristics: [],
     intakeType: IntakeType.BORN_IN_CARE,
-    healthStatus: AnimalHealthStatus.AWAITING_SPAY_NEUTER,
+    arrivalHealth: "AWAITING_SPAY_NEUTER",
     images: [
       `${baseUrl}/cat/cat-09-1.webp`,
       `${baseUrl}/cat/cat-09-2.webp`,
@@ -908,14 +1032,14 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 6000,
     heightCm: 40,
-    microchipNumber: "985141000100006",
+    chipNumber: "985141000100006",
     species: allSpecies.REPTILE,
     breeds: [allSpecies.REPTILE.breeds.IGUANA],
     colors: [allColors.GREEN, allColors.ORANGE],
     primaryColor: allColors.GREEN,
     characteristics: [],
     intakeType: IntakeType.SEIZE,
-    healthStatus: AnimalHealthStatus.AWAITING_TRIAGE,
+    arrivalHealth: "AWAITING_TRIAGE",
     images: [
       `${baseUrl}/reptile/reptile-01-1.webp`,
       `${baseUrl}/reptile/reptile-01-2.webp`,
@@ -934,7 +1058,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 32000,
     heightCm: 57,
-    microchipNumber: "985141000100007",
+    chipNumber: "985141000100007",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.LABRADOR, allSpecies.DOG.breeds.MIXED_BREED],
     colors: [allColors.BLACK, allColors.WHITE],
@@ -944,7 +1068,7 @@ const animalSeedData: AnimalBlueprint[] = [
       allCharacteristics.HOUSEBROKEN,
     ],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/dog/dog-04-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A3.name,
     archetype: "IN_CARE",
@@ -959,7 +1083,7 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.SMALL,
     weightGrams: 3200,
     heightCm: 22,
-    microchipNumber: "985141000100008",
+    chipNumber: "985141000100008",
     species: allSpecies.CAT,
     breeds: [
       allSpecies.CAT.breeds.TABBY,
@@ -969,7 +1093,7 @@ const animalSeedData: AnimalBlueprint[] = [
     primaryColor: allColors.TABBY,
     characteristics: [allCharacteristics.GOOD_WITH_CATS],
     intakeType: IntakeType.BORN_IN_CARE,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/cat/cat-01-1.webp`],
     // Unplaced: not yet assigned to a unit (shows in the "Unplaced" column).
     unitName: null,
@@ -983,14 +1107,14 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 28000,
     heightCm: 55,
-    microchipNumber: "985141000100009",
+    chipNumber: "985141000100009",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.GOLDEN_RETRIEVER],
     colors: [allColors.GOLDEN, allColors.WHITE],
     primaryColor: allColors.GOLDEN,
     characteristics: [allCharacteristics.DEAF],
     intakeType: IntakeType.TRANSFER_IN,
-    healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
+    arrivalHealth: "UNDER_VET_CARE",
     images: [`${baseUrl}/dog/dog-05-1.webp`],
     unitName: allLocations.MEDICAL_WING.units.MED2.name,
     archetype: "IN_CARE",
@@ -1000,27 +1124,29 @@ const animalSeedData: AnimalBlueprint[] = [
       "Daisy is deaf and does not appear to consider it a problem. She watches faces instead of listening, and learns hand signals fast.",
   },
 
-  // --- Attention-queue signal 2: acute health, nobody has planned anything ---
-  // These animals are in an acute health status but carry NO open task
-  // (skipIntakeFollowUpTask suppresses the usual triage follow-up). They model
-  // the gap the queue exists to surface — an animal needing care that has
-  // fallen through the cracks. The auto-task the other acute animals get
-  // (Flash, Fido, Godzilla, Daisy) is the realistic norm; these are the
-  // exceptions, and there are only a few on purpose.
+  // --- Attention queue: under care, nobody has planned anything -----------
+  // These animals carry NO open task (skipIntakeFollowUpTask suppresses the
+  // usual triage follow-up). seedCareFixtures puts Rocket and Marigold under
+  // a care episode with no scheduled care either: the gap the queue exists
+  // to surface, an animal needing care that has fallen through the cracks.
+  // Fern gets her triage exam scheduled and Rusty a recent surgery instead.
+  // The follow-up task the other animals needing a vet get (Flash, Fido,
+  // Godzilla, Daisy) is the realistic norm; these are the exceptions, and
+  // there are only a few on purpose.
   {
     name: "Marigold",
     sex: Sex.FEMALE,
     size: AnimalSize.SMALL,
     weightGrams: 3600,
     heightCm: 24,
-    microchipNumber: "985141000100010",
+    chipNumber: "985141000100010",
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.DOMESTIC_SHORTHAIR],
     colors: [allColors.BLACK, allColors.WHITE],
     primaryColor: allColors.BLACK,
     characteristics: [],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.HOSPITALISED,
+    arrivalHealth: "HOSPITALISED",
     images: [`${baseUrl}/cat/cat-02-1.webp`],
     unitName: null,
     archetype: "IN_CARE",
@@ -1033,14 +1159,14 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.MEDIUM,
     weightGrams: 15000,
     heightCm: 42,
-    microchipNumber: "985141000100011",
+    chipNumber: "985141000100011",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.MIXED_BREED],
     colors: [allColors.BROWN],
     primaryColor: allColors.BROWN,
     characteristics: [],
     intakeType: IntakeType.OWNER_SURRENDER,
-    healthStatus: AnimalHealthStatus.UNDER_VET_CARE,
+    arrivalHealth: "UNDER_VET_CARE",
     images: [`${baseUrl}/dog/dog-06-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A4.name,
     archetype: "IN_CARE",
@@ -1053,14 +1179,14 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.SMALL,
     weightGrams: 1600,
     heightCm: 22,
-    microchipNumber: "985141000100012",
+    chipNumber: "985141000100012",
     species: allSpecies.RABBIT,
     breeds: [allSpecies.RABBIT.breeds.LIONHEAD],
     colors: [allColors.WHITE, allColors.GRAY],
     primaryColor: allColors.WHITE,
     characteristics: [],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.AWAITING_TRIAGE,
+    arrivalHealth: "AWAITING_TRIAGE",
     images: [`${baseUrl}/rabbit/rabbit-01-1.webp`],
     unitName: allLocations.ISOLATION.units.ISO2.name,
     archetype: "IN_CARE",
@@ -1073,14 +1199,14 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 26000,
     heightCm: 54,
-    microchipNumber: "985141000100013",
+    chipNumber: "985141000100013",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.LABRADOR],
     colors: [allColors.GOLDEN],
     primaryColor: allColors.GOLDEN,
     characteristics: [allCharacteristics.HOUSEBROKEN],
     intakeType: IntakeType.TRANSFER_IN,
-    healthStatus: AnimalHealthStatus.RECOVERING_FROM_SURGERY,
+    arrivalHealth: "RECOVERING_FROM_SURGERY",
     images: [`${baseUrl}/dog/dog-07-1.webp`],
     unitName: null,
     archetype: "IN_CARE",
@@ -1088,22 +1214,21 @@ const animalSeedData: AnimalBlueprint[] = [
     skipIntakeFollowUpTask: true,
   },
   {
-    // AWAITING_SPAY_NEUTER is deliberately NOT in the acute set — spay/neuter is
-    // routine and sticky, and would dominate the queue. Nutmeg is untasked and
-    // acute-adjacent, and must still never appear via signal 2.
+    // Untasked, but under no care episode: her scheduled spay is routine care,
+    // so she never appears as care with nothing planned.
     name: "Nutmeg",
     sex: Sex.FEMALE,
     size: AnimalSize.SMALL,
     weightGrams: 3200,
     heightCm: 23,
-    microchipNumber: "985141000100014",
+    chipNumber: "985141000100014",
     species: allSpecies.CAT,
     breeds: [allSpecies.CAT.breeds.TABBY],
     colors: [allColors.TABBY],
     primaryColor: allColors.TABBY,
     characteristics: [],
     intakeType: IntakeType.OWNER_SURRENDER,
-    healthStatus: AnimalHealthStatus.AWAITING_SPAY_NEUTER,
+    arrivalHealth: "AWAITING_SPAY_NEUTER",
     images: [`${baseUrl}/cat/cat-03-1.webp`],
     unitName: allLocations.CAT_ROOM.units.C2.name,
     archetype: "IN_CARE",
@@ -1119,14 +1244,14 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.MEDIUM,
     weightGrams: 19000,
     heightCm: 46,
-    microchipNumber: "985141000100015",
+    chipNumber: "985141000100015",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.AIREDALE_TERRIER],
     colors: [allColors.BLACK, allColors.BROWN],
     primaryColor: allColors.BLACK,
     characteristics: [allCharacteristics.GOOD_WITH_DOGS],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/dog/dog-08-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A4.name,
     archetype: "IN_CARE",
@@ -1147,14 +1272,14 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.LARGE,
     weightGrams: 27000,
     heightCm: 55,
-    microchipNumber: "985141000100016",
+    chipNumber: "985141000100016",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.LABRADOR],
     colors: [allColors.GOLDEN],
     primaryColor: allColors.GOLDEN,
     characteristics: [allCharacteristics.GOOD_WITH_KIDS],
     intakeType: IntakeType.OWNER_SURRENDER,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/dog/dog-09-1.webp`],
     unitName: allLocations.DOG_BLOCK_A.units.A3.name,
     archetype: "IN_CARE",
@@ -1167,14 +1292,14 @@ const animalSeedData: AnimalBlueprint[] = [
     size: AnimalSize.MEDIUM,
     weightGrams: 19000,
     heightCm: 46,
-    microchipNumber: "985141000100017",
+    chipNumber: "985141000100017",
     species: allSpecies.DOG,
     breeds: [allSpecies.DOG.breeds.MIXED_BREED],
     colors: [allColors.BLACK, allColors.WHITE],
     primaryColor: allColors.BLACK,
     characteristics: [allCharacteristics.HOUSEBROKEN],
     intakeType: IntakeType.STRAY,
-    healthStatus: AnimalHealthStatus.HEALTHY,
+    arrivalHealth: "HEALTHY",
     images: [`${baseUrl}/dog/dog-10-1.webp`],
     unitName: null,
     archetype: "IN_CARE",
@@ -1307,8 +1432,9 @@ const overdueTaskSeedData: {
     daysOverdue: 10,
   },
   {
-    // Daisy is UNDER_VET_CARE and already has the intake follow-up task, so she
-    // never qualifies for signal 2 — this overdue task keeps her in signal 1.
+    // Daisy is under care but already has the intake follow-up task, so she
+    // never reaches the queue's care signal — this overdue task keeps her in
+    // its task tier.
     animalName: "Daisy",
     title: "Post-op wound recheck",
     details: "Recheck incision site; overdue by several days.",
@@ -1435,16 +1561,16 @@ function pickTypicalSize(
   return pickWeighted(typicalSizeWeightsBySpecies[speciesKey]);
 }
 
-function pickHealthStatus(): AnimalHealthStatus {
-  return pickWeighted([
-    { value: AnimalHealthStatus.HEALTHY, weight: 60 },
-    { value: AnimalHealthStatus.AWAITING_VET_EXAM, weight: 10 },
-    { value: AnimalHealthStatus.AWAITING_TRIAGE, weight: 5 },
-    { value: AnimalHealthStatus.UNDER_VET_CARE, weight: 8 },
-    { value: AnimalHealthStatus.HOSPITALISED, weight: 3 },
-    { value: AnimalHealthStatus.AWAITING_SPAY_NEUTER, weight: 8 },
-    { value: AnimalHealthStatus.AWAITING_OTHER_SURGERY, weight: 3 },
-    { value: AnimalHealthStatus.RECOVERING_FROM_SURGERY, weight: 3 },
+function pickArrivalHealth(): ArrivalHealth {
+  return pickWeighted<ArrivalHealth>([
+    { value: "HEALTHY", weight: 60 },
+    { value: "AWAITING_VET_EXAM", weight: 10 },
+    { value: "AWAITING_TRIAGE", weight: 5 },
+    { value: "UNDER_VET_CARE", weight: 8 },
+    { value: "HOSPITALISED", weight: 3 },
+    { value: "AWAITING_SPAY_NEUTER", weight: 8 },
+    { value: "AWAITING_OTHER_SURGERY", weight: 3 },
+    { value: "RECOVERING_FROM_SURGERY", weight: 3 },
   ]);
 }
 
@@ -1612,7 +1738,7 @@ function generateAnimalBlueprints(
           : null,
       archetype,
       intakeType,
-      healthStatus: pickHealthStatus(),
+      arrivalHealth: pickArrivalHealth(),
       listingStatus: isDraft
         ? AnimalListingStatus.DRAFT
         : AnimalListingStatus.PUBLISHED,
@@ -1623,14 +1749,14 @@ function generateAnimalBlueprints(
 }
 
 // The hand-authored blueprints hold microchip numbers 985141000100001 through
-// 985141000100017. `microchipNumber` is `String? @unique`, so a collision
-// fails the seed partway through — every chip assigned procedurally continues
-// that one sequence rather than being randomised.
+// 985141000100017. A chip number can't be on two live medical entries, so a
+// collision fails the seed partway through — every chip assigned procedurally
+// continues that one sequence rather than being randomised.
 const FIRST_GENERATED_MICROCHIP = 985141000100018;
 
 // Single pass over every blueprint — hand-authored and generated alike — run
 // once before any animal is created. It resolves each blueprint's birth date,
-// then derives `isSpayedNeutered` and `microchipNumber` from it. Doing all
+// then derives `altered` and `chipNumber` from it. Doing all
 // three here (rather than at the two create sites) keeps the age math and the
 // timing identical for hand-authored and generated animals and gives the chip
 // sequence a single home.
@@ -1670,22 +1796,22 @@ function resolveBlueprintDerivedFields(blueprints: AnimalBlueprint[]): void {
     }
 
     // 2. Spay/neuter status, gated by age unless the blueprint pins it.
-    if (blueprint.isSpayedNeutered === undefined) {
+    if (blueprint.altered === undefined) {
       if (blueprint.longStay) {
-        blueprint.isSpayedNeutered = true;
+        blueprint.altered = true;
       } else {
         const neuterRate =
           blueprint.birthDate > shelterDayKey(sixMonthsAgo, seedTimezone) ? 0.15 : 0.85;
-        blueprint.isSpayedNeutered = Math.random() < neuterRate;
+        blueprint.altered = Math.random() < neuterRate;
       }
     }
 
     // 3. Microchip number, conditional on neuter status unless already set.
     //    Long-stayers are always chipped for the same hero-determinism reason.
-    if (!blueprint.microchipNumber) {
-      const chipRate = blueprint.isSpayedNeutered ? 0.95 : 0.65;
+    if (!blueprint.chipNumber) {
+      const chipRate = blueprint.altered ? 0.95 : 0.65;
       if (blueprint.longStay || Math.random() < chipRate) {
-        blueprint.microchipNumber = String(nextMicrochip);
+        blueprint.chipNumber = String(nextMicrochip);
         nextMicrochip += 1;
       }
     }
@@ -2210,13 +2336,10 @@ async function seedReturnAndReadoptAnimal(opts: {
       size: blueprint.size,
       currentWeightGrams: blueprint.weightGrams,
       heightCm: blueprint.heightCm,
-      microchipNumber: blueprint.microchipNumber,
-      isSpayedNeutered: blueprint.isSpayedNeutered,
       description:
         blueprint.description ?? "A wonderful companion looking for a home.",
       listingStatus: AnimalListingStatus.PUBLISHED,
       publishedAt: stay1.intakeDate,
-      healthStatus: blueprint.healthStatus,
       species: { connect: { id: species.id } },
       breeds: { connect: connectedBreeds },
       colors: { connect: connectedColors },
@@ -2229,6 +2352,15 @@ async function seedReturnAndReadoptAnimal(opts: {
       },
       ...(currentUnit ? { currentUnit: { connect: { id: currentUnit.id } } } : {}),
     },
+  });
+
+  // Written as medical records in the tail (see pendingMedicalFacts).
+  pendingMedicalFacts.push({
+    animalId: animal.id,
+    altered: blueprint.altered ?? false,
+    chipNumber: blueprint.chipNumber ?? null,
+    sex: blueprint.sex,
+    intakeType: blueprint.intakeType,
   });
 
   // Characteristic assignments are written in the tail (see the module-level
@@ -2288,7 +2420,7 @@ async function seedReturnAndReadoptAnimal(opts: {
       authorId: processingStaff.id,
       category: NoteCategory.GENERAL,
       createdAt: stay1.intakeDate,
-      content: `Initial intake notes. Animal appears to be in ${blueprint.healthStatus} condition.`,
+      content: `Initial intake notes. Animal appears to be in ${blueprint.arrivalHealth} condition.`,
     },
   });
 
@@ -2301,7 +2433,8 @@ async function seedReturnAndReadoptAnimal(opts: {
   });
 
   // Re-intake: mirrors `_createReIntake` — a new Intake event, the animal's
-  // prior archive reason is cleared, and a fresh health status is set.
+  // prior archive reason is cleared, and how it arrived back is drawn for its
+  // notes and follow-up task.
   const reIntakeType = pickWeighted([
     { value: IntakeType.OWNER_SURRENDER, weight: 70 },
     { value: IntakeType.STRAY, weight: 20 },
@@ -2312,7 +2445,7 @@ async function seedReturnAndReadoptAnimal(opts: {
     walkInPersons,
     allPartners,
   );
-  const reIntakeHealthStatus = pickHealthStatus();
+  const reIntakeArrivalHealth = pickArrivalHealth();
 
   await prisma.intake.create({
     data: {
@@ -2321,13 +2454,6 @@ async function seedReturnAndReadoptAnimal(opts: {
       intakeDate: shelterDayKey(stay2.intakeDate, seedTimezone),
       staffMemberId: processingStaff.id,
       ...reIntakeRelations,
-    },
-  });
-
-  await prisma.animal.update({
-    where: { id: animal.id },
-    data: {
-      healthStatus: reIntakeHealthStatus,
     },
   });
 
@@ -2349,7 +2475,7 @@ async function seedReturnAndReadoptAnimal(opts: {
       authorId: processingStaff.id,
       category: NoteCategory.GENERAL,
       createdAt: stay2.intakeDate,
-      content: `Re-intake notes. Animal appears to be in ${reIntakeHealthStatus} condition.`,
+      content: `Re-intake notes. Animal appears to be in ${reIntakeArrivalHealth} condition.`,
     },
   });
 
@@ -2372,7 +2498,7 @@ async function seedReturnAndReadoptAnimal(opts: {
         currentUnitId: null,
       },
     });
-  } else if (reIntakeHealthStatus !== AnimalHealthStatus.HEALTHY) {
+  } else if (reIntakeArrivalHealth !== "HEALTHY") {
     await prisma.task.create({
       data: {
         animalId: animal.id,
@@ -2604,8 +2730,8 @@ async function seedAnimalsAndRelations() {
     ...generateAnimalBlueprints("RETURN_READOPT", RETURN_READOPT_COUNT),
   ];
 
-  // Resolve birth dates and derive the age-gated `isSpayedNeutered` /
-  // `microchipNumber` values for the whole set before any animal is written.
+  // Resolve birth dates and derive the age-gated `altered` / `chipNumber`
+  // values for the whole set before any animal is written.
   resolveBlueprintDerivedFields(blueprints);
 
   // Failures are collected rather than swallowed: a partial/inconsistent
@@ -2735,14 +2861,11 @@ async function seedAnimalsAndRelations() {
           size: blueprint.size,
           currentWeightGrams: blueprint.weightGrams,
           heightCm: blueprint.heightCm,
-          microchipNumber: blueprint.microchipNumber,
-          isSpayedNeutered: blueprint.isSpayedNeutered,
           description:
             blueprint.description ??
             "A wonderful companion looking for a home.",
           listingStatus: interimListingStatus,
           publishedAt: stay.intakeDate,
-          healthStatus: blueprint.healthStatus,
           species: { connect: { id: species.id } },
           breeds: { connect: connectedBreeds },
           colors: { connect: connectedColors },
@@ -2757,6 +2880,15 @@ async function seedAnimalsAndRelations() {
             ? { currentUnit: { connect: { id: currentUnit.id } } }
             : {}),
         },
+      });
+
+      // Written as medical records in the tail (see pendingMedicalFacts).
+      pendingMedicalFacts.push({
+        animalId: animal.id,
+        altered: blueprint.altered ?? false,
+        chipNumber: blueprint.chipNumber ?? null,
+        sex: blueprint.sex,
+        intakeType: blueprint.intakeType,
       });
 
       // Deferred to the tail so AnimalCharacteristic cuid()s don't shift the
@@ -2923,16 +3055,17 @@ async function seedAnimalsAndRelations() {
           authorId: processingStaff.id,
           category: NoteCategory.GENERAL,
           createdAt: stay.intakeDate,
-          content: `Initial intake notes. Animal appears to be in ${blueprint.healthStatus} condition.`,
+          content: `Initial intake notes. Animal appears to be in ${blueprint.arrivalHealth} condition.`,
         },
       });
 
       // Only in-care animals get an open follow-up — an archived
       // animal has already left the shelter's care. `skipIntakeFollowUpTask`
-      // blueprints opt out so they stay untasked for attention-queue signal 2.
+      // blueprints opt out so they stay untasked for the attention queue's
+      // care signal.
       if (
         isInCare &&
-        blueprint.healthStatus !== AnimalHealthStatus.HEALTHY &&
+        blueprint.arrivalHealth !== "HEALTHY" &&
         !blueprint.skipIntakeFollowUpTask
       ) {
         await prisma.task.create({
@@ -3403,22 +3536,16 @@ async function seedFostering() {
     const animal = await prisma.animal.create({
       data: {
         name: "Winston",
-        // Adopted adult dog: draw an adult age so the hard-set
-        // isSpayedNeutered below stays consistent with the age gate.
+        // Adopted adult dog: draw an adult age so the neuter recorded for
+        // him below stays consistent with the age gate.
         birthDate: shelterDayKey(getRandomDate(6, 1), seedTimezone),
         sex: Sex.MALE,
         size: AnimalSize.LARGE,
         currentWeightGrams: winstonWeightGrams,
         heightCm: 48,
-        // Outside the blueprint system, so both flags are set explicitly. The
-        // microchip sits well clear of the seeded sequence (…018 upward, a few
-        // hundred at most) and the hand-authored block (…001–…017).
-        isSpayedNeutered: true,
-        microchipNumber: "985141000109999",
         description: "A wonderful companion looking for a home.",
         listingStatus: AnimalListingStatus.PUBLISHED,
         publishedAt: intakeDate,
-        healthStatus: AnimalHealthStatus.HEALTHY,
         species: { connect: { id: dogSpecies.id } },
         breeds: { connect: [{ id: breed.id }] },
         colors: { connect: [{ id: primaryColor.id }] },
@@ -3431,6 +3558,18 @@ async function seedFostering() {
         },
         currentUnit: { connect: { id: startUnit.id } },
       },
+    });
+
+    // Outside the blueprint system, so his facts are set explicitly, as
+    // medical records in the tail (see pendingMedicalFacts). The microchip
+    // sits well clear of the seeded sequence (…018 upward, a few hundred at
+    // most) and the hand-authored block (…001–…017).
+    pendingMedicalFacts.push({
+      animalId: animal.id,
+      altered: true,
+      chipNumber: "985141000109999",
+      sex: Sex.MALE,
+      intakeType: IntakeType.OWNER_SURRENDER,
     });
 
     const surrenderer = getRandomItem(walkInPersons);
@@ -3581,14 +3720,29 @@ async function seedFostering() {
 async function seedApplicationNoise() {
   console.log("Seeding standalone adoption applications...");
 
+  // Every list the draws below index into is read in a fixed order. Without
+  // one, Postgres returns rows in whatever order they sit on disk, which can
+  // change between runs, and the same seeded draws then land on different
+  // animals and people: which animals end up pending adoption would vary from
+  // one seed to the next. Ids are no tiebreak for that (cuids are random), so
+  // the order is by what the seed itself fixes, then by when it was written.
+  const personOrder = [
+    { name: "asc" as const },
+    { email: "asc" as const },
+    { createdAt: "asc" as const },
+    { id: "asc" as const },
+  ];
   const staffMembers = await prisma.person.findMany({
     where: { user: { role: Role.STAFF } },
+    orderBy: personOrder,
   });
   const walkInPersons = await prisma.person.findMany({
     where: { user: null, name: { notIn: ["External Agency", "SYSTEM"] } },
+    orderBy: personOrder,
   });
   const userRolePersons = await prisma.person.findMany({
     where: { user: { role: Role.USER } },
+    orderBy: personOrder,
   });
   const applicantPool: ApplicantPerson[] = [
     ...walkInPersons.filter((p) => !NON_APPLICANT_PERSON_NAMES.has(p.name)),
@@ -3599,6 +3753,12 @@ async function seedApplicationNoise() {
 
   const publishedAnimals = await prisma.animal.findMany({
     where: { listingStatus: AnimalListingStatus.PUBLISHED },
+    orderBy: [
+      { name: "asc" },
+      { birthDate: "asc" },
+      { createdAt: "asc" },
+      { id: "asc" },
+    ],
     select: {
       id: true,
       intake: {
@@ -5059,9 +5219,6 @@ async function seedPartnerNote(opts: {
 async function clearDatabase() {
   console.log("Clearing existing data...");
 
-  await prisma.medicationLog.deleteMany();
-  await prisma.medicationSchedule.deleteMany();
-
   // Assessments before persons (assessorId is Restrict) and before the
   // template rows they FK to. Answers -> assessments -> fields -> templates.
   await prisma.assessmentAnswer.deleteMany();
@@ -5075,6 +5232,49 @@ async function clearDatabase() {
   // relative to the task delete below doesn't matter — it just has to precede
   // the person delete.
   await prisma.aiActionLog.deleteMany();
+  // Medical entries cascade from Animal, but their person FKs (created by,
+  // administered by, voided by, event actor) are not cascades, and a test
+  // result's analyte and an entry's item are Restrict. So: results before
+  // analytes, events and details before entries, entries before items, and
+  // all of it before the animal, partner, species and person deletes below.
+  // Entries point at the protocol steps that scheduled them, and steps at
+  // their protocol, item and species (all Restrict), so steps and then
+  // protocols go after entries and before items.
+  // Conditions and care episodes cascade from Animal too, and their person
+  // FKs (created, opened, closed or voided by, event actor) aren't cascades
+  // either, so their events and then the rows go first. Medication orders
+  // and doses are the same, and a dose's order and an order's item are
+  // Restrict: doses, then order events, then orders, all before items.
+  // Medical documents point at entries and foster reports (Restrict), so
+  // their events and then the rows go before both. Entries point at the
+  // report they were recorded from (Restrict), so reports go after entries,
+  // and before placements, which a report points at.
+  await prisma.medicalDocumentEvent.deleteMany();
+  await prisma.medicalDocument.deleteMany();
+  await prisma.medicationDose.deleteMany();
+  await prisma.medicationOrderEvent.deleteMany();
+  await prisma.medicationOrder.deleteMany();
+  await prisma.medicalConditionEvent.deleteMany();
+  await prisma.careEpisodeEvent.deleteMany();
+  await prisma.careEpisode.deleteMany();
+  await prisma.medicalCondition.deleteMany();
+  await prisma.testAnalyteResult.deleteMany();
+  await prisma.medicalEntryEvent.deleteMany();
+  await prisma.vaccineDetails.deleteMany();
+  await prisma.testDetails.deleteMany();
+  await prisma.treatmentDetails.deleteMany();
+  await prisma.surgeryDetails.deleteMany();
+  await prisma.microchipDetails.deleteMany();
+  await prisma.examFinding.deleteMany();
+  await prisma.examDetails.deleteMany();
+  await prisma.euthanasiaDetails.deleteMany();
+  await prisma.deathDetails.deleteMany();
+  await prisma.medicalEntry.deleteMany();
+  await prisma.vetVisitReport.deleteMany();
+  await prisma.medicalProtocolStep.deleteMany();
+  await prisma.medicalProtocol.deleteMany();
+  await prisma.medicalItemAnalyte.deleteMany();
+  await prisma.medicalItem.deleteMany();
   await prisma.animalActivityLog.deleteMany();
   await prisma.task.deleteMany();
   await prisma.intake.deleteMany();
@@ -5105,7 +5305,6 @@ async function clearDatabase() {
   await prisma.householdProfile.deleteMany();
 
   await prisma.animalImage.deleteMany();
-  await prisma.medicalRecord.deleteMany();
   await prisma.animal.deleteMany();
 
   // Units reference Location; Animal references Unit (SetNull). Animals are
@@ -5562,18 +5761,6 @@ const handAssignedCharacteristics: HandAssignedCharacteristic[] = [
 const assessmentSeedData: SeedAssessment[] = [
   {
     animalName: "Frisco",
-    templateKey: "INTAKE_MEDICAL",
-    signal: AssessmentSignal.NO_CONCERNS,
-    observedAt: daysAgo(38),
-    summary: "Healthy adult dog, no findings on the intake exam.",
-    answers: [
-      { fieldKey: "dental", value: "Mild tartar" },
-      { fieldKey: "parasites", value: "None seen" },
-      { fieldKey: "heart_lungs", value: "Clear" },
-    ],
-  },
-  {
-    animalName: "Frisco",
     templateKey: "INTAKE_BEHAVIORAL",
     signal: AssessmentSignal.NO_CONCERNS,
     observedAt: daysAgo(36),
@@ -5677,18 +5864,6 @@ const assessmentSeedData: SeedAssessment[] = [
   },
   {
     animalName: "Whiskers",
-    templateKey: "INTAKE_MEDICAL",
-    signal: AssessmentSignal.NO_CONCERNS,
-    observedAt: daysAgo(50),
-    summary: "Healthy senior-ish cat; moderate dental disease noted.",
-    answers: [
-      { fieldKey: "dental", value: "Moderate disease" },
-      { fieldKey: "parasites", value: "Treated" },
-      { fieldKey: "heart_lungs", value: "Clear" },
-    ],
-  },
-  {
-    animalName: "Whiskers",
     templateKey: "HANDLING",
     signal: AssessmentSignal.NO_CONCERNS,
     observedAt: daysAgo(48),
@@ -5699,23 +5874,6 @@ const assessmentSeedData: SeedAssessment[] = [
       { fieldKey: "paws_nails", value: "No concern" },
       { fieldKey: "ears_mouth", value: "No concern" },
       { fieldKey: "overall_sensitivity", value: "Low" },
-    ],
-  },
-  {
-    animalName: "Leo",
-    templateKey: "INTAKE_MEDICAL",
-    signal: AssessmentSignal.FOLLOW_UP,
-    observedAt: daysAgo(20),
-    summary:
-      "Severe dental disease — needs a dental before the profile goes public.",
-    answers: [
-      {
-        fieldKey: "dental",
-        value: "Severe disease",
-        notes: "Multiple fractured teeth, gingival recession.",
-      },
-      { fieldKey: "parasites", value: "Ear mites" },
-      { fieldKey: "heart_lungs", value: "Clear" },
     ],
   },
   {
@@ -6131,7 +6289,2516 @@ async function seedReadinessFixtures() {
   console.log(`Removed photos from ${animalsWithoutPhotos.join(", ")}.`);
 }
 
+// The medical catalog a fresh shelter starts with: generic, clinical names, no
+// brands. Species are named, not ids, and resolved when seeded.
+type SeedMedicalItem = Omit<MedicalItemInput, "speciesIds" | "analytes"> & {
+  species: string[];
+  analytes?: string[];
+  retired?: boolean;
+};
+
+const medicalCatalogDefaults: SeedMedicalItem[] = [
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "DHPP",
+    species: ["Dog"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+    repeatIntervalDays: 14,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Bordetella",
+    species: ["Dog"],
+    defaultRoute: MedicalRoute.INTRANASAL,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Canine influenza",
+    species: ["Dog"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Leptospirosis",
+    species: ["Dog"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "FVRCP",
+    species: ["Cat"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+    repeatIntervalDays: 14,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Rabies 1-year",
+    species: ["Dog", "Cat"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+    repeatIntervalDays: 365,
+    isRabies: true,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Rabies 3-year",
+    species: ["Dog", "Cat"],
+    defaultRoute: MedicalRoute.SUBCUTANEOUS,
+    repeatIntervalDays: 1095,
+    isRabies: true,
+  },
+  {
+    kind: MedicalItemKind.VACCINE,
+    name: "Bordetella intranasal (old stock)",
+    species: ["Dog"],
+    defaultRoute: MedicalRoute.INTRANASAL,
+    retired: true,
+  },
+  {
+    kind: MedicalItemKind.TEST,
+    name: "FeLV/FIV combo",
+    species: ["Cat"],
+    analytes: ["FeLV antigen", "FIV antibody"],
+  },
+  {
+    kind: MedicalItemKind.TEST,
+    name: "Heartworm antigen",
+    species: ["Dog"],
+    analytes: ["Heartworm antigen"],
+    repeatIntervalDays: 365,
+  },
+  {
+    kind: MedicalItemKind.TEST,
+    name: "Parvovirus antigen",
+    species: ["Dog"],
+    analytes: ["Parvovirus antigen"],
+  },
+  {
+    kind: MedicalItemKind.TEST,
+    name: "Fecal flotation",
+    species: [],
+    analytes: ["Intestinal parasites"],
+  },
+  {
+    kind: MedicalItemKind.TEST,
+    name: "Ringworm culture",
+    species: [],
+    analytes: ["Dermatophytes"],
+  },
+  {
+    kind: MedicalItemKind.TREATMENT,
+    name: "Pyrantel pamoate",
+    species: [],
+    defaultRoute: MedicalRoute.ORAL,
+    defaultDoseUnit: DoseUnit.ML,
+    repeatIntervalDays: 14,
+  },
+  {
+    kind: MedicalItemKind.TREATMENT,
+    name: "Fenbendazole",
+    species: [],
+    defaultRoute: MedicalRoute.ORAL,
+    defaultDoseUnit: DoseUnit.ML,
+  },
+  {
+    kind: MedicalItemKind.TREATMENT,
+    name: "Praziquantel",
+    species: [],
+    defaultRoute: MedicalRoute.ORAL,
+    defaultDoseUnit: DoseUnit.TABLET,
+  },
+  {
+    kind: MedicalItemKind.TREATMENT,
+    name: "Selamectin",
+    species: ["Dog", "Cat"],
+    defaultRoute: MedicalRoute.TOPICAL,
+    defaultDoseAmount: 1,
+    defaultDoseUnit: DoseUnit.APPLICATION,
+    repeatIntervalDays: 30,
+  },
+];
+
+// Through the catalog service in a real transaction, as the settings page
+// writes, so a default that breaks a catalog rule fails the seed. Fixed
+// values only: no random draws.
+async function seedMedicalCatalog() {
+  console.log("Seeding medical catalog...");
+
+  const species = await prisma.species.findMany({
+    select: { id: true, name: true },
+  });
+  const speciesId = (name: string) => {
+    const found = species.find((row) => row.name === name);
+    if (!found) {
+      throw new Error(`seedMedicalCatalog: species ${name} was not seeded.`);
+    }
+    return found.id;
+  };
+
+  for (const { species: names, analytes, retired, ...item } of medicalCatalogDefaults) {
+    await prisma.$transaction(async (tx) => {
+      const { id } = await createMedicalItem(tx, {
+        ...item,
+        speciesIds: names.map(speciesId),
+        analytes: (analytes ?? []).map((name) => ({ name })),
+      });
+      if (retired) {
+        await retireMedicalItem(tx, id);
+      }
+    });
+  }
+
+  console.log(`Seeded ${medicalCatalogDefaults.length} medical catalog items.`);
+}
+
+// Medical entries on four hand-authored animals, covering every state an
+// entry can be in: recorded, corrected by someone else, voided, given before
+// intake on an unknown day, and a rabies vaccine that has expired. Every write
+// goes through the entry service in a real transaction, as the actions do, so
+// a fixture that breaks an entry rule fails the seed rather than writing a row
+// the product never could. Days are fixed offsets from each animal's intake,
+// clamped to today, with no random draws.
+async function seedMedicalEntries() {
+  console.log("Seeding medical entries...");
+
+  const today = shelterToday(seedTimezone);
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  const downtownVet = await prisma.partner.findFirst({
+    where: { name: "Downtown Veterinary Clinic" },
+  });
+  if (!olivia || !benjamin || !downtownVet) {
+    throw new Error(
+      "seedMedicalEntries: staff or Downtown Veterinary Clinic fixtures not found.",
+    );
+  }
+
+  const items = await prisma.medicalItem.findMany({
+    select: {
+      id: true,
+      name: true,
+      analytes: { select: { id: true, name: true } },
+    },
+  });
+  const item = (name: string) => {
+    const found = items.find((row) => row.name === name);
+    if (!found) {
+      throw new Error(`seedMedicalEntries: catalog item ${name} was not seeded.`);
+    }
+    return found;
+  };
+  const negativeResults = (name: string) =>
+    item(name).analytes.map((analyte) => ({
+      analyteId: analyte.id,
+      result: TestResult.NEGATIVE,
+    }));
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        birthDate: true,
+        intake: { select: { intakeDate: true } },
+      },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(`seedMedicalEntries: ${name} was not seeded with an intake.`);
+    }
+    const days = row.intake.map((intake) => calendarDay(intake.intakeDate)).sort();
+    return {
+      id: row.id,
+      birthDate: calendarDay(row.birthDate),
+      firstIntake: days[0],
+      latestIntake: days[days.length - 1],
+    };
+  };
+  // A day in the current stay, `offset` days after it began, never after today.
+  const inStay = (intake: CalendarDay, offset: number): CalendarDay => {
+    const day = shiftDayKey(intake, offset);
+    return day > today ? today : day;
+  };
+
+  const record = (
+    animalId: string,
+    input: MedicalEntryInput,
+    actorId = olivia.id,
+  ) =>
+    prisma.$transaction((tx) =>
+      recordMedicalEntry(tx, { ...input, animalId }, actorId, today),
+    );
+
+  // --- Frisco: in-house care, one entry corrected by someone else ----------
+  const frisco = await animal("Frisco");
+  const dhpp: MedicalEntryInput = {
+    kind: MedicalEntryKind.VACCINE,
+    itemId: item("DHPP").id,
+    completedDate: inStay(frisco.latestIntake, 1),
+    source: MedicalEntrySource.IN_HOUSE,
+    lotNumber: "DH-2291A",
+    lotExpiryDate: shiftDayKey(today, 240),
+    site: "Right shoulder",
+  };
+  const friscoDhpp = await record(frisco.id, dhpp);
+  // Olivia typed the lot from the wrong vial; Benjamin corrects it.
+  await prisma.$transaction((tx) =>
+    editMedicalEntry(
+      tx,
+      friscoDhpp.entryId,
+      { ...dhpp, lotNumber: "DH-2291B" },
+      benjamin.id,
+      today,
+    ),
+  );
+  await record(frisco.id, {
+    kind: MedicalEntryKind.VACCINE,
+    itemId: item("Rabies 3-year").id,
+    completedDate: inStay(frisco.latestIntake, 2),
+    source: MedicalEntrySource.IN_HOUSE,
+    lotNumber: "RB-7730",
+    lotExpiryDate: shiftDayKey(today, 300),
+    site: "Right hind leg",
+    rabiesTagNumber: "R-10482",
+    durationMonths: 36,
+  });
+  await record(frisco.id, {
+    kind: MedicalEntryKind.TEST,
+    itemId: item("Heartworm antigen").id,
+    completedDate: inStay(frisco.latestIntake, 2),
+    source: MedicalEntrySource.IN_HOUSE,
+    results: negativeResults("Heartworm antigen"),
+  });
+  await record(frisco.id, {
+    kind: MedicalEntryKind.TREATMENT,
+    itemId: item("Pyrantel pamoate").id,
+    completedDate: inStay(frisco.latestIntake, 1),
+    source: MedicalEntrySource.IN_HOUSE,
+    doseAmount: 3,
+  });
+
+  // --- Buddy: rabies before intake on an unknown day, and a voided entry --
+  const buddy = await animal("Buddy");
+  await record(buddy.id, {
+    kind: MedicalEntryKind.VACCINE,
+    itemId: item("Rabies 1-year").id,
+    completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE,
+    vetName: "Lakeside Animal Hospital (from his collar tag)",
+    rabiesTagNumber: "LK-55821",
+    durationMonths: 12,
+  });
+  const buddyDewormer = await record(buddy.id, {
+    kind: MedicalEntryKind.TREATMENT,
+    itemId: item("Fenbendazole").id,
+    completedDate: inStay(buddy.latestIntake, 1),
+    source: MedicalEntrySource.IN_HOUSE,
+    doseAmount: 16,
+  });
+  await prisma.$transaction((tx) =>
+    voidMedicalEntry(
+      tx,
+      buddyDewormer.entryId,
+      "Entered against the wrong animal.",
+      benjamin.id,
+    ),
+  );
+
+  // --- Whiskers: tested and vaccinated at a partner clinic -----------------
+  const whiskers = await animal("Whiskers");
+  const clinicDay = inStay(whiskers.latestIntake, 3);
+  await record(whiskers.id, {
+    kind: MedicalEntryKind.VACCINE,
+    itemId: item("FVRCP").id,
+    completedDate: clinicDay,
+    source: MedicalEntrySource.OUTSIDE_VET,
+    vetPartnerId: downtownVet.id,
+  });
+  await record(whiskers.id, {
+    kind: MedicalEntryKind.TEST,
+    itemId: item("FeLV/FIV combo").id,
+    completedDate: clinicDay,
+    source: MedicalEntrySource.OUTSIDE_VET,
+    vetPartnerId: downtownVet.id,
+    results: negativeResults("FeLV/FIV combo"),
+  });
+
+  // --- Leo: a one-year rabies vaccine given more than a year ago -----------
+  const leo = await animal("Leo");
+  const leoRabiesDay = shiftDayKey(today, -400);
+  if (leoRabiesDay < leo.birthDate) {
+    throw new Error(
+      "seedMedicalEntries: Leo is too young for a rabies vaccine that has expired; move the fixture.",
+    );
+  }
+  await record(leo.id, {
+    kind: MedicalEntryKind.VACCINE,
+    itemId: item("Rabies 1-year").id,
+    completedDate: leoRabiesDay,
+    source:
+      leoRabiesDay < leo.firstIntake
+        ? MedicalEntrySource.BEFORE_INTAKE
+        : MedicalEntrySource.IN_HOUSE,
+    ...(leoRabiesDay < leo.firstIntake && {
+      vetName: "Records that arrived with him",
+    }),
+    rabiesTagNumber: "R-08817",
+    durationMonths: 12,
+  });
+
+  console.log("Seeded medical entries for Frisco, Buddy, Whiskers and Leo.");
+}
+
+// Scheduled care on hand-authored animals, covering each state scheduling
+// leaves an entry in: overdue, due today after a reschedule, upcoming, on a
+// fostered animal, declined, and recorded as given with the next dose
+// scheduled; and one generated animal that left with care still due. Every
+// write goes through the services in a real transaction, as the actions do. The services take the shelter's today as an
+// argument so that care planned in the past can be seeded by passing them the
+// day it was planned on. Fixed offsets from today or the animal's intake, with
+// no random draws.
+async function seedMedicalScheduling() {
+  console.log("Seeding scheduled medical care...");
+
+  const today = shelterToday(seedTimezone);
+  const daysFromToday = (offset: number) => shiftDayKey(today, offset);
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  if (!olivia || !benjamin) {
+    throw new Error("seedMedicalScheduling: staff fixtures not found.");
+  }
+
+  const items = await prisma.medicalItem.findMany({
+    select: { id: true, name: true, repeatIntervalDays: true },
+  });
+  const item = (name: string) => {
+    const found = items.find((row) => row.name === name);
+    if (!found) {
+      throw new Error(`seedMedicalScheduling: catalog item ${name} was not seeded.`);
+    }
+    return found;
+  };
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, intake: { select: { intakeDate: true } } },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(`seedMedicalScheduling: ${name} was not seeded with an intake.`);
+    }
+    const days = row.intake.map((intake) => calendarDay(intake.intakeDate)).sort();
+    return { id: row.id, name, latestIntake: days[days.length - 1] };
+  };
+  // Care is planned during a stay. A fixture day before the animal's intake
+  // means the hand-authored intake moved: move the fixture, not the rule.
+  const duringStay = (
+    subject: { name: string; latestIntake: CalendarDay },
+    day: CalendarDay,
+  ) => {
+    if (day < subject.latestIntake) {
+      throw new Error(
+        `seedMedicalScheduling: ${subject.name}'s fixture day ${day} is before the intake on ${subject.latestIntake}; move the fixture.`,
+      );
+    }
+    return day;
+  };
+
+  const schedule = (
+    animalId: string,
+    kind: CatalogEntryKind,
+    itemName: string,
+    dueDate: CalendarDay,
+    { actorId = olivia.id, plannedOn = today } = {},
+  ) =>
+    prisma.$transaction((tx) =>
+      scheduleMedicalEntry(
+        tx,
+        { animalId, kind, itemId: item(itemName).id, dueDate },
+        actorId,
+        plannedOn,
+      ),
+    );
+
+  // --- Fido: a DHPP booster planned ten days ago, due three days ago --------
+  const fido = await animal("Fido");
+  await schedule(fido.id, MedicalEntryKind.VACCINE, "DHPP", daysFromToday(-3), {
+    plannedOn: duringStay(fido, daysFromToday(-10)),
+  });
+
+  // --- Misty: planned by Olivia at intake, moved to today by Benjamin ------
+  const misty = await animal("Misty");
+  const mistyFvrcp = await schedule(
+    misty.id,
+    MedicalEntryKind.VACCINE,
+    "FVRCP",
+    daysFromToday(3),
+    { plannedOn: misty.latestIntake },
+  );
+  await prisma.$transaction((tx) =>
+    rescheduleMedicalEntry(tx, mistyFvrcp.entryId, today, benjamin.id, today),
+  );
+
+  // --- Whiskers: a rabies vaccine coming up --------------------------------
+  const whiskers = await animal("Whiskers");
+  await schedule(
+    whiskers.id,
+    MedicalEntryKind.VACCINE,
+    "Rabies 1-year",
+    daysFromToday(5),
+  );
+
+  // --- Juniper: a dewormer due while she is in foster ----------------------
+  const juniper = await animal("Juniper");
+  await schedule(
+    juniper.id,
+    MedicalEntryKind.TREATMENT,
+    "Pyrantel pamoate",
+    daysFromToday(2),
+  );
+
+  // --- Buddy: a vaccine declined on the vet's advice -----------------------
+  const buddy = await animal("Buddy");
+  const buddyLepto = await schedule(
+    buddy.id,
+    MedicalEntryKind.VACCINE,
+    "Leptospirosis",
+    daysFromToday(7),
+  );
+  await prisma.$transaction((tx) =>
+    declineMedicalEntry(
+      tx,
+      buddyLepto.entryId,
+      "Vet advised against it: reaction noted in his previous records.",
+      benjamin.id,
+    ),
+  );
+
+  // --- Daisy: a DHPP booster planned at intake and given three days late;
+  // recording it schedules the next one, on the day the form suggests ------
+  const daisy = await animal("Daisy");
+  const dhpp = item("DHPP");
+  const daisyGiven = daysFromToday(-1);
+  const daisyBooster = await schedule(
+    daisy.id,
+    MedicalEntryKind.VACCINE,
+    "DHPP",
+    duringStay(daisy, daysFromToday(-4)),
+    { plannedOn: daisy.latestIntake },
+  );
+  await prisma.$transaction((tx) =>
+    recordScheduledMedicalEntry(
+      tx,
+      daisyBooster.entryId,
+      {
+        kind: MedicalEntryKind.VACCINE,
+        itemId: dhpp.id,
+        completedDate: daisyGiven,
+        source: MedicalEntrySource.IN_HOUSE,
+        lotNumber: "DH-3104C",
+        lotExpiryDate: shiftDayKey(today, 200),
+        site: "Left shoulder",
+        scheduleNext: {
+          dueDate: nextDueDate(daisyGiven, dhpp.repeatIntervalDays!, today),
+        },
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- A dog transferred out with a booster still due ----------------------
+  // Leaving care doesn't close scheduled care: the entry stays open on the
+  // animal's page, to be declined there, and shelter-wide lists of due care
+  // leave the animal out. Claimed as the application fixtures claim theirs,
+  // never a hand-authored animal: specs and scenarios address those by name,
+  // and this outcome takes the animal out of care. One with no applications,
+  // open placement or tasks, so the outcome closes nothing else.
+  const leaving = await prisma.animal.findFirst({
+    where: {
+      name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+      species: { name: "Dog" },
+      listingStatus: { not: AnimalListingStatus.ARCHIVED },
+      intake: { some: {} },
+      adoptionApplications: { none: {} },
+      fosterPlacements: { none: { endDate: null } },
+      tasks: { none: {} },
+      medicalEntries: { none: {} },
+    },
+    orderBy: [{ name: "desc" }, { id: "asc" }],
+    select: { id: true, name: true },
+  });
+  const secondChance = await prisma.partner.findFirst({
+    where: { name: "Second Chance Rescue" },
+  });
+  if (!leaving || !secondChance) {
+    throw new Error(
+      "seedMedicalScheduling: no generated dog to transfer out, or Second Chance Rescue was not seeded.",
+    );
+  }
+  await schedule(leaving.id, MedicalEntryKind.VACCINE, "DHPP", daysFromToday(4));
+  await prisma.$transaction((tx) =>
+    recordOutcome(
+      tx,
+      {
+        animalId: leaving.id,
+        values: {
+          outcomeDate: today,
+          outcomeType: OutcomeType.TRANSFER_OUT,
+          destinationPartnerId: secondChance.id,
+          notes: "Transferred to Second Chance Rescue with a DHPP booster still due.",
+        },
+      },
+      benjamin.id,
+    ),
+  );
+
+  // --- A dewormer round for the Cat room's C-1, given as one batch ---------
+  // Whiskers and Misty are always there; anyone else the seed housed in C-1
+  // is dosed too, as staff would dose the whole room. Given ten days ago, or
+  // on the latest arrival's intake if that is later, so it falls in every
+  // animal's stay. The batch also schedules each animal's next dose, on the
+  // day the form suggests.
+  const c1 = await prisma.animal.findMany({
+    where: {
+      listingStatus: { not: AnimalListingStatus.ARCHIVED },
+      currentUnit: { name: "C-1", location: { name: "Cat room" } },
+    },
+    orderBy: [{ name: "asc" }, { id: "asc" }],
+    select: { id: true, name: true, intake: { select: { intakeDate: true } } },
+  });
+  if (c1.length < 2) {
+    throw new Error("seedMedicalScheduling: the Cat room's C-1 holds fewer than two animals.");
+  }
+  const pyrantel = item("Pyrantel pamoate");
+  const roomGiven = c1
+    .flatMap((animal) => animal.intake.map((intake) => calendarDay(intake.intakeDate)))
+    .reduce((latest, intakeDay) => (intakeDay > latest ? intakeDay : latest), daysFromToday(-10));
+  await prisma.$transaction((tx) =>
+    recordMedicalBatch(
+      tx,
+      {
+        mode: "RECORD",
+        animals: c1.map((animal) => ({ animalId: animal.id })),
+        entry: {
+          kind: MedicalEntryKind.TREATMENT,
+          itemId: pyrantel.id,
+          completedDate: roomGiven,
+          source: MedicalEntrySource.IN_HOUSE,
+          doseAmount: 1,
+          doseUnit: DoseUnit.ML,
+          notes: "Room dewormer round.",
+        },
+        scheduleNext: {
+          dueDate: nextDueDate(roomGiven, pyrantel.repeatIntervalDays!, today),
+        },
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  console.log(
+    `Seeded scheduled care for Fido, Misty, Whiskers, Juniper, Buddy, Daisy and ${leaving.name} (transferred out), and a dewormer batch for ${c1.map((animal) => animal.name).join(", ")}.`,
+  );
+}
+
+// The animals seedSurgeryAndMicrochipFixtures() scripts, and which of their
+// blueprint facts it writes itself instead of seedMedicalFacts(). Hand-authored
+// animals are the first created under their name.
+const SCRIPTED_MEDICAL_FACTS: Record<string, { altered?: true; chip?: true }> = {
+  // An in-house spay with its day.
+  Whiskers: { altered: true },
+  // Exempt for good: an iguana isn't routinely neutered.
+  Godzilla: { altered: true },
+  // A spay scheduled, not done.
+  Nutmeg: { altered: true },
+  // Born in care, so chipped here.
+  Leo: { chip: true },
+  // A mistyped chip number, voided, then the right one.
+  Marigold: { chip: true },
+};
+
+const scriptedAnimalIds = async (fact: "altered" | "chip") => {
+  const ids = new Set<string>();
+  for (const [name, scripted] of Object.entries(SCRIPTED_MEDICAL_FACTS)) {
+    if (!scripted[fact]) continue;
+    const animal = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    if (!animal) {
+      throw new Error(`seedMedicalFacts: ${name} was not seeded.`);
+    }
+    ids.add(animal.id);
+  }
+  return ids;
+};
+
+// What shows a spay or neuter was done before the animal arrived: an owner
+// hands over their records, a transferring shelter its vet's, and a stray
+// shows a scar.
+const evidenceForIntake = (intakeType: IntakeType): SurgeryEvidence =>
+  intakeType === IntakeType.OWNER_SURRENDER
+    ? SurgeryEvidence.OWNER_RECORDS
+    : intakeType === IntakeType.TRANSFER_IN
+      ? SurgeryEvidence.VET_RECORDS
+      : SurgeryEvidence.SCAR;
+
+// Every animal's blueprint facts (arrived spayed or neutered, and its
+// microchip number), written as the medical records they stand for: a chip found on a scan before intake, and
+// a spay (female) or neuter (male, or sex unknown) done before intake, both
+// on a day nobody knows. Through the entry service, one transaction per
+// animal, recorded by Olivia. The animals the fixtures below script are left
+// out for the fact they script.
+async function seedMedicalFacts() {
+  console.log("Seeding spay/neuter and microchip records from each animal's blueprint...");
+
+  const today = shelterToday(seedTimezone);
+  const olivia = await prisma.person.findFirst({
+    where: { user: { email: "staff1@example.com" } },
+  });
+  if (!olivia) {
+    throw new Error("seedMedicalFacts: staff fixtures not found.");
+  }
+  const scriptedAltered = await scriptedAnimalIds("altered");
+  const scriptedChip = await scriptedAnimalIds("chip");
+
+  let chips = 0;
+  let altered = 0;
+  for (const fact of pendingMedicalFacts) {
+    const chipNumber = scriptedChip.has(fact.animalId) ? null : fact.chipNumber;
+    const isAltered = fact.altered && !scriptedAltered.has(fact.animalId);
+    if (!chipNumber && !isAltered) continue;
+    await prisma.$transaction(async (tx) => {
+      if (chipNumber) {
+        await recordMedicalEntry(
+          tx,
+          {
+            animalId: fact.animalId,
+            kind: MedicalEntryKind.MICROCHIP,
+            chipNumber,
+            completedDate: null,
+            source: MedicalEntrySource.BEFORE_INTAKE,
+          },
+          olivia.id,
+          today,
+        );
+        chips += 1;
+      }
+      if (isAltered) {
+        await recordMedicalEntry(
+          tx,
+          {
+            animalId: fact.animalId,
+            kind: MedicalEntryKind.SURGERY,
+            procedure:
+              fact.sex === Sex.FEMALE ? SurgeryProcedure.SPAY : SurgeryProcedure.NEUTER,
+            completedDate: null,
+            source: MedicalEntrySource.BEFORE_INTAKE,
+            evidence: evidenceForIntake(fact.intakeType),
+          },
+          olivia.id,
+          today,
+        );
+        altered += 1;
+      }
+    });
+  }
+
+  console.log(
+    `Seeded ${chips} microchips and ${altered} spays or neuters found before intake.`,
+  );
+}
+
+// Surgeries, chips and spay/neuter exemptions in each state the record can
+// show, through the services, at fixed offsets from the seed's today or the
+// animal's intake, with no random draws:
+// - Whiskers: spayed in house, with its day.
+// - Daisy: a dental by Downtown Veterinary Clinic, on top of her spay.
+// - Leo: chipped in house (born in care), with his own number.
+// - Rocket: a second chip implanted in house.
+// - Marigold: her intake scan typed wrong, voided, then the right number.
+// - Nutmeg: a spay scheduled four days out, and nothing done yet.
+// - Godzilla: exempt for good, with no review day.
+// - A young generated animal: an exemption whose review day passed two days
+//   ago, so it is open for review and overdue.
+async function seedSurgeryAndMicrochipFixtures() {
+  console.log("Seeding surgery, microchip and exemption fixtures...");
+
+  const today = shelterToday(seedTimezone);
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  const downtownVet = await prisma.partner.findFirst({
+    where: { name: "Downtown Veterinary Clinic" },
+  });
+  if (!olivia || !benjamin || !downtownVet) {
+    throw new Error(
+      "seedSurgeryAndMicrochipFixtures: staff or Downtown Veterinary Clinic fixtures not found.",
+    );
+  }
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, intake: { select: { intakeDate: true } } },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(
+        `seedSurgeryAndMicrochipFixtures: ${name} was not seeded with an intake.`,
+      );
+    }
+    const days = row.intake.map((intake) => calendarDay(intake.intakeDate)).sort();
+    return { id: row.id, name, latestIntake: days[days.length - 1] };
+  };
+  // A day in the current stay, `offset` days after it began, never after today.
+  const inStay = (subject: { latestIntake: CalendarDay }, offset: number) => {
+    const day = shiftDayKey(subject.latestIntake, offset);
+    return day > today ? today : day;
+  };
+  // The number the animal's blueprint gives it.
+  const blueprintChip = (subject: { id: string; name: string }) => {
+    const chipNumber = pendingMedicalFacts.find(
+      (fact) => fact.animalId === subject.id,
+    )?.chipNumber;
+    if (!chipNumber) {
+      throw new Error(
+        `seedSurgeryAndMicrochipFixtures: ${subject.name} has no blueprint chip number.`,
+      );
+    }
+    return chipNumber;
+  };
+  const record = (
+    animalId: string,
+    input: MedicalEntryInput,
+    actorId = olivia.id,
+  ) =>
+    prisma.$transaction((tx) =>
+      recordMedicalEntry(tx, { ...input, animalId }, actorId, today),
+    );
+
+  // --- Whiskers: spayed in house three days into her stay ------------------
+  const whiskers = await animal("Whiskers");
+  await record(whiskers.id, {
+    kind: MedicalEntryKind.SURGERY,
+    procedure: SurgeryProcedure.SPAY,
+    completedDate: inStay(whiskers, 3),
+    source: MedicalEntrySource.IN_HOUSE,
+    surgeon: "Dr. Amara Okafor",
+    findings: "Routine ovariohysterectomy. No complications.",
+    anesthesiaNotes: "Isoflurane. Smooth recovery, eating the same evening.",
+  });
+
+  // --- Daisy: a dental at Downtown Veterinary Clinic -----------------------
+  const daisy = await animal("Daisy");
+  await record(daisy.id, {
+    kind: MedicalEntryKind.SURGERY,
+    procedure: SurgeryProcedure.DENTAL,
+    completedDate: inStay(daisy, 12),
+    source: MedicalEntrySource.OUTSIDE_VET,
+    vetPartnerId: downtownVet.id,
+    surgeon: "Dr. Priya Raman",
+    findings: "Scaled and polished. Two fractured premolars extracted.",
+  });
+
+  // --- Leo: born in care, so chipped here, two days into his stay ----------
+  const leo = await animal("Leo");
+  await record(leo.id, {
+    kind: MedicalEntryKind.MICROCHIP,
+    chipNumber: blueprintChip(leo),
+    completedDate: inStay(leo, 2),
+    source: MedicalEntrySource.IN_HOUSE,
+    brand: "HomeAgain",
+  });
+
+  // --- Rocket: a second chip, since his first reads only now and then ------
+  // A number outside the seeded sequences (985141000100001 upward, and
+  // Winston's 985141000109999).
+  const rocket = await animal("Rocket");
+  await record(rocket.id, {
+    kind: MedicalEntryKind.MICROCHIP,
+    chipNumber: "977200009012345",
+    completedDate: inStay(rocket, 5),
+    source: MedicalEntrySource.IN_HOUSE,
+    brand: "Datamars",
+    notes: "His first chip reads only now and then, so a second was implanted.",
+  });
+
+  // --- Marigold: the intake scan typed wrong, voided, then the right one ---
+  const marigold = await animal("Marigold");
+  const mistyped = await record(marigold.id, {
+    kind: MedicalEntryKind.MICROCHIP,
+    // Two groups of digits swapped; outside the seeded sequences too.
+    chipNumber: "985141001000010",
+    completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE,
+  });
+  await prisma.$transaction((tx) =>
+    voidMedicalEntry(
+      tx,
+      mistyped.entryId,
+      "Digits typed in the wrong order. The scanner reads her chip correctly.",
+      benjamin.id,
+    ),
+  );
+  await record(
+    marigold.id,
+    {
+      kind: MedicalEntryKind.MICROCHIP,
+      chipNumber: blueprintChip(marigold),
+      completedDate: null,
+      source: MedicalEntrySource.BEFORE_INTAKE,
+    },
+    benjamin.id,
+  );
+
+  // --- Nutmeg: a spay planned four days out --------------------------------
+  const nutmeg = await animal("Nutmeg");
+  await prisma.$transaction((tx) =>
+    scheduleMedicalEntry(
+      tx,
+      {
+        animalId: nutmeg.id,
+        kind: MedicalEntryKind.SURGERY,
+        procedure: SurgeryProcedure.SPAY,
+        dueDate: shiftDayKey(today, 4),
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- Godzilla: exempt for good ------------------------------------------
+  const godzilla = await animal("Godzilla");
+  await prisma.$transaction((tx) =>
+    recordSpayNeuterExemption(
+      tx,
+      {
+        animalId: godzilla.id,
+        procedure: SurgeryProcedure.NEUTER,
+        exemptionReason: SpayNeuterExemptionReason.OTHER,
+        declineReason: "Not routinely done for this species.",
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- A young animal whose exemption came up for review two days ago ------
+  // Claimed as the transferred-out dog is, never a hand-authored animal: the
+  // youngest published animal in care, under six months old, not altered, in
+  // care for at least five days. Recorded three weeks ago, or at intake if
+  // that is later, as staff would have then.
+  const young = await prisma.animal.findFirst({
+    where: {
+      name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+      listingStatus: AnimalListingStatus.PUBLISHED,
+      birthDate: { gt: shiftDayKey(today, -183) },
+      intake: { some: {}, every: { intakeDate: { lte: shiftDayKey(today, -5) } } },
+      medicalEntries: { none: ALTERED_ENTRY_WHERE },
+    },
+    orderBy: [{ birthDate: "desc" }, { id: "asc" }],
+    select: { id: true, name: true, sex: true, intake: { select: { intakeDate: true } } },
+  });
+  if (!young) {
+    throw new Error(
+      "seedSurgeryAndMicrochipFixtures: no young unaltered animal has been in care five days.",
+    );
+  }
+  const youngIntake = young.intake
+    .map((intake) => calendarDay(intake.intakeDate))
+    .sort()
+    .at(-1)!;
+  const threeWeeksAgo = shiftDayKey(today, -21);
+  await prisma.$transaction((tx) =>
+    recordSpayNeuterExemption(
+      tx,
+      {
+        animalId: young.id,
+        procedure:
+          young.sex === Sex.FEMALE ? SurgeryProcedure.SPAY : SurgeryProcedure.NEUTER,
+        exemptionReason: SpayNeuterExemptionReason.TOO_YOUNG_OR_UNDERWEIGHT,
+        reviewDate: shiftDayKey(today, -2),
+      },
+      benjamin.id,
+      youngIntake > threeWeeksAgo ? youngIntake : threeWeeksAgo,
+    ),
+  );
+
+  console.log(
+    `Seeded surgeries for Whiskers and Daisy, chips for Leo, Rocket and Marigold, Nutmeg's spay, Godzilla's exemption, and a lapsed exemption for ${young.name}.`,
+  );
+}
+
+// Exams in each state the record can show, through the entry service, one
+// transaction per animal, recorded by Olivia unless noted. Days are fixed
+// offsets from the animal's latest intake, never after today, with no random
+// draws:
+// - Frisco, Whiskers and Leo: their intake exams. Whiskers' finds her
+//   intact, three days before her spay, so her status shows the spay beats
+//   the exam. Leo's, the day after he arrived, needs treatment and brings
+//   his vitals.
+// - Fido: an intake exam asking for a vet's review, cleared a week later by
+//   a vet exam at Downtown Veterinary Clinic.
+// - Rocket: an intake exam asking for a vet's review, still open.
+// - Nutmeg: a vet exam finding her intact, beside her scheduled spay.
+// - A generated male: a vet exam that found him already neutered, which
+//   records the neuter with it.
+// - Flash: a vet exam scheduled three days out.
+// - Marigold: a recheck recorded on her by mistake, voided by Benjamin.
+async function seedExamFixtures() {
+  console.log("Seeding exam fixtures...");
+
+  const today = shelterToday(seedTimezone);
+  const settings = resolveShelterSettings(
+    await prisma.shelterSettings.findUnique({ where: { id: "shelter" } }),
+  );
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  const downtownVet = await prisma.partner.findFirst({
+    where: { name: "Downtown Veterinary Clinic" },
+  });
+  if (!olivia || !benjamin || !downtownVet) {
+    throw new Error(
+      "seedExamFixtures: staff or Downtown Veterinary Clinic fixtures not found.",
+    );
+  }
+
+  const latestIntakeOf = (intake: { intakeDate: string }[]) =>
+    intake.map((row) => calendarDay(row.intakeDate)).sort().at(-1)!;
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, intake: { select: { intakeDate: true } } },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(`seedExamFixtures: ${name} was not seeded with an intake.`);
+    }
+    return { id: row.id, name, latestIntake: latestIntakeOf(row.intake) };
+  };
+  // A day in the current stay, `offset` days after it began, never after today.
+  const inStay = (subject: { latestIntake: CalendarDay }, offset: number) => {
+    const day = shiftDayKey(subject.latestIntake, offset);
+    return day > today ? today : day;
+  };
+  // Every body system Normal, unless named with its finding and note.
+  const findings = (
+    named: Record<string, { status?: ExamFindingStatus; notes: string }> = {},
+  ) =>
+    EXAM_BODY_SYSTEM_KEYS.map((bodySystem) => ({
+      bodySystem,
+      status: named[bodySystem]?.status ?? ExamFindingStatus.NORMAL,
+      notes: named[bodySystem]?.notes ?? null,
+    }));
+  const exam = (
+    completedDate: CalendarDay,
+    fields: Omit<
+      ExamEntryInput,
+      "kind" | "completedDate" | "source" | "findings"
+    > &
+      Partial<Pick<ExamEntryInput, "source" | "findings" | "vetPartnerId">>,
+  ): ExamEntryInput => ({
+    kind: MedicalEntryKind.EXAM,
+    completedDate,
+    source: MedicalEntrySource.IN_HOUSE,
+    findings: findings(),
+    ...fields,
+  });
+  const record = (
+    animalId: string,
+    input: RecordMedicalEntryInput,
+    tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0],
+  ) =>
+    recordMedicalEntry(tx, { ...input, animalId }, olivia.id, today, {
+      weightUnitSystem: settings.weightUnitSystem,
+    });
+  const recordOne = (animalId: string, input: RecordMedicalEntryInput) =>
+    prisma.$transaction((tx) => record(animalId, input, tx));
+
+  // --- Intake exams -------------------------------------------------------
+  const frisco = await animal("Frisco");
+  await recordOne(
+    frisco.id,
+    exam(frisco.latestIntake, {
+      examType: ExamType.INTAKE,
+      overallResult: ExamResult.NO_CONCERNS,
+      findings: findings({
+        MOUTH_TEETH: { notes: "Mild tartar." },
+        EXTERNAL_PARASITES: { notes: "None seen." },
+      }),
+    }),
+  );
+
+  const whiskers = await animal("Whiskers");
+  await recordOne(
+    whiskers.id,
+    exam(whiskers.latestIntake, {
+      examType: ExamType.INTAKE,
+      overallResult: ExamResult.NO_CONCERNS,
+      reproductiveStatus: ReproductiveStatus.INTACT,
+      findings: findings({
+        MOUTH_TEETH: {
+          status: ExamFindingStatus.ABNORMAL,
+          notes: "Moderate dental disease.",
+        },
+        EXTERNAL_PARASITES: { notes: "Treated for fleas." },
+      }),
+    }),
+  );
+
+  // The day after he arrived: an exam dated before today places its weigh-in
+  // at the start of its day, and his intake weigh-in was taken later on the
+  // intake day, so only a later day makes the exam's weight his current one.
+  const leo = await animal("Leo");
+  const leoExamDay = inStay(leo, 1);
+  await recordOne(leo.id, {
+    ...exam(leoExamDay, {
+      examType: ExamType.INTAKE,
+      overallResult: ExamResult.NEEDS_TREATMENT,
+      findings: findings({
+        MOUTH_TEETH: {
+          status: ExamFindingStatus.ABNORMAL,
+          notes: "Multiple fractured teeth, gingival recession.",
+        },
+        EARS: { status: ExamFindingStatus.ABNORMAL, notes: "Ear mites." },
+      }),
+    }),
+    vitals: {
+      recordedAt: examVitalsInstant(leoExamDay, today, seedTimezone, new Date()),
+      weightGrams: 3350,
+      temperatureC: 38.7,
+      bodyConditionScore: 4,
+    },
+  });
+
+  // --- Fido: a vet's review asked for, then cleared a week later ----------
+  const fido = await animal("Fido");
+  await prisma.$transaction(async (tx) => {
+    await record(
+      fido.id,
+      exam(fido.latestIntake, {
+        examType: ExamType.INTAKE,
+        overallResult: ExamResult.NEEDS_VET_REVIEW,
+        findings: findings({
+          HEART: {
+            status: ExamFindingStatus.ABNORMAL,
+            notes: "Grade II/VI systolic murmur.",
+          },
+        }),
+      }),
+      tx,
+    );
+    await record(
+      fido.id,
+      exam(inStay(fido, 7), {
+        examType: ExamType.VET,
+        overallResult: ExamResult.NO_CONCERNS,
+        source: MedicalEntrySource.OUTSIDE_VET,
+        vetPartnerId: downtownVet.id,
+        findings: findings({
+          HEART: {
+            status: ExamFindingStatus.ABNORMAL,
+            notes: "Innocent murmur; no treatment needed.",
+          },
+        }),
+      }),
+      tx,
+    );
+  });
+
+  // --- Rocket: a vet's review asked for, still open ------------------------
+  const rocket = await animal("Rocket");
+  await recordOne(
+    rocket.id,
+    exam(rocket.latestIntake, {
+      examType: ExamType.INTAKE,
+      overallResult: ExamResult.NEEDS_VET_REVIEW,
+      findings: findings({
+        LUNGS: {
+          status: ExamFindingStatus.ABNORMAL,
+          notes: "Harsh lung sounds and a mild cough.",
+        },
+      }),
+    }),
+  );
+
+  // --- Nutmeg: found intact, with her spay already scheduled ---------------
+  const nutmeg = await animal("Nutmeg");
+  await recordOne(
+    nutmeg.id,
+    exam(inStay(nutmeg, 1), {
+      examType: ExamType.VET,
+      overallResult: ExamResult.NO_CONCERNS,
+      reproductiveStatus: ReproductiveStatus.INTACT,
+    }),
+  );
+
+  // --- A male found already neutered on an exam ----------------------------
+  // Claimed as the lapsed exemption is, never a hand-authored animal: a
+  // published male with no spay or neuter on his record in any state, the
+  // one that has been in care longest.
+  const unaltered = await prisma.animal.findMany({
+    where: {
+      name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+      listingStatus: AnimalListingStatus.PUBLISHED,
+      sex: Sex.MALE,
+      intake: { some: {} },
+      medicalEntries: {
+        none: {
+          kind: MedicalEntryKind.SURGERY,
+          procedure: { in: [SurgeryProcedure.SPAY, SurgeryProcedure.NEUTER] },
+        },
+      },
+    },
+    select: { id: true, name: true, intake: { select: { intakeDate: true } } },
+  });
+  const foundMale = unaltered
+    .map((row) => ({ ...row, latestIntake: latestIntakeOf(row.intake) }))
+    .sort(
+      (a, b) =>
+        a.latestIntake.localeCompare(b.latestIntake) || a.id.localeCompare(b.id),
+    )[0];
+  if (!foundMale) {
+    throw new Error("seedExamFixtures: no published male without a spay or neuter.");
+  }
+  await recordOne(foundMale.id, {
+    ...exam(inStay(foundMale, 2), {
+      examType: ExamType.VET,
+      overallResult: ExamResult.NO_CONCERNS,
+      reproductiveStatus: ReproductiveStatus.ALTERED,
+    }),
+    foundAltered: { procedure: SurgeryProcedure.NEUTER },
+  });
+
+  // --- Flash: a vet exam three days out ------------------------------------
+  const flash = await animal("Flash");
+  await prisma.$transaction((tx) =>
+    scheduleMedicalEntry(
+      tx,
+      {
+        animalId: flash.id,
+        kind: MedicalEntryKind.EXAM,
+        examType: ExamType.VET,
+        dueDate: shiftDayKey(today, 3),
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- Marigold: a recheck recorded on the wrong animal, voided -----------
+  const marigold = await animal("Marigold");
+  await prisma.$transaction(async (tx) => {
+    const { entryId } = await record(
+      marigold.id,
+      exam(inStay(marigold, 3), {
+        examType: ExamType.RECHECK,
+        overallResult: ExamResult.NO_CONCERNS,
+      }),
+      tx,
+    );
+    await voidMedicalEntry(tx, entryId, "Recorded on the wrong animal.", benjamin.id);
+  });
+
+  console.log(
+    `Seeded exams for Frisco, Whiskers, Leo, Fido, Rocket, Nutmeg, Flash and Marigold, and a neuter found on an exam for ${foundMale.name}.`,
+  );
+}
+
+// The problem list and care episodes, through the condition and care-episode
+// services, one transaction per animal, by Olivia unless noted. Days are fixed
+// offsets from the animal's latest intake or from today, kept inside the
+// stay, with no random draws:
+// - Fido (MED-1): hospitalised in house since three days ago for heartworm
+//   treatment. A positive heartworm test at Downtown Veterinary Clinic two
+//   weeks into his stay found "Heartworm disease", which stands for the
+//   Heartworm Positive trait he doesn't carry yet.
+// - Daisy (MED-2): a stay at Downtown Veterinary Clinic early in her stay,
+//   closed, and under vet care since five days ago after her dental.
+//   "Congenital deafness", chronic, stands for the Deaf trait she already
+//   carries, assigned by hand.
+// - Rocket and Marigold: under care with nothing planned for them, no task
+//   and no scheduled care, which the attention queue surfaces. Rocket is
+//   under vet care from his intake exam; Marigold is hospitalised at
+//   Downtown Veterinary Clinic. Marigold also has a ringworm entry recorded
+//   on her by mistake, voided by Benjamin.
+// - Fern and Godzilla: their triage, as vet exams scheduled today and in two
+//   days.
+// - Rusty: recovering from a mass removal four days ago.
+// - Leo: an allergy to penicillin.
+// - Whiskers: a flea infestation found on her intake exam, resolved two weeks
+//   later.
+async function seedCareFixtures() {
+  console.log("Seeding conditions and care episodes...");
+
+  const today = shelterToday(seedTimezone);
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  const downtownVet = await prisma.partner.findFirst({
+    where: { name: "Downtown Veterinary Clinic" },
+  });
+  const [heartwormTest, heartwormPositive, deaf] = await Promise.all([
+    prisma.medicalItem.findFirst({
+      where: { name: "Heartworm antigen" },
+      select: { id: true, analytes: { select: { id: true } } },
+    }),
+    prisma.characteristic.findFirst({ where: { name: "Heartworm Positive" } }),
+    prisma.characteristic.findFirst({ where: { name: "Deaf" } }),
+  ]);
+  if (!olivia || !benjamin || !downtownVet || !heartwormTest || !heartwormPositive || !deaf) {
+    throw new Error(
+      "seedCareFixtures: staff, Downtown Veterinary Clinic, the heartworm test or the medical traits not found.",
+    );
+  }
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, intake: { select: { intakeDate: true } } },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(`seedCareFixtures: ${name} was not seeded with an intake.`);
+    }
+    const latestIntake = row.intake.map((intake) => calendarDay(intake.intakeDate)).sort().at(-1)!;
+    return { id: row.id, latestIntake };
+  };
+  // A day `offset` days into the current stay, never after today.
+  const inStay = (subject: { latestIntake: CalendarDay }, offset: number) => {
+    const day = shiftDayKey(subject.latestIntake, offset);
+    return day > today ? today : day;
+  };
+  // A day `daysAgo` days before today, never before the current stay.
+  const sinceDaysAgo = (subject: { latestIntake: CalendarDay }, daysAgo: number) => {
+    const day = shiftDayKey(today, -daysAgo);
+    return day < subject.latestIntake ? subject.latestIntake : day;
+  };
+  const intakeExamOf = async (animalId: string) => {
+    const exam = await prisma.medicalEntry.findFirst({
+      where: {
+        animalId,
+        kind: MedicalEntryKind.EXAM,
+        examType: ExamType.INTAKE,
+        status: MedicalEntryStatus.COMPLETED,
+        voidedAt: null,
+      },
+      orderBy: [{ completedDate: "desc" }, { id: "asc" }],
+      select: { id: true, completedDate: true },
+    });
+    if (!exam?.completedDate) {
+      throw new Error("seedCareFixtures: an intake exam the fixtures cite was not seeded.");
+    }
+    return { id: exam.id, day: calendarDay(exam.completedDate) };
+  };
+
+  // --- Fido: heartworm, and hospitalised in house for its treatment --------
+  const fido = await animal("Fido");
+  await prisma.$transaction(async (tx) => {
+    const testDay = inStay(fido, 14);
+    const { entryId } = await recordMedicalEntry(
+      tx,
+      {
+        animalId: fido.id,
+        kind: MedicalEntryKind.TEST,
+        itemId: heartwormTest.id,
+        completedDate: testDay,
+        source: MedicalEntrySource.OUTSIDE_VET,
+        vetPartnerId: downtownVet.id,
+        results: heartwormTest.analytes.map((analyte) => ({
+          analyteId: analyte.id,
+          result: TestResult.POSITIVE,
+        })),
+      },
+      olivia.id,
+      today,
+    );
+    await addMedicalCondition(
+      tx,
+      {
+        animalId: fido.id,
+        type: MedicalConditionType.CONDITION,
+        name: "Heartworm disease",
+        status: MedicalConditionStatus.ACTIVE,
+        onsetDate: testDay,
+        diagnosedBy: "Downtown Veterinary Clinic",
+        sourceEntryId: entryId,
+        // Left off the animal, so the condition offers to add it.
+        characteristicId: heartwormPositive.id,
+      },
+      olivia.id,
+      today,
+    );
+    await openCareEpisode(
+      tx,
+      {
+        animalId: fido.id,
+        type: CareEpisodeType.HOSPITALISED_IN_HOUSE,
+        startDate: sinceDaysAgo(fido, 3),
+        reason: "Heartworm treatment: adulticide injections and cage rest.",
+      },
+      olivia.id,
+      today,
+    );
+  });
+
+  // --- Daisy: a clinic stay, closed, and vet care after her dental ---------
+  const daisy = await animal("Daisy");
+  await prisma.$transaction(async (tx) => {
+    await openCareEpisode(
+      tx,
+      {
+        animalId: daisy.id,
+        type: CareEpisodeType.HOSPITALISED_OFF_SITE,
+        startDate: inStay(daisy, 2),
+        endDate: inStay(daisy, 4),
+        partnerId: downtownVet.id,
+        reason: "Dehydrated on arrival; fluids and monitoring.",
+      },
+      olivia.id,
+      today,
+    );
+    await openCareEpisode(
+      tx,
+      {
+        animalId: daisy.id,
+        type: CareEpisodeType.UNDER_VET_CARE,
+        startDate: sinceDaysAgo(daisy, 5),
+        reason: "Post-op dental recheck and pain management.",
+      },
+      olivia.id,
+      today,
+    );
+    // Her Deaf trait was assigned by hand, so the condition offers to cite it.
+    await addMedicalCondition(
+      tx,
+      {
+        animalId: daisy.id,
+        type: MedicalConditionType.CONDITION,
+        name: "Congenital deafness",
+        status: MedicalConditionStatus.CHRONIC,
+        characteristicId: deaf.id,
+      },
+      olivia.id,
+      today,
+    );
+  });
+
+  // --- Rocket and Marigold: under care, with nothing planned ---------------
+  const rocket = await animal("Rocket");
+  const rocketExam = await intakeExamOf(rocket.id);
+  await prisma.$transaction((tx) =>
+    openCareEpisode(
+      tx,
+      {
+        animalId: rocket.id,
+        type: CareEpisodeType.UNDER_VET_CARE,
+        startDate: rocketExam.day,
+        reason: "Cough under investigation.",
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  const marigold = await animal("Marigold");
+  await prisma.$transaction(async (tx) => {
+    await openCareEpisode(
+      tx,
+      {
+        animalId: marigold.id,
+        type: CareEpisodeType.HOSPITALISED_OFF_SITE,
+        startDate: sinceDaysAgo(marigold, 2),
+        partnerId: downtownVet.id,
+        reason: "Not eating; on IV fluids.",
+      },
+      olivia.id,
+      today,
+    );
+    const { conditionId } = await addMedicalCondition(
+      tx,
+      {
+        animalId: marigold.id,
+        type: MedicalConditionType.CONDITION,
+        name: "Ringworm",
+        status: MedicalConditionStatus.ACTIVE,
+      },
+      olivia.id,
+      today,
+    );
+    await voidMedicalCondition(tx, conditionId, "Recorded on the wrong animal.", benjamin.id);
+  });
+
+  // --- Fern and Godzilla: triage, as vet exams scheduled -------------------
+  for (const [name, inDays] of [
+    ["Fern", 0],
+    ["Godzilla", 2],
+  ] as const) {
+    const subject = await animal(name);
+    await prisma.$transaction((tx) =>
+      scheduleMedicalEntry(
+        tx,
+        {
+          animalId: subject.id,
+          kind: MedicalEntryKind.EXAM,
+          examType: ExamType.VET,
+          dueDate: shiftDayKey(today, inDays),
+          notes: "Triage on arrival.",
+        },
+        olivia.id,
+        today,
+      ),
+    );
+  }
+
+  // --- Rusty: recovering from a mass removal -------------------------------
+  const rusty = await animal("Rusty");
+  await prisma.$transaction((tx) =>
+    recordMedicalEntry(
+      tx,
+      {
+        animalId: rusty.id,
+        kind: MedicalEntryKind.SURGERY,
+        procedure: SurgeryProcedure.MASS_REMOVAL,
+        completedDate: sinceDaysAgo(rusty, 4),
+        source: MedicalEntrySource.IN_HOUSE,
+        findings: "Benign lipoma, left flank, removed whole.",
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- Leo: an allergy ------------------------------------------------------
+  const leo = await animal("Leo");
+  await prisma.$transaction((tx) =>
+    addMedicalCondition(
+      tx,
+      {
+        animalId: leo.id,
+        type: MedicalConditionType.ALLERGY,
+        name: "Penicillin",
+        status: MedicalConditionStatus.ACTIVE,
+        notes: "Hives after a dose before intake, per his previous owner.",
+      },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- Whiskers: fleas found on her intake exam, since resolved ------------
+  const whiskers = await animal("Whiskers");
+  const whiskersExam = await intakeExamOf(whiskers.id);
+  await prisma.$transaction(async (tx) => {
+    const { conditionId } = await addMedicalCondition(
+      tx,
+      {
+        animalId: whiskers.id,
+        type: MedicalConditionType.CONDITION,
+        name: "Flea infestation",
+        status: MedicalConditionStatus.ACTIVE,
+        onsetDate: whiskersExam.day,
+        sourceEntryId: whiskersExam.id,
+      },
+      olivia.id,
+      today,
+    );
+    await editMedicalCondition(
+      tx,
+      conditionId,
+      {
+        status: MedicalConditionStatus.RESOLVED,
+        resolvedDate: inStay(whiskers, 14),
+      },
+      olivia.id,
+      today,
+    );
+  });
+
+  console.log(
+    "Seeded care episodes for Fido, Daisy, Rocket and Marigold, triage exams for Fern and Godzilla, Rusty's surgery, and conditions for Fido, Daisy, Marigold, Leo and Whiskers.",
+  );
+}
+
+// The medical protocols: what a dog, a puppy, a cat and a kitten get when
+// they arrive, and an older puppy protocol that was replaced. Written through
+// the protocol service by Olivia, with fixed values. Then the puppy and
+// kitten protocols are applied, through the apply service as an intake does,
+// to one young dog and one young cat. No other animal gets protocol care:
+// applied to every animal, the due lists and the attention queue would flood.
+async function seedMedicalProtocols() {
+  console.log("Seeding medical protocols...");
+
+  const today = shelterToday(seedTimezone);
+  const olivia = await prisma.person.findFirst({
+    where: { user: { email: "staff1@example.com" } },
+  });
+  if (!olivia) {
+    throw new Error("seedMedicalProtocols: staff fixtures not found.");
+  }
+  const [species, items] = await Promise.all([
+    prisma.species.findMany({ select: { id: true, name: true } }),
+    prisma.medicalItem.findMany({ select: { id: true, name: true } }),
+  ]);
+  const speciesId = (name: string) => {
+    const found = species.find((row) => row.name === name);
+    if (!found) throw new Error(`seedMedicalProtocols: species ${name} was not seeded.`);
+    return found.id;
+  };
+  const itemId = (name: string) => {
+    const found = items.find((row) => row.name === name);
+    if (!found) throw new Error(`seedMedicalProtocols: catalog item ${name} was not seeded.`);
+    return found.id;
+  };
+
+  type Step = MedicalProtocolInput["steps"][number];
+  const intakeExam: Step = {
+    kind: MedicalProtocolStepKind.EXAM,
+    examType: ExamType.INTAKE,
+    offsetDays: 0,
+  };
+  const vaccine = (name: string, timing: Partial<Step> = {}): Step => ({
+    kind: MedicalProtocolStepKind.VACCINE,
+    itemId: itemId(name),
+    offsetDays: 0,
+    ...timing,
+  });
+  const test = (name: string, timing: Partial<Step> = {}): Step => ({
+    ...vaccine(name, timing),
+    kind: MedicalProtocolStepKind.TEST,
+  });
+  const treatment = (name: string, timing: Partial<Step> = {}): Step => ({
+    ...vaccine(name, timing),
+    kind: MedicalProtocolStepKind.TREATMENT,
+  });
+  const microchip: Step = { kind: MedicalProtocolStepKind.MICROCHIP, offsetDays: 0 };
+  const spayNeuter = (timing: Partial<Step> = {}): Step => ({
+    kind: MedicalProtocolStepKind.SPAY_NEUTER,
+    offsetDays: 7,
+    ...timing,
+  });
+
+  const create = (input: MedicalProtocolInput) =>
+    prisma.$transaction((tx) => createMedicalProtocol(tx, input));
+
+  // Written first and retired at once: the live Puppy protocol covers its
+  // ages now, and only one live protocol of a species covers any age.
+  const old = await create({
+    name: "Puppy (until 2026)",
+    speciesId: speciesId("Dog"),
+    maxAgeDays: 140,
+    steps: [vaccine("DHPP", { repeatIntervalDays: 21, repeatCount: 2 })],
+  });
+  await prisma.$transaction((tx) => retireMedicalProtocol(tx, old.id));
+
+  const puppy = await create({
+    name: "Puppy",
+    speciesId: speciesId("Dog"),
+    maxAgeDays: 140,
+    steps: [
+      intakeExam,
+      vaccine("DHPP", { notBeforeAgeDays: 42, repeatIntervalDays: 14, untilAgeDays: 140 }),
+      vaccine("Bordetella", { notBeforeAgeDays: 56 }),
+      treatment("Pyrantel pamoate", { repeatIntervalDays: 14, repeatCount: 2 }),
+      test("Fecal flotation"),
+      vaccine("Rabies 1-year", { notBeforeAgeDays: 112 }),
+      microchip,
+      spayNeuter({ notBeforeAgeDays: 56 }),
+    ],
+  });
+  await create({
+    name: "Dog",
+    speciesId: speciesId("Dog"),
+    minAgeDays: 140,
+    steps: [
+      intakeExam,
+      vaccine("DHPP", { repeatIntervalDays: 21, repeatCount: 1 }),
+      vaccine("Bordetella"),
+      test("Heartworm antigen", { notBeforeAgeDays: 182 }),
+      treatment("Pyrantel pamoate"),
+      vaccine("Rabies 1-year"),
+      microchip,
+      spayNeuter(),
+    ],
+  });
+  const kitten = await create({
+    name: "Kitten",
+    speciesId: speciesId("Cat"),
+    maxAgeDays: 140,
+    steps: [
+      intakeExam,
+      vaccine("FVRCP", { notBeforeAgeDays: 42, repeatIntervalDays: 14, untilAgeDays: 140 }),
+      test("FeLV/FIV combo"),
+      treatment("Pyrantel pamoate", { repeatIntervalDays: 14, repeatCount: 2 }),
+      vaccine("Rabies 1-year", { notBeforeAgeDays: 84 }),
+      microchip,
+      spayNeuter({ notBeforeAgeDays: 56 }),
+    ],
+  });
+  await create({
+    name: "Cat",
+    speciesId: speciesId("Cat"),
+    minAgeDays: 140,
+    steps: [
+      intakeExam,
+      vaccine("FVRCP", { repeatIntervalDays: 21, repeatCount: 1 }),
+      test("FeLV/FIV combo"),
+      treatment("Selamectin"),
+      vaccine("Rabies 1-year"),
+      microchip,
+      spayNeuter(),
+    ],
+  });
+
+  // Claimed as the transferred-out dog and the lapsed exemption are, never a
+  // hand-authored animal: in care, with nothing on its medical record but
+  // care recorded before intake (most animals arrive with a chip on it), born
+  // by its latest intake and under 140 days old on it; youngest first.
+  const claim = async (speciesName: string, protocolId: string) => {
+    const candidates = await prisma.animal.findMany({
+      where: {
+        name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+        speciesId: speciesId(speciesName),
+        listingStatus: { not: AnimalListingStatus.ARCHIVED },
+        medicalEntries: { every: { source: MedicalEntrySource.BEFORE_INTAKE } },
+      },
+      orderBy: [{ birthDate: "desc" }, { id: "asc" }],
+      select: { id: true, name: true, birthDate: true, intake: { select: { intakeDate: true } } },
+    });
+    for (const candidate of candidates) {
+      const intakeDate = candidate.intake
+        .map((intake) => calendarDay(intake.intakeDate))
+        .sort()
+        .at(-1);
+      const birthDate = calendarDay(candidate.birthDate);
+      if (!intakeDate || birthDate > intakeDate) continue;
+      if (shelterDaysBetweenKeys(birthDate, intakeDate) >= 140) continue;
+      const applied = await prisma.$transaction((tx) =>
+        applyIntakeProtocol(tx, { animalId: candidate.id, intakeDate }, olivia.id, today),
+      );
+      if (applied?.protocolId !== protocolId) {
+        throw new Error(
+          `seedMedicalProtocols: ${candidate.name} didn't get the ${speciesName.toLowerCase()} protocol expected.`,
+        );
+      }
+      return { name: candidate.name, entries: applied.entryIds.length, skipped: applied.skipped };
+    }
+    throw new Error(
+      `seedMedicalProtocols: no ${speciesName.toLowerCase()} in care under 140 days old has only care from before intake on its record.`,
+    );
+  };
+  const dog = await claim("Dog", puppy.id);
+  const cat = await claim("Cat", kitten.id);
+
+  const skippedText = (skipped: { label: string }[]) =>
+    skipped.length === 0 ? "" : `, not ${skipped.map((step) => step.label).join(", ")}`;
+  console.log(
+    `Seeded 5 medical protocols (1 retired); the Puppy protocol scheduled ${dog.entries} entries for ${dog.name}${skippedText(dog.skipped)}, and the Kitten protocol ${cat.entries} for ${cat.name}${skippedText(cat.skipped)}.`,
+  );
+}
+
+// Medications in the catalog, and fixed medication orders and doses on four
+// hand-authored animals in care, none in a foster placement: a course with
+// a refused dose and a missed slot after a voided order (Fido), a short
+// course and an as-needed one (Rusty), a dose voided and recorded again and
+// a course discontinued with a dose not given (Daisy), and a course every
+// few days, over (Whiskers). Rocket and Marigold, under care with nothing
+// planned, get none. Through the catalog, order and dose services as Olivia,
+// with no random draws; their medications are created here rather than in
+// the catalog defaults, so every earlier draw is what it was. Days are
+// offsets from today kept inside each stay, and past doses are given at a
+// fixed time on their day's clock. Today's slots are never recorded, so
+// nothing depends on the time of day the seed ran.
+async function seedMedications() {
+  console.log("Seeding medications...");
+
+  const now = new Date();
+  const today = shelterToday(seedTimezone, now);
+  const olivia = await prisma.person.findFirst({
+    where: { user: { email: "staff1@example.com" } },
+  });
+  if (!olivia) throw new Error("seedMedications: staff fixtures not found.");
+
+  const medications = [
+    { name: "Amoxicillin-clavulanate", defaultDoseUnit: DoseUnit.TABLET },
+    { name: "Doxycycline", defaultDoseUnit: DoseUnit.MG },
+    { name: "Meloxicam", defaultDoseUnit: DoseUnit.ML },
+    { name: "Gabapentin", defaultDoseUnit: DoseUnit.CAPSULE },
+    { name: "Metronidazole", defaultDoseUnit: DoseUnit.MG },
+    { name: "Prednisolone", defaultDoseUnit: DoseUnit.MG },
+    { name: "Amoxicillin drops (old stock)", defaultDoseUnit: DoseUnit.ML, retired: true },
+  ];
+  const itemIds = new Map<string, string>();
+  for (const { retired, ...item } of medications) {
+    await prisma.$transaction(async (tx) => {
+      const { id } = await createMedicalItem(tx, {
+        kind: MedicalItemKind.MEDICATION,
+        defaultRoute: MedicalRoute.ORAL,
+        speciesIds: [],
+        analytes: [],
+        ...item,
+      });
+      if (retired) await retireMedicalItem(tx, id);
+      itemIds.set(item.name, id);
+    });
+  }
+  const medication = (name: string) => itemIds.get(name)!;
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: {
+        id: true,
+        listingStatus: true,
+        intake: { select: { intakeDate: true } },
+        fosterPlacements: { where: { endDate: null }, select: { id: true } },
+      },
+    });
+    if (!row || row.intake.length === 0) {
+      throw new Error(`seedMedications: ${name} was not seeded with an intake.`);
+    }
+    if (row.listingStatus === AnimalListingStatus.ARCHIVED || row.fosterPlacements.length > 0) {
+      throw new Error(`seedMedications: ${name} must be in the shelter's care, not in a foster placement.`);
+    }
+    const latestIntake = row.intake.map((intake) => calendarDay(intake.intakeDate)).sort().at(-1)!;
+    return { id: row.id, latestIntake };
+  };
+  const openEpisodeStart = async (animalId: string, name: string) => {
+    const episode = await prisma.careEpisode.findFirst({
+      where: { animalId, endDate: null, voidedAt: null },
+      select: { startDate: true },
+    });
+    if (!episode) throw new Error(`seedMedications: ${name}'s open care episode was not seeded.`);
+    return calendarDay(episode.startDate);
+  };
+  // A day `daysAgo` days before today, never before the current stay.
+  const sinceDaysAgo = (subject: { latestIntake: CalendarDay }, daysAgo: number) => {
+    const day = shiftDayKey(today, -daysAgo);
+    return day < subject.latestIntake ? subject.latestIntake : day;
+  };
+  const daysFrom = (from: CalendarDay, to: CalendarDay) => {
+    const days: CalendarDay[] = [];
+    for (let day = from; day <= to; day = shiftDayKey(day, 1)) days.push(day);
+    return days;
+  };
+  const yesterday = shiftDayKey(today, -1);
+
+  const write = <T,>(fn: (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => Promise<T>) =>
+    prisma.$transaction(fn, { timeout: 30_000 });
+  const order = (input: MedicationOrderInput) =>
+    write((tx) => createMedicationOrder(tx, input, olivia.id, today)).then((o) => o.orderId);
+  // Past doses only, at a fixed time on their day's clock: before the AM
+  // slot ends, at midday, in the evening.
+  const TIME: Record<DoseSlot, string> = { AM: "08:00", MIDDAY: "12:30", PM: "18:00" };
+  const dose = (
+    orderId: string,
+    slotDate: CalendarDay,
+    slot: DoseSlot | null,
+    result: MedicationDoseResult = MedicationDoseResult.GIVEN,
+    reason?: string,
+  ) => {
+    if (slotDate >= today) throw new Error("seedMedications: today's slots are left unrecorded.");
+    return write((tx) =>
+      recordMedicationDose(
+        tx,
+        {
+          orderId,
+          slotDate,
+          slot,
+          result,
+          reason,
+          administeredAt: shelterInstant(slotDate, slot ? TIME[slot] : "14:00", seedTimezone),
+        },
+        olivia.id,
+        today,
+        now,
+      ),
+    );
+  };
+
+  // --- Fido: doxycycline for his heartworm treatment ----------------------
+  const fido = await animal("Fido");
+  const fidoStart = await openEpisodeStart(fido.id, "Fido");
+  const doxycycline = {
+    animalId: fido.id,
+    itemId: medication("Doxycycline"),
+    doseUnit: DoseUnit.MG,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.BID,
+    startDate: fidoStart,
+    firstSlot: DoseSlot.AM,
+    endDate: shiftDayKey(fidoStart, 29),
+    prescribedBy: "Downtown Veterinary Clinic",
+  };
+  const wrongDose = await order({ ...doxycycline, doseAmount: 50 });
+  await write((tx) =>
+    voidMedicationOrder(tx, wrongDose, "Wrong dose: the vet ordered 100 mg", olivia.id),
+  );
+  const fidoCourse = await order({
+    ...doxycycline,
+    doseAmount: 100,
+    instructions: "With food, to spare his stomach. Keep him rested.",
+  });
+  const twoDaysAgo = shiftDayKey(today, -2);
+  for (const day of daysFrom(fidoStart, yesterday)) {
+    await dose(fidoCourse, day, DoseSlot.AM);
+    if (day === twoDaysAgo) {
+      await dose(fidoCourse, day, DoseSlot.PM, MedicationDoseResult.REFUSED, "Spat it out");
+    } else if (day !== yesterday) {
+      // Yesterday's PM is left missed.
+      await dose(fidoCourse, day, DoseSlot.PM);
+    }
+  }
+
+  // --- Rusty: pain relief after his mass removal --------------------------
+  const rusty = await animal("Rusty");
+  const surgery = await prisma.medicalEntry.findFirst({
+    where: {
+      animalId: rusty.id,
+      kind: MedicalEntryKind.SURGERY,
+      procedure: SurgeryProcedure.MASS_REMOVAL,
+      status: MedicalEntryStatus.COMPLETED,
+      voidedAt: null,
+    },
+    select: { completedDate: true },
+  });
+  if (!surgery?.completedDate) {
+    throw new Error("seedMedications: Rusty's mass removal was not seeded.");
+  }
+  const surgeryDay = calendarDay(surgery.completedDate);
+  const meloxicamStart = shiftDayKey(surgeryDay, 1);
+  const meloxicam = await order({
+    animalId: rusty.id,
+    itemId: medication("Meloxicam"),
+    doseAmount: 0.5,
+    doseUnit: DoseUnit.ML,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.SID,
+    startDate: meloxicamStart,
+    firstSlot: DoseSlot.AM,
+    endDate: shiftDayKey(meloxicamStart, 6),
+    instructions: "With food.",
+  });
+  for (const day of daysFrom(meloxicamStart, yesterday)) {
+    await dose(meloxicam, day, DoseSlot.AM);
+  }
+  const gabapentin = await order({
+    animalId: rusty.id,
+    itemId: medication("Gabapentin"),
+    doseAmount: 1,
+    doseUnit: DoseUnit.CAPSULE,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.PRN,
+    startDate: surgeryDay,
+    instructions: "100 mg capsules, for pain: at most one every 8 hours.",
+  });
+  await dose(gabapentin, sinceDaysAgo(rusty, 2), null);
+
+  // --- Daisy: after her dental --------------------------------------------
+  const daisy = await animal("Daisy");
+  const daisyStart = await openEpisodeStart(daisy.id, "Daisy");
+  const amoxicillin = await order({
+    animalId: daisy.id,
+    itemId: medication("Amoxicillin-clavulanate"),
+    doseAmount: 62.5,
+    doseUnit: DoseUnit.MG,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.BID,
+    startDate: daisyStart,
+    firstSlot: DoseSlot.AM,
+    endDate: shiftDayKey(daisyStart, 9),
+    instructions: "With a small meal.",
+    prescribedBy: "Downtown Veterinary Clinic",
+  });
+  const recordedTwice = shiftDayKey(daisyStart, 1);
+  for (const day of daysFrom(daisyStart, yesterday)) {
+    const am = await dose(amoxicillin, day, DoseSlot.AM);
+    if (day === recordedTwice) {
+      await write((tx) =>
+        voidMedicationDose(tx, am.doseId, "Recorded on the wrong day", olivia.id),
+      );
+      await dose(amoxicillin, day, DoseSlot.AM);
+    }
+    await dose(amoxicillin, day, DoseSlot.PM);
+  }
+  const metronidazoleStart = sinceDaysAgo(daisy, 4);
+  const metronidazole = await order({
+    animalId: daisy.id,
+    itemId: medication("Metronidazole"),
+    doseAmount: 250,
+    doseUnit: DoseUnit.MG,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.TID,
+    startDate: metronidazoleStart,
+    firstSlot: DoseSlot.AM,
+    endDate: shiftDayKey(metronidazoleStart, 6),
+  });
+  const notGivenDay = shiftDayKey(metronidazoleStart, 1);
+  for (const day of daysFrom(metronidazoleStart, shiftDayKey(yesterday, -1))) {
+    await dose(metronidazole, day, DoseSlot.AM);
+    if (day === notGivenDay) {
+      await dose(
+        metronidazole,
+        day,
+        DoseSlot.MIDDAY,
+        MedicationDoseResult.NOT_GIVEN,
+        "Out of stock until the afternoon delivery",
+      );
+    } else {
+      await dose(metronidazole, day, DoseSlot.MIDDAY);
+    }
+    await dose(metronidazole, day, DoseSlot.PM);
+  }
+  await write((tx) =>
+    discontinueMedicationOrder(
+      tx,
+      metronidazole,
+      { day: yesterday, reason: "Stools normal again" },
+      olivia.id,
+      today,
+    ),
+  );
+
+  // --- Whiskers: a short course of prednisolone, over ---------------------
+  const whiskers = await animal("Whiskers");
+  const prednisoloneEnd = shiftDayKey(today, -7);
+  const prednisoloneStart = shiftDayKey(prednisoloneEnd, -6);
+  if (prednisoloneStart < whiskers.latestIntake) {
+    throw new Error("seedMedications: Whiskers' course would start before her stay.");
+  }
+  const prednisolone = await order({
+    animalId: whiskers.id,
+    itemId: medication("Prednisolone"),
+    doseAmount: 5,
+    doseUnit: DoseUnit.MG,
+    route: MedicalRoute.ORAL,
+    frequency: MedicationFrequency.EVERY_N_DAYS,
+    intervalDays: 2,
+    startDate: prednisoloneStart,
+    firstSlot: DoseSlot.AM,
+    endDate: prednisoloneEnd,
+  });
+  for (let day = prednisoloneStart; day <= prednisoloneEnd; day = shiftDayKey(day, 2)) {
+    await dose(prednisolone, day, DoseSlot.AM);
+  }
+
+  const [orders, doses] = await Promise.all([
+    prisma.medicationOrder.count(),
+    prisma.medicationDose.count({ where: { voidedAt: null } }),
+  ]);
+  console.log(
+    `Seeded ${medications.length} medications (1 retired), ${orders} medication orders and ${doses} doses on Fido, Rusty, Daisy and Whiskers.`,
+  );
+}
+
 let seedTimezone = fallbackShelterSettings().timezone;
+
+// =================================================================//
+//                       MEDICAL DOCUMENTS                           //
+// =================================================================//
+//
+// Paperwork on two hand-authored animals, uploaded by Olivia through the
+// document service, as staff upload it:
+// - Fido: "Heartworm antigen panel", a lab result for his positive heartworm
+//   test, dated the test's day; and "Intake paperwork (wrong animal)",
+//   voided by Benjamin with its file kept, so the list shows a void.
+// - Daisy: "Dental discharge sheet", a vet record for her dental, dated its
+//   day; and "Dental radiograph", imaging with no entry and no day.
+//
+// The files are the two small samples in prisma/seed-files. Each document
+// is written to its own fixed pathname, overwriting what a reseed left
+// there, so reseeding never piles up files in the store. The store is the
+// one the environment picks: the local folder in development and under
+// Playwright, the private Blob store where its token is set.
+//
+// No random draws: nothing earlier in the seed moves.
+async function seedMedicalDocuments() {
+  console.log("Seeding medical documents...");
+
+  const today = shelterToday(seedTimezone, new Date());
+  const [olivia, benjamin] = await Promise.all([
+    prisma.person.findFirst({ where: { user: { email: "staff1@example.com" } } }),
+    prisma.person.findFirst({ where: { user: { email: "staff2@example.com" } } }),
+  ]);
+  if (!olivia || !benjamin) {
+    throw new Error("seedMedicalDocuments: staff fixtures not found.");
+  }
+
+  const store = medicalDocumentStore({ overwrite: true });
+  const sample = (file: string) =>
+    new Uint8Array(fs.readFileSync(path.join(process.cwd(), "prisma/seed-files", file)));
+  const pdf = sample("sample-vet-record.pdf");
+  const png = sample("sample-radiograph.png");
+
+  const animal = async (name: string) => {
+    const row = await prisma.animal.findFirst({
+      where: { name },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    if (!row) throw new Error(`seedMedicalDocuments: ${name} not found.`);
+    return row.id;
+  };
+  const upload = (
+    fileName: string,
+    bytes: Uint8Array,
+    input: MedicalDocumentInput,
+  ) =>
+    storeThenRecord(
+      store,
+      { pathname: seedDocumentPathname(fileName), bytes, fresh: false },
+      (stored) =>
+        prisma.$transaction((tx) =>
+          createMedicalDocument(tx, { ...input, ...stored }, olivia.id, today),
+        ),
+    );
+
+  // --- Fido: the lab report of his positive heartworm test -----------------
+  const fido = await animal("Fido");
+  const heartwormTest = await prisma.medicalEntry.findFirst({
+    where: {
+      animalId: fido,
+      kind: MedicalEntryKind.TEST,
+      status: MedicalEntryStatus.COMPLETED,
+      voidedAt: null,
+      item: { name: "Heartworm antigen" },
+      test: { results: { some: { result: TestResult.POSITIVE } } },
+    },
+    select: { id: true, completedDate: true },
+  });
+  if (!heartwormTest?.completedDate) {
+    throw new Error("seedMedicalDocuments: Fido's positive heartworm test was not seeded.");
+  }
+  await upload("fido-heartworm-antigen-panel.pdf", pdf, {
+    animalId: fido,
+    name: "Heartworm antigen panel",
+    type: MedicalDocumentType.LAB_RESULT,
+    documentDate: calendarDay(heartwormTest.completedDate),
+    entryId: heartwormTest.id,
+  });
+
+  // --- Daisy: her dental's discharge sheet and a radiograph ----------------
+  const daisy = await animal("Daisy");
+  const dental = await prisma.medicalEntry.findFirst({
+    where: {
+      animalId: daisy,
+      kind: MedicalEntryKind.SURGERY,
+      procedure: SurgeryProcedure.DENTAL,
+      status: MedicalEntryStatus.COMPLETED,
+      voidedAt: null,
+    },
+    select: { id: true, completedDate: true },
+  });
+  if (!dental?.completedDate) {
+    throw new Error("seedMedicalDocuments: Daisy's dental was not seeded.");
+  }
+  await upload("daisy-dental-discharge-sheet.pdf", pdf, {
+    animalId: daisy,
+    name: "Dental discharge sheet",
+    type: MedicalDocumentType.VET_RECORD,
+    documentDate: calendarDay(dental.completedDate),
+    entryId: dental.id,
+    notes: "Soft food for a week; recheck in ten days.",
+  });
+  await upload("daisy-dental-radiograph.png", png, {
+    animalId: daisy,
+    name: "Dental radiograph",
+    type: MedicalDocumentType.IMAGING,
+  });
+
+  // --- Fido: paperwork uploaded to the wrong animal, voided ----------------
+  const { documentId: wrongAnimal } = await upload("fido-intake-paperwork.pdf", pdf, {
+    animalId: fido,
+    name: "Intake paperwork (wrong animal)",
+    type: MedicalDocumentType.OTHER,
+  });
+  await prisma.$transaction((tx) =>
+    voidMedicalDocument(tx, wrongAnimal, "Uploaded to the wrong animal", benjamin.id),
+  );
+
+  console.log(`Seeded 4 medical documents (1 voided) in the ${store.kind} store.`);
+}
+
+/** A foster's medical record, after all earlier random draws are spent. */
+async function seedFosterMedical() {
+  const today = shelterToday(seedTimezone);
+  const olivia = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff1@example.com" } } });
+  const clinic = await prisma.partner.findFirstOrThrow({ where: { name: "Downtown Veterinary Clinic", type: PartnerType.VET_CLINIC, isActive: true } });
+  const species = await prisma.species.findMany({ where: { name: { in: ["Dog", "Cat"] } }, select: { id: true } });
+  const rosa = await prisma.person.create({ data: { name: "Rosa Lindqvist", email: "foster1@example.com" } });
+  const { user } = await seedAuth.api.signUpEmail({ body: { name: rosa.name, email: rosa.email!, password: "7dJbys5@?tMA" } });
+  await prisma.user.update({ where: { id: user.id }, data: { role: Role.USER } });
+  const profile = await prisma.fosterProfile.create({ data: { personId: rosa.id, status: FosterStatus.ACTIVE, maxAnimals: 2, canGiveOralMeds: true, speciesCapabilities: { connect: species }, approvedAt: new Date() } });
+  const dog = await prisma.animal.findFirstOrThrow({
+    where: {
+      species: { name: "Dog" }, listingStatus: AnimalListingStatus.PUBLISHED, currentUnitId: { not: null },
+      name: { notIn: HAND_AUTHORED_ANIMAL_NAMES }, fosterPlacements: { none: {} }, medicationOrders: { none: {} },
+      medicalEntries: { none: { protocolStepId: { not: null } } },
+      intake: { some: { intakeDate: { lte: shiftDayKey(today, -6) } } },
+    },
+    orderBy: [{ name: "desc" }, { id: "asc" }],
+    select: { id: true, name: true, currentUnitId: true, intake: { orderBy: [{ intakeDate: "desc" }, { id: "desc" }], take: 1, select: { intakeDate: true } } },
+  });
+  const afterIntake = shiftDayKey(calendarDay(dog.intake[0].intakeDate), 1);
+  const desiredStart = shiftDayKey(today, -5);
+  const startDate = afterIntake > desiredStart ? afterIntake : desiredStart;
+  const day = (daysBack: number) => { const candidate = shiftDayKey(today, -daysBack); return candidate < startDate ? startDate : candidate; };
+  await prisma.$transaction(async (tx) => {
+    await tx.fosterPlacement.create({ data: { animalId: dog.id, fosterProfileId: profile.id, type: FosterPlacementType.GENERAL, startDate, expectedEndDate: shiftDayKey(today, 9), previousUnitId: dog.currentUnitId, placedById: olivia.id } });
+    await tx.animal.update({ where: { id: dog.id }, data: { currentUnitId: null } });
+    await tx.animalActivityLog.create({ data: { animalId: dog.id, activityType: AnimalActivityType.FOSTER_PLACED, changedById: olivia.id, changedAt: shelterInstant(startDate, "12:00", seedTimezone), changeSummary: "Animal was placed with Rosa Lindqvist." } });
+  });
+  const medicine = await prisma.medicalItem.findFirstOrThrow({ where: { kind: MedicalItemKind.MEDICATION, name: "Amoxicillin-clavulanate", retiredAt: null } });
+  const dewormer = await prisma.medicalItem.findFirstOrThrow({ where: { kind: MedicalItemKind.TREATMENT, name: "Pyrantel pamoate", retiredAt: null } });
+  const treatment = await prisma.$transaction((tx) => createMedicalItem(tx, { kind: MedicalItemKind.TREATMENT, name: "Ear drops (clinic dose)", speciesIds: [], analytes: [], defaultRoute: MedicalRoute.OTIC }));
+  const orderStart = day(3);
+  const { orderId } = await prisma.$transaction((tx) => createMedicationOrder(tx, { animalId: dog.id, itemId: medicine.id, doseAmount: 125, doseUnit: DoseUnit.MG, route: MedicalRoute.ORAL, frequency: MedicationFrequency.BID, firstSlot: DoseSlot.AM, startDate: orderStart, endDate: shiftDayKey(orderStart, 6), prescribedBy: "Dr. Patel", instructions: "Give with food, morning and evening." }, olivia.id, today));
+  for (let slotDate = orderStart; slotDate < today; slotDate = shiftDayKey(slotDate, 1)) {
+    for (const slot of [DoseSlot.AM, DoseSlot.PM]) await prisma.$transaction((tx) => recordMedicationDose(tx, { orderId, slotDate, slot, result: MedicationDoseResult.GIVEN, administeredAt: shelterInstant(slotDate, slot === DoseSlot.AM ? "08:00" : "18:00", seedTimezone) }, rosa.id, today, new Date(), { foster: { personId: rosa.id } }));
+  }
+  await prisma.$transaction((tx) => scheduleMedicalEntry(tx, { animalId: dog.id, kind: MedicalEntryKind.TREATMENT, itemId: dewormer.id, dueDate: shiftDayKey(today, 1), notes: "Give the scheduled dewormer with food." }, olivia.id, today));
+  const reviewedDay = day(4);
+  const { reportId: reviewedId } = await prisma.$transaction((tx) => submitVetVisitReport(tx, { animalId: dog.id, visitDate: reviewedDay, vetPartnerId: clinic.id, summary: "Ear check: mild infection, drops given at the clinic." }, rosa.id, today));
+  const store = medicalDocumentStore({ overwrite: true });
+  const upload = async (reportId: string, fileName: string, source: string, name: string, documentDate: CalendarDay) => {
+    const bytes = new Uint8Array(fs.readFileSync(path.join(process.cwd(), "prisma/seed-files", source)));
+    await storeThenRecord(store, { pathname: seedDocumentPathname(fileName), bytes, fresh: false }, (stored) => prisma.$transaction((tx) => createMedicalDocument(tx, { animalId: dog.id, vetReportId: reportId, type: MedicalDocumentType.VET_RECORD, name, documentDate, ...stored }, rosa.id, today, { foster: { personId: rosa.id } })));
+  };
+  await upload(reviewedId, "foster-ear-check.png", "sample-radiograph.png", "Ear check record", reviewedDay);
+  await prisma.$transaction(async (tx) => {
+    await recordMedicalEntry(tx, { animalId: dog.id, kind: MedicalEntryKind.TREATMENT, itemId: treatment.id, completedDate: reviewedDay, source: MedicalEntrySource.OUTSIDE_VET, vetPartnerId: clinic.id, notes: "Ear drops administered at the clinic." }, olivia.id, today, { vetReportId: reviewedId });
+    await reviewVetVisitReport(tx, reviewedId, olivia.id);
+  });
+  const waitingDay = day(1);
+  const { reportId: waitingId } = await prisma.$transaction((tx) => submitVetVisitReport(tx, { animalId: dog.id, visitDate: waitingDay, vetPartnerId: clinic.id, summary: "Limping on the left front leg; the vet found a torn nail and trimmed it." }, rosa.id, today));
+  await upload(waitingId, "foster-torn-nail.pdf", "sample-vet-record.pdf", "Torn nail visit record", waitingDay);
+  console.log(`Seeded Rosa Lindqvist (foster1@example.com), fostering ${dog.name}: a medication course, dewormer, and two vet visit reports with paperwork.`);
+}
+
+/** Late documentation of old outcomes, and an outcome recorded in error. */
+async function seedEndOfLife() {
+  console.log("Seeding end-of-life medical records...");
+  const today = shelterToday(seedTimezone);
+  const olivia = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff1@example.com" } } });
+  const benjamin = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff2@example.com" } } });
+  const admin = await prisma.person.findFirstOrThrow({ where: { user: { email: "admin@example.com" } } });
+  const clinic = await prisma.partner.findFirstOrThrow({ where: { name: "Downtown Veterinary Clinic", type: PartnerType.VET_CLINIC, isActive: true } });
+  const euthanasia = EuthanasiaMedicalSchema.parse({
+    kind: "EUTHANASIA", source: MedicalEntrySource.OUTSIDE_VET,
+    vetPartnerId: clinic.id, performedByName: "Dr. Morgan Hale",
+    authorizedById: benjamin.id, reasonCategory: "MEDICAL",
+    reasonNotes: "Irreversible illness with poor quality of life; clinical paperwork supplied after the outcome was recorded.",
+    drug: "Pentobarbital", dose: "4 mL", route: "Intravenous",
+    witness: olivia.name, bodyDisposition: "Private cremation arranged",
+  });
+  const death: OutcomeMedicalDetailsInput = {
+    kind: "DEATH", circumstances: "FOUND_DEAD",
+    circumstanceNotes: "Found during morning rounds; details documented after the outcome was recorded.",
+    causeKnowledge: "UNKNOWN", cause: null, necropsyRequested: null,
+    bodyDisposition: "Pending family instructions",
+  };
+
+  const attached: { animalId: string; name: string; entryId: string; day: CalendarDay }[] = [];
+  for (const [type, medical] of [[OutcomeType.EUTHANIZED, euthanasia], [OutcomeType.DECEASED, death]] as const) {
+    const outcome = await prisma.outcome.findFirst({
+      where: {
+        type, reversedAt: null, medicalEntry: { is: null },
+        animal: { name: { notIn: HAND_AUTHORED_ANIMAL_NAMES }, listingStatus: AnimalListingStatus.ARCHIVED, archiveReason: type },
+      },
+      orderBy: [{ animal: { name: "desc" } }, { id: "asc" }],
+      include: { animal: { select: { name: true } } },
+    });
+    assert(outcome, `seedEndOfLife: no generated live ${type} outcome without medical details.`);
+    assert(outcome.outcomeDate <= today, "seedEndOfLife: a historical outcome is in the future.");
+    const documentedAfter = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      await lockAnimal(tx, outcome.animalId);
+      return correctOutcomeMedical(tx, outcome.id, outcome.animalId, medical, olivia.id);
+    });
+    assert.equal(result.status, "created");
+    assert(result.entryId);
+    const { animal: _animal, ...originalOutcome } = outcome;
+    assert.deepEqual(await prisma.outcome.findUniqueOrThrow({ where: { id: outcome.id } }), originalOutcome,
+      "seedEndOfLife: late documentation changed the original outcome or its provenance.");
+    const entry = await prisma.medicalEntry.findUniqueOrThrow({ where: { id: result.entryId } });
+    assert.equal(entry.createdById, olivia.id);
+    assert(entry.createdAt >= documentedAfter, "seedEndOfLife: documentation must not be backdated.");
+    attached.push({ animalId: outcome.animalId, name: outcome.animal.name, entryId: result.entryId, day: calendarDay(outcome.outcomeDate) });
+  }
+
+  // No earlier scenario is consumed: this animal has no care, placements or
+  // applications, and reversing restores its listing and unit.
+  const eligible = {
+    name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+    listingStatus: { not: AnimalListingStatus.ARCHIVED }, archiveReason: null,
+    intake: { some: { intakeDate: { lte: today } } }, Outcome: { none: {} },
+    adoptionApplications: { none: {} }, fosterPlacements: { none: {} },
+    medicationOrders: { none: {} }, medicalEntries: { none: {} },
+    medicalConditions: { none: {} }, careEpisodes: { none: {} },
+    medicalDocuments: { none: {} }, vetVisitReports: { none: {} },
+  } satisfies Prisma.AnimalWhereInput;
+  const mistaken = await prisma.animal.findFirst({
+    where: eligible, orderBy: [{ name: "desc" }, { id: "asc" }],
+    select: { id: true, name: true, listingStatus: true, currentUnitId: true },
+  });
+  assert(mistaken, "seedEndOfLife: no unreserved generated animal for the reversed-outcome example.");
+  // Reassert the entire claim before writing, rather than relying on its name.
+  assert.equal(await prisma.animal.count({ where: { ...eligible, id: mistaken.id } }), 1);
+  const reversedEntry = await prisma.$transaction(async (tx) => {
+    await recordOutcome(tx, {
+      animalId: mistaken.id,
+      values: {
+        outcomeType: OutcomeType.EUTHANIZED, outcomeDate: today,
+        notes: "Outcome recorded against the wrong animal; retained to show its correction by reversal.",
+        medical: { ...euthanasia, source: MedicalEntrySource.IN_HOUSE,
+          vetPartnerId: null, performedByName: null, performedById: benjamin.id,
+          reasonNotes: "Severe injury; this documentation belongs to another animal.",
+          witness: olivia.name, bodyDisposition: "Pending" },
+      },
+    }, olivia.id);
+    return tx.medicalEntry.findFirstOrThrow({
+      where: { animalId: mistaken.id, outcomeId: { not: null } },
+      select: { id: true, outcomeId: true },
+    });
+  });
+
+  // Real sample paperwork stays attached when the mistaken entry is voided.
+  const store = medicalDocumentStore({ overwrite: true });
+  const bytes = new Uint8Array(fs.readFileSync(path.join(process.cwd(), "prisma/seed-files/sample-vet-record.pdf")));
+  for (const [subject, fileName, name] of [
+    [attached[0], "euthanasia-clinical-record.pdf", "Euthanasia clinical record"],
+    [{ animalId: mistaken.id, entryId: reversedEntry.id, day: today }, "reversed-outcome-paperwork.pdf", "Retained outcome paperwork"],
+  ] as const) {
+    await storeThenRecord(store, { pathname: seedDocumentPathname(fileName), bytes, fresh: false }, (stored) =>
+      prisma.$transaction((tx) => createMedicalDocument(tx, {
+        animalId: subject.animalId, entryId: subject.entryId, documentDate: subject.day,
+        type: MedicalDocumentType.VET_RECORD, name, ...stored,
+      }, olivia.id, today)),
+    );
+  }
+  assert(reversedEntry.outcomeId);
+  await prisma.$transaction((tx) => recordOutcomeReversal(tx, reversedEntry.outcomeId!, "Recorded against the wrong animal", admin.id));
+  const restored = await prisma.animal.findUniqueOrThrow({ where: { id: mistaken.id } });
+  assert.equal(restored.listingStatus, mistaken.listingStatus);
+  assert.equal(restored.currentUnitId, mistaken.currentUnitId);
+  assert.equal(restored.archiveReason, null);
+
+  await assertEndOfLifeConsistency();
+  console.log(`Seeded end-of-life records: ${attached[0].name} (late euthanasia documentation), ${attached[1].name} (late death documentation), ${mistaken.name} (reversed euthanasia with retained paperwork).`);
+}
+
+async function assertEndOfLifeConsistency() {
+  const entries = await prisma.medicalEntry.findMany({
+    where: { OR: [{ outcomeId: { not: null } }, { kind: { in: [MedicalEntryKind.EUTHANASIA, MedicalEntryKind.DEATH] } }] },
+    include: { outcome: true, euthanasia: true, death: true, events: { orderBy: { createdAt: "asc" } }, documents: true },
+  });
+  assert.equal(entries.length, 3, "seedEndOfLife: expected exactly three linked examples.");
+  for (const entry of entries) {
+    const outcome = entry.outcome;
+    assert(outcome, "seedEndOfLife: an end-of-life entry has no outcome.");
+    assert.equal(entry.animalId, outcome.animalId);
+    assert.equal(entry.completedDate, outcome.outcomeDate);
+    assert.equal(entry.status, MedicalEntryStatus.COMPLETED);
+    assert.equal(entry.administeredById, null);
+    assert.equal(entry.kind, outcome.type === OutcomeType.EUTHANIZED ? MedicalEntryKind.EUTHANASIA : MedicalEntryKind.DEATH);
+    assert.equal(Boolean(entry.euthanasia), outcome.type === OutcomeType.EUTHANIZED);
+    assert.equal(Boolean(entry.death), outcome.type === OutcomeType.DECEASED);
+    assert.deepEqual(entry.voidedAt, outcome.reversedAt);
+    assert.equal(entry.voidedById, outcome.reversedById);
+    assert.equal(entry.voidReason, outcome.reversalReason);
+    assert.equal(entry.events.filter((event) => event.action === "CREATED").length, 1);
+    if (outcome.reversedAt) {
+      const [event] = entry.events.filter((event) => event.action === "VOIDED");
+      assert.equal(entry.events.length, 2);
+      assert.deepEqual(event.createdAt, outcome.reversedAt);
+      assert.equal(event.actorId, outcome.reversedById);
+      assert.equal(entry.documents.length, 1);
+      assert.equal(entry.documents[0].voidedAt, null);
+      assert.equal(entry.documents[0].fileRemovedAt, null);
+    } else {
+      assert.equal(entry.events.length, 1);
+    }
+    if (entry.death) {
+      assert.equal(entry.source, null);
+      assert.equal(entry.death.cause, null);
+      assert.equal(entry.death.necropsyRequested, null);
+    }
+  }
+  for (const type of [OutcomeType.EUTHANIZED, OutcomeType.DECEASED]) {
+    assert.equal(entries.filter((entry) => entry.outcome?.type === type && !entry.voidedAt).length, 1);
+    assert(await prisma.outcome.count({ where: { type, reversedAt: null, medicalEntry: { is: null } } }) > 0,
+      `seedEndOfLife: expected intentional legacy ${type} gaps to remain.`);
+  }
+  console.log("Verified end-of-life links, days, provenance, retained documents and reversal symmetry; legacy gaps remain.");
+}
+
+/** Output examples use otherwise unscripted animals and leave their intake facts intact. */
+async function seedMedicalOutputExamples() {
+  // One reading of the shelter's time, so the day, the clock and the instant agree.
+  const clock = shelterNow(new Date(), seedTimezone);
+  const today = clock.today;
+  const olivia = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff1@example.com" } } });
+  const benjamin = await prisma.person.findFirstOrThrow({ where: { user: { email: "staff2@example.com" } } });
+  const eligible = {
+    name: { notIn: [...HAND_AUTHORED_ANIMAL_NAMES, "Peanut", "Rango", "Rex", "Bear"] },
+    species: { name: { in: ["Dog", "Cat"] } },
+    listingStatus: AnimalListingStatus.PUBLISHED, archiveReason: null,
+    intake: { some: {}, every: { intakeDate: { lte: shiftDayKey(today, -7) } } },
+    Outcome: { none: {} }, adoptionApplications: { none: {} }, fosterPlacements: { none: {} },
+    medicationOrders: { none: {} }, medicalConditions: { none: {} }, careEpisodes: { none: {} },
+    medicalDocuments: { none: {} }, vetVisitReports: { none: {} },
+    medicalEntries: {
+      some: { kind: MedicalEntryKind.MICROCHIP },
+      every: {
+        kind: { in: [MedicalEntryKind.MICROCHIP, MedicalEntryKind.SURGERY] },
+        status: MedicalEntryStatus.COMPLETED, source: MedicalEntrySource.BEFORE_INTAKE,
+        completedDate: null, voidedAt: null, outcomeId: null, protocolStepId: null,
+      },
+    },
+  } satisfies Prisma.AnimalWhereInput;
+  const subjects = await prisma.animal.findMany({
+    where: eligible, orderBy: [{ name: "asc" }, { id: "asc" }], take: 2,
+  });
+  assert.equal(subjects.length, 2, "seedMedicalOutputExamples: two unscripted animals with intake chip facts are required.");
+  const [complete, legacy] = subjects;
+  const ids = subjects.map((animal) => animal.id);
+  assert.equal(await prisma.animal.count({ where: { ...eligible, id: { in: ids } } }), 2);
+  const originalFacts = await prisma.medicalEntry.findMany({
+    where: { animalId: { in: ids } }, orderBy: { id: "asc" },
+    include: { microchip: true, surgery: true, events: { orderBy: { id: "asc" } } },
+  });
+  const rabies = await prisma.medicalItem.findFirstOrThrow({ where: { name: "Rabies 1-year", retiredAt: null } });
+  const dewormer = await prisma.medicalItem.findFirstOrThrow({ where: { name: "Pyrantel pamoate", retiredAt: null } });
+  const medicine = await prisma.medicalItem.findFirstOrThrow({ where: { name: "Amoxicillin-clavulanate", retiredAt: null } });
+  const day = shiftDayKey(today, -2);
+  const record = (animalId: string, input: MedicalEntryInput) => prisma.$transaction((tx) =>
+    recordMedicalEntry(tx, { ...input, animalId }, olivia.id, today));
+  const { entryId: certificateId } = await record(complete.id, {
+    kind: MedicalEntryKind.VACCINE, itemId: rabies.id, completedDate: day,
+    source: MedicalEntrySource.IN_HOUSE, durationMonths: 12,
+    manufacturer: "Boehringer Ingelheim", lotNumber: "RB-DEMO-104",
+    lotExpiryDate: shiftDayKey(today, 180), route: MedicalRoute.SUBCUTANEOUS,
+    site: "Right hind leg", rabiesTagNumber: "R-DEMO-104",
+    veterinarianName: "Dr. Amara Okafor", veterinarianLicenseNumber: "DEMO-1040",
+  });
+  await prisma.$transaction((tx) => editMedicalEntry(tx, certificateId, {
+    kind: MedicalEntryKind.VACCINE, itemId: rabies.id, completedDate: day,
+    source: MedicalEntrySource.IN_HOUSE,
+    veterinarianLicenseNumber: "DEMO-1041",
+  }, benjamin.id, today));
+  const { entryId: legacyId } = await record(legacy.id, {
+    kind: MedicalEntryKind.VACCINE, itemId: rabies.id, completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE, durationMonths: 12,
+    rabiesTagNumber: "R-LEGACY-105",
+  });
+
+  // Existing scanned chips retain UNKNOWN; these separate numbers show the other states.
+  const { entryId: registeredId } = await record(complete.id, {
+    kind: MedicalEntryKind.MICROCHIP, chipNumber: "977200009020001",
+    completedDate: day, source: MedicalEntrySource.IN_HOUSE, brand: "Datamars",
+    registrationStatus: MicrochipRegistrationStatus.PENDING, registryName: "PetLink",
+  });
+  await prisma.$transaction((tx) => editMedicalEntry(tx, registeredId, {
+    kind: MedicalEntryKind.MICROCHIP, chipNumber: "977200009020001",
+    completedDate: day, source: MedicalEntrySource.IN_HOUSE,
+    registrationStatus: MicrochipRegistrationStatus.REGISTERED, registryName: "PetLink",
+    registrationDate: shiftDayKey(today, -1), registrationNotes: "Registry confirmation retained by staff.",
+  }, benjamin.id, today));
+  await record(complete.id, {
+    kind: MedicalEntryKind.MICROCHIP, chipNumber: "977200009020002",
+    completedDate: null, source: MedicalEntrySource.BEFORE_INTAKE, brand: "HomeAgain",
+    registrationStatus: MicrochipRegistrationStatus.PENDING, registryName: "HomeAgain",
+  });
+  await record(legacy.id, {
+    kind: MedicalEntryKind.MICROCHIP, chipNumber: "977200009020003",
+    completedDate: null, source: MedicalEntrySource.BEFORE_INTAKE,
+    registrationStatus: MicrochipRegistrationStatus.NOT_REGISTERED,
+  });
+  await record(complete.id, {
+    kind: MedicalEntryKind.TREATMENT, itemId: dewormer.id, completedDate: null,
+    source: MedicalEntrySource.BEFORE_INTAKE, doseAmount: 2,
+    notes: "Historical paperwork reviewed by staff; treatment day was not supplied.",
+  });
+  await prisma.$transaction(async (tx) => {
+    await addMedicalCondition(tx, { animalId: complete.id,
+      type: MedicalConditionType.ALLERGY, name: "Seasonal pollen allergy",
+      status: MedicalConditionStatus.CHRONIC, onsetDate: day,
+    }, olivia.id, today);
+    await openCareEpisode(tx, { animalId: complete.id,
+      type: CareEpisodeType.UNDER_VET_CARE, startDate: day, reason: "Skin irritation follow-up",
+    }, olivia.id, today);
+    await createMedicationOrder(tx, {
+      animalId: complete.id, itemId: medicine.id, doseAmount: 1, doseUnit: DoseUnit.TABLET,
+      route: MedicalRoute.ORAL, frequency: MedicationFrequency.BID, firstSlot: DoseSlot.AM,
+      startDate: today, endDate: shiftDayKey(today, 6),
+      instructions: "Give with food morning and evening. Finish the recorded course.",
+    }, olivia.id, today);
+    await scheduleMedicalEntry(tx, {
+      animalId: complete.id, kind: MedicalEntryKind.EXAM,
+      examType: ExamType.RECHECK, dueDate: shiftDayKey(today, 7),
+    }, olivia.id, today);
+  });
+
+  assert.deepEqual(await prisma.animal.findMany({ where: { id: { in: ids } }, orderBy: [{ name: "asc" }, { id: "asc" }] }), subjects);
+  assert.deepEqual(await prisma.medicalEntry.findMany({
+    where: { id: { in: originalFacts.map((entry) => entry.id) } }, orderBy: { id: "asc" },
+    include: { microchip: true, surgery: true, events: { orderBy: { id: "asc" } } },
+  }), originalFacts, "seedMedicalOutputExamples: original intake facts and audit must remain unchanged.");
+  const certificate = await findRabiesCertificateOutput(prisma, complete.id, certificateId, clock);
+  assert(certificate.available);
+  assert.equal(certificate.output.certificate.veterinarianLicenseNumber, "DEMO-1041");
+  const unavailable = await findRabiesCertificateOutput(prisma, legacy.id, legacyId, clock);
+  assert(!unavailable.available);
+  assert.equal(unavailable.reason, "DAY_UNKNOWN");
+  const legacyVaccine = await prisma.vaccineDetails.findUniqueOrThrow({ where: { entryId: legacyId } });
+  assert.equal(legacyVaccine.validUntilDate, null);
+  assert.equal(legacyVaccine.veterinarianName, null);
+  assert.equal(legacyVaccine.veterinarianLicenseNumber, null);
+  for (const [entryId, field, before, after] of [
+    [certificateId, "veterinarianLicenseNumber", "DEMO-1040", "DEMO-1041"],
+    [registeredId, "registrationStatus", "PENDING", "REGISTERED"],
+  ]) {
+    const events = await prisma.medicalEntryEvent.findMany({ where: { entryId } });
+    assert.equal(events.length, 2);
+    const correction = events.find((event) => event.action === "EDITED");
+    assert(correction);
+    assert.equal(correction.actorId, benjamin.id);
+    assert.equal((correction.before as Record<string, unknown>)[field], before);
+    assert.equal((correction.after as Record<string, unknown>)[field], after);
+  }
+  const histories = [];
+  for (const subject of subjects) {
+    const history = await findMedicalHistoryOutput(prisma, subject.id, clock);
+    assert(history);
+    histories.push(history);
+    const facts = await prisma.animal.findUniqueOrThrow({ where: { id: subject.id }, select: { medicalEntries: PUBLIC_MEDICAL_FACTS_SELECT } });
+    assert.equal(publicMedicalFacts(facts.medicalEntries).hasRecordedVaccination, true);
+    assert.equal(publicMedicalFacts(facts.medicalEntries).hasMicrochip, true);
+  }
+  assert.deepEqual([...new Set(histories.flatMap((history) => history.summary.chips.map((chip) => chip.registrationStatus)))].sort(), Object.values(MicrochipRegistrationStatus).sort());
+  const history = histories[0];
+  assert(history.completedCare.some((entry) => entry.completedDate === null));
+  assert.equal(history.conditions.length, 1);
+  assert.equal(history.careEpisodes.length, 1);
+  assert.equal(history.medications.length, 1);
+  assert.equal(history.plannedCare.length, 1);
+  assert(!JSON.stringify(histories).includes("Registry confirmation retained by staff."));
+  await assertEndOfLifeConsistency();
+  console.log(`Seeded output examples: ${complete.name} (printable rabies, corrected credentials, history/current/planned care), ${legacy.name} (unknown-day rabies); all four chip registration states, original intake facts and earlier clinical examples preserved.`);
+}
 
 export async function main() {
   const restoreRandom = installDeterministicRandom();
@@ -6140,6 +8807,7 @@ export async function main() {
   // images identically to a fresh run.
   individualDealQueues = {};
   pendingCharacteristicAssignments = [];
+  pendingMedicalFacts = [];
 
   try {
     await seedAll();
@@ -6156,7 +8824,7 @@ async function seedAll() {
     where: { id: "shelter" },
     create: {
       id: "shelter",
-      ...settings,
+      ...shelterSettingsColumns(settings),
       phoneIndexCountry: settings.defaultPhoneCountry,
     },
     update: {},
@@ -6191,6 +8859,19 @@ async function seedAll() {
   await seedAssessmentTemplates();
   await seedAssessments();
   await seedReadinessFixtures();
+  await seedMedicalCatalog();
+  await seedMedicalEntries();
+  await seedMedicalScheduling();
+  await seedMedicalFacts();
+  await seedSurgeryAndMicrochipFixtures();
+  await seedExamFixtures();
+  await seedCareFixtures();
+  await seedMedicalProtocols();
+  await seedMedications();
+  await seedMedicalDocuments();
+  await seedFosterMedical();
+  await seedEndOfLife();
+  await seedMedicalOutputExamples();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
 }

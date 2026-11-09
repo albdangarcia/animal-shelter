@@ -49,8 +49,11 @@ import {
 } from "@/app/lib/actions/outcome.actions";
 import {
   OutcomeFormSchema,
+  CreateOutcomeFormSchema,
   type OutcomeFormInput,
 } from "@/app/lib/zod-schemas/outcome.schema";
+import { OutcomeMedicalFields, emptyOutcomeMedical } from "./outcome-medical-fields";
+import type { OutcomeMedicalDetailsInput } from "@/app/lib/zod-schemas/outcome-medical.schemas";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 
 export type OutcomeFormValues = OutcomeFormInput;
@@ -73,6 +76,12 @@ interface OutcomeFormProps {
   suggestedOwnerId?: string; // For the 'Return to Owner' option
   suggestedOwnerLabel?: string;
   canCreatePerson?: boolean;
+  canManageOutcome: boolean;
+  canManageMedical?: boolean;
+  hasMedicalDetails?: boolean;
+  medical?: OutcomeMedicalDetailsInput;
+  medicalPeople?: { authorizer?: { id: string; name: string }; performer?: { id: string; name: string } };
+  clinics?: { id: string; name: string }[];
   /**
    * Today, on the shelter's calendar, resolved on the server. The picker starts
    * on it, and it is the same day the outcome would be filed under — a
@@ -108,7 +117,7 @@ export function OutcomeForm({
   suggestedOwnerId,
   suggestedOwnerLabel,
   canCreatePerson,
-  today,
+  today, canManageOutcome, canManageMedical = false, hasMedicalDetails = false, medical, medicalPeople, clinics = [],
 }: OutcomeFormProps) {
   const isEditMode = !!outcome;
   const router = useRouter();
@@ -118,11 +127,11 @@ export function OutcomeForm({
 
   const filteredOutcomeTypeOptions = isAdoptionOutcome
     ? outcomeTypeOptions.filter((option) => option.value === "ADOPTION")
-    : outcomeTypeOptions.filter((option) => option.value !== "ADOPTION");
+    : outcomeTypeOptions.filter((option) => option.value !== "ADOPTION" && (isEditMode || canManageMedical || !["DECEASED", "EUTHANIZED"].includes(option.value)));
 
   const form = useForm<OutcomeFormValues>({
-    resolver: standardSchemaResolver(OutcomeFormSchema),
-    defaultValues: buildDefaultValues(today, outcome, application),
+    resolver: standardSchemaResolver(isEditMode ? OutcomeFormSchema : CreateOutcomeFormSchema),
+    defaultValues: { ...buildDefaultValues(today, outcome, application), medical: canManageMedical ? medical : undefined },
   });
 
   // useWatch rather than form.watch(): watch() returns a function the React
@@ -131,6 +140,8 @@ export function OutcomeForm({
     control: form.control,
     name: "outcomeType",
   });
+
+  const medicalValue = useWatch({ control: form.control, name: "medical" });
 
   const handleFormSubmit = (values: OutcomeFormValues) => {
     startSubmitTransition(async () => {
@@ -177,7 +188,7 @@ export function OutcomeForm({
             </CardDescription>
           </CardHeader>
 
-          <CardContent className="space-y-6">
+          <CardContent><fieldset disabled={!canManageOutcome || isPending} className="space-y-6 min-w-0">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <FormField
                 control={form.control}
@@ -189,7 +200,10 @@ export function OutcomeForm({
                         uncontrolled on first render and ignores form.reset(). */}
                     <Select
                       name={field.name}
-                      onValueChange={field.onChange}
+                      onValueChange={(type) => {
+                        field.onChange(type);
+                        form.reset({ ...form.getValues(), outcomeType: type as OutcomeFormInput["outcomeType"], medical: type === "DECEASED" || type === "EUTHANIZED" ? emptyOutcomeMedical(type) : undefined }, { keepDefaultValues: true });
+                      }}
                       value={field.value ?? ""}
                       disabled={isAdoptionOutcome || isEditMode}
                     >
@@ -226,9 +240,11 @@ export function OutcomeForm({
                 // No future days: an outcome is recorded after it happens. The
                 // grid works in local dates, so the shelter's day is read as
                 // one to compare against.
-                disabledDates={(date) => date > parseISO(today)}
+                disabledDates={(date) => date > parseISO(today) || (hasMedicalDetails && !canManageMedical)}
                 description={
-                  isEditMode && endedFosterPlacement
+                  hasMedicalDetails && !canManageMedical
+                    ? "Changing this date also changes the medical record and requires medical management."
+                    : isEditMode && endedFosterPlacement
                     ? "This outcome ended a foster placement. Changing the date moves the placement's end day with it."
                     : undefined
                 }
@@ -294,6 +310,13 @@ export function OutcomeForm({
               />
             </div>
 
+            {(outcomeTypeValue === "EUTHANIZED" || outcomeTypeValue === "DECEASED") && <>
+              {!hasMedicalDetails && isEditMode && <p>Medical details not recorded</p>}
+              {canManageMedical && <>
+                {!medicalValue && <Button type="button" variant="outline" onClick={() => form.reset({ ...form.getValues(), medical: emptyOutcomeMedical(outcomeTypeValue) }, { keepDefaultValues: true })}>Add medical details</Button>}
+                <OutcomeMedicalFields key={outcomeTypeValue} form={form} clinics={clinics} people={medicalPeople} />
+              </>}
+            </>}
             <FormField
               control={form.control}
               name="notes"
@@ -311,7 +334,7 @@ export function OutcomeForm({
                 </FormItem>
               )}
             />
-          </CardContent>
+          </fieldset></CardContent>
 
           <CardFooter className="flex justify-end space-x-4">
             <Button
@@ -322,7 +345,7 @@ export function OutcomeForm({
             >
               <Link href={`/dashboard/animals/${animal.id}`}>Cancel</Link>
             </Button>
-            <Button type="submit" size="lg" disabled={isPending}>
+            {canManageOutcome && <Button type="submit" size="lg" disabled={isPending}>
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {isPending
                 ? isEditMode
@@ -331,7 +354,7 @@ export function OutcomeForm({
                 : isEditMode
                   ? "Update Outcome"
                   : "Process Outcome"}
-            </Button>
+            </Button>}
           </CardFooter>
         </Card>
       </form>

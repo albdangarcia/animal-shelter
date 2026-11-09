@@ -84,6 +84,10 @@ test("editing an animal note stamps 'edited by Admin User' and feeds the activit
   // Footer: the denormalized last-editor line (revalidated, no manual reload).
   const editedCard = noteCard(page, revised);
   await expect(editedCard.getByText(/edited by Admin User/)).toBeVisible();
+  // Focus goes back to the menu's button, not to the page.
+  await expect(
+    editedCard.getByRole("button", { name: /note actions/i }),
+  ).toBeFocused();
   // The same revalidation re-read the intake note: the no-op left no line.
   await expect(intakeCard.getByText(/edited by/i)).toHaveCount(0);
 

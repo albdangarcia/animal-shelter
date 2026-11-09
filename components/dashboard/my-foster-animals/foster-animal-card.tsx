@@ -51,7 +51,7 @@ export function FosterAnimalCard({ placement, today }: Props) {
           )}
         </div>
 
-        <div className="flex flex-1 flex-col gap-1.5 text-sm">
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5 text-sm">
           <div className="flex flex-wrap items-center gap-2">
             {isPubliclyListed ? (
               <Link
@@ -90,6 +90,9 @@ export function FosterAnimalCard({ placement, today }: Props) {
             )}
           </p>
 
+          <Link href={`/dashboard/my-foster-animals/${animal.id}`} className="font-medium underline">
+            Medical care
+          </Link>
           <p className="text-xs text-muted-foreground italic">
             Questions? Contact the shelter.
           </p>

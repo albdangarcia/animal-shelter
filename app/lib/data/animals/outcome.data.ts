@@ -26,6 +26,7 @@ export const _fetchOutcomeById = async (outcomeId: string) => {
         id: outcomeId,
       },
       include: {
+        medicalEntry: { select: { id: true } },
         animal: {
           select: {
             id: true,

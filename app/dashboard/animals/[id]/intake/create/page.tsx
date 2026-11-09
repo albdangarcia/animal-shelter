@@ -16,6 +16,7 @@ import { notFound } from "next/navigation";
 import ActionBlockedMessage from "@/components/action-blocked-message";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { fetchReIntakeProtocolPreview } from "@/app/lib/data/medical-protocol.data";
 
 interface Props {
   params: IDParamType;
@@ -35,10 +36,11 @@ const Page = async ({ params }: Props) => {
 };
 
 const PageContent = async ({ animalId }: { animalId: string }) => {
-  const [animal, partners, canCreatePerson] = await Promise.all([
+  const [animal, partners, canCreatePerson, canManageMedical] = await Promise.all([
     fetchAnimalForReIntake(animalId),
     fetchPartners(),
     hasPermission(AppPermissions.PERSONS_MANAGE),
+    hasPermission(AppPermissions.MEDICAL_MANAGE),
   ]);
 
   if (!animal) {
@@ -77,6 +79,12 @@ const PageContent = async ({ animalId }: { animalId: string }) => {
     );
   }
 
+  // Only someone who may manage medical care sees the protocol and may leave
+  // it out; anyone else's re-intake applies it as the shelter set it.
+  const protocolPreview = canManageMedical
+    ? await fetchReIntakeProtocolPreview(animalId)
+    : null;
+
   return (
     <main className="container mx-auto">
       <Button asChild variant="ghost" className="mb-4">
@@ -90,6 +98,7 @@ const PageContent = async ({ animalId }: { animalId: string }) => {
         animal={animal}
         partners={partners}
         canCreatePerson={canCreatePerson}
+        protocolPreview={protocolPreview}
         today={await getShelterToday()}
       />
     </main>

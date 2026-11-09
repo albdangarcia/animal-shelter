@@ -35,6 +35,7 @@ import {
   DirtyFormHandle,
   useConfirmedOpenChange,
 } from "@/hooks/use-confirmed-open-change";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface NoteActionsProps {
   note: NotePayload;
@@ -45,6 +46,7 @@ export function NoteActions({ note, animalId }: NoteActionsProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<DirtyFormHandle>(null);
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
     useConfirmedOpenChange(
@@ -81,7 +83,12 @@ export function NoteActions({ note, animalId }: NoteActionsProps) {
     <Dialog open={isDialogOpen} onOpenChange={guardedOnOpenChange}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+          >
             <MoreHorizontal className="h-4 w-4" />
             <span className="sr-only">Note actions</span>
           </Button>
@@ -106,7 +113,10 @@ export function NoteActions({ note, animalId }: NoteActionsProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent
+        className="sm:max-w-[600px]"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Note</DialogTitle>
           <DialogDescription>

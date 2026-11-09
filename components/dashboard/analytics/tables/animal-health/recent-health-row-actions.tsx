@@ -9,11 +9,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { AnimalsRequiringAttentionPayload } from "@/app/lib/data/analytics.data";
+import type { AnimalUnderCarePayload } from "@/app/lib/data/analytics.data";
 import Link from "next/link";
 
 interface DataTableRowActionsProps {
-  row: Row<StockFeatures, AnimalsRequiringAttentionPayload>;
+  row: Row<StockFeatures, AnimalUnderCarePayload>;
 }
 
 export function DataTableRowActions({ row }: DataTableRowActionsProps) {
@@ -29,7 +29,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
-        <Link href={`/dashboard/animals/${row.original.id}`}>
+        <Link href={`/dashboard/animals/${row.original.animal.id}`}>
           <DropdownMenuItem>Profile</DropdownMenuItem>
         </Link>
       </DropdownMenuContent>

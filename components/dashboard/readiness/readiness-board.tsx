@@ -5,9 +5,11 @@ import {
   IconAlertTriangle,
   IconArrowRight,
   IconClipboardX,
+  IconHeartbeat,
   IconMedicalCross,
   IconPhotoOff,
   IconStethoscope,
+  IconStethoscopeOff,
   IconTagOff,
   type TablerIcon,
 } from "@tabler/icons-react";
@@ -62,17 +64,24 @@ export const KIND_META: Record<
     icon: IconAlertTriangle,
     urgent: true,
   },
-  ACUTE_HEALTH: {
-    title: "Acute health",
+  NEEDS_VET_REVIEW: {
+    title: "Needs vet review",
     description:
-      "Under or awaiting veterinary care. Clears when the health status is updated.",
+      "The latest exam this stay asked for a vet's review. A later exam with another result clears it.",
+    icon: IconHeartbeat,
+    urgent: true,
+  },
+  UNDER_CARE: {
+    title: "Under care",
+    description:
+      "An open care episode on the medical record. Closing the episode clears it.",
     icon: IconStethoscope,
     urgent: true,
   },
   UNSUPPORTED_CHARACTERISTIC: {
     title: "Unsupported characteristics",
     description:
-      "A trait on the profile that a live finding contradicts, or whose citing assessment was deleted or no longer supports it.",
+      "A trait on the profile that a live finding contradicts, whose citing assessment was deleted or no longer supports it, or whose citing condition was resolved or voided.",
     icon: IconTagOff,
   },
   MISSING_ASSESSMENT: {
@@ -80,9 +89,16 @@ export const KIND_META: Record<
     description: "Required checks with nothing on file for the current stay.",
     icon: IconClipboardX,
   },
+  NO_INTAKE_EXAM: {
+    title: "No intake exam",
+    description:
+      "No intake exam on the medical record for the current stay.",
+    icon: IconStethoscopeOff,
+  },
   NOT_SPAYED_NEUTERED: {
     title: "Not spayed or neutered",
-    description: "The procedure isn't recorded on the profile yet.",
+    description:
+      "No spay or neuter on the medical record, and no exemption in force.",
     icon: IconMedicalCross,
   },
   NO_PHOTO: {
@@ -114,6 +130,10 @@ export const blockerKey = (blocker: ReadinessBlocker): string => {
       return blocker.templateKey;
     case "ESCALATED_FINDING":
       return blocker.assessmentId;
+    case "NEEDS_VET_REVIEW":
+      return blocker.entryId;
+    case "UNDER_CARE":
+      return blocker.episodeId;
     case "UNSUPPORTED_CHARACTERISTIC":
       return `${blocker.characteristicId}-${blocker.issue}`;
     default:

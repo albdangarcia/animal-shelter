@@ -1,14 +1,28 @@
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import { checkFirstIntakeDay } from "@/app/lib/data/animal-timeline.data";
-import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
+import {
+  getShelterSettings,
+  getShelterToday,
+} from "@/app/lib/data/shelter-settings.data";
 import { findLiveUnitForPlacement } from "@/app/lib/services/unit-housing";
+import { recordMedicalEntry } from "@/app/lib/services/medical-entry";
+import {
+  applyIntakeProtocol,
+  type AppliedProtocol,
+} from "@/app/lib/services/medical-protocol-application";
 import { toAnimalData } from "@/app/lib/utils/animal-data";
-import { startOfShelterDay } from "@/app/lib/utils/shelter-day";
-import type { CreateAnimalFormOutput } from "@/app/lib/zod-schemas/animal.schemas";
+import { startOfShelterDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
+import {
+  hasIntakeMedical,
+  type CreateAnimalFormOutput,
+  type IntakeMedical,
+} from "@/app/lib/zod-schemas/animal.schemas";
 import {
   AnimalActivityType,
   AnimalListingStatus,
   IntakeType,
+  MedicalEntryKind,
+  MedicalEntrySource,
 } from "@/prisma/generated/enums";
 
 /**
@@ -22,17 +36,26 @@ import {
  * the animal, so the timeline a new animal starts with is always one intake and
  * no outcome. That is what makes the listing safe to choose here: a draft or
  * published animal is here, and the schema refuses every other status.
+ *
+ * A chip found on the first scan, and a spay or neuter the animal arrived
+ * with, go on the medical record in the same transaction, through the entry
+ * service and its rules. One it refuses (a chip number already on another
+ * animal's record) rolls back the whole intake. The caller checks that the
+ * actor may record medical care.
+ *
+ * Then the medical protocol for the animal's species and age schedules its
+ * care, last, so it counts the chip and the spay or neuter just recorded,
+ * unless `applyProtocol` is off; the caller checks that the actor may skip it.
  */
 export const recordAnimalCreation = async (
   tx: TransactionClient,
   values: CreateAnimalFormOutput,
   staffMemberId: string,
-): Promise<{ animalId: string }> => {
+): Promise<{ animalId: string; protocol: AppliedProtocol | null }> => {
   const {
     animalName,
     estimatedBirthDate,
     sex,
-    healthStatus,
     listingStatus,
     species: speciesId,
     breed: breedId,
@@ -42,6 +65,8 @@ export const recordAnimalCreation = async (
     intakeDate,
     weightGrams,
     heightCm,
+    intakeMedical,
+    applyProtocol,
   } = values;
 
   const mapped = toAnimalData(values);
@@ -102,11 +127,8 @@ export const recordAnimalCreation = async (
       // nullable numbers rather than strings needing a truthy guard.
       currentWeightGrams: weightGrams,
       heightCm,
-      healthStatus: healthStatus,
       listingStatus: listingStatus,
       publishedAt: publishedAt,
-      microchipNumber: mapped.microchipNumber,
-      isSpayedNeutered: mapped.isSpayedNeutered,
       currentUnit: resolvedUnitId
         ? { connect: { id: resolvedUnitId } }
         : undefined,
@@ -142,10 +164,10 @@ export const recordAnimalCreation = async (
   });
 
   // A dated first data point with real provenance, rather than a bare
-  // number with no history. See VitalsLog and recomputeCurrentWeight in
-  // animal-vitals.actions.ts for the cache invariant this must respect —
-  // safe to set currentWeightGrams directly here since this is the only
-  // entry that will exist for this animal.
+  // number with no history. See the vitals service (`services/vitals.ts`)
+  // for the cache invariant this must respect — safe to set
+  // currentWeightGrams directly here since this is the only entry that will
+  // exist for this animal.
   if (weightGrams) {
     await tx.vitalsLog.create({
       data: {
@@ -180,9 +202,12 @@ export const recordAnimalCreation = async (
     select: { changedAt: true },
   });
 
+  // The latest row written so far, which any row after it must follow.
+  let lastLoggedAt = intakeRow.changedAt;
+
   // Log status change if published
   if (listingStatus === AnimalListingStatus.PUBLISHED) {
-    await tx.animalActivityLog.create({
+    ({ changedAt: lastLoggedAt } = await tx.animalActivityLog.create({
       data: {
         animalId: newAnimal.id,
         activityType: AnimalActivityType.STATUS_CHANGE,
@@ -196,11 +221,92 @@ export const recordAnimalCreation = async (
           Math.max(Date.now(), intakeRow.changedAt.getTime() + 1),
         ),
       },
-    });
+      select: { changedAt: true },
+    }));
   }
 
-  return { animalId: newAnimal.id };
+  const today = await getShelterToday();
+
+  // After the intake and its activity, and stamped after them, so the feed
+  // reads the animal as admitted before anything was found on it.
+  if (hasIntakeMedical(intakeMedical)) {
+    lastLoggedAt = await recordIntakeMedical(
+      tx,
+      newAnimal.id,
+      intakeMedical,
+      staffMemberId,
+      today,
+      lastLoggedAt,
+    );
+  }
+
+  const protocol = applyProtocol
+    ? await applyIntakeProtocol(
+        tx,
+        { animalId: newAnimal.id, intakeDate },
+        staffMemberId,
+        today,
+        { loggedAfter: lastLoggedAt },
+      )
+    : null;
+
+  return { animalId: newAnimal.id, protocol };
 };
+
+/**
+ * Care the animal arrived with, recorded as given before intake on an
+ * unknown day: the day it was implanted or done is rarely known. Each
+ * activity row is stamped after the one before it, the chip's first.
+ * Returns the last row's stamp.
+ */
+const recordIntakeMedical = async (
+  tx: TransactionClient,
+  animalId: string,
+  { chipNumber, altered }: IntakeMedical,
+  staffMemberId: string,
+  today: CalendarDay,
+  loggedAfter: Date,
+): Promise<Date> => {
+  if (chipNumber) {
+    ({ loggedAt: loggedAfter } = await recordMedicalEntry(
+      tx,
+      {
+        animalId,
+        kind: MedicalEntryKind.MICROCHIP,
+        chipNumber,
+        completedDate: null,
+        source: MedicalEntrySource.BEFORE_INTAKE,
+      },
+      staffMemberId,
+      today,
+      { loggedAfter },
+    ));
+  }
+  if (altered) {
+    ({ loggedAt: loggedAfter } = await recordMedicalEntry(
+      tx,
+      {
+        animalId,
+        kind: MedicalEntryKind.SURGERY,
+        procedure: altered.procedure,
+        evidence: altered.evidence,
+        completedDate: null,
+        source: MedicalEntrySource.BEFORE_INTAKE,
+      },
+      staffMemberId,
+      today,
+      { loggedAfter },
+    ));
+  }
+  return loggedAfter;
+};
+
+/**
+ * An intake can schedule a protocol's worth of care, an entry and its event
+ * at a time behind their locks, so its transaction is given the time a batch
+ * is, against a remote database.
+ */
+export const INTAKE_TRANSACTION = { timeout: 30_000 };
 
 /**
  * The create form's write: the first intake's day is checked, then the animal
@@ -210,7 +316,9 @@ export const recordAnimalCreation = async (
 export const createAnimalFromForm = async (
   values: CreateAnimalFormOutput,
   staffMemberId: string,
-): Promise<{ refusal: string } | { animalId: string }> => {
+): Promise<
+  { refusal: string } | { animalId: string; protocol: AppliedProtocol | null }
+> => {
   // The picker disables future days, but only in the browser, and against
   // the day the page was rendered on. The animal has no other events yet,
   // so this is the only part of the timeline check that can apply.
@@ -219,7 +327,8 @@ export const createAnimalFromForm = async (
     return { refusal };
   }
 
-  return prisma.$transaction((tx) =>
-    recordAnimalCreation(tx, values, staffMemberId),
+  return prisma.$transaction(
+    (tx) => recordAnimalCreation(tx, values, staffMemberId),
+    INTAKE_TRANSACTION,
   );
 };

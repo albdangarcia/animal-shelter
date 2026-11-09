@@ -9,6 +9,7 @@ import StatusPage from "@/components/StatusPage";
 import { fetchColors, fetchPartners, fetchSpecies } from "@/app/lib/data/animals/animal.data";
 import { fetchUnitPickerOptions } from "@/app/lib/data/locations/unit-picker.data";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { fetchIntakeProtocols } from "@/app/lib/data/medical-protocol.data";
 
 const Page = async () => {
   return (
@@ -22,14 +23,25 @@ const Page = async () => {
 };
 
 const PageContent = async () => {
-  const [partners, colors, speciesList, unitOptions, canCreatePerson] =
-    await Promise.all([
-      fetchPartners(),
-      fetchColors(),
-      fetchSpecies(),
-      fetchUnitPickerOptions(),
-      hasPermission(AppPermissions.PERSONS_MANAGE),
-    ]);
+  const [
+    partners,
+    colors,
+    speciesList,
+    unitOptions,
+    canCreatePerson,
+    canManageMedical,
+  ] = await Promise.all([
+    fetchPartners(),
+    fetchColors(),
+    fetchSpecies(),
+    fetchUnitPickerOptions(),
+    hasPermission(AppPermissions.PERSONS_MANAGE),
+    hasPermission(AppPermissions.MEDICAL_MANAGE),
+  ]);
+
+  // Only someone who may manage medical care sees the protocol and may leave
+  // it out; anyone else's intake applies it as the shelter set it.
+  const protocols = canManageMedical ? await fetchIntakeProtocols() : [];
 
   return (
     <main>
@@ -40,6 +52,8 @@ const PageContent = async () => {
         colors={colors}
         unitOptions={unitOptions}
         canCreatePerson={canCreatePerson}
+        canManageMedical={canManageMedical}
+        protocols={protocols}
         today={await getShelterToday()}
       />
     </main>

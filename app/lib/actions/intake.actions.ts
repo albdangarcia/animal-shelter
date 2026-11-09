@@ -26,6 +26,12 @@ import {
   type IntakeCorrection,
 } from "../services/intake-correction";
 import { recordReIntake } from "../services/intake-recording";
+import { INTAKE_TRANSACTION } from "../services/animal-creation";
+import {
+  SKIP_PROTOCOL_REFUSAL,
+  withProtocolHeadline,
+} from "../services/medical-protocol-application";
+import { can } from "../auth/can";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
@@ -61,13 +67,25 @@ const _createReIntake = async (
     };
   }
 
+  // The protocol is the shelter's policy for a returning animal too; leaving
+  // it out is a medical decision.
+  if (
+    !validatedFields.data.applyProtocol &&
+    !can(user.role, AppPermissions.MEDICAL_MANAGE)
+  ) {
+    return { ok: false, message: SKIP_PROTOCOL_REFUSAL };
+  }
+
+  let recorded: Awaited<ReturnType<typeof recordReIntake>>;
   try {
-    await prisma.$transaction((tx) =>
-      recordReIntake(
-        tx,
-        { animalId: validatedAnimalId, values: validatedFields.data },
-        staffMemberId,
-      ),
+    recorded = await prisma.$transaction(
+      (tx) =>
+        recordReIntake(
+          tx,
+          { animalId: validatedAnimalId, values: validatedFields.data },
+          staffMemberId,
+        ),
+      INTAKE_TRANSACTION,
     );
   } catch (error) {
     if (error instanceof TimelineOrderError) {
@@ -90,10 +108,16 @@ const _createReIntake = async (
 
   revalidatePath("/dashboard/animals");
   revalidatePath(`/dashboard/animals/${validatedAnimalId}`);
+  if (recorded.protocol) {
+    revalidatePath("/dashboard/medical/due");
+  }
 
   return {
     ok: true,
-    message: "Animal re-intake processed successfully.",
+    message: withProtocolHeadline(
+      "Animal re-intake processed successfully.",
+      recorded.protocol,
+    ),
     redirectTo: `/dashboard/animals/${validatedAnimalId}`,
   };
 };

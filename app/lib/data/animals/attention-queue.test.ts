@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import {
   ATTENTION_QUEUE_CAP,
   buildAttentionQueue,
-  type AcuteHealthRow,
   type AttentionAnimal,
+  type CareUnplannedRow,
   type FosterOverdueRow,
+  type MedicalDueRow,
+  type MissedDoseRow,
   type TaskDueRow,
 } from "./attention-queue";
 import { calendarDay, shiftDayKey } from "@/app/lib/utils/shelter-day";
@@ -30,12 +32,14 @@ const taskRow = (
   ...overrides,
 });
 
-const acuteRow = (
+const careRow = (
   a: AttentionAnimal,
-  overrides: Partial<Omit<AcuteHealthRow, "animal">> = {},
-): AcuteHealthRow => ({
+  overrides: Partial<Omit<CareUnplannedRow, "animal">> = {},
+): CareUnplannedRow => ({
   animal: a,
-  healthStatus: "UNDER_VET_CARE",
+  episodeId: `episode-${a.id}`,
+  episodeType: "UNDER_VET_CARE",
+  startDate: calendarDay("2026-08-10"),
   ...overrides,
 });
 
@@ -50,7 +54,36 @@ const fosterRow = (
   ...overrides,
 });
 
-const empty = { tasksDue: [], acuteHealth: [], fostersOverdue: [] };
+const medicalRow = (
+  a: AttentionAnimal,
+  overrides: Partial<Omit<MedicalDueRow, "animal">> = {},
+): MedicalDueRow => ({
+  animal: a,
+  entryId: `entry-${a.id}`,
+  itemName: "DHPP",
+  kind: "VACCINE",
+  dueDate: calendarDay("2026-08-20"),
+  ...overrides,
+});
+
+const missedRow = (
+  a: AttentionAnimal,
+  overrides: Partial<Omit<MissedDoseRow, "animal">> = {},
+): MissedDoseRow => ({
+  animal: a,
+  count: 1,
+  earliest: { slotDate: calendarDay("2026-08-20"), slot: "AM" },
+  medications: ["Doxycycline"],
+  ...overrides,
+});
+
+const empty = {
+  tasksDue: [],
+  dosesMissed: [],
+  medicalDue: [],
+  careUnplanned: [],
+  fostersOverdue: [],
+};
 
 test("no signals produces an empty queue", () => {
   assert.deepEqual(buildAttentionQueue(empty), []);
@@ -72,20 +105,20 @@ test("an animal with multiple signals appears once, with every reason attached",
   );
 });
 
-test("acute health with an open task never reaches signal 2 — but the pure merge still dedupes if handed both", () => {
-  // The query layer excludes tasked animals from `acuteHealth`; this asserts the
-  // merge is not the thing that would double-list an animal if it didn't.
+test("care with an open task never reaches signal 3 — but the pure merge still dedupes if handed both", () => {
+  // The query layer excludes tasked animals from `careUnplanned`; this asserts
+  // the merge is not the thing that would double-list an animal if it didn't.
   const luna = animal("luna");
   const queue = buildAttentionQueue({
     ...empty,
     tasksDue: [taskRow(luna)],
-    acuteHealth: [acuteRow(luna)],
+    careUnplanned: [careRow(luna)],
   });
 
   assert.equal(queue.length, 1);
   assert.deepEqual(
     queue[0].reasons.map((r) => r.kind),
-    ["TASK_DUE", "UNTASKED_ACUTE_HEALTH"],
+    ["TASK_DUE", "CARE_UNPLANNED"],
   );
 });
 
@@ -106,31 +139,142 @@ test("multiple overdue tasks on one animal each contribute a reason, ordered by 
   );
 });
 
-test("tiers order the queue: overdue task, then untasked acute health, then overdue foster", () => {
+test("tiers order the queue: overdue task, then a missed dose, then medical care due, then care with nothing planned, then overdue foster", () => {
   const queue = buildAttentionQueue({
     tasksDue: [taskRow(animal("has-task"))],
-    acuteHealth: [acuteRow(animal("acute-only"))],
+    // Its slot is later than the medical care's due day: the tier decides.
+    dosesMissed: [
+      missedRow(animal("missed-dose"), {
+        earliest: { slotDate: calendarDay("2026-08-25"), slot: "PM" },
+      }),
+    ],
+    medicalDue: [medicalRow(animal("medical-only"))],
+    careUnplanned: [careRow(animal("care-only"))],
     fostersOverdue: [fosterRow(animal("foster-only"))],
   });
 
   assert.deepEqual(
     queue.map((item) => item.animalId),
-    ["has-task", "acute-only", "foster-only"],
+    ["has-task", "missed-dose", "medical-only", "care-only", "foster-only"],
+  );
+});
+
+test("animals under care with nothing planned sort by the episode's start, then name", () => {
+  const queue = buildAttentionQueue({
+    ...empty,
+    careUnplanned: [
+      careRow(animal("late", { name: "Abe" }), { startDate: calendarDay("2026-08-12") }),
+      careRow(animal("zoe", { name: "Zoe" }), { startDate: calendarDay("2026-08-03") }),
+      careRow(animal("bea", { name: "Bea" }), { startDate: calendarDay("2026-08-03") }),
+    ],
+  });
+
+  assert.deepEqual(
+    queue.map((item) => item.animalId),
+    ["bea", "zoe", "late"],
+  );
+});
+
+test("an animal with a task and medical care due appears once, the task first", () => {
+  const luna = animal("luna");
+  const queue = buildAttentionQueue({
+    ...empty,
+    // The medical care is due earlier, but a task is the higher tier.
+    tasksDue: [taskRow(luna, { dueDate: calendarDay("2026-08-20") })],
+    medicalDue: [medicalRow(luna, { dueDate: calendarDay("2026-08-01") })],
+  });
+
+  assert.equal(queue.length, 1);
+  assert.deepEqual(
+    queue[0].reasons.map((reason) => reason.kind),
+    ["TASK_DUE", "MEDICAL_DUE"],
+  );
+});
+
+test("an animal with a task and a missed dose appears once, the task first, then the dose, then care due", () => {
+  const fido = animal("fido");
+  const queue = buildAttentionQueue({
+    ...empty,
+    medicalDue: [medicalRow(fido, { dueDate: calendarDay("2026-08-01") })],
+    dosesMissed: [missedRow(fido)],
+    tasksDue: [taskRow(fido)],
+  });
+
+  assert.equal(queue.length, 1);
+  assert.deepEqual(
+    queue[0].reasons.map((reason) => reason.kind),
+    ["TASK_DUE", "DOSE_MISSED", "MEDICAL_DUE"],
+  );
+});
+
+test("animals with missed doses sort by their earliest missed slot, its day then AM before Midday before PM, then name", () => {
+  const slot = (slotDate: string, at: MissedDoseRow["earliest"]["slot"]) => ({
+    earliest: { slotDate: calendarDay(slotDate), slot: at },
+  });
+  const queue = buildAttentionQueue({
+    ...empty,
+    dosesMissed: [
+      missedRow(animal("today-am", { name: "Abe" }), slot("2026-08-21", "AM")),
+      missedRow(animal("pm", { name: "Abe" }), slot("2026-08-20", "PM")),
+      missedRow(animal("midday", { name: "Zoe" }), slot("2026-08-20", "MIDDAY")),
+      missedRow(animal("am-zoe", { name: "Zoe" }), slot("2026-08-20", "AM")),
+      missedRow(animal("am-bea", { name: "Bea" }), slot("2026-08-20", "AM")),
+    ],
+  });
+
+  assert.deepEqual(
+    queue.map((item) => item.animalId),
+    ["am-bea", "am-zoe", "midday", "pm", "today-am"],
+  );
+});
+
+test("an animal's medical care due is ordered by due day, then entry", () => {
+  const bruno = animal("bruno");
+  const queue = buildAttentionQueue({
+    ...empty,
+    medicalDue: [
+      medicalRow(bruno, { entryId: "b-today", dueDate: calendarDay("2026-08-20") }),
+      medicalRow(bruno, { entryId: "a-today", dueDate: calendarDay("2026-08-20") }),
+      medicalRow(bruno, { entryId: "z-overdue", dueDate: calendarDay("2026-08-11") }),
+    ],
+  });
+
+  assert.deepEqual(
+    queue[0].reasons.map((reason) =>
+      reason.kind === "MEDICAL_DUE" ? reason.entryId : null,
+    ),
+    ["z-overdue", "a-today", "b-today"],
+  );
+});
+
+test("animals with medical care due sort by their earliest due day", () => {
+  const queue = buildAttentionQueue({
+    ...empty,
+    medicalDue: [
+      medicalRow(animal("a", { name: "Abe" }), { dueDate: calendarDay("2026-08-20") }),
+      medicalRow(animal("z", { name: "Zoe" }), { dueDate: calendarDay("2026-08-14") }),
+    ],
+  });
+
+  assert.deepEqual(
+    queue.map((item) => item.animalId),
+    ["z", "a"],
   );
 });
 
 test("an animal in more than one tier sorts by its highest tier", () => {
   const queue = buildAttentionQueue({
+    ...empty,
     tasksDue: [taskRow(animal("multi"))],
-    acuteHealth: [acuteRow(animal("acute-only"))],
+    careUnplanned: [careRow(animal("care-only"))],
     fostersOverdue: [fosterRow(animal("multi"))],
   });
 
   // `multi` has a foster reason too, but its task puts it in tier 1, ahead of
-  // the acute-only animal.
+  // the care-only animal.
   assert.deepEqual(
     queue.map((item) => item.animalId),
-    ["multi", "acute-only"],
+    ["multi", "care-only"],
   );
 });
 
@@ -150,7 +294,7 @@ test("within tier 1, earlier due date wins; then higher priority", () => {
   );
 });
 
-test("within tier 3, the earliest expected end date sorts first", () => {
+test("within the foster tier, the earliest expected end date sorts first", () => {
   const queue = buildAttentionQueue({
     ...empty,
     fostersOverdue: [
@@ -202,7 +346,23 @@ test("reason payloads carry the fields each consumer needs, and no more", () => 
     tasksDue: [
       taskRow(bruno, { taskId: "task-9", title: "Dental follow-up", priority: "HIGH", dueDate: calendarDay("2026-08-19") }),
     ],
-    acuteHealth: [acuteRow(bruno, { healthStatus: "HOSPITALISED" })],
+    dosesMissed: [
+      missedRow(bruno, {
+        count: 3,
+        earliest: { slotDate: calendarDay("2026-08-18"), slot: "PM" },
+        medications: ["Doxycycline", "Meloxicam"],
+      }),
+    ],
+    medicalDue: [
+      medicalRow(bruno, { entryId: "entry-4", itemName: "Rabies 1-year", kind: "VACCINE", dueDate: calendarDay("2026-08-18") }),
+    ],
+    careUnplanned: [
+      careRow(bruno, {
+        episodeId: "episode-2",
+        episodeType: "HOSPITALISED_IN_HOUSE",
+        startDate: calendarDay("2026-08-14"),
+      }),
+    ],
     fostersOverdue: [
       fosterRow(bruno, { placementId: "fp-3", fosterName: "Sam Rivera", expectedEndDate: calendarDay("2026-08-12") }),
     ],
@@ -221,7 +381,26 @@ test("reason payloads carry the fields each consumer needs, and no more", () => 
         dueDate: calendarDay("2026-08-19"),
         priority: "HIGH",
       },
-      { kind: "UNTASKED_ACUTE_HEALTH", healthStatus: "HOSPITALISED" },
+      {
+        kind: "DOSE_MISSED",
+        count: 3,
+        earliestSlotDate: calendarDay("2026-08-18"),
+        earliestSlot: "PM",
+        medications: ["Doxycycline", "Meloxicam"],
+      },
+      {
+        kind: "MEDICAL_DUE",
+        entryId: "entry-4",
+        itemName: "Rabies 1-year",
+        entryKind: "VACCINE",
+        dueDate: calendarDay("2026-08-18"),
+      },
+      {
+        kind: "CARE_UNPLANNED",
+        episodeId: "episode-2",
+        episodeType: "HOSPITALISED_IN_HOUSE",
+        startDate: calendarDay("2026-08-14"),
+      },
       {
         kind: "FOSTER_OVERDUE",
         placementId: "fp-3",
@@ -230,4 +409,24 @@ test("reason payloads carry the fields each consumer needs, and no more", () => 
       },
     ],
   });
+});
+
+test("a surgery or microchip due is named as the due list names it, with its kind", () => {
+  const rex = animal("rex", { name: "Rex" });
+  const [item] = buildAttentionQueue({
+    ...empty,
+    medicalDue: [
+      medicalRow(rex, { entryId: "spay", itemName: "Neuter", kind: "SURGERY", dueDate: calendarDay("2026-08-18") }),
+      medicalRow(rex, { entryId: "chip", itemName: "Microchip", kind: "MICROCHIP", dueDate: calendarDay("2026-08-20") }),
+    ],
+  });
+  assert.deepEqual(
+    item.reasons.map((reason) =>
+      reason.kind === "MEDICAL_DUE" ? [reason.itemName, reason.entryKind] : null,
+    ),
+    [
+      ["Neuter", "SURGERY"],
+      ["Microchip", "MICROCHIP"],
+    ],
+  );
 });

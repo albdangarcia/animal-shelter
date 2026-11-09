@@ -36,6 +36,7 @@ import {
 } from "@/app/lib/actions/breeds-catalog.actions";
 import { sizeOptions } from "@/components/dashboard/animals/table/animal-options";
 import { toast } from "sonner";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 const sizeLabels = Object.fromEntries(
   sizeOptions.map((option) => [option.value, option.label]),
@@ -50,6 +51,7 @@ function BreedActions({
 }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const onSoftDelete = () => {
     startTransition(() => {
@@ -81,7 +83,12 @@ function BreedActions({
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+          >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -105,7 +112,10 @@ function BreedActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent
+        className="sm:max-w-[480px]"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Breed</DialogTitle>
           <DialogDescription>

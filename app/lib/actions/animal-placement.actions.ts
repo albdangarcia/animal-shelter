@@ -10,7 +10,13 @@ import {
   withAuthenticatedUser,
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { can } from "../auth/can";
 import { AnimalArchivedError, moveAnimal } from "../services/animal-move";
+import { careEpisodeOfferInMove } from "../services/care-episode";
+import {
+  careEpisodeOfferPrompt,
+  type CareEpisodeOfferPrompt,
+} from "../data/care-episode-offer.data";
 import { NotFoundError, PreconditionFailedError } from "../utils/errors";
 
 export interface MoveAnimalResult {
@@ -22,12 +28,18 @@ export interface MoveAnimalResult {
   unitLabel?: string;
   newCount?: number;
   capacity?: number;
+  // A move into or out of a medical unit offers to open or close a care
+  // episode, to someone who may. Only an offer: the move is already done.
+  careEpisodeOffer?: CareEpisodeOfferPrompt | null;
 }
 
 // Moves an animal to a unit (or to Unplaced when targetUnitId is null) by
 // writing Animal.currentUnitId — the single source of truth for occupancy.
 // Capacity is never enforced: over-capacity is reported back so the client
-// can warn, but the write always goes through. Last-write-wins.
+// can warn, but the write always goes through. Last-write-wins. A move into
+// or out of a medical unit offers a holder of MEDICAL_MANAGE to open or close
+// a care episode; answering it is a separate action, so the move is the same
+// whether or not they do.
 const _moveAnimalToUnit = async (
   user: SessionUser,
   animalId: string,
@@ -48,11 +60,31 @@ const _moveAnimalToUnit = async (
     parsedUnitId = parsed.data;
   }
 
-  let unit: Awaited<ReturnType<typeof moveAnimal>> = null;
+  const offersCare = can(user.role, AppPermissions.MEDICAL_MANAGE);
+  let unit: Awaited<ReturnType<typeof moveAnimal>>["unit"] = null;
+  let offer: Awaited<ReturnType<typeof careEpisodeOfferInMove>> = null;
   try {
-    unit = await prisma.$transaction((tx) =>
-      moveAnimal(tx, parsedAnimalId.data, parsedUnitId, staffMemberId),
-    );
+    ({ unit, offer } = await prisma.$transaction(async (tx) => {
+      const moved = await moveAnimal(
+        tx,
+        parsedAnimalId.data,
+        parsedUnitId,
+        staffMemberId,
+      );
+      return {
+        unit: moved.unit,
+        // Read behind the move's lock, so it sees the episodes as the move
+        // left them. A failed read gives no offer and leaves the move be.
+        offer: offersCare
+          ? await careEpisodeOfferInMove(
+              tx,
+              parsedAnimalId.data,
+              moved.fromUnitId,
+              moved.unit?.id ?? null,
+            )
+          : null,
+      };
+    }));
   } catch (error) {
     if (error instanceof AnimalArchivedError) {
       // The board that sent this still shows the animal; refresh it so the
@@ -95,6 +127,13 @@ const _moveAnimalToUnit = async (
       // The move already succeeded; the warning is advisory, so don't fail.
       console.error("Database Error counting unit occupancy:", error);
     }
+  }
+
+  try {
+    result.careEpisodeOffer = await careEpisodeOfferPrompt(offer);
+  } catch (error) {
+    // The move already succeeded; the offer is a convenience, so don't fail.
+    console.error("Database Error reading the care episode offer:", error);
   }
 
   revalidatePath("/dashboard/locations");

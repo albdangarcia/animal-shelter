@@ -13,7 +13,6 @@ import assert from "node:assert/strict";
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import {
   AnimalActivityType,
-  AnimalHealthStatus,
   AnimalListingStatus,
   ApplicationSource,
   ApplicationStatus,
@@ -88,6 +87,7 @@ before(async () => {
 });
 
 after(async () => {
+  await prisma.medicalEntry.deleteMany({ where: { createdById: staffId } });
   await prisma.fosterPlacement.deleteMany({ where: { fosterProfileId } });
   await prisma.outcome.deleteMany({ where: { staffMemberId: staffId } });
   await prisma.intake.deleteMany({ where: { staffMemberId: staffId } });
@@ -199,7 +199,7 @@ const record = (
   prisma.$transaction((tx) =>
     recordOutcome(
       tx,
-      { animalId, adoptionApplicationId, values: values(type, outcomeDate) },
+      { animalId, adoptionApplicationId, values: { ...values(type, outcomeDate), ...(type === "DECEASED" ? { medical: { kind: "DEATH" as const, source: null, cause: null, circumstanceNotes: null, bodyDisposition: null, circumstances: "FOUND_DEAD" as const, causeKnowledge: "UNKNOWN" as const, necropsyRequested: null } } : {}) } },
       staffId,
     ),
   );
@@ -240,6 +240,7 @@ const readAnimal = async (animalId: string) => {
       // By time alone, as the feed orders them. No tie-break on id: it
       // would hide two rows that share a timestamp.
       activityLog: {
+        where: { activityType: { notIn: [AnimalActivityType.MEDICAL_ENTRY_RECORDED, AnimalActivityType.MEDICAL_ENTRY_EDITED, AnimalActivityType.MEDICAL_ENTRY_VOIDED] } },
         select: { activityType: true, changeSummary: true },
         orderBy: { changedAt: "asc" },
       },
@@ -404,8 +405,6 @@ test("an outcome reversed after a re-intake leaves its placement ended and linke
           intakeType: IntakeType.SEIZE,
           intakeDate: "2026-01-20",
           notes: "",
-          healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
-          isSpayedNeutered: false,
         }),
       },
       staffId,
@@ -591,6 +590,7 @@ test("correcting the outcome's day moves the placement's end with it, in the sam
     fosterPersonId,
   });
   assert.equal((await onlyOutcome(animalId)).outcomeDate, "2026-01-08");
+  assert.equal((await prisma.medicalEntry.findUniqueOrThrow({ where: { outcomeId } })).completedDate, "2026-01-08");
   assert.equal((await readPlacement(placementId!)).endDate, "2026-01-08");
   // One row for the correction, and none for the placement's move.
   assert.deepEqual((await readAnimal(animalId)).activityLogs, [
@@ -784,7 +784,7 @@ test("an outcome waiting on a placement being made closes it once it commits", a
           tx,
           {
             animalId,
-            values: values(OutcomeType.DECEASED, "2026-01-10"),
+            values: { ...values(OutcomeType.DECEASED, "2026-01-10"), medical: { kind: "DEATH" as const, source: null, cause: null, circumstanceNotes: null, bodyDisposition: null, circumstances: "FOUND_DEAD" as const, causeKnowledge: "UNKNOWN" as const, necropsyRequested: null } },
           },
           staffId,
         ),
@@ -827,4 +827,31 @@ test("an outcome waiting on a placement being made closes it once it commits", a
   });
   await assertEndFollowsOutcome(animalId);
   await assertNoListingMismatch(animalId);
+});
+
+test("a failure after the outcome closes foster rolls back the archive, placement and linked medical audit", async () => {
+  const { animalId, placementId } = await makeAnimal("Failed clinical departure", FosterPlacementType.GENERAL);
+  const beforeAnimal = await readAnimal(animalId);
+  const beforePlacement = await readPlacement(placementId!);
+  await assert.rejects(prisma.$transaction(async (tx) => {
+    const broken = new Proxy(tx, { get(target, key, receiver) {
+      if (key !== "animalActivityLog") return Reflect.get(target, key, receiver);
+      return new Proxy(target.animalActivityLog, { get(delegate, operation) {
+        if (operation !== "create") return Reflect.get(delegate, operation);
+        return (args: Parameters<typeof tx.animalActivityLog.create>[0]) => {
+          if (args.data.activityType === AnimalActivityType.FOSTER_RETURNED) throw new Error("Placement activity unavailable");
+          return delegate.create(args);
+        };
+      } });
+    } });
+    return recordOutcome(broken, { animalId, values: OutcomeFormSchema.parse({
+      outcomeType: OutcomeType.DECEASED, outcomeDate: "2026-01-10",
+      medical: { kind: "DEATH", circumstances: "FOUND_DEAD", causeKnowledge: "UNKNOWN", necropsyRequested: null },
+    }) }, staffId);
+  }), /Placement activity unavailable/);
+  assert.deepEqual(await readAnimal(animalId), beforeAnimal);
+  assert.deepEqual(await readPlacement(placementId!), beforePlacement);
+  assert.equal(await prisma.medicalEntry.count({ where: { animalId } }), 0);
+  assert.equal(await prisma.medicalEntryEvent.count({ where: { entry: { animalId } } }), 0);
+  assert.equal(await prisma.animalActivityLog.count({ where: { animalId } }), 0);
 });

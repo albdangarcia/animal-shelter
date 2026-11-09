@@ -1,7 +1,6 @@
 import {
   IntakeType,
   Sex,
-  AnimalHealthStatus,
   AnimalListingStatus,
   AnimalSize,
   TaskCategory,
@@ -85,16 +84,12 @@ export const formatAnimalSize = (
 
 export const formattedIntakeTypes = formatEnumForDisplay(IntakeType);
 export const formattedSexes = formatEnumForDisplay(Sex);
-export const formattedPetHealthStatuses =
-  formatEnumForDisplay(AnimalHealthStatus);
 
 export const intakeTypeOptions = formatEnumAsOptions(IntakeType);
 export const animalSexOptions = formatEnumAsOptions(Sex);
 export const animalSizeOptions = Object.entries(ANIMAL_SIZE_LABELS).map(
   ([value, label]) => ({ value: value as AnimalSize, label }),
 );
-export const animalHealthStatusOptions =
-  formatEnumAsOptions(AnimalHealthStatus);
 export const animalListingStatusOptions =
   formatEnumAsOptions(AnimalListingStatus);
 

@@ -4,7 +4,7 @@ import { createReIntake } from "@/app/lib/actions/intake.actions";
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,24 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Switch } from "@/components/ui/switch";
-import { animalHealthStatusOptions } from "@/app/lib/utils/enum-formatter";
-import { AnimalHealthStatus } from "@/prisma/generated/enums";
+import { Form, FormField } from "@/components/ui/form";
 import { AnimalReIntakeFormPayload, PartnerPayload } from "@/app/lib/types";
 import Link from "next/link";
 import { IntakeFormFields } from "./intake-form-fields";
@@ -42,12 +25,25 @@ import {
   type ReIntakeFormInput,
 } from "@/app/lib/zod-schemas/intake.schema";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
-import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
+import type { ReIntakeProtocolPreview } from "@/app/lib/data/medical-protocol.data";
+import {
+  spayNeuterFactsOn,
+  type ProtocolPlanFacts,
+} from "@/app/lib/utils/medical-protocol-plan";
+import { ProtocolPreview } from "./protocol-preview";
 
 interface ReIntakeFormProps {
   animal: AnimalReIntakeFormPayload;
   partners: PartnerPayload[];
   canCreatePerson?: boolean;
+  /**
+   * The live protocols and what the animal's record says, for a viewer who
+   * may manage medical care: the form shows the protocol that fits the
+   * returning animal and what it will schedule, and lets them leave it out.
+   * Null for anyone else, whose re-intake applies it with no choice.
+   */
+  protocolPreview?: ReIntakeProtocolPreview | null;
   /**
    * Today, on the shelter's calendar, resolved on the server. It is the day an
    * intake recorded now is filed under — a `new Date()` here would be
@@ -61,6 +57,7 @@ const ReIntakeForm = ({
   animal,
   partners,
   canCreatePerson,
+  protocolPreview = null,
   today,
 }: ReIntakeFormProps) => {
   const router = useRouter();
@@ -73,16 +70,31 @@ const ReIntakeForm = ({
       // now is filed under.
       intakeDate: today,
       intakeType: undefined,
-      healthStatus: AnimalHealthStatus.HEALTHY,
-      isSpayedNeutered: false,
       notes: "",
       sourcePartnerId: "",
       foundAddress: "",
       foundCity: "",
       foundState: "",
       surrenderingPersonId: "",
+      applyProtocol: true,
     },
   });
+
+  // What the protocol's plan reads: the animal and its record as the page
+  // read them, on the day the form says it came back.
+  const intakeDate = parseCalendarDay(
+    useWatch({ control: form.control, name: "intakeDate" }),
+  );
+  const protocolFacts: ProtocolPlanFacts | null =
+    protocolPreview && intakeDate
+      ? {
+          ...protocolPreview.animal,
+          intakeDate,
+          ...spayNeuterFactsOn(protocolPreview.record.spayNeuterEntries, intakeDate),
+          chipped: protocolPreview.record.chipped,
+          openScheduled: protocolPreview.record.openScheduled,
+        }
+      : null;
 
   const onSubmit = (values: ReIntakeFormInput) => {
     startSubmitTransition(async () => {
@@ -114,61 +126,6 @@ const ReIntakeForm = ({
           </CardHeader>
 
           <CardContent className="space-y-10">
-            {/* Health Status Selection */}
-            <div className="space-y-6">
-              <h3 className="font-semibold border-b pb-2">
-                Current Health Status
-              </h3>
-              <div className="grid grid-cols-1 @[662px]:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="healthStatus"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel required>Health Status</FormLabel>
-                      <Select
-                        name={field.name}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select health status" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {animalHealthStatusOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="isSpayedNeutered"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Spayed / Neutered</FormLabel>
-                      <div className="flex h-9 items-center">
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-            </div>
-
             {/* Intake Fields Component */}
             <IntakeFormFields
               control={form.control}
@@ -176,6 +133,22 @@ const ReIntakeForm = ({
               canCreatePerson={canCreatePerson}
               today={today}
             />
+
+            {protocolPreview && (
+              <FormField
+                control={form.control}
+                name="applyProtocol"
+                render={({ field }) => (
+                  <ProtocolPreview
+                    protocols={protocolPreview.protocols}
+                    facts={protocolFacts}
+                    today={today}
+                    checked={field.value ?? true}
+                    onCheckedChange={field.onChange}
+                  />
+                )}
+              />
+            )}
           </CardContent>
 
           <CardFooter className="flex justify-end space-x-4">

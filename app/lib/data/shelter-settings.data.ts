@@ -1,7 +1,12 @@
 import { cache } from "react";
 import prisma from "@/app/lib/prisma";
 import { resolveShelterSettings } from "@/app/lib/utils/shelter-settings";
-import { shelterToday, type CalendarDay } from "@/app/lib/utils/shelter-day";
+import {
+  shelterNow,
+  type CalendarDay,
+  type ShelterClock,
+  type ShelterNow,
+} from "@/app/lib/utils/shelter-day";
 import { ensurePhoneIndexCountry } from "./phone-index.data";
 
 // React cache deduplicates this read only within a request. A changed row is
@@ -10,6 +15,20 @@ export const getShelterSettings = cache(async () =>
   resolveShelterSettings(
     await prisma.shelterSettings.findUnique({ where: { id: "shelter" } }),
   ),
+);
+
+/**
+ * One reading of the shelter's time: the instant, today and the wall clock,
+ * from one `new Date()`. Cached per request during a render, so every part
+ * of a page agrees. A server action runs outside that cache, so each call
+ * there reads the time afresh: an action that needs more than one of these
+ * (a day and a time, or a day and an instant) reads this once and passes its
+ * parts on, rather than calling `getShelterToday` and `getShelterClock`
+ * separately, which midnight could fall between.
+ */
+export const getShelterNow = cache(
+  async (): Promise<ShelterNow> =>
+    shelterNow(new Date(), (await getShelterSettings()).timezone),
 );
 
 /**
@@ -26,8 +45,16 @@ export const getShelterSettings = cache(async () =>
  * what decides.
  */
 export const getShelterToday = cache(
-  async (): Promise<CalendarDay> =>
-    shelterToday((await getShelterSettings()).timezone),
+  async (): Promise<CalendarDay> => (await getShelterNow()).today,
+);
+
+/**
+ * The shelter's wall clock: today, and the time of day it reads. Whether a
+ * dose slot has ended is read against it. Its day is `getShelterToday`'s
+ * within a render; in a server action, take both from `getShelterNow`.
+ */
+export const getShelterClock = cache(
+  async (): Promise<ShelterClock> => (await getShelterNow()).clock,
 );
 
 // Indexed phone lookups need the stored numbers interpreted under the same

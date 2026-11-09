@@ -51,6 +51,24 @@ export const AppPermissions = {
   ANIMAL_VITALS_READ: "animal_vitals:read",
   ANIMAL_VITALS_MANAGE: "animal_vitals:manage",
 
+  // Medical Record Permissions
+  // Reading every medical page and record on an animal: vaccines, tests and
+  // treatments, and who recorded, corrected or voided each one.
+  MEDICAL_READ: "medical:read",
+  // Recording as given, or declining, care that is already scheduled. It
+  // can't create new care: what to give and when is decided by someone
+  // holding MEDICAL_MANAGE, and this only says whether it happened.
+  MEDICAL_ADMINISTER: "medical:administer",
+  // Scheduling, recording, correcting and voiding medical entries. Held apart from
+  // ANIMAL_VITALS_MANAGE because an entry states what the shelter did to the
+  // animal, not what someone observed, so it is staff work.
+  MEDICAL_MANAGE: "medical:manage",
+  // The catalog of vaccines, tests, treatments and medications staff pick
+  // from, the protocols that schedule care at intake, and the times doses are
+  // due (admins only). Retiring an item hides it from new entries and orders
+  // shelter-wide, so it is configuration, not record-keeping.
+  MEDICAL_SETTINGS_MANAGE: "medical_settings:manage",
+
   // Animal Note Permissions
   ANIMAL_NOTE_READ: "animal_note:read",
   ANIMAL_NOTE_MANAGE: "animal_note:manage",
@@ -91,6 +109,10 @@ export const AppPermissions = {
   // My Foster Management (users managing their own foster application/animals)
   MY_FOSTER_APPLICATION_MANAGE: "my_foster_application:manage",
   MY_FOSTER_ANIMALS_READ: "my_foster_animals:read",
+  // Recording care for an animal in the person's own open foster placement,
+  // and reporting its outside vet visits. Held with the placement: every use
+  // checks that the placement is open.
+  MY_FOSTER_ANIMALS_CARE: "my_foster_animals:care",
 
   MY_PROFILE_UPDATE: "my_profile:update", // Self-service profile feature
 

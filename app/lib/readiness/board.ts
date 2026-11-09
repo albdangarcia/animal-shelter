@@ -10,7 +10,8 @@
  */
 
 import type { AnimalListingStatus } from "@/prisma/generated/enums";
-import { formatSingleEnumOption } from "../utils/enum-formatter";
+import { EXAM_TYPE_LABELS } from "../constants/medical";
+import { openEpisodeText } from "../utils/care-status";
 import {
   formatShelterDay,
   shelterDayKey,
@@ -46,9 +47,11 @@ export type ReadinessBlockerKind = ReadinessBlocker["kind"];
  */
 export const BLOCKER_KIND_ORDER: readonly ReadinessBlockerKind[] = [
   "ESCALATED_FINDING",
-  "ACUTE_HEALTH",
+  "NEEDS_VET_REVIEW",
+  "UNDER_CARE",
   "UNSUPPORTED_CHARACTERISTIC",
   "MISSING_ASSESSMENT",
+  "NO_INTAKE_EXAM",
   "NOT_SPAYED_NEUTERED",
   "NO_PHOTO",
 ];
@@ -336,6 +339,8 @@ const CLAIM_ISSUE_TEXT = {
   CONTRADICTED: "contradicted by a live finding",
   SOURCE_DELETED: "cites a deleted assessment",
   NO_LONGER_SUPPORTED: "its assessment no longer supports it",
+  CONDITION_RESOLVED: "its condition was resolved",
+  CONDITION_VOIDED: "cites a voided condition",
 } as const;
 
 /** What a blocker is, in the words the board and the panel show it in. */
@@ -347,12 +352,20 @@ export const describeBlocker = (blocker: ReadinessBlocker, timezone: string): st
       return `${blocker.templateName} of ${formatShelterDay(shelterDayKey(blocker.observedAt, timezone))}`;
     case "UNSUPPORTED_CHARACTERISTIC":
       return `${blocker.characteristicName} — ${CLAIM_ISSUE_TEXT[blocker.issue]}`;
+    case "NO_INTAKE_EXAM":
+      return "No intake exam";
+    case "NEEDS_VET_REVIEW":
+      return `${EXAM_TYPE_LABELS[blocker.examType]} of ${formatShelterDay(blocker.examDate)} needs vet review`;
     case "NOT_SPAYED_NEUTERED":
       return "Not spayed or neutered";
     case "NO_PHOTO":
       return "No photo on the profile";
-    case "ACUTE_HEALTH":
-      return formatSingleEnumOption(blocker.healthStatus);
+    case "UNDER_CARE":
+      return openEpisodeText({
+        type: blocker.episodeType,
+        startDate: blocker.startDate,
+        clinicName: blocker.partnerName,
+      });
   }
 };
 
@@ -367,6 +380,7 @@ export interface ReadinessViewerCan {
   manageAssessments: boolean;
   manageAnimalInfo: boolean;
   managePhotos: boolean;
+  manageMedical: boolean;
 }
 
 /**
@@ -395,14 +409,26 @@ export function blockerAction(
       };
     case "UNSUPPORTED_CHARACTERISTIC":
       return { label: "Review characteristics", href: `${animal}/characteristics` };
+    case "NO_INTAKE_EXAM":
+      return {
+        label: can.manageMedical ? "Record intake exam" : "View medical record",
+        href: `${animal}/medical`,
+      };
+    case "NEEDS_VET_REVIEW":
+      return {
+        label: "Review the exam",
+        href: `${animal}/medical/history?kind=EXAM`,
+      };
     case "NOT_SPAYED_NEUTERED":
-      return can.manageAnimalInfo
-        ? { label: "Update spay/neuter status", href: `${animal}/edit` }
-        : { label: "View profile", href: animal };
-    case "ACUTE_HEALTH":
-      return can.manageAnimalInfo
-        ? { label: "Update health status", href: `${animal}/edit` }
-        : { label: "View profile", href: animal };
+      return {
+        label: can.manageMedical ? "Record spay/neuter" : "View medical record",
+        href: `${animal}/medical`,
+      };
+    case "UNDER_CARE":
+      return {
+        label: "View care episode",
+        href: `${animal}/medical/conditions`,
+      };
     case "NO_PHOTO":
       return {
         label: can.managePhotos ? "Add a photo" : "View photos",

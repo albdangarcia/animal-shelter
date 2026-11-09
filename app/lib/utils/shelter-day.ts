@@ -13,6 +13,7 @@ import { format, parseISO } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const MS_PER_HOUR = 60 * 60 * 1000;
 
 /**
  * A calendar day, as `yyyy-MM-dd`.
@@ -71,6 +72,97 @@ export const shelterToday = (
 ): CalendarDay =>
   shelterDayKey(now, timezone);
 
+const wallClockFormats = new Map<string, Intl.DateTimeFormat>();
+
+/**
+ * What the clock in `timezone` reads at `at`, part by part, with the year
+ * counted from 1 BC as year 0. Read through `Intl` with the era: the date-fns
+ * formatters have no year zero, so the day before 0001-01-01 would read as
+ * year 1.
+ */
+const wallClockParts = (at: number, timezone: string) => {
+  let wallClock = wallClockFormats.get(timezone);
+  if (!wallClock) {
+    wallClock = new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      hourCycle: "h23",
+      era: "short",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      hour: "numeric",
+      minute: "numeric",
+      second: "numeric",
+      fractionalSecondDigits: 3,
+    });
+    wallClockFormats.set(timezone, wallClock);
+  }
+  const part = Object.fromEntries(
+    wallClock.formatToParts(at).map(({ type, value }) => [type, value]),
+  );
+  return {
+    year: part.era === "BC" ? 1 - Number(part.year) : Number(part.year),
+    month: Number(part.month),
+    day: Number(part.day),
+    hour: Number(part.hour),
+    minute: Number(part.minute),
+    second: Number(part.second),
+    millisecond: Number(part.fractionalSecond),
+  };
+};
+
+/** What the clock in `timezone` reads at `at`, as the UTC instant that reads
+ * the same. */
+const wallClockAsUtc = (at: number, timezone: string): number => {
+  const part = wallClockParts(at, timezone);
+  // `setUTCFullYear`, not `Date.UTC`, which reads years 0 to 99 as 1900s.
+  const utc = new Date(0);
+  utc.setUTCFullYear(part.year, part.month - 1, part.day);
+  utc.setUTCHours(part.hour, part.minute, part.second, part.millisecond);
+  return utc.getTime();
+};
+
+/**
+ * The shelter's wall clock: the day it is and the time it reads, as
+ * `"HH:mm"`. A dose slot's window ends at a time on that clock, so whether a
+ * slot has ended is a comparison of a day and a time as strings, and no
+ * instant is built from a slot: a skipped or repeated hour can't misplace
+ * one. During a repeated hour the clock reads the same time twice, as a
+ * clock on the wall does.
+ */
+export interface ShelterClock {
+  day: CalendarDay;
+  time: string;
+}
+
+const pad = (value: number, width = 2) => String(value).padStart(width, "0");
+
+/** What the shelter's clock reads at `now`. Its day is `shelterToday`'s. */
+export const shelterClock = (now: Date, timezone: string): ShelterClock => {
+  const part = wallClockParts(now.getTime(), timezone);
+  return {
+    day: `${pad(part.year, 4)}-${pad(part.month)}-${pad(part.day)}` as CalendarDay,
+    time: `${pad(part.hour)}:${pad(part.minute)}`,
+  };
+};
+
+/**
+ * One reading of the shelter's time: the instant, today, and the clock, all
+ * from `now`, so today is always the clock's day. Code that needs more than
+ * one of them takes them from one reading: two reads either side of midnight
+ * would disagree.
+ */
+export interface ShelterNow {
+  now: Date;
+  today: CalendarDay;
+  clock: ShelterClock;
+}
+
+export const shelterNow = (now: Date, timezone: string): ShelterNow => {
+  const clock = shelterClock(now, timezone);
+  return { now, today: clock.day, clock };
+};
+
 /**
  * The instant a day begins in the shelter's timezone.
  *
@@ -78,9 +170,97 @@ export const shelterToday = (
  * compared against real timestamps. A day is the wider truth, so going this
  * way invents a time of day that was never recorded — do it only where an
  * instant is genuinely required, and say why at the call site.
+ *
+ * Usually that is 00:00 on the day. Where the clock changed near midnight it
+ * isn't: a day whose 00:00 was skipped (Santiago, Havana and Beirut spring
+ * forward at midnight) begins when the jump lands; a day whose 00:00 came
+ * twice begins at the first; old offsets changed by seconds. A date skipped
+ * whole reads as the start of the next day that happened.
  */
-export const startOfShelterDay = (day: CalendarDay, timezone: string): Date =>
-  fromZonedTime(`${day} 00:00:00`, timezone);
+export const startOfShelterDay = (day: CalendarDay, timezone: string): Date => {
+  // How far the clock is from UTC at an instant, read off the clock itself.
+  const offsetAt = (at: number) => wallClockAsUtc(at, timezone) - at;
+  const midnightUtc = Date.parse(`${day}T00:00:00Z`);
+  const midnight = fromZonedTime(`${day} 00:00:00`, timezone).getTime();
+  // The usual case: it reads exactly 00:00 on the day, and the clock didn't
+  // change in the day before it, so no earlier instant was on the day.
+  const offset = offsetAt(midnight);
+  if (midnight + offset === midnightUtc && offsetAt(midnight - MS_PER_DAY) === offset) {
+    return new Date(midnight);
+  }
+  // Otherwise find where the clock changed within a day either side of
+  // midnight (no clock is a day from UTC). Between two changes the offset
+  // holds, so the clock reaches the day at the later of the stretch's start
+  // and the instant its offset puts at 00:00; the first stretch where that
+  // falls inside it is where the day begins.
+  const from = midnightUtc - MS_PER_DAY;
+  const to = midnightUtc + MS_PER_DAY;
+  const bounds = [from];
+  for (let hour = from; hour < to; hour += MS_PER_HOUR) {
+    // A clock changes at most once an hour, so a change in this hour is the
+    // first instant whose offset differs from its start's.
+    let before = hour;
+    let changed = hour + MS_PER_HOUR;
+    if (offsetAt(before) === offsetAt(changed)) continue;
+    while (changed - before > 1) {
+      const middle = before + Math.floor((changed - before) / 2);
+      if (offsetAt(middle) === offsetAt(hour)) before = middle;
+      else changed = middle;
+    }
+    bounds.push(changed);
+  }
+  bounds.push(to);
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const begins = Math.max(bounds[i], midnightUtc - offsetAt(bounds[i]));
+    if (begins < bounds[i + 1]) return new Date(begins);
+  }
+  // Unreachable: by `to` every clock reads the day or later.
+  return new Date(to);
+};
+
+/**
+ * The instant the shelter's clock reads `time` (`"HH:mm"`) on `day`: when a
+ * dose was given, entered as a day and a time of day. A time the clock
+ * skipped (the hour it springs forward over) reads as the moment the jump
+ * lands; a time it read twice (the hour it falls back over), as the first.
+ */
+export const shelterInstant = (day: CalendarDay, time: string, timezone: string): Date => {
+  // The wall clock as if it were UTC, and how far the clock is from UTC at an
+  // instant, read off the clock itself.
+  const target = Date.parse(`${day}T${time}:00Z`);
+  const offsetAt = (at: number) => wallClockAsUtc(at, timezone) - at;
+  // The offsets in force within a day either side: a clock changes far less
+  // often than that, so these are the one or two it could read the time at.
+  const candidates = [
+    ...new Set([
+      offsetAt(target - MS_PER_DAY),
+      offsetAt(target),
+      offsetAt(target + MS_PER_DAY),
+    ]),
+  ]
+    .map((offset) => target - offset)
+    .sort((a, b) => a - b);
+  const reading = candidates.find((at) => wallClockAsUtc(at, timezone) === target);
+  if (reading !== undefined) return new Date(reading);
+  // Skipped: before the jump the clock is short of the time, after it past
+  // it. The jump is the first instant at the later offset.
+  let before = candidates[0];
+  let after = candidates[candidates.length - 1];
+  const offsetBefore = offsetAt(before);
+  while (after - before > 1) {
+    const middle = before + Math.floor((after - before) / 2);
+    if (offsetAt(middle) === offsetBefore) before = middle;
+    else after = middle;
+  }
+  return new Date(after);
+};
+
+/** A time of day, `"HH:mm"`, as it reads on a page: "8:00 PM", "12:30 AM". */
+export const formatTimeOfDay = (time: string): string => {
+  const [hour, minute] = time.split(":").map(Number);
+  const half = hour < 12 ? "AM" : "PM";
+  return `${hour % 12 === 0 ? 12 : hour % 12}:${pad(minute)} ${half}`;
+};
 
 /** A day as it reads on a page, e.g. "Sep 1, 2026". */
 export const formatShelterDay = (day: CalendarDay): string =>

@@ -76,11 +76,60 @@ test("INTAKE_READ and OUTCOMES_READ start at VOLUNTEER, their MANAGE at STAFF", 
   }
 });
 
+// Volunteers read the medical record, as they read the rest of the animal's
+// history; recording or correcting care is staff work.
+test("MEDICAL_READ starts at VOLUNTEER", () => {
+  assert.equal(can(Role.USER, AppPermissions.MEDICAL_READ), false);
+  assert.equal(can(Role.VOLUNTEER, AppPermissions.MEDICAL_READ), true);
+});
+
+test("MEDICAL_MANAGE starts at STAFF", () => {
+  assert.equal(can(Role.VOLUNTEER, AppPermissions.MEDICAL_MANAGE), false);
+  assert.equal(can(Role.STAFF, AppPermissions.MEDICAL_MANAGE), true);
+});
+
+// Giving care that is already scheduled is still giving care, not an
+// observation, so it isn't part of the volunteer exception below.
+test("MEDICAL_ADMINISTER starts at STAFF", () => {
+  assert.equal(can(Role.VOLUNTEER, AppPermissions.MEDICAL_ADMINISTER), false);
+  assert.equal(can(Role.STAFF, AppPermissions.MEDICAL_ADMINISTER), true);
+});
+
+// Screens gated on MEDICAL_MANAGE also offer recording scheduled care, which
+// is gated on MEDICAL_ADMINISTER, so a manager must always hold both.
+test("every role holding MEDICAL_MANAGE also holds MEDICAL_ADMINISTER", () => {
+  for (const role of Object.values(Role)) {
+    if (can(role, AppPermissions.MEDICAL_MANAGE)) {
+      assert.equal(can(role, AppPermissions.MEDICAL_ADMINISTER), true, role);
+    }
+  }
+});
+
+// The catalog is shelter-wide configuration: retiring an item hides it from
+// every new entry, so recording care is deliberately not enough for it.
+test("MEDICAL_SETTINGS_MANAGE stops at ADMIN", () => {
+  assert.equal(can(Role.STAFF, AppPermissions.MEDICAL_SETTINGS_MANAGE), false);
+  assert.equal(can(Role.ADMIN, AppPermissions.MEDICAL_SETTINGS_MANAGE), true);
+});
+
+// A foster of any role cares for the animal in their own placement, so every
+// role holds it; the placement, checked on every use, is what limits it. It
+// gives no staff-wide medical permission.
+test("MY_FOSTER_ANIMALS_CARE is held by every role", () => {
+  for (const role of Object.values(Role)) {
+    assert.equal(can(role, AppPermissions.MY_FOSTER_ANIMALS_CARE), true, role);
+  }
+  assert.equal(can(Role.USER, AppPermissions.MEDICAL_READ), false);
+  assert.equal(can(Role.USER, AppPermissions.MEDICAL_ADMINISTER), false);
+});
+
 test("the documented volunteer exception: VOLUNTEER holds ANIMAL_VITALS_MANAGE", () => {
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_VITALS_MANAGE), true);
   // ...and it is genuinely an exception: no other MANAGE permission leaks to it.
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_INFO_MANAGE), false);
   assert.equal(can(Role.VOLUNTEER, AppPermissions.ANIMAL_NOTE_MANAGE), false);
+  assert.equal(can(Role.VOLUNTEER, AppPermissions.MEDICAL_MANAGE), false);
+  assert.equal(can(Role.VOLUNTEER, AppPermissions.MEDICAL_ADMINISTER), false);
 });
 
 test("an unknown role string returns false rather than throwing", () => {

@@ -283,7 +283,7 @@ const waitForFormHydration = async (page: Page, submitName: string) => {
 // re-clicking an open one would shut it, so click again only while it is
 // still closed.
 const openSelect = async (page: Page, label: string) => {
-  const options = page.getByRole("option");
+  const options = page.getByRole("listbox").getByRole("option");
   await expect(async () => {
     if (!(await options.first().isVisible())) {
       await page.getByLabel(label, { exact: true }).click();
@@ -390,6 +390,8 @@ test("an outcome recorded while the animal is in foster says so, and ends the pl
   ).toBeVisible();
   await waitForFormHydration(page, "Process Outcome");
   await chooseFromSelect(page, "Outcome Type *", "Deceased");
+  await page.getByLabel("Circumstances").selectOption("FOUND_DEAD");
+  await page.getByLabel("Cause knowledge").selectOption("UNKNOWN");
 
   // Submitted on the day the form opens on, the shelter's today.
   const outcomeDay = await shownDay(page);

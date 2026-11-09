@@ -10,7 +10,7 @@ import { formatDateToLongString } from "@/app/lib/utils/date-utils";
 /**
  * Acting on one of an assessment's suggestions: assign the trait if it isn't
  * on the animal, or move its citation here if it is assigned from anywhere
- * else. Re-derives, inside the transaction, that the assessment still
+ * else, a condition on the problem list included. Re-derives, inside the transaction, that the assessment still
  * proposes the trait — the client's request is only a selection, never
  * trusted past that.
  *
@@ -87,6 +87,8 @@ export async function recordCharacteristicSuggestion(
       assignedById: personId,
       assignedAt: now,
       sourceAssessmentId: assessmentId,
+      // A trait has one source: citing the assessment drops a condition's.
+      sourceConditionId: null,
       removedAt: null,
       removedById: null,
     },

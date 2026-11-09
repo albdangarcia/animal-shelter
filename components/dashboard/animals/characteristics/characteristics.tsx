@@ -53,6 +53,7 @@ import { updateAnimalCharacteristics } from "@/app/lib/actions/animal-characteri
 import { toast } from "sonner";
 import { CATEGORIES } from "@/app/lib/constants/characteristic-categories";
 import { formatDateToLongString } from "@/app/lib/utils/date-utils";
+import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import { FindingsAgainst } from "./findings-against";
 import { useConfirmedOpenChange } from "@/hooks/use-confirmed-open-change";
 
@@ -409,6 +410,26 @@ const AssignmentProvenance = ({
                 !char.assignment.sourceAssessment.stillSupports && (
                   <span className="text-destructive">
                     {" (no longer supports it)"}
+                  </span>
+                )
+              )}
+            </>
+          )}
+          {char.assignment.sourceCondition && (
+            <>
+              {" — from the condition "}
+              <Link
+                href={`/dashboard/animals/${animalId}/medical/conditions`}
+                className="font-medium underline underline-offset-2 hover:text-foreground"
+              >
+                {char.assignment.sourceCondition.name}
+              </Link>
+              {char.assignment.sourceCondition.voidedAt ? (
+                <span className="text-destructive"> (voided)</span>
+              ) : (
+                char.assignment.sourceCondition.resolvedDate && (
+                  <span className="text-destructive">
+                    {` (resolved ${formatShelterDayOrNA(char.assignment.sourceCondition.resolvedDate)})`}
                   </span>
                 )
               )}

@@ -52,14 +52,26 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { DayField } from "@/components/forms/day-field";
-import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import { parseCalendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import {
-  AnimalHealthStatus,
+  EMPTY_RECORD_FACTS,
+  type ProtocolPlanFacts,
+  type ProtocolPlanProtocol,
+} from "@/app/lib/utils/medical-protocol-plan";
+import { ProtocolPreview } from "./protocol-preview";
+import {
   AnimalListingStatus,
   Sex,
+  SurgeryProcedure,
 } from "@/prisma/generated/enums";
 import {
-  animalHealthStatusOptions,
+  PICKABLE_SURGERY_EVIDENCE,
+  SURGERY_EVIDENCE_LABELS,
+  SURGERY_PROCEDURE_LABELS,
+} from "@/app/lib/constants/medical";
+import { normaliseChipNumber } from "@/app/lib/utils/microchip";
+import { proceduresFor } from "@/app/lib/utils/spay-neuter";
+import {
   animalListingStatusOptions,
   animalSexOptions,
 } from "@/app/lib/utils/enum-formatter";
@@ -86,6 +98,8 @@ import { WeightInput } from "@/components/forms/weight-input";
 import { NumberField } from "@/components/forms/number-field";
 import { FieldInfo } from "@/components/forms/field-info";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
+import type { CareEpisodeOfferPrompt } from "@/app/lib/data/care-episode-offer.data";
+import { CareEpisodeOfferDialog } from "./medical/care-episode-offer-dialog";
 
 // Sentinel for the "Unplaced" option — Radix Select forbids empty-string item
 // values, so we map this back to "" (currentUnitId = null) on change.
@@ -97,6 +111,24 @@ const SIZE_NOT_SPECIFIED_VALUE = "__not_specified__";
 
 type AnimalFormValues = CreateAnimalFormInput;
 
+type IntakeProcedure =
+  | typeof SurgeryProcedure.SPAY
+  | typeof SurgeryProcedure.NEUTER;
+
+/** Spay or neuter, as the animal's sex allows: both while it's unknown. */
+const intakeProceduresFor = (sex: Sex): IntakeProcedure[] =>
+  proceduresFor(sex).filter(
+    (procedure): procedure is IntakeProcedure =>
+      procedure === SurgeryProcedure.SPAY ||
+      procedure === SurgeryProcedure.NEUTER,
+  );
+
+/** The one procedure the sex allows, picked for the user; none otherwise. */
+const intakeProcedureFor = (sex: Sex): IntakeProcedure | null => {
+  const procedures = intakeProceduresFor(sex);
+  return procedures.length === 1 ? procedures[0] : null;
+};
+
 interface AnimalFormProps {
   speciesList: SpeciesPayload[];
   unitSystem: WeightUnitSystem;
@@ -105,6 +137,19 @@ interface AnimalFormProps {
   unitOptions: UnitPickerLocation[];
   animal?: AnimalIntakeFormPayload;
   canCreatePerson?: boolean;
+  /**
+   * Whether the viewer may record medical care. Only then does a new intake
+   * offer a microchip number and "already spayed or neutered", which go on
+   * the medical record.
+   */
+  canManageMedical?: boolean;
+  /**
+   * The live medical protocols, for a viewer who may manage medical care:
+   * the create form shows the one that fits the animal and what it will
+   * schedule, and lets them leave it out. Anyone else's intake applies it
+   * with no choice.
+   */
+  protocols?: ProtocolPlanProtocol[];
   /**
    * Today, on the shelter's calendar, resolved on the server. It is the day an
    * intake recorded now is filed under — a `new Date()` here would be
@@ -122,6 +167,8 @@ const AnimalForm = ({
   unitOptions,
   animal,
   canCreatePerson,
+  canManageMedical = false,
+  protocols = [],
   today,
 }: AnimalFormProps) => {
   const router = useRouter();
@@ -149,6 +196,12 @@ const AnimalForm = ({
       : defaultStatusOptions;
 
   const [isPending, startSubmitTransition] = useTransition();
+  // A changed unit into or out of a medical one asks about the animal's care
+  // episode before the form leaves for the animal's page.
+  const [careEpisodeOffer, setCareEpisodeOffer] = useState<{
+    offer: CareEpisodeOfferPrompt;
+    redirectTo: string | undefined;
+  } | null>(null);
   const [currentSpeciesId, setCurrentSpeciesId] = useState(
     animal?.speciesId || "",
   );
@@ -189,9 +242,6 @@ const AnimalForm = ({
           size: animal.size ?? "",
           estimatedBirthDate: animal.birthDate,
           heightCm: animal.heightCm ?? null,
-          healthStatus: animal.healthStatus ?? AnimalHealthStatus.HEALTHY,
-          microchipNumber: animal.microchipNumber || "",
-          isSpayedNeutered: animal.isSpayedNeutered,
           listingStatus: animal.listingStatus,
           description: animal.description || "",
           currentUnitId: animal.currentUnitId || "",
@@ -211,12 +261,15 @@ const AnimalForm = ({
           additionalColors: [],
           weightGrams: null,
           heightCm: null,
-          microchipNumber: "",
-          isSpayedNeutered: false,
+          // Left out for someone who can't record medical care, so the form
+          // sends nothing the action would refuse.
+          intakeMedical: canManageMedical
+            ? { chipNumber: "", altered: null }
+            : undefined,
           listingStatus: AnimalListingStatus.DRAFT,
+          applyProtocol: true,
           currentUnitId: "",
           notes: "",
-          healthStatus: AnimalHealthStatus.HEALTHY,
           sourcePartnerId: "",
           foundAddress: "",
           foundCity: "",
@@ -233,6 +286,11 @@ const AnimalForm = ({
 
       if (result.ok) {
         toast.success(result.message);
+        const offer = result.data?.careEpisodeOffer;
+        if (offer) {
+          setCareEpisodeOffer({ offer, redirectTo: result.redirectTo });
+          return;
+        }
         if (result.redirectTo) {
           router.push(result.redirectTo);
         }
@@ -270,6 +328,39 @@ const AnimalForm = ({
   // called inside render, and the compiler bails on the whole file if any
   // watch() call is left in place.
   const primaryColorId = useWatch({ control: form.control, name: "primaryColor" });
+  const sex = useWatch({ control: form.control, name: "sex" });
+  const intakeAltered = useWatch({
+    control: form.control,
+    name: "intakeMedical.altered",
+  });
+  const speciesId = useWatch({ control: form.control, name: "species" });
+  const birthDate = parseCalendarDay(
+    useWatch({ control: form.control, name: "estimatedBirthDate" }),
+  );
+  const intakeDate = parseCalendarDay(
+    useWatch({ control: form.control, name: "intakeDate" }),
+  );
+  const intakeChipNumber = useWatch({
+    control: form.control,
+    name: "intakeMedical.chipNumber",
+  });
+
+  // What the protocol's plan reads about a new animal: the form's species,
+  // sex and days, and the chip and spay or neuter it records first. It has
+  // no other record yet.
+  const protocolFacts: ProtocolPlanFacts | null =
+    speciesId && birthDate && intakeDate
+      ? {
+          speciesId,
+          sex,
+          birthDate,
+          intakeDate,
+          altered: !!intakeAltered,
+          exempt: false,
+          chipped: normaliseChipNumber(intakeChipNumber ?? "") !== "",
+          openScheduled: EMPTY_RECORD_FACTS.openScheduled,
+        }
+      : null;
 
   // Advisory occupancy hint, e.g. "A-3 · 2/2" or "A-3 · 2/2 (full)". Never blocks.
   const formatUnitOption = (unit: UnitPickerLocation["units"][number]) => {
@@ -506,7 +597,24 @@ const AnimalForm = ({
                       <FormLabel required>Sex</FormLabel>
                       <Select
                         name={field.name}
-                        onValueChange={field.onChange}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          // A spay picked for a female doesn't suit a male.
+                          const altered = form.getValues(
+                            "intakeMedical.altered",
+                          );
+                          if (
+                            altered?.procedure &&
+                            !intakeProceduresFor(value as Sex).includes(
+                              altered.procedure,
+                            )
+                          ) {
+                            form.setValue(
+                              "intakeMedical.altered.procedure",
+                              intakeProcedureFor(value as Sex),
+                            );
+                          }
+                        }}
                         value={field.value}
                       >
                         <FormControl>
@@ -590,34 +698,6 @@ const AnimalForm = ({
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="healthStatus"
-                  render={({ field }) => (
-                    <FormItem className="col-span-2">
-                      <FormLabel required>Health Status</FormLabel>
-                      <Select
-                        name={field.name}
-                        onValueChange={field.onChange}
-                        value={field.value}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select health status" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {animalHealthStatusOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>
-                              {option.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
                 {isEditMode ? (
                   // Weight becomes read-only on edit: it's a dated observation
                   // now, not a plain field. Editing it here (with no "when was
@@ -638,7 +718,7 @@ const AnimalForm = ({
                       </p>
                     )}
                     <Link
-                      href={`/dashboard/animals/${animal.id}/vitals`}
+                      href={`/dashboard/animals/${animal.id}/medical/vitals`}
                       className="text-xs text-primary underline underline-offset-2 mt-1 inline-block"
                     >
                       View vitals history
@@ -673,37 +753,133 @@ const AnimalForm = ({
                   decimal
                   placeholder="e.g., 55"
                 />
-                <FormField
-                  control={form.control}
-                  name="microchipNumber"
-                  render={({ field }) => (
-                    <FormItem className="col-span-2">
-                      <FormLabel>Microchip Number</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., 900123000456789" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="isSpayedNeutered"
-                  render={({ field }) => (
-                    <FormItem className="col-span-2">
-                      <FormLabel>Spayed / Neutered</FormLabel>
-                      <div className="flex h-9 items-center">
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
-                        </FormControl>
-                      </div>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {/* Care the animal arrived with goes on the medical record,
+                    recorded as given before intake. Later, both are recorded
+                    and corrected on the Medical tab. */}
+                {!isEditMode && canManageMedical && (
+                  <>
+                    <FormField
+                      control={form.control}
+                      name="intakeMedical.chipNumber"
+                      render={({ field }) => (
+                        <FormItem className="col-span-2">
+                          <FormLabel>Microchip number</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="e.g., 900123000456789"
+                              autoComplete="off"
+                              className="font-mono"
+                              {...field}
+                              value={field.value ?? ""}
+                              // Shown as it will be stored, without spaces
+                              // or hyphens.
+                              onBlur={() => {
+                                field.onChange(
+                                  normaliseChipNumber(field.value ?? ""),
+                                );
+                                field.onBlur();
+                              }}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="intakeMedical.altered"
+                      render={({ field }) => (
+                        <FormItem className="col-span-2">
+                          <FormLabel>Already spayed or neutered</FormLabel>
+                          <div className="flex h-9 items-center">
+                            <FormControl>
+                              <Switch
+                                checked={!!field.value}
+                                onCheckedChange={(checked) =>
+                                  field.onChange(
+                                    checked
+                                      ? {
+                                          procedure: intakeProcedureFor(sex),
+                                          evidence: null,
+                                        }
+                                      : null,
+                                  )
+                                }
+                              />
+                            </FormControl>
+                          </div>
+                        </FormItem>
+                      )}
+                    />
+                    {intakeAltered && (
+                      <>
+                        <FormField
+                          control={form.control}
+                          name="intakeMedical.altered.procedure"
+                          render={({ field }) => (
+                            <FormItem className="col-span-2">
+                              <FormLabel required>Procedure</FormLabel>
+                              <Select
+                                // Its choices follow the sex. Mounted afresh
+                                // when they change, so the procedure the sex
+                                // change picked isn't cleared for missing
+                                // from the choices it replaced.
+                                key={sex}
+                                name={field.name}
+                                onValueChange={field.onChange}
+                                value={field.value ?? ""}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Spay or neuter" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {intakeProceduresFor(sex).map((procedure) => (
+                                    <SelectItem key={procedure} value={procedure}>
+                                      {SURGERY_PROCEDURE_LABELS[procedure]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={form.control}
+                          name="intakeMedical.altered.evidence"
+                          render={({ field }) => (
+                            <FormItem className="col-span-2">
+                              <FormLabel required>Evidence</FormLabel>
+                              <Select
+                                name={field.name}
+                                onValueChange={field.onChange}
+                                value={field.value ?? ""}
+                              >
+                                <FormControl>
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="What shows it was done" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  {PICKABLE_SURGERY_EVIDENCE.map(
+                                    (evidence) => (
+                                      <SelectItem key={evidence} value={evidence}>
+                                        {SURGERY_EVIDENCE_LABELS[evidence]}
+                                      </SelectItem>
+                                    ),
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </>
+                    )}
+                  </>
+                )}
                 <FormField
                   control={form.control}
                   name="listingStatus"
@@ -757,8 +933,10 @@ const AnimalForm = ({
                 />
                 {/* Kennel placement (Location -> Unit cascade). Optional:
                     "Unplaced" leaves currentUnitId null. Location is a UI-only
-                    helper; only the chosen unit is persisted. */}
-                <FormItem className="col-span-3">
+                    helper; only the chosen unit is persisted. Location and
+                    Unit share a row of their own, whatever fields come
+                    before them. */}
+                <FormItem className="col-span-3 @[662px]:col-start-1">
                   <div className="flex items-center gap-1.5">
                     <Label htmlFor="animal-location">Location</Label>
                     <FieldInfo label="About location">
@@ -832,6 +1010,18 @@ const AnimalForm = ({
                     </FormItem>
                   )}
                 />
+                {isEditMode && (
+                  <p className="col-span-full text-sm text-muted-foreground">
+                    Microchips and spay/neuter status are kept on the medical
+                    record, where each correction keeps its history.{" "}
+                    <Link
+                      href={`/dashboard/animals/${animal.id}/medical`}
+                      className="text-primary underline underline-offset-2"
+                    >
+                      Open the Medical tab
+                    </Link>
+                  </p>
+                )}
                 <FormField
                   control={form.control}
                   name="description"
@@ -860,6 +1050,24 @@ const AnimalForm = ({
                 today={today}
               />
             )}
+
+            {/* Shown to someone who may manage medical care, who alone may
+                leave the protocol out. */}
+            {!isEditMode && canManageMedical && (
+              <FormField
+                control={form.control}
+                name="applyProtocol"
+                render={({ field }) => (
+                  <ProtocolPreview
+                    protocols={protocols}
+                    facts={protocolFacts}
+                    today={today}
+                    checked={field.value ?? true}
+                    onCheckedChange={field.onChange}
+                  />
+                )}
+              />
+            )}
           </CardContent>
 
           <CardFooter className="flex justify-end space-x-4">
@@ -884,6 +1092,14 @@ const AnimalForm = ({
           </CardFooter>
         </Card>
       </form>
+      <CareEpisodeOfferDialog
+        offer={careEpisodeOffer?.offer ?? null}
+        onDone={() => {
+          const redirectTo = careEpisodeOffer?.redirectTo;
+          setCareEpisodeOffer(null);
+          if (redirectTo) router.push(redirectTo);
+        }}
+      />
     </Form>
   );
 };

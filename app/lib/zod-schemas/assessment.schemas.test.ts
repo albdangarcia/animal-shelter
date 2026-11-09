@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { AssessmentSignal, FieldType } from "@/prisma/generated/enums";
 import {
+  ASSESSMENT_TEMPLATES,
   getActiveTemplate,
   type AssessmentTemplateDef,
 } from "../assessments/templates";
@@ -65,14 +66,19 @@ test("the wrong template key is rejected", () => {
   assert.equal(schema.safeParse(input).success, false);
 });
 
+// Retired, so read by key and version: assessments recorded against it are
+// still read and shown with this definition.
+const intakeMedical = () =>
+  ASSESSMENT_TEMPLATES.find((t) => t.key === "INTAKE_MEDICAL" && t.version === 1)!;
+
 test("INTAKE_MEDICAL no longer carries weight or body condition", () => {
-  const medical = getActiveTemplate("INTAKE_MEDICAL")!;
+  const medical = intakeMedical();
   const keys = medical.fields.map((f) => f.key);
   assert.deepEqual(keys, ["dental", "parasites", "heart_lungs", "notes"]);
 });
 
 test("INTAKE_MEDICAL requires the core exam questions (dental + heart & lungs)", () => {
-  const medical = getActiveTemplate("INTAKE_MEDICAL")!;
+  const medical = intakeMedical();
   const required = medical.fields
     .filter((f) => f.isRequired)
     .map((f) => f.key)
@@ -81,7 +87,7 @@ test("INTAKE_MEDICAL requires the core exam questions (dental + heart & lungs)",
 });
 
 test("a fully blank INTAKE_MEDICAL is rejected", () => {
-  const medical = getActiveTemplate("INTAKE_MEDICAL")!;
+  const medical = intakeMedical();
   const result = buildAssessmentSchema(medical).safeParse({
     templateKey: "INTAKE_MEDICAL",
     observedAt: new Date(Date.now() - 60_000),

@@ -1,6 +1,13 @@
 "use client";
 
-import { useId, useOptimistic, useState, useTransition } from "react";
+import {
+  useEffect,
+  useId,
+  useOptimistic,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import Link from "next/link";
 import {
   DndContext,
@@ -47,6 +54,8 @@ import type {
   ShelterBoardData,
 } from "@/app/lib/data/locations/shelter-board.data";
 import { moveAnimalToUnit } from "@/app/lib/actions/animal-placement.actions";
+import type { CareEpisodeOfferPrompt } from "@/app/lib/data/care-episode-offer.data";
+import { CareEpisodeOfferDialog } from "@/components/dashboard/animals/medical/care-episode-offer-dialog";
 import { AnimalChip } from "./animal-chip";
 import {
   DraggableAnimalChip,
@@ -57,6 +66,10 @@ import { boardKeyboardCoordinates } from "./board-keyboard-coordinates";
 
 // Droppable id for the Unplaced tray; every other droppable id is a unit id.
 const UNPLACED_ID = "unplaced";
+
+// The board itself, where focus goes when nothing nearer to an animal can
+// take it.
+const BOARD_ID = "shelter-board";
 
 // Capacity states
 type CapacityState = "empty" | "hasSpace" | "atCapacity" | "overCapacity";
@@ -249,8 +262,12 @@ function UnitTile({
       // test) can tell one unit's tile from the next.
       role="group"
       aria-label={`${unit.name} in ${locationName}`}
+      // Focusable from script only: when a dialog about an animal closes and
+      // its chip is hidden in a collapsed tile, focus comes to the tile.
+      tabIndex={-1}
+      data-unit-id={unit.id}
       className={cn(
-        "flex flex-col gap-2 rounded-lg border p-3",
+        "flex flex-col gap-2 rounded-lg border p-3 outline-none focus-visible:ring-2 focus-visible:ring-ring",
         capacityTileClass[state],
         isIncoming &&
           (wouldOverflow
@@ -440,8 +457,86 @@ export const ShelterBoard = ({ data, canReadFosters }: Props) => {
   const [board, applyMove] = useOptimistic(data, applyMoveToBoard);
   const [isPending, startTransition] = useTransition();
   const [activeAnimal, setActiveAnimal] = useState<BoardAnimal | null>(null);
+  // Asked after a move into or out of a medical unit, one at a time, in the
+  // order the moves came back: a second drop made before the first offer is
+  // answered waits its turn rather than replacing it.
+  const [careEpisodeOffers, setCareEpisodeOffers] = useState<
+    CareEpisodeOfferPrompt[]
+  >([]);
 
   const { locations, unplaced, fostered, totals } = board;
+
+  // Where focus goes for an animal once a dialog about it closes: its chip,
+  // wherever it now is; its unit's tile when the tile is collapsed and hides
+  // the chip; the board when the animal is no longer on it.
+  const focusTargetFor = (animalId: string) => {
+    const chip = document.querySelector<HTMLElement>(
+      `[data-animal-id="${CSS.escape(animalId)}"]`,
+    );
+    if (chip) return chip;
+    const unit = locations
+      .flatMap((location) => location.units)
+      .find((u) => u.animals.some((a) => a.id === animalId));
+    const tile =
+      unit &&
+      document.querySelector<HTMLElement>(
+        `[data-unit-id="${CSS.escape(unit.id)}"]`,
+      );
+    return tile ?? document.getElementById(BOARD_ID);
+  };
+
+  // Focus given back while other moves are still pending, and the animal it
+  // was for. Their responses re-render the board and can take that element
+  // away (a chip tucked into a collapsed tile, or off the board), which would
+  // drop focus to the page; each render puts it back on the animal's current
+  // target instead. Let go once nothing is pending, or as soon as the person
+  // moves focus (anywhere, out of the page included) or presses the pointer.
+  // Only a render ever puts focus back, and only while the page has focus.
+  const focusAnchor = useRef<{ animalId: string; element: HTMLElement } | null>(
+    null,
+  );
+  useEffect(() => {
+    const anchor = focusAnchor.current;
+    if (!anchor) return;
+    const active = document.activeElement;
+    if (!document.hasFocus()) {
+      focusAnchor.current = null;
+      return;
+    }
+    if (!active || active === document.body) {
+      const target = focusTargetFor(anchor.animalId);
+      target?.focus();
+      if (target) anchor.element = target;
+    } else if (active !== anchor.element) {
+      focusAnchor.current = null;
+      return;
+    }
+    if (!isPending) focusAnchor.current = null;
+  });
+  useEffect(() => {
+    const letGo = () => {
+      focusAnchor.current = null;
+    };
+    // Focus leaving the anchored element while it is still on the page was
+    // moved by the person (Tab, out to the browser, another window). An
+    // element a render removed is no longer connected, and keeps the anchor.
+    // Read once the focus change has settled.
+    const onFocusOut = (event: FocusEvent) => {
+      const anchor = focusAnchor.current;
+      if (!anchor || event.target !== anchor.element) return;
+      setTimeout(() => {
+        if (focusAnchor.current === anchor && anchor.element.isConnected) {
+          focusAnchor.current = null;
+        }
+      });
+    };
+    document.addEventListener("pointerdown", letGo);
+    document.addEventListener("focusout", onFocusOut);
+    return () => {
+      document.removeEventListener("pointerdown", letGo);
+      document.removeEventListener("focusout", onFocusOut);
+    };
+  }, []);
 
   const sensors = useSensors(
     // Small activation distance so a plain click on a chip isn't a drag.
@@ -511,6 +606,8 @@ export const ShelterBoard = ({ data, canReadFosters }: Props) => {
             `${result.unitLabel} is now over capacity — ${result.newCount}/${result.capacity}`,
           );
         }
+        const offer = result.careEpisodeOffer;
+        if (offer) setCareEpisodeOffers((offers) => [...offers, offer]);
       } catch (error) {
         console.error("Failed to move animal:", error);
         toast.error(`Failed to move ${name}.`);
@@ -528,7 +625,13 @@ export const ShelterBoard = ({ data, canReadFosters }: Props) => {
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="@container/main flex flex-col gap-4 md:gap-6">
+      <div
+        id={BOARD_ID}
+        role="region"
+        aria-label="Housing board"
+        tabIndex={-1}
+        className="@container/main flex flex-col gap-4 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background md:gap-6"
+      >
         {/* Summary strip */}
         <div className="grid grid-cols-2 gap-4 @xl/main:grid-cols-4">
           <MetricCard
@@ -609,6 +712,19 @@ export const ShelterBoard = ({ data, canReadFosters }: Props) => {
           />
         ) : null}
       </DragOverlay>
+      <CareEpisodeOfferDialog
+        offer={careEpisodeOffers[0] ?? null}
+        onDone={() => setCareEpisodeOffers((offers) => offers.slice(1))}
+        returnFocusTo={(offer) => {
+          const target = focusTargetFor(offer.animalId);
+          // A move still pending can re-render the board under it.
+          focusAnchor.current =
+            target && isPending
+              ? { animalId: offer.animalId, element: target }
+              : null;
+          return target;
+        }}
+      />
     </DndContext>
   );
 };

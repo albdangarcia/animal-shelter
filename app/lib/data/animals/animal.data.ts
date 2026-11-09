@@ -27,6 +27,10 @@ import {
   DERIVATION_APPLICATION_SELECT,
   effectiveApplicationStatuses,
 } from "../application-status.data";
+import { getShelterToday } from "../shelter-settings.data";
+import { findMedicalStatus } from "./medical-status";
+import { findCareStatus } from "./care-status";
+import type { CareStatus } from "@/app/lib/utils/care-status";
 
 // data for the animals table in the dashboard
 const _fetchAnimals = async (
@@ -126,6 +130,12 @@ const _fetchAnimals = async (
 // gate each one's dedicated tab, not the overview. The weight/vitals-trend field
 // follows that same established pattern rather than requiring ANIMAL_VITALS_READ
 // — keep it consistent with the fields beside it if this ever gets re-examined.
+// So do the spay/neuter status and the chip numbers, read from the medical
+// record rather than behind MEDICAL_READ: they identify the animal, and were
+// fields on its profile before the record held them. The care status (an open
+// episode, a recent surgery, care awaited, allergies) is read here too, but
+// the card shows it only to a viewer holding MEDICAL_READ: it says what the
+// animal is being treated for.
 const _fetchSectionCardsAnimalData = async (
   id: string,
 ): Promise<AnimalSectionCardPayload | null> => {
@@ -146,10 +156,7 @@ const _fetchSectionCardsAnimalData = async (
         birthDate: true,
         sex: true,
         size: true,
-        microchipNumber: true,
         listingStatus: true,
-        isSpayedNeutered: true,
-        healthStatus: true,
         animalImages: {
           select: {
             url: true,
@@ -249,15 +256,20 @@ const _fetchSectionCardsAnimalData = async (
       return null;
     }
 
-    const statuses = await effectiveApplicationStatuses(
-      animal.adoptionApplications,
-    );
+    const today = await getShelterToday();
+    const [statuses, medicalStatus, careStatus] = await Promise.all([
+      effectiveApplicationStatuses(animal.adoptionApplications),
+      findMedicalStatus(prisma, animal.id, today),
+      findCareStatus(prisma, [animal.id], today),
+    ]);
     return {
       ...animal,
       adoptionApplications: animal.adoptionApplications.map((application) => ({
         id: application.id,
         status: statuses.get(application.id)!,
       })),
+      medicalStatus,
+      careStatus: careStatus.get(animal.id)!,
     };
   } catch (error) {
     console.error("Error fetching animal by ID.", error);
@@ -296,9 +308,6 @@ const _fetchAnimalById = async (
         heightCm: true,
         description: true,
         listingStatus: true,
-        microchipNumber: true,
-        isSpayedNeutered: true,
-        healthStatus: true,
         speciesId: true,
         primaryColorId: true,
         currentUnitId: true,
@@ -621,7 +630,6 @@ const aiAnimalSummarySelect = {
   sex: true,
   birthDate: true,
   size: true,
-  healthStatus: true,
   listingStatus: true,
   species: { select: { name: true } },
   breeds: { where: { deletedAt: null }, select: { name: true } },
@@ -671,7 +679,8 @@ export type AiAnimalSummaryRow = Prisma.AnimalGetPayload<{
 
 /**
  * Single-animal summary for the assistant: identity, current housing/foster
- * state, health, and open tasks. Returns `null` for an unknown or malformed
+ * state, and open tasks (its care is read by `_fetchAnimalCareStatus`, for a
+ * viewer who can see the medical record). Returns `null` for an unknown or malformed
  * id — the tool turns that into a structured failure the model can explain.
  * Deliberately NOT `_fetchSectionCardsAnimalData`: that surfaces
  * microchip number, foster contact, and application statuses under
@@ -691,6 +700,27 @@ export const _fetchAnimalSummary = async (
   } catch (error) {
     console.error("Error fetching animal summary for the AI assistant.", error);
     throw new Error("Error fetching animal summary.");
+  }
+};
+
+/**
+ * One animal's care status on the shelter's today, for the assistant's
+ * summary. Exported unwrapped, as `_fetchAnimalSummary` is: the tool checks
+ * `MEDICAL_READ` itself and leaves the care out for a viewer without it.
+ * Null for an unknown or malformed id.
+ */
+export const _fetchAnimalCareStatus = async (
+  animalId: string,
+): Promise<CareStatus | null> => {
+  const parsedId = cuidSchema.safeParse(animalId);
+  if (!parsedId.success) return null;
+
+  try {
+    const today = await getShelterToday();
+    return (await findCareStatus(prisma, [parsedId.data], today)).get(parsedId.data) ?? null;
+  } catch (error) {
+    console.error("Error fetching the care status for the AI assistant.", error);
+    throw new Error("Error fetching the care status.");
   }
 };
 

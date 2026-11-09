@@ -3,6 +3,8 @@ import type {
   EffectiveApplicationStatus,
   WithEffectiveStatus,
 } from "@/app/lib/utils/derive-application-status";
+import type { MedicalStatus } from "@/app/lib/data/animals/medical-status";
+import type { CareStatus } from "@/app/lib/utils/care-status";
 
 export type SearchParamsType = Promise<{ [key: string]: string | undefined }>;
 export type IDParamType = Promise<{ id: string }>;
@@ -50,10 +52,7 @@ export type AnimalSectionCardPayload = Omit<
       birthDate: true;
       sex: true;
       size: true;
-      microchipNumber: true;
       listingStatus: true;
-      isSpayedNeutered: true;
-      healthStatus: true;
       animalImages: {
         select: {
           url: true;
@@ -130,6 +129,13 @@ export type AnimalSectionCardPayload = Omit<
   // Each application's effective status, derived from the animal's outcomes,
   // and its ID so the profile can open the matching adoption outcome form.
   adoptionApplications: { id: string; status: EffectiveApplicationStatus }[];
+  // Spay/neuter status and the chips it carries, worked out from the medical
+  // record on the shelter's today.
+  medicalStatus: MedicalStatus;
+  // The care the animal is under, read from the medical record on the
+  // shelter's today: its open episode, a recent surgery, the exam or surgery
+  // it awaits, and its allergies.
+  careStatus: CareStatus;
 };
 
 export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{
@@ -143,9 +149,6 @@ export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{
     heightCm: true;
     description: true;
     listingStatus: true;
-    microchipNumber: true;
-    isSpayedNeutered: true;
-    healthStatus: true;
     speciesId: true;
     primaryColorId: true;
     currentUnitId: true;

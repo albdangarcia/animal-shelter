@@ -17,13 +17,14 @@ import {
   type ToolResult,
 } from "./tool-result";
 
-// All three reads, as the readiness board and panel require: outstanding
-// items come from assessments and characteristic claims as well as the
-// animal record.
+// All four reads, as the readiness board and panel require: outstanding
+// items come from assessments, characteristic claims and the medical record
+// as well as the animal record.
 export const GET_ANIMAL_READINESS_PERMISSIONS = [
   AppPermissions.ANIMAL_INFO_READ,
   AppPermissions.ANIMAL_ASSESSMENT_READ,
   AppPermissions.ANIMAL_CHARACTERISTICS_READ,
+  AppPermissions.MEDICAL_READ,
 ];
 
 /** What this actor may change — decides whether each item's next step
@@ -32,6 +33,7 @@ export const readinessViewerCanFor = (actor: Actor): ReadinessViewerCan => ({
   manageAssessments: can(actor.role, AppPermissions.ANIMAL_ASSESSMENT_MANAGE),
   manageAnimalInfo: can(actor.role, AppPermissions.ANIMAL_INFO_MANAGE),
   managePhotos: can(actor.role, AppPermissions.ANIMAL_PHOTO_MANAGE),
+  manageMedical: can(actor.role, AppPermissions.MEDICAL_MANAGE),
 });
 
 export const getAnimalReadinessTool = tool({
@@ -52,12 +54,18 @@ export const getAnimalReadinessTool = tool({
     "still open. When NOT_READY, `outstanding` is already sorted most " +
     "urgent first — report every item, in the order given. Each item's " +
     "`kind` is one of: ESCALATED_FINDING (the latest check of that " +
-    "assessment was escalated), ACUTE_HEALTH, UNSUPPORTED_CHARACTERISTIC (a " +
+    "assessment was escalated), NEEDS_VET_REVIEW (the latest exam this stay " +
+    "asked for a vet's review; a later exam with another result clears it), " +
+    "UNDER_CARE (an open care episode on the medical record: under vet " +
+    "care or hospitalised; closing the episode clears it), " +
+    "UNSUPPORTED_CHARACTERISTIC (a " +
     "trait on the profile that the assessments contradict or no longer back " +
     "up), MISSING_ASSESSMENT (a required check with nothing on file), " +
-    "NOT_SPAYED_NEUTERED, NO_PHOTO. `description` says which one; " +
-    "`nextStep` is what the person asking can do about it — relay it as " +
-    "written. How long is already worked out: `daysOutstanding` is whole " +
+    "NO_INTAKE_EXAM (no intake exam on the medical record for the current " +
+    "stay), NOT_SPAYED_NEUTERED (the medical record has no spay or neuter, and no " +
+    "exemption from one is in force), NO_PHOTO. `description` says which " +
+    "one; `nextStep` is what the person asking can do about it — relay it " +
+    "as written. How long is already worked out: `daysOutstanding` is whole " +
     "days (0 means since today) — state it as given and never compute " +
     "durations from dates yourself. A null `daysOutstanding` means nothing " +
     "records when that item began: say it is not dated, do not guess. The " +

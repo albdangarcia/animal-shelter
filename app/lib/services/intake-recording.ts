@@ -8,6 +8,11 @@ import {
 } from "@/prisma/generated/enums";
 import { ConflictError, TimelineOrderError } from "@/app/lib/utils/errors";
 import type { ReIntakeFormOutput } from "@/app/lib/zod-schemas/intake.schema";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
+import {
+  applyIntakeProtocol,
+  type AppliedProtocol,
+} from "@/app/lib/services/medical-protocol-application";
 
 /**
  * Re-intaking an animal that has left: a new stay, opened with an intake on
@@ -42,14 +47,18 @@ const toReIntakeData = (data: ReIntakeFormOutput) => ({
 
 /**
  * Lists the animal again as a draft, and records the intake that brought it
- * back, with its activity row.
+ * back, with its activity row. Then the medical protocol for its species and
+ * its age on that day schedules its care again, unless `applyProtocol` is
+ * off (the caller checks that the actor may skip it): a returning animal
+ * needs its boosters again. Care still open from its last stay counts as
+ * already scheduled.
  */
 export const recordReIntake = async (
   tx: TransactionClient,
   { animalId, values }: ReIntakeToRecord,
   actorId: string,
-): Promise<void> => {
-  const { intakeDate, intakeType, healthStatus, isSpayedNeutered } = values;
+): Promise<{ protocol: AppliedProtocol | null }> => {
+  const { intakeDate, intakeType } = values;
   const mapped = toReIntakeData(values);
 
   // Held until commit, so the animal's intakes and outcomes are still as the
@@ -89,8 +98,6 @@ export const recordReIntake = async (
     data: {
       listingStatus: AnimalListingStatus.DRAFT,
       archiveReason: null,
-      healthStatus: healthStatus,
-      isSpayedNeutered: isSpayedNeutered,
     },
   });
 
@@ -123,7 +130,7 @@ export const recordReIntake = async (
   });
 
   // Log this important event in the animal's history
-  await tx.animalActivityLog.create({
+  const intakeRow = await tx.animalActivityLog.create({
     data: {
       animalId,
       activityType: AnimalActivityType.INTAKE_PROCESSED,
@@ -132,5 +139,16 @@ export const recordReIntake = async (
         .replace(/_/g, " ")
         .toLowerCase()}.`,
     },
+    select: { changedAt: true },
   });
+
+  if (!values.applyProtocol) return { protocol: null };
+  const protocol = await applyIntakeProtocol(
+    tx,
+    { animalId, intakeDate },
+    actorId,
+    await getShelterToday(),
+    { loggedAfter: intakeRow.changedAt },
+  );
+  return { protocol };
 };

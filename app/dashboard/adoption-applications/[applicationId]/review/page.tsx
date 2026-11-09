@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { SearchParamsType } from "@/app/lib/types";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 
 interface Props {
   params: Promise<{ applicationId: string }>;
@@ -22,6 +24,7 @@ const Page = async ({ params, searchParams }: Props) => {
     notFound();
   }
 
+  const canCreateOutcome = await hasPermission(AppPermissions.OUTCOMES_MANAGE);
   const animal = userApplication.animal;
 
   if (!animal) {
@@ -42,6 +45,7 @@ const Page = async ({ params, searchParams }: Props) => {
           application={userApplication}
           animal={animal}
           returnTo={returnTo}
+          canCreateOutcome={canCreateOutcome}
         />
       </Suspense>
     </main>

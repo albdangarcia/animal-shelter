@@ -1,17 +1,15 @@
 "use client";
 
+import { MedicalRecordHeader } from "../medical/medical-record-header";
+import { VitalsToolbar } from "./vitals-toolbar";
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SimplePagination } from "@/components/simple-pagination";
 import {
   Card,
-  CardAction,
   CardContent,
-  CardDescription,
   CardFooter,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -35,8 +33,6 @@ import { AnimalVitalsListPayload } from "@/app/lib/data/animals/animal-vitals.da
 import { formatDateToLongString } from "@/app/lib/utils/date-utils";
 import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
 import { formatWeight, formatTemperature } from "@/app/lib/utils/weight-format";
-import { ServerSideSort } from "@/components/table-common/server-side-sort";
-import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { VitalsActions } from "./vitals-actions";
 import { VitalsForm } from "./vitals-form";
 import {
@@ -44,10 +40,6 @@ import {
   useConfirmedOpenChange,
 } from "@/hooks/use-confirmed-open-change";
 
-const vitalsStatusOptions = [
-  { value: "active", label: "Active" },
-  { value: "deleted", label: "Deleted" },
-];
 
 interface Props {
   vitalsLogs: AnimalVitalsListPayload[];
@@ -77,12 +69,9 @@ const AnimalVitalsTab = ({
 
   return (
     <Card className="@container/card">
-      <CardHeader>
-        <CardTitle className="@[650px]/card:text-xl">Vitals</CardTitle>
-        <CardDescription>
-          A dated log of weight, temperature, and body condition.
-        </CardDescription>
-        <CardAction>
+      <MedicalRecordHeader
+        section="vitals"
+        action={
           <Dialog open={isAddDialogOpen} onOpenChange={guardedOnOpenChange}>
             <DialogTrigger asChild>
               <Button
@@ -135,27 +124,11 @@ const AnimalVitalsTab = ({
               </AlertDialogContent>
             </AlertDialog>
           </Dialog>
-        </CardAction>
+        }
+      />
 
-        {/* Filter and Sort Controls */}
-        <div className="mt-4 flex flex-row flex-wrap items-center gap-3">
-          <ServerSideFacetedFilter
-            title="Status"
-            paramKey="status"
-            options={vitalsStatusOptions}
-          />
-          <ServerSideSort
-            paramKey="sort"
-            placeholder="Select order"
-            options={[
-              { label: "Newest First", value: "recordedAt.desc" },
-              { label: "Oldest First", value: "recordedAt.asc" },
-            ]}
-          />
-        </div>
-      </CardHeader>
-
-      <CardContent>
+      <CardContent className="space-y-6">
+        <VitalsToolbar />
         {vitalsLogs.length > 0 ? (
           <div className="space-y-4">
             {vitalsLogs.map((vitalsLog) => (

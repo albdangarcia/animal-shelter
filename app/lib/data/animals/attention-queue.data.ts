@@ -2,11 +2,17 @@ import prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
 import { AnimalListingStatus, TaskStatus } from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
-import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
+import {
+  getShelterNow,
+  getShelterSettings,
+} from "@/app/lib/data/shelter-settings.data";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
 import { RequireAllPermissions } from "../../auth/protected-actions";
+import { findMedicalDueForQueue } from "../medical-due";
+import { findUnplannedCareForQueue } from "../care-episodes";
+import { findMissedDosesForQueue } from "../medication-doses";
 import {
-  ACUTE_HEALTH_STATUSES,
+  attentionUnitLabel,
   buildAttentionQueue,
   type AttentionAnimal,
   type AttentionQueueItem,
@@ -14,21 +20,23 @@ import {
 
 export type { AttentionQueueItem, AttentionReason } from "./attention-queue";
 
-// Deliberate sibling of `fetchAnimalsRequiringAttention` in `analytics.data.ts`.
-// That one is health-status-only and backs the dashboard health table; this one
-// answers "what needs attention *today*" as a work queue whose every item clears
-// when someone acts on it. Both
-// exist on purpose — changing either would break the other's consumer.
+// Not the dashboard's list of animals under care (`fetchAnimalsUnderCare` in
+// `analytics.data.ts`), which shows every open care episode whatever is
+// planned for it. This one answers "what needs attention *today*" as a work
+// queue whose every item clears when someone acts on it.
 //
 // Signals:
 //   1. Task overdue or due today (status TODO/IN_PROGRESS, dueDate <= today)
-//   2. Acute health status (see ACUTE_HEALTH_STATUSES) with no open task
-//   3. Open foster placement past its expectedEndDate
-//
-// Intended fourth signal, once it has data: missed medication —
-// `MedicationSchedule` with no `MedicationLog` today. `MedicationSchedule` /
-// `MedicationLog` exist in the schema but have no forms and no seed data, so a
-// query against them would silently return nothing and look like it works.
+//   2. Medication dose slots missed yesterday or today: a slot an order
+//      expects whose window has ended on the shelter's clock with no dose
+//      recorded, read by `findMissedDosesForQueue`. Refused and not given
+//      account for their slot.
+//   3. Scheduled medical care overdue or due today (status SCHEDULED, not
+//      voided, dueDate <= today), read by `findMedicalDueForQueue`
+//   4. An open care episode with nothing planned: no open task, no
+//      scheduled care and no medication order running, read by
+//      `findUnplannedCareForQueue`
+//   5. Open foster placement past its expectedEndDate
 //
 // Queue-wide precondition: ARCHIVED animals (adopted / transferred / deceased)
 // are excluded from every signal. Their state is frozen history — an item on
@@ -38,7 +46,8 @@ export type { AttentionQueueItem, AttentionReason } from "./attention-queue";
 
 const OPEN_TASK_STATUSES = [TaskStatus.TODO, TaskStatus.IN_PROGRESS];
 
-// Flattened animal-identity select, shared by all three signal queries.
+// Flattened animal-identity select, shared by the task and foster queries.
+// The medical and care queries have their own, in auth-free modules.
 const attentionAnimalSelect = {
   id: true,
   name: true,
@@ -52,38 +61,39 @@ type AttentionAnimalRow = Prisma.AnimalGetPayload<{
   select: typeof attentionAnimalSelect;
 }>;
 
-// "Dog block A · A-3" — same "Location · Unit" convention as
-// `app/lib/utils/location-activity.ts`. Null for fostered / unplaced animals.
 const toAttentionAnimal = (animal: AttentionAnimalRow): AttentionAnimal => ({
   id: animal.id,
   name: animal.name,
   species: animal.species.name,
-  currentUnit: animal.currentUnit
-    ? `${animal.currentUnit.location.name} · ${animal.currentUnit.name}`
-    : null,
+  currentUnit: attentionUnitLabel(animal.currentUnit),
 });
 
 // Exported unwrapped for the AI tool layer: a tool's `execute` runs
 // mid-stream where `RequirePermission`'s ambient session read is unreliable.
-// `getAttentionQueue` calls `requireFor` for both permissions
+// `getAttentionQueue` calls `requireFor` for each of its permissions
 // itself before calling this. The `RequirePermission`-wrapped `fetchAttentionQueue`
 // export below stays for server components.
 export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
   try {
-    // Both deadline columns hold a calendar day, so both boundaries are one
+    // Every deadline column holds a calendar day, so each boundary is one
     // day compared as a plain string — resolved on the shelter's calendar,
     // which is the only place "today" means anything here.
     //
-    // Signal 1 counts a task due at any point today, so `<= today`. Signal 3
-    // is strictly before today, so a placement expected to end today is not
-    // yet overdue.
-    const today = await getShelterToday();
+    // Signals 1 and 3 count anything due at any point today, so `<= today`.
+    // Signal 5 is strictly before today, so a placement expected to end today
+    // is not yet overdue. Signal 2 reads the clock too, to tell which of
+    // today's slots have ended: one reading gives both, so they agree on the
+    // day.
+    const [{ today, clock }, { doseSlotEnds }] = await Promise.all([
+      getShelterNow(),
+      getShelterSettings(),
+    ]);
 
     const notArchived = {
       listingStatus: { not: AnimalListingStatus.ARCHIVED },
     } satisfies Prisma.AnimalWhereInput;
 
-    const [tasksDue, acuteHealth, fostersOverdue] = await Promise.all([
+    const [tasksDue, dosesMissed, medicalDue, careUnplanned, fostersOverdue] = await Promise.all([
       // Signal 1. A null dueDate never satisfies `lte`, so undated backlog
       // tasks are excluded without an explicit filter.
       prisma.task.findMany({
@@ -100,17 +110,16 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
           animal: { select: attentionAnimalSelect },
         },
       }),
-      // Signal 2. Acute health AND zero open tasks — an animal that needs care
-      // and nobody has planned anything. Creating any task clears it.
-      prisma.animal.findMany({
-        where: {
-          ...notArchived,
-          healthStatus: { in: [...ACUTE_HEALTH_STATUSES] },
-          tasks: { none: { status: { in: OPEN_TASK_STATUSES } } },
-        },
-        select: { ...attentionAnimalSelect, healthStatus: true },
-      }),
-      // Signal 3. Open placement (endDate == null) past its expected end.
+      // Signal 2. Archived animals are left out there too.
+      findMissedDosesForQueue(prisma, clock, doseSlotEnds),
+      // Signal 3. Archived animals are left out there too.
+      findMedicalDueForQueue(prisma, today),
+      // Signal 4. Under care AND nothing planned — an animal that needs care
+      // and nobody has planned anything. Creating a task, scheduling care or
+      // ordering a medication clears it. Archived animals are left out there
+      // too.
+      findUnplannedCareForQueue(prisma, today),
+      // Signal 5. Open placement (endDate == null) past its expected end.
       // One open placement per animal is an action-layer rule, not a DB
       // constraint — do not assume at most one row per animal.
       prisma.fosterPlacement.findMany({
@@ -139,11 +148,9 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
         dueDate: calendarDay(task.dueDate!),
         priority: task.priority,
       })),
-      acuteHealth: acuteHealth.map((animal) => ({
-        animal: toAttentionAnimal(animal),
-        // `in: ACUTE_HEALTH_STATUSES` guarantees a non-null healthStatus here.
-        healthStatus: animal.healthStatus!,
-      })),
+      dosesMissed,
+      medicalDue,
+      careUnplanned,
       fostersOverdue: fostersOverdue.map((placement) => ({
         animal: toAttentionAnimal(placement.animal),
         placementId: placement.id,
@@ -158,14 +165,17 @@ export const _fetchAttentionQueue = async (): Promise<AttentionQueueItem[]> => {
 };
 
 /**
- * `ANIMAL_INFO_READ` **and** `ANIMAL_TASK_READ`: the queue returns task detail
- * (titles, due dates, priorities) next to animal identity, so a caller needs
- * both reads. `RequirePermission` takes a single permission — `RequireAllPermissions`
- * is the and-composition.
+ * `ANIMAL_INFO_READ`, `ANIMAL_TASK_READ` **and** `MEDICAL_READ`: the queue
+ * returns task detail (titles, due dates, priorities), missed medication
+ * doses and scheduled medical care next to animal identity, so a caller needs
+ * all three reads.
+ * `RequirePermission` takes a single permission — `RequireAllPermissions` is
+ * the and-composition.
  *
  * No actor-taking export yet
  */
 export const fetchAttentionQueue = RequireAllPermissions(
   AppPermissions.ANIMAL_INFO_READ,
   AppPermissions.ANIMAL_TASK_READ,
+  AppPermissions.MEDICAL_READ,
 )(_fetchAttentionQueue);

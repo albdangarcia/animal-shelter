@@ -5,29 +5,60 @@ import {
   type ComputeReadinessInputs,
   type ReadinessAssessment,
   type ReadinessCharacteristicClaim,
+  type ReadinessExam,
 } from "./compute-readiness";
+import {
+  shelterDayKey,
+  shelterDaysBetween,
+  shiftDayKey,
+  type CalendarDay,
+} from "../utils/shelter-day";
 
 const NOW = new Date(2026, 8, 12, 12, 0);
 const DAY = 24 * 60 * 60 * 1000;
 const daysBefore = (n: number) => new Date(NOW.getTime() - n * DAY);
 const IN_CARE_SINCE = daysBefore(40);
 
+const day = (value: string) => value as CalendarDay;
+
+// The stay's first day on the shelter's calendar (Aug 3, 40 days before
+// Sep 12, read in Los Angeles whatever the machine's timezone). Its intake
+// exam was done that day, with no concerns.
+const STAY_DAY = shelterDayKey(IN_CARE_SINCE, "America/Los_Angeles");
+const exam = (overrides: Partial<ReadinessExam> = {}): ReadinessExam => ({
+  entryId: "exam-intake",
+  examType: "INTAKE",
+  completedDate: STAY_DAY,
+  overallResult: "NO_CONCERNS",
+  reproductiveStatus: null,
+  createdAt: IN_CARE_SINCE,
+  ...overrides,
+});
+
 const baseInputs: ComputeReadinessInputs = {
   requirements: [],
   assessments: [],
   claims: [],
-  isSpayedNeutered: true,
+  spayNeuter: {
+    status: "ALTERED",
+    entryId: "e1",
+    procedure: "SPAY",
+    completedDate: null,
+  },
+  exams: [exam()],
   hasPhoto: true,
-  healthStatus: "HEALTHY",
+  openEpisode: null,
   inCareSince: IN_CARE_SINCE,
+  timezone: "America/Los_Angeles",
 };
+const UNKNOWN = { status: "UNKNOWN", lapsedOn: null } as const;
 
 const assessment = (
   overrides: Partial<ReadinessAssessment> = {},
 ): ReadinessAssessment => ({
   id: "a1",
-  templateKey: "INTAKE_MEDICAL",
-  templateName: "Intake Medical",
+  templateKey: "INTAKE_BEHAVIORAL",
+  templateName: "Intake Behavioral",
   observedAt: NOW,
   signal: "NO_CONCERNS",
   ...overrides,
@@ -42,6 +73,8 @@ const claim = (
   contradictedAt: null,
   sourceDeletedAt: null,
   supportLostAt: null,
+  conditionVoidedAt: null,
+  conditionResolvedAt: null,
   ...overrides,
 });
 
@@ -52,13 +85,13 @@ test("an animal with nothing wrong has no blockers", () => {
 test("a requirement with no matching assessment is missing", () => {
   const blockers = computeReadiness({
     ...baseInputs,
-    requirements: [{ templateKey: "INTAKE_MEDICAL", templateName: "Intake Medical" }],
+    requirements: [{ templateKey: "INTAKE_BEHAVIORAL", templateName: "Intake Behavioral" }],
   });
   assert.deepEqual(blockers, [
     {
       kind: "MISSING_ASSESSMENT",
-      templateKey: "INTAKE_MEDICAL",
-      templateName: "Intake Medical",
+      templateKey: "INTAKE_BEHAVIORAL",
+      templateName: "Intake Behavioral",
       since: IN_CARE_SINCE,
     },
   ]);
@@ -67,7 +100,7 @@ test("a requirement with no matching assessment is missing", () => {
 test("a satisfied one-time requirement, however old, is not missing", () => {
   const blockers = computeReadiness({
     ...baseInputs,
-    requirements: [{ templateKey: "INTAKE_MEDICAL", templateName: "Intake Medical" }],
+    requirements: [{ templateKey: "INTAKE_BEHAVIORAL", templateName: "Intake Behavioral" }],
     assessments: [assessment({ observedAt: new Date(2020, 0, 1) })],
   });
   assert.deepEqual(blockers, []);
@@ -77,8 +110,8 @@ test("multiple unmet requirements each produce their own blocker", () => {
   const blockers = computeReadiness({
     ...baseInputs,
     requirements: [
-      { templateKey: "INTAKE_MEDICAL", templateName: "Intake Medical" },
       { templateKey: "INTAKE_BEHAVIORAL", templateName: "Intake Behavioral" },
+      { templateKey: "CAT_TEST", templateName: "Cat Test" },
     ],
   });
   assert.equal(blockers.length, 2);
@@ -188,6 +221,29 @@ test("a trait whose source no longer supports it blocks with NO_LONGER_SUPPORTED
   ]);
 });
 
+test("a trait whose condition was resolved or voided blocks, dated by the condition", () => {
+  const issueOf = (overrides: Partial<ReadinessCharacteristicClaim>) =>
+    computeReadiness({ ...baseInputs, claims: [claim(overrides)] }).map((b) =>
+      b.kind === "UNSUPPORTED_CHARACTERISTIC" ? [b.issue, b.since] : null,
+    );
+  assert.deepEqual(issueOf({ conditionResolvedAt: daysBefore(4) }), [
+    ["CONDITION_RESOLVED", daysBefore(4)],
+  ]);
+  assert.deepEqual(issueOf({ conditionVoidedAt: daysBefore(1) }), [
+    ["CONDITION_VOIDED", daysBefore(1)],
+  ]);
+  // A voided condition counts for nothing, resolved or not.
+  assert.deepEqual(
+    issueOf({ conditionVoidedAt: daysBefore(1), conditionResolvedAt: daysBefore(4) }),
+    [["CONDITION_VOIDED", daysBefore(1)]],
+  );
+  // Undermined no earlier than the trait was added.
+  assert.deepEqual(
+    issueOf({ assignedAt: daysBefore(2), conditionResolvedAt: daysBefore(4) }),
+    [["CONDITION_RESOLVED", daysBefore(2)]],
+  );
+});
+
 test("a claim made over older evidence is undermined only from when it was made", () => {
   const blockers = computeReadiness({
     ...baseInputs,
@@ -226,9 +282,163 @@ test("an unassigned, unproblematic claim is never passed in — no blocker from 
   assert.deepEqual(blockers, []);
 });
 
-test("not spayed or neutered blocks from the start of the stay", () => {
-  const blockers = computeReadiness({ ...baseInputs, isSpayedNeutered: false });
+test("no spay or neuter on record blocks from the start of the stay", () => {
+  const blockers = computeReadiness({ ...baseInputs, spayNeuter: UNKNOWN });
   assert.deepEqual(blockers, [{ kind: "NOT_SPAYED_NEUTERED", since: IN_CARE_SINCE }]);
+});
+
+test("an exemption in force does not block, with or without a review day", () => {
+  for (const reviewDate of [day("2026-10-01"), null]) {
+    const blockers = computeReadiness({
+      ...baseInputs,
+      spayNeuter: {
+        status: "EXEMPT",
+        entryId: "e1",
+        reason: "TOO_YOUNG_OR_UNDERWEIGHT",
+        reviewDate,
+      },
+    });
+    assert.deepEqual(blockers, []);
+  }
+});
+
+test("a lapsed exemption blocks from the start of the day after its review day", () => {
+  // Reviewed Sep 5 in Los Angeles, so needed from midnight Sep 6 there
+  // (07:00 UTC, daylight time), well after this stay began.
+  const blockers = computeReadiness({
+    ...baseInputs,
+    spayNeuter: { status: "UNKNOWN", lapsedOn: day("2026-09-05") },
+  });
+  assert.deepEqual(blockers, [
+    { kind: "NOT_SPAYED_NEUTERED", since: new Date("2026-09-06T07:00:00Z") },
+  ]);
+});
+
+test("an exemption that lapsed before this stay began blocks from the stay", () => {
+  const blockers = computeReadiness({
+    ...baseInputs,
+    spayNeuter: { status: "UNKNOWN", lapsedOn: day("2026-01-10") },
+  });
+  assert.deepEqual(blockers, [{ kind: "NOT_SPAYED_NEUTERED", since: IN_CARE_SINCE }]);
+});
+
+test("an exam that found the animal intact blocks as Unknown does: from the stay, or after a lapse", () => {
+  const intact = (lapsedOn: CalendarDay | null) =>
+    ({
+      status: "INTACT",
+      examEntryId: "exam-1",
+      examDate: day("2026-08-20"),
+      lapsedOn,
+    }) as const;
+  assert.deepEqual(computeReadiness({ ...baseInputs, spayNeuter: intact(null) }), [
+    { kind: "NOT_SPAYED_NEUTERED", since: IN_CARE_SINCE },
+  ]);
+  assert.deepEqual(
+    computeReadiness({ ...baseInputs, spayNeuter: intact(day("2026-09-05")) }),
+    [{ kind: "NOT_SPAYED_NEUTERED", since: new Date("2026-09-06T07:00:00Z") }],
+  );
+});
+
+test("no intake exam blocks from the start of the stay", () => {
+  assert.deepEqual(computeReadiness({ ...baseInputs, exams: [] }), [
+    { kind: "NO_INTAKE_EXAM", since: IN_CARE_SINCE },
+  ]);
+  // Another type of exam doesn't stand in for it.
+  assert.deepEqual(
+    computeReadiness({ ...baseInputs, exams: [exam({ examType: "VET" })] }),
+    [{ kind: "NO_INTAKE_EXAM", since: IN_CARE_SINCE }],
+  );
+});
+
+test("an intake exam counts for the stay it was done in", () => {
+  // From an earlier stay: the day before this one began.
+  assert.deepEqual(
+    computeReadiness({
+      ...baseInputs,
+      exams: [exam({ completedDate: shiftDayKey(STAY_DAY, -1) })],
+    }),
+    [{ kind: "NO_INTAKE_EXAM", since: IN_CARE_SINCE }],
+  );
+  // On the stay's first day, it counts.
+  assert.deepEqual(
+    computeReadiness({ ...baseInputs, exams: [exam({ completedDate: STAY_DAY })] }),
+    [],
+  );
+});
+
+test("the stay's latest exam asking for a vet's review blocks from its day", () => {
+  const blockers = computeReadiness({
+    ...baseInputs,
+    exams: [
+      exam(),
+      exam({
+        entryId: "exam-recheck",
+        examType: "RECHECK",
+        completedDate: day("2026-09-05"),
+        overallResult: "NEEDS_VET_REVIEW",
+      }),
+    ],
+  });
+  // Midnight Sep 5 in Los Angeles is 07:00 UTC, daylight time.
+  assert.deepEqual(blockers, [
+    {
+      kind: "NEEDS_VET_REVIEW",
+      entryId: "exam-recheck",
+      examType: "RECHECK",
+      examDate: day("2026-09-05"),
+      since: new Date("2026-09-05T07:00:00Z"),
+    },
+  ]);
+});
+
+test("a later exam with another result clears the review", () => {
+  const needsReview = exam({ overallResult: "NEEDS_VET_REVIEW" });
+  const cleared = exam({
+    entryId: "exam-vet",
+    examType: "VET",
+    completedDate: shiftDayKey(STAY_DAY, 7),
+  });
+  assert.deepEqual(
+    computeReadiness({ ...baseInputs, exams: [needsReview, cleared] }),
+    [],
+  );
+  // On one day, the one recorded later speaks.
+  const sameDay = exam({
+    entryId: "exam-same-day",
+    examType: "VET",
+    createdAt: new Date(IN_CARE_SINCE.getTime() + 60_000),
+  });
+  assert.deepEqual(
+    computeReadiness({ ...baseInputs, exams: [needsReview, sameDay] }),
+    [],
+  );
+});
+
+test("needs treatment doesn't block", () => {
+  assert.deepEqual(
+    computeReadiness({
+      ...baseInputs,
+      exams: [exam({ overallResult: "NEEDS_TREATMENT" })],
+    }),
+    [],
+  );
+});
+
+test("an earlier stay's exam asking for review doesn't block this stay", () => {
+  const earlier = exam({
+    entryId: "exam-earlier",
+    completedDate: day("2026-05-01"),
+    overallResult: "NEEDS_VET_REVIEW",
+  });
+  assert.deepEqual(
+    computeReadiness({ ...baseInputs, exams: [exam(), earlier] }),
+    [],
+  );
+  // Even when it is the only exam on record.
+  assert.deepEqual(
+    computeReadiness({ ...baseInputs, exams: [earlier] }),
+    [{ kind: "NO_INTAKE_EXAM", since: IN_CARE_SINCE }],
+  );
 });
 
 test("no photo blocks from the start of the stay", () => {
@@ -236,57 +446,82 @@ test("no photo blocks from the start of the stay", () => {
   assert.deepEqual(blockers, [{ kind: "NO_PHOTO", since: IN_CARE_SINCE }]);
 });
 
-test("an acute health status blocks, with no onset date to report", () => {
-  const blockers = computeReadiness({ ...baseInputs, healthStatus: "HOSPITALISED" });
+test("an open care episode blocks from the start of its first day on the shelter's calendar", () => {
+  const blockers = computeReadiness({
+    ...baseInputs,
+    openEpisode: {
+      id: "episode-1",
+      type: "HOSPITALISED_OFF_SITE",
+      startDate: day("2026-09-05"),
+      clinicName: "Downtown Veterinary Clinic",
+    },
+  });
   assert.deepEqual(blockers, [
-    { kind: "ACUTE_HEALTH", healthStatus: "HOSPITALISED", since: null },
+    {
+      kind: "UNDER_CARE",
+      episodeId: "episode-1",
+      episodeType: "HOSPITALISED_OFF_SITE",
+      startDate: "2026-09-05",
+      partnerName: "Downtown Veterinary Clinic",
+      // Midnight in Los Angeles, on daylight time.
+      since: new Date("2026-09-05T07:00:00Z"),
+    },
   ]);
 });
 
-test("a null health status does not block", () => {
-  const blockers = computeReadiness({ ...baseInputs, healthStatus: null });
-  assert.deepEqual(blockers, []);
+test("an episode starting on a day whose midnight the clocks skip is dated on that day", () => {
+  // Santiago springs forward at midnight on Sep 6, 2026: that day begins at
+  // 01:00, and read at the old offset its 00:00 is 23:00 on Sep 5.
+  const timezone = "America/Santiago";
+  const [blocker] = computeReadiness({
+    ...baseInputs,
+    timezone,
+    openEpisode: {
+      id: "episode-1",
+      type: "HOSPITALISED_IN_HOUSE",
+      startDate: day("2026-09-06"),
+      clinicName: null,
+    },
+  });
+  assert.equal(blocker.kind, "UNDER_CARE");
+  assert.equal(shelterDayKey(blocker.since, timezone), "2026-09-06");
+  assert.equal(
+    shelterDaysBetween(blocker.since, new Date("2026-09-06T12:00:00Z"), timezone),
+    0,
+  );
 });
 
-test("HEALTHY and AWAITING_SPAY_NEUTER are not acute", () => {
-  for (const healthStatus of ["HEALTHY", "AWAITING_SPAY_NEUTER"] as const) {
-    const blockers = computeReadiness({ ...baseInputs, healthStatus });
-    assert.deepEqual(blockers, []);
-  }
-});
-
-test("every acute health status blocks", () => {
-  const acute = [
-    "AWAITING_TRIAGE",
-    "AWAITING_VET_EXAM",
-    "UNDER_VET_CARE",
-    "HOSPITALISED",
-    "AWAITING_OTHER_SURGERY",
-    "RECOVERING_FROM_SURGERY",
-  ] as const;
-  for (const healthStatus of acute) {
-    const blockers = computeReadiness({ ...baseInputs, healthStatus });
-    assert.deepEqual(blockers, [{ kind: "ACUTE_HEALTH", healthStatus, since: null }]);
-  }
+test("no open care episode blocks nothing", () => {
+  assert.deepEqual(computeReadiness({ ...baseInputs, openEpisode: null }), []);
 });
 
 test("every blocker kind can appear together on one animal", () => {
   const blockers = computeReadiness({
-    requirements: [{ templateKey: "INTAKE_MEDICAL", templateName: "Intake Medical" }],
+    requirements: [{ templateKey: "INTAKE_BEHAVIORAL", templateName: "Intake Behavioral" }],
     assessments: [assessment({ signal: "ESCALATE", templateKey: "CAT_TEST", templateName: "Cat Test" })],
     claims: [claim({ contradictedAt: daysBefore(1) })],
-    isSpayedNeutered: false,
+    spayNeuter: UNKNOWN,
+    // A vet exam asked for review, and there is no intake exam this stay.
+    exams: [exam({ examType: "VET", overallResult: "NEEDS_VET_REVIEW" })],
     hasPhoto: false,
-    healthStatus: "UNDER_VET_CARE",
+    openEpisode: {
+      id: "episode-1",
+      type: "UNDER_VET_CARE",
+      startDate: STAY_DAY,
+      clinicName: null,
+    },
     inCareSince: IN_CARE_SINCE,
+    timezone: "America/Los_Angeles",
   });
   const kinds = blockers.map((b) => b.kind).sort();
   assert.deepEqual(kinds, [
-    "ACUTE_HEALTH",
     "ESCALATED_FINDING",
     "MISSING_ASSESSMENT",
+    "NEEDS_VET_REVIEW",
     "NOT_SPAYED_NEUTERED",
+    "NO_INTAKE_EXAM",
     "NO_PHOTO",
+    "UNDER_CARE",
     "UNSUPPORTED_CHARACTERISTIC",
   ]);
 });

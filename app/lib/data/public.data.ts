@@ -14,6 +14,10 @@ import {
   DERIVATION_APPLICATION_SELECT,
   effectiveApplicationStatuses,
 } from "./application-status.data";
+import {
+  PUBLIC_MEDICAL_FACTS_SELECT,
+  publicMedicalFacts,
+} from "./animals/medical-status";
 
 export type PetsPayload = Prisma.AnimalGetPayload<{
   select: {
@@ -413,12 +417,12 @@ export const fetchPublicPagePetById = async (id: string) => {
         },
         sex: true,
         size: true,
-        isSpayedNeutered: true,
-        // Server-side only: mapped to the `hasMicrochip` boolean below and
-        // never included in what this function returns. Same contract as
-        // fetchSpotlightAnimals — the detail page only needs to know whether
-        // to show the "Microchipped" pill, not the number itself.
-        microchipNumber: true,
+        // Server-side only: read from the medical record, mapped to the
+        // medical-fact booleans below, and never included in
+        // what this function returns. Same contract as fetchSpotlightAnimals —
+        // the detail page only needs to know whether to show the "Neutered"
+        // and other positive pills, not the record or the chip number.
+        medicalEntries: PUBLIC_MEDICAL_FACTS_SELECT,
         species: {
           select: {
             name: true,
@@ -473,7 +477,7 @@ export const fetchPublicPagePetById = async (id: string) => {
       return null;
     }
 
-    const { microchipNumber, adoptionApplications, ...rest } = pet;
+    const { medicalEntries, adoptionApplications, ...rest } = pet;
     let blockingApplications: { id: string }[] = [];
     if (adoptionApplications) {
       const statuses = await effectiveApplicationStatuses(adoptionApplications);
@@ -486,7 +490,7 @@ export const fetchPublicPagePetById = async (id: string) => {
 
     return {
       ...flattenCharacteristics(rest),
-      hasMicrochip: microchipNumber !== null,
+      ...publicMedicalFacts(medicalEntries),
       ...(personId && { adoptionApplications: blockingApplications }),
     };
   } catch (error) {
@@ -555,9 +559,13 @@ export type SpotlightAnimal = {
   ageString: string | null;
   description: string | null;
   weightGrams: number | null;
-  isSpayedNeutered: boolean;
-  /** Derived from `microchipNumber`. The number itself never leaves the server. */
+  /** A spay or neuter is on the medical record. */
+  isAltered: boolean;
+  /** The medical record has a chip the animal carries. The number itself
+   *  never leaves the server. */
   hasMicrochip: boolean;
+  /** At least one vaccine recorded as given; no coverage or series assertion. */
+  hasRecordedVaccination: boolean;
   /** Days of the current open stay. Null when the animal is not in care. */
   waitingDays: number | null;
   imageUrl: string | null;
@@ -607,10 +615,9 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
         birthDate: true,
         description: true,
         currentWeightGrams: true,
-        isSpayedNeutered: true,
-        // Server-side only: mapped to the `hasMicrochip` boolean below and
-        // never included in what this function returns.
-        microchipNumber: true,
+        // Server-side only: mapped to the positive medical-fact
+        // booleans below and never included in what this function returns.
+        medicalEntries: PUBLIC_MEDICAL_FACTS_SELECT,
         publishedAt: true,
         breeds: { where: { deletedAt: null }, select: { name: true } },
         animalImages: {
@@ -701,8 +708,7 @@ export const fetchSpotlightAnimals = async (): Promise<SpotlightAnimal[]> => {
       }),
       description: animal.description,
       weightGrams: animal.currentWeightGrams,
-      isSpayedNeutered: animal.isSpayedNeutered,
-      hasMicrochip: animal.microchipNumber !== null,
+      ...publicMedicalFacts(animal.medicalEntries),
       waitingDays: currentStayDays,
       imageUrl: animal.animalImages[0]?.url ?? null,
       isFavoritedByCurrentUser: (animal.favorites?.length ?? 0) > 0,

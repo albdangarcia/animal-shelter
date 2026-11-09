@@ -15,12 +15,19 @@ import assert from "node:assert/strict";
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
 import {
   AnimalActivityType,
-  AnimalHealthStatus,
   AnimalListingStatus,
+  ExamType,
   IntakeType,
+  MedicalEntryKind,
+  MedicalEntryStatus,
+  MedicalProtocolStepKind,
   OutcomeType,
   Sex,
+  SpayNeuterExemptionReason,
+  SurgeryProcedure,
 } from "@/prisma/generated/enums";
+import { recordSpayNeuterExemption } from "@/app/lib/services/medical-entry";
+import { createMedicalProtocol } from "@/app/lib/services/medical-protocol";
 import { recordReIntake } from "@/app/lib/services/intake-recording";
 import { recordOutcomeReversal } from "@/app/lib/services/outcome-reversal";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
@@ -30,7 +37,7 @@ import {
   ReIntakeFormSchema,
   type ReIntakeFormOutput,
 } from "@/app/lib/zod-schemas/intake.schema";
-import { shiftDayKey, shelterToday } from "@/app/lib/utils/shelter-day";
+import { calendarDay, shiftDayKey, shelterToday } from "@/app/lib/utils/shelter-day";
 import { fallbackShelterSettings } from "@/app/lib/utils/shelter-settings";
 import { ConflictError, TimelineOrderError } from "@/app/lib/utils/errors";
 import { assertNoListingMismatch } from "./listing-consistency";
@@ -42,6 +49,11 @@ const future = () =>
   shiftDayKey(shelterToday(fallbackShelterSettings().timezone), 2);
 
 let speciesId: string;
+// The re-intakes that apply a protocol keep to a species of their own, so
+// the other tests' animals have none.
+let protocolSpeciesId: string;
+// And the one whose protocol has a spay/neuter step.
+let spaySpeciesId: string;
 let colorId: string;
 let staffId: string;
 
@@ -49,6 +61,18 @@ before(async () => {
   speciesId = (
     await prisma.species.create({
       data: { name: `Re-intake day species ${runId}` },
+      select: { id: true },
+    })
+  ).id;
+  protocolSpeciesId = (
+    await prisma.species.create({
+      data: { name: `Re-intake protocol species ${runId}` },
+      select: { id: true },
+    })
+  ).id;
+  spaySpeciesId = (
+    await prisma.species.create({
+      data: { name: `Re-intake spay species ${runId}` },
       select: { id: true },
     })
   ).id;
@@ -70,10 +94,15 @@ after(async () => {
   await prisma.outcome.deleteMany({ where: { staffMemberId: staffId } });
   await prisma.intake.deleteMany({ where: { staffMemberId: staffId } });
   // Takes the activity rows with it.
-  await prisma.animal.deleteMany({ where: { speciesId } });
+  const allSpecies = [speciesId, protocolSpeciesId, spaySpeciesId];
+  await prisma.animal.deleteMany({ where: { speciesId: { in: allSpecies } } });
+  await prisma.medicalProtocolStep.deleteMany({
+    where: { protocol: { speciesId: { in: allSpecies } } },
+  });
+  await prisma.medicalProtocol.deleteMany({ where: { speciesId: { in: allSpecies } } });
   await prisma.person.deleteMany({ where: { id: staffId } });
   await prisma.color.deleteMany({ where: { id: colorId } });
-  await prisma.species.deleteMany({ where: { id: speciesId } });
+  await prisma.species.deleteMany({ where: { id: { in: allSpecies } } });
   await prisma.$disconnect();
 });
 
@@ -83,14 +112,18 @@ type Event = { intake: string } | { outcome: string };
  * An animal with the given intakes and outcomes, listed as its last event
  * leaves it. Every outcome is a death, so it needs no partner or owner.
  */
-const makeAnimal = async (label: string, events: Event[]) => {
+const makeAnimal = async (
+  label: string,
+  events: Event[],
+  animalSpeciesId = speciesId,
+) => {
   const archived = "outcome" in events[events.length - 1];
   const animal = await prisma.animal.create({
     data: {
       name: `${label} ${runId}`,
       birthDate: "2024-01-01",
       sex: Sex.FEMALE,
-      speciesId,
+      speciesId: animalSpeciesId,
       primaryColorId: colorId,
       listingStatus: archived
         ? AnimalListingStatus.ARCHIVED
@@ -132,8 +165,6 @@ const seized = (intakeDate: string): ReIntakeFormOutput =>
     intakeType: IntakeType.SEIZE,
     intakeDate,
     notes: "",
-    healthStatus: AnimalHealthStatus.AWAITING_VET_EXAM,
-    isSpayedNeutered: false,
   });
 
 const reIntake = (
@@ -409,5 +440,171 @@ test("a new animal's first intake may be dated today but not later", async () =>
   assert.equal(
     await checkFirstIntakeDay(shiftDayKey(today, 1)),
     "The intake date can't be in the future.",
+  );
+});
+
+// --- The medical protocol ---------------------------------------------------
+
+let protocol: Promise<{ id: string; stepIds: string[] }> | null = null;
+const ensureProtocol = () =>
+  (protocol ??= prisma.$transaction((tx) =>
+    createMedicalProtocol(tx, {
+      name: `Returning ${runId}`,
+      speciesId: protocolSpeciesId,
+      steps: [
+        { kind: MedicalProtocolStepKind.EXAM, examType: ExamType.INTAKE, offsetDays: 0 },
+        { kind: MedicalProtocolStepKind.MICROCHIP, offsetDays: 0 },
+      ],
+    }),
+  ));
+
+test("a re-intake applies the animal's protocol, logged after the intake", async (t) => {
+  const { id: protocolId, stepIds } = await ensureProtocol();
+  const { animalId } = await makeAnimal(
+    "Back again, protocol",
+    [{ intake: "2026-01-01" }, { outcome: "2026-02-01" }],
+    protocolSpeciesId,
+  );
+  const today = await getShelterToday();
+
+  // Frozen, so both rows are written in the same millisecond.
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+  let recorded: Awaited<ReturnType<typeof reIntake>>;
+  try {
+    recorded = await reIntake(animalId, today);
+  } finally {
+    t.mock.timers.reset();
+  }
+
+  assert.equal(recorded.protocol?.protocolId, protocolId);
+  assert.deepEqual(
+    await prisma.medicalEntry.findMany({
+      where: { animalId },
+      // Both rows share one createdAt (the clock is frozen), so order by the step.
+      orderBy: { protocolStep: { sortOrder: "asc" } },
+      select: { kind: true, status: true, dueDate: true, protocolStepId: true },
+    }),
+    [
+      {
+        kind: MedicalEntryKind.EXAM,
+        status: MedicalEntryStatus.SCHEDULED,
+        dueDate: today,
+        protocolStepId: stepIds[0],
+      },
+      {
+        kind: MedicalEntryKind.MICROCHIP,
+        status: MedicalEntryStatus.SCHEDULED,
+        dueDate: today,
+        protocolStepId: stepIds[1],
+      },
+    ],
+  );
+  const rows = await prisma.animalActivityLog.findMany({
+    where: { animalId },
+    orderBy: { changedAt: "asc" },
+    select: { activityType: true, changedAt: true },
+  });
+  assert.deepEqual(
+    rows.map((row) => row.activityType),
+    [AnimalActivityType.INTAKE_PROCESSED, AnimalActivityType.MEDICAL_PROTOCOL_APPLIED],
+  );
+  assert.ok(rows[1].changedAt > rows[0].changedAt);
+});
+
+test("a re-intake with its protocol left out schedules nothing", async () => {
+  await ensureProtocol();
+  const { animalId } = await makeAnimal(
+    "Back again, protocol skipped",
+    [{ intake: "2026-01-01" }, { outcome: "2026-02-01" }],
+    protocolSpeciesId,
+  );
+
+  const recorded = await prisma.$transaction((tx) =>
+    recordReIntake(
+      tx,
+      {
+        animalId,
+        values: ReIntakeFormSchema.parse({
+          intakeType: IntakeType.SEIZE,
+          intakeDate: "2026-03-01",
+          applyProtocol: false,
+        }),
+      },
+      staffId,
+    ),
+  );
+
+  assert.equal(recorded.protocol, null);
+  assert.equal(await prisma.medicalEntry.count({ where: { animalId } }), 0);
+  assert.equal((await readAnimal(animalId)).listingStatus, AnimalListingStatus.DRAFT);
+});
+
+test("a re-intake reads an exemption on the day the animal came back, not on today", async () => {
+  await prisma.$transaction((tx) =>
+    createMedicalProtocol(tx, {
+      name: `Returning spay ${runId}`,
+      speciesId: spaySpeciesId,
+      steps: [{ kind: MedicalProtocolStepKind.SPAY_NEUTER, offsetDays: 0 }],
+    }),
+  );
+  const today = calendarDay(await getShelterToday());
+  // Came back 20 days ago, recorded today.
+  const cameBack = shiftDayKey(today, -20);
+
+  // Exempted during its first stay, the exemption to be reviewed five days
+  // after it came back, then it left.
+  const exemptThenLeave = async (label: string, reviewDate: string) => {
+    const { animalId } = await makeAnimal(label, [{ intake: "2026-01-01" }], spaySpeciesId);
+    await prisma.$transaction((tx) =>
+      recordSpayNeuterExemption(
+        tx,
+        {
+          animalId,
+          procedure: SurgeryProcedure.SPAY,
+          exemptionReason: SpayNeuterExemptionReason.MEDICAL_RISK,
+          reviewDate: calendarDay(reviewDate),
+        },
+        staffId,
+        calendarDay("2026-01-15"),
+      ),
+    );
+    await prisma.outcome.create({
+      data: {
+        animalId,
+        outcomeDate: "2026-02-01",
+        type: OutcomeType.DECEASED,
+        staffMemberId: staffId,
+      },
+    });
+    await prisma.animal.update({
+      where: { id: animalId },
+      data: { listingStatus: AnimalListingStatus.ARCHIVED, archiveReason: OutcomeType.DECEASED },
+    });
+    return animalId;
+  };
+  const scheduledSpays = (animalId: string) =>
+    prisma.medicalEntry.count({
+      where: { animalId, kind: MedicalEntryKind.SURGERY, status: MedicalEntryStatus.SCHEDULED },
+    });
+
+  // It held on the day it came back, and has lapsed by today: no spay.
+  const held = await exemptThenLeave("Exempt on return", shiftDayKey(cameBack, 5));
+  const heldResult = await reIntake(held, cameBack);
+  assert.deepEqual(
+    heldResult.protocol?.skipped.map((step) => step.reason),
+    ["EXEMPT"],
+  );
+  assert.equal(await scheduledSpays(held), 0);
+
+  // It had lapsed before it came back: the spay is scheduled from today.
+  const lapsed = await exemptThenLeave("Lapsed before return", shiftDayKey(cameBack, -1));
+  const lapsedResult = await reIntake(lapsed, cameBack);
+  assert.deepEqual(lapsedResult.protocol?.skipped, []);
+  assert.deepEqual(
+    await prisma.medicalEntry.findMany({
+      where: { animalId: lapsed, kind: MedicalEntryKind.SURGERY, status: MedicalEntryStatus.SCHEDULED },
+      select: { procedure: true, dueDate: true },
+    }),
+    [{ procedure: SurgeryProcedure.SPAY, dueDate: today }],
   );
 });

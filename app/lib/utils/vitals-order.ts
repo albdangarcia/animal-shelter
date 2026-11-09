@@ -9,7 +9,7 @@ import type { Prisma } from "@/prisma/generated/client";
 //
 // Every query anywhere in the app that resolves "the latest vitals entry" (or
 // "the last N") MUST use this exact tiebreaker chain — recomputeCurrentWeight
-// and previousWeighIn in animal-vitals.actions.ts, the vitals list's default/
+// and recordVitals' previous weigh-in in services/vitals.ts, the vitals list's default/
 // recordedAt sort in animal-vitals.data.ts, and the section-cards trend / edit
 // form's last-weigh-in date in animal.data.ts — or the cached weight, the
 // overview card, and what the list displays as newest can all disagree.

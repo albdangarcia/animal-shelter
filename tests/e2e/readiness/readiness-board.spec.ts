@@ -15,8 +15,11 @@ import {
 // - Fido: an escalated Daily Rounds two days ago.
 // - Flash: a hand-assigned "Good with other dogs" his "Solo-dog home" intro
 //   contradicts.
-// - Leo: an unplaced draft cat with no photo; he has an Intake Medical but no
+// - Leo: an unplaced draft cat with no photo; he has an intake exam but no
 //   Intake Behavioral.
+// - Rocket: an intake exam asking for a vet's review, still open. Other
+//   specs edit his traits, never his exams. Fido's review was cleared by a
+//   later vet exam.
 
 const adminPassword = process.env.ADMIN_PASSWORD;
 const BOARD_PATH = "/dashboard/readiness";
@@ -69,6 +72,10 @@ test("the sidebar entry leads to the board, which groups the seeded blockers by 
   await expect(rowFor(page, "Escalated findings", "Fido")).toContainText(
     "Daily Rounds of",
   );
+  await expect(rowFor(page, "Needs vet review", "Rocket")).toContainText(
+    /Intake exam of .+ needs vet review/,
+  );
+  await expect(rowFor(page, "Needs vet review", "Fido")).toHaveCount(0);
   await expect(
     rowFor(page, "Unsupported characteristics", "Flash"),
   ).toContainText("Good with other dogs — contradicted by a live finding");

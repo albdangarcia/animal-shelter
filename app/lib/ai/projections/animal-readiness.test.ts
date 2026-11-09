@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { fromZonedTime } from "date-fns-tz";
 const SHELTER_TIMEZONE = "America/New_York";
 import type { ReadinessBlocker } from "@/app/lib/readiness/compute-readiness";
+import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import type {
   AnimalReadiness,
   ReadinessViewerCan,
@@ -22,11 +23,13 @@ const STAFF: ReadinessViewerCan = {
   manageAssessments: true,
   manageAnimalInfo: true,
   managePhotos: true,
+  manageMedical: true,
 };
 const VOLUNTEER: ReadinessViewerCan = {
   manageAssessments: false,
   manageAnimalInfo: false,
   managePhotos: false,
+  manageMedical: false,
 };
 
 const buddy = (
@@ -64,10 +67,13 @@ const escalated: ReadinessBlocker = {
   observedAt: at("2026-09-11"),
   since: at("2026-09-11"),
 };
-const acute: ReadinessBlocker = {
-  kind: "ACUTE_HEALTH",
-  healthStatus: "UNDER_VET_CARE",
-  since: null,
+const underCare: ReadinessBlocker = {
+  kind: "UNDER_CARE",
+  episodeId: "episode-1",
+  episodeType: "UNDER_VET_CARE",
+  startDate: "2026-09-05" as CalendarDay,
+  partnerName: null,
+  since: at("2026-09-05", "00:00"),
 };
 
 test("an animal with nothing outstanding is ready", () => {
@@ -136,7 +142,7 @@ test("something that began today is 0 days, not negative", () => {
 
 test("outstanding items come most urgent first, in the board's order", () => {
   const view = toAnimalReadinessView(
-    buddy([noPhoto, missingBehavioral, acute, escalated]),
+    buddy([noPhoto, missingBehavioral, underCare, escalated]),
     STAFF,
     NOW,
   );
@@ -144,29 +150,30 @@ test("outstanding items come most urgent first, in the board's order", () => {
   if (view.status !== "NOT_READY") return;
   assert.deepEqual(
     view.outstanding.map((b) => b.kind),
-    ["ESCALATED_FINDING", "ACUTE_HEALTH", "MISSING_ASSESSMENT", "NO_PHOTO"],
+    ["ESCALATED_FINDING", "UNDER_CARE", "MISSING_ASSESSMENT", "NO_PHOTO"],
   );
 });
 
-test("an undated item says so rather than inventing a duration", () => {
-  const view = toAnimalReadinessView(buddy([acute]), STAFF, NOW);
-  assert.equal(view.status, "NOT_READY");
-  if (view.status !== "NOT_READY") return;
-  assert.equal(view.daysOutstanding, null);
-  assert.deepEqual(view.outstanding[0], {
-    kind: "ACUTE_HEALTH",
-    description: "Under Vet Care",
-    since: null,
-    daysOutstanding: null,
-    nextStep: "Update health status",
-  });
+test("an animal under care is outstanding from the episode's first day", () => {
+  for (const can of [STAFF, VOLUNTEER]) {
+    const view = toAnimalReadinessView(buddy([underCare]), can, NOW);
+    assert.equal(view.status, "NOT_READY");
+    if (view.status !== "NOT_READY") return;
+    assert.equal(view.daysOutstanding, 8);
+    assert.deepEqual(view.outstanding[0], {
+      kind: "UNDER_CARE",
+      description: "Under vet care since Sep 5, 2026",
+      since: "2026-09-05",
+      daysOutstanding: 8,
+      nextStep: "View care episode",
+    });
+  }
 });
 
 test("the animal's own duration is its oldest dated item's", () => {
-  // The undated one doesn't pull it to null, and the recent one doesn't
-  // shorten it.
+  // The recent ones don't shorten it.
   const view = toAnimalReadinessView(
-    buddy([acute, escalated, noPhoto]),
+    buddy([underCare, escalated, noPhoto]),
     STAFF,
     NOW,
   );
@@ -196,7 +203,8 @@ test("an item's description is the board's wording", () => {
 });
 
 test("the next step is worded for what the viewer may change", () => {
-  const blockers = [missingBehavioral, noPhoto];
+  const notAltered: ReadinessBlocker = { kind: "NOT_SPAYED_NEUTERED", since: ARRIVED };
+  const blockers = [missingBehavioral, notAltered, noPhoto];
   const staff = toAnimalReadinessView(buddy(blockers), STAFF, NOW);
   const volunteer = toAnimalReadinessView(buddy(blockers), VOLUNTEER, NOW);
   assert.equal(staff.status, "NOT_READY");
@@ -204,30 +212,60 @@ test("the next step is worded for what the viewer may change", () => {
   if (staff.status !== "NOT_READY" || volunteer.status !== "NOT_READY") return;
   assert.deepEqual(
     staff.outstanding.map((b) => b.nextStep),
-    ["Record Intake Behavioral", "Add a photo"],
+    ["Record Intake Behavioral", "Record spay/neuter", "Add a photo"],
   );
   assert.deepEqual(
     volunteer.outstanding.map((b) => b.nextStep),
-    ["View assessments", "View photos"],
+    ["View assessments", "View medical record", "View photos"],
+  );
+});
+
+test("the exam items' next steps", () => {
+  const blockers: ReadinessBlocker[] = [
+    { kind: "NO_INTAKE_EXAM", since: ARRIVED },
+    {
+      kind: "NEEDS_VET_REVIEW",
+      entryId: "exam-1",
+      examType: "VET",
+      examDate: "2026-09-01" as CalendarDay,
+      since: at("2026-09-01", "00:00"),
+    },
+  ];
+  const staff = toAnimalReadinessView(buddy(blockers), STAFF, NOW);
+  const volunteer = toAnimalReadinessView(buddy(blockers), VOLUNTEER, NOW);
+  assert.equal(staff.status, "NOT_READY");
+  assert.equal(volunteer.status, "NOT_READY");
+  if (staff.status !== "NOT_READY" || volunteer.status !== "NOT_READY") return;
+  // The review is urgent, so it comes first.
+  assert.deepEqual(
+    staff.outstanding.map((b) => [b.kind, b.description, b.nextStep]),
+    [
+      ["NEEDS_VET_REVIEW", "Vet exam of Sep 1, 2026 needs vet review", "Review the exam"],
+      ["NO_INTAKE_EXAM", "No intake exam", "Record intake exam"],
+    ],
+  );
+  assert.deepEqual(
+    volunteer.outstanding.map((b) => b.nextStep),
+    ["Review the exam", "View medical record"],
   );
 });
 
 test("the summary line counts outstanding items and names each kind once", () => {
   const secondMissing: ReadinessBlocker = {
     ...missingBehavioral,
-    templateKey: "INTAKE_MEDICAL",
-    templateName: "Intake Medical",
+    templateKey: "CAT_TEST",
+    templateName: "Cat Test",
   };
   assert.deepEqual(
     toReadinessLine(
-      buddy([noPhoto, missingBehavioral, secondMissing, acute]),
+      buddy([noPhoto, missingBehavioral, secondMissing, underCare]),
       NOW,
     ),
     {
       status: "NOT_READY",
       outstandingCount: 4,
       daysOutstanding: 34,
-      kinds: ["ACUTE_HEALTH", "MISSING_ASSESSMENT", "NO_PHOTO"],
+      kinds: ["UNDER_CARE", "MISSING_ASSESSMENT", "NO_PHOTO"],
     },
   );
 });

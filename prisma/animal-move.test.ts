@@ -3,8 +3,8 @@
 // outcome on the animal's row lock, which only a real Postgres shows.
 //
 // `moveAnimal` is the whole of the board's move action bar the session check,
-// the occupancy count and the cache invalidation, so driving it is driving the
-// action.
+// the care-episode offer read after it (care-episodes.test.ts), the occupancy
+// count and the cache invalidation, so driving it is driving the move.
 import { after, afterEach, before, test } from "node:test";
 import assert from "node:assert/strict";
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
@@ -120,7 +120,7 @@ const move = (
   options?: { timeout: number },
 ) =>
   prisma.$transaction(
-    (tx) => moveAnimal(tx, animalId, unitId, staffId),
+    async (tx) => (await moveAnimal(tx, animalId, unitId, staffId)).unit,
     options,
   );
 

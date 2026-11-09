@@ -40,6 +40,7 @@ import {
 } from "@/app/lib/actions/locations.actions";
 import { toast } from "sonner";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 const locationStatusOptions = [
   { value: "active", label: "Active" },
@@ -49,6 +50,7 @@ const locationStatusOptions = [
 function LocationActions({ location }: { location: LocationWithUnits }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const onSoftDelete = () => {
     startTransition(() => {
@@ -80,7 +82,12 @@ function LocationActions({ location }: { location: LocationWithUnits }) {
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+          >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -104,7 +111,10 @@ function LocationActions({ location }: { location: LocationWithUnits }) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent
+        className="sm:max-w-[480px]"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Location</DialogTitle>
           <DialogDescription>
@@ -124,6 +134,7 @@ function LocationActions({ location }: { location: LocationWithUnits }) {
 function UnitActions({ unit, locationId }: { unit: UnitModel; locationId: string }) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const onSoftDelete = () => {
     startTransition(() => {
@@ -155,7 +166,12 @@ function UnitActions({ unit, locationId }: { unit: UnitModel; locationId: string
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+          >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -179,7 +195,10 @@ function UnitActions({ unit, locationId }: { unit: UnitModel; locationId: string
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent
+        className="sm:max-w-[480px]"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Unit</DialogTitle>
           <DialogDescription>

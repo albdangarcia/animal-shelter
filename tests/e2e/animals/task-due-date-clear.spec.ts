@@ -140,5 +140,12 @@ test("clearing a task's due date with the X beside the picker leaves it undated"
 
   await dialog.getByRole("button", { name: "Update Task" }).click();
   await expect(dialog).toBeHidden();
+  // Focus goes back to the menu's button, not to the page.
+  await expect(
+    page
+      .getByRole("row")
+      .filter({ hasText: task.title })
+      .getByRole("button", { name: "Open menu" }),
+  ).toBeFocused();
   await expect.poll(() => storedDueDate(task.id)).toBeNull();
 });

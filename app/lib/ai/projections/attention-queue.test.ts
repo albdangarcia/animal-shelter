@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { toAttentionQueueView } from "./attention-queue";
 import type { AttentionQueueItem } from "@/app/lib/data/animals/attention-queue";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
-import { TaskPriority } from "@/prisma/generated/enums";
+import { DoseSlot, MedicalEntryKind, TaskPriority } from "@/prisma/generated/enums";
 
 const TODAY = calendarDay("2026-08-28");
 
@@ -57,6 +57,39 @@ test("the due date reaches the model as the day it is, not an instant", () => {
   assert.equal(reason.dueDate, "2026-08-20");
 });
 
+const withMedical = (dueDate: string): AttentionQueueItem => ({
+  animalId: "a3",
+  name: "Fido",
+  species: "Dog",
+  currentUnit: "Medical wing · MED-1",
+  reasons: [
+    {
+      kind: "MEDICAL_DUE",
+      entryId: "e1",
+      itemName: "DHPP",
+      entryKind: MedicalEntryKind.VACCINE,
+      dueDate: calendarDay(dueDate),
+    },
+  ],
+});
+
+test("medical care due before today is overdue, and due today is not", () => {
+  const view = (dueDate: string) =>
+    toAttentionQueueView([withMedical(dueDate)], TODAY)[0].reasons[0];
+  assert.deepEqual(view("2026-08-27"), {
+    kind: "MEDICAL_DUE",
+    entryId: "e1",
+    itemName: "DHPP",
+    entryKind: MedicalEntryKind.VACCINE,
+    dueDate: "2026-08-27",
+    overdue: true,
+  });
+  assert.equal(
+    (view("2026-08-28") as { overdue?: boolean }).overdue,
+    false,
+  );
+});
+
 test("non-task reasons are unaffected", () => {
   const view = toAttentionQueueView(
     [
@@ -65,10 +98,52 @@ test("non-task reasons are unaffected", () => {
         name: "Fern",
         species: "Rabbit",
         currentUnit: "Isolation · ISO-2",
-        reasons: [{ kind: "UNTASKED_ACUTE_HEALTH", healthStatus: "AWAITING_TRIAGE" }],
-      } as AttentionQueueItem,
+        reasons: [
+          {
+            kind: "CARE_UNPLANNED",
+            episodeId: "episode-1",
+            episodeType: "HOSPITALISED_OFF_SITE",
+            startDate: calendarDay("2026-08-20"),
+          },
+        ],
+      },
     ],
     TODAY,
   );
-  assert.equal(view[0].reasons[0].kind, "UNTASKED_ACUTE_HEALTH");
+  // The episode's id stays on the server; the model gets what and since when.
+  assert.deepEqual(view[0].reasons[0], {
+    kind: "CARE_UNPLANNED",
+    episodeType: "HOSPITALISED_OFF_SITE",
+    startDate: "2026-08-20",
+  });
+});
+
+test("missed doses reach the model as how many, the first one missed, and the medications", () => {
+  const view = toAttentionQueueView(
+    [
+      {
+        animalId: "a3",
+        name: "Fido",
+        species: "Dog",
+        currentUnit: "Medical wing · MED-1",
+        reasons: [
+          {
+            kind: "DOSE_MISSED",
+            // Three slots of two medications.
+            count: 3,
+            earliestSlotDate: calendarDay("2026-08-27"),
+            earliestSlot: DoseSlot.PM,
+            medications: ["Doxycycline", "Meloxicam"],
+          },
+        ],
+      },
+    ],
+    TODAY,
+  );
+  assert.deepEqual(view[0].reasons[0], {
+    kind: "DOSE_MISSED",
+    missedDoses: 3,
+    earliest: { date: "2026-08-27", slot: "PM" },
+    medications: ["Doxycycline", "Meloxicam"],
+  });
 });

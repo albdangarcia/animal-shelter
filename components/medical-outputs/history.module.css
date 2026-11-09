@@ -1,0 +1,48 @@
+.sheet {
+  color: #111;
+  background: #fff;
+  max-width: 58rem;
+  margin: 0 auto;
+  padding: 2rem;
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.sheet h1 { font-size: 1.8rem; font-weight: 700; margin: 1rem 0 .5rem; }
+.sheet h2 { font-size: 1.15rem; font-weight: 700; margin: 1.5rem 0 .5rem; break-after: avoid; }
+.sheet h3 { font-weight: 600; margin: 1rem 0 .5rem; break-after: avoid; }
+.sheet p { margin: .35rem 0; }
+.sheet dl { display: grid; grid-template-columns: 7rem minmax(0, 1fr); gap: .25rem 1rem; }
+.sheet dt { font-weight: 600; }
+.sheet dd { min-width: 0; }
+.sheet table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.sheet th, .sheet td { text-align: left; vertical-align: top; border-bottom: 1px solid #bbb; padding: .5rem; }
+.sheet th:first-child, .sheet td:first-child { width: 7.5rem; }
+.sheet thead { display: table-header-group; }
+.sheet tr { break-inside: avoid; }
+.sheet ul { padding-left: 1.25rem; list-style: disc; }
+.sheet li { margin: .4rem 0; }
+.controls { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+.controls a, .controls button { border: 1px solid #555; border-radius: .25rem; padding: .5rem .75rem; cursor: pointer; }
+.controls :focus-visible { outline: 3px solid #1359a0; outline-offset: 3px; }
+.note { font-size: .85em; }
+.sheet .signature { margin-top: 1.5rem; }
+.signature span { display: inline-block; width: 18rem; max-width: 100%; border-bottom: 1px solid #111; }
+@media (max-width: 500px) {
+  .sheet { padding: 1rem; }
+  .sheet th:first-child, .sheet td:first-child { width: 6rem; }
+  .sheet dl { grid-template-columns: 5rem minmax(0, 1fr); }
+  .certificate dl { grid-template-columns: 7rem minmax(0, 1fr); }
+}
+@page { margin: 15mm; }
+@media print {
+  .sheet { max-width: none; margin: 0; padding: 0; font-size: 10pt; color: #000; background: #fff; }
+  .sheet h1 { font-size: 19pt; }
+  .sheet h2 { font-size: 13pt; }
+  .certificate { line-height: 1.4; }
+  .certificate h1 { font-size: 17pt; line-height: 1.3; }
+  .controls { display: none; }
+  .sheet :global(*) { box-shadow: none !important; text-shadow: none !important; }
+  :global(body):has(.sheet) { background: #fff !important; color: #000 !important; }
+  :global(body):has(.sheet) :global([data-sonner-toaster]) { display: none; }
+}

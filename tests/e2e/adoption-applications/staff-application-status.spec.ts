@@ -4,6 +4,7 @@ import {
   bootstrapStorageState,
   fillStable,
   rowMenuItemHref,
+  SEEDED_USER_PASSWORD,
   storageStatePathFor,
   waitForPathname,
 } from "../support/applications";
@@ -123,6 +124,39 @@ test("the animal profile opens the approved application's adoption form", async 
   await expect(page.getByText("Process Animal Outcome", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Outcome Type")).toBeDisabled();
   await expect(page.getByLabel("Outcome Type")).toContainText("Adoption");
+});
+
+test("only someone who can record outcomes is offered Create Outcome on an approved application", async ({
+  page,
+  browser,
+}) => {
+  await gotoTable(page, `${APPLICATIONS_PATH}?status=APPROVED`);
+  const reviewHref = await rowMenuItemHref(page, 0, "Review");
+  const createOutcome = (target: Page) =>
+    target.getByRole("link", { name: "Create Outcome", exact: true });
+
+  await page.goto(reviewHref);
+  await expect(createOutcome(page)).toBeVisible();
+
+  const volunteerStatePath = storageStatePathFor(
+    "staff-application-status-volunteer.state.json",
+  );
+  await bootstrapStorageState(browser, {
+    email: "volunteer1@example.com",
+    password: SEEDED_USER_PASSWORD,
+    storageStatePath: volunteerStatePath,
+  });
+  const context = await browser.newContext({ storageState: volunteerStatePath });
+  try {
+    const volunteer = await context.newPage();
+    await volunteer.goto(reviewHref);
+    await expect(
+      volunteer.getByText("This application is approved and ready for the final step."),
+    ).toBeVisible();
+    await expect(createOutcome(volunteer)).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
 });
 
 test("an adopted animal offers re-intake instead of completing adoption again", async ({

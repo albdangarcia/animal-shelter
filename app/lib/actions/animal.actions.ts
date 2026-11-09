@@ -7,6 +7,7 @@ import { cuidSchema } from "../zod-schemas/common.schemas";
 import {
   CreateAnimalFormSchema,
   AnimalEditFormSchema,
+  hasIntakeMedical,
   type CreateAnimalFormInput,
   type AnimalEditFormInput,
 } from "../zod-schemas/animal.schemas";
@@ -16,6 +17,7 @@ import {
   withAuthenticatedUser,
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { can } from "../auth/can";
 import {
   AnimalActivityType,
   AnimalListingStatus,
@@ -26,6 +28,22 @@ import { buildLocationChangeSummary } from "../utils/location-activity";
 import { ConflictError, NotFoundError } from "../utils/errors";
 import { findLiveUnitForPlacement } from "../services/unit-housing";
 import { createAnimalFromForm } from "../services/animal-creation";
+import {
+  SKIP_PROTOCOL_REFUSAL,
+  withProtocolHeadline,
+} from "../services/medical-protocol-application";
+import {
+  careEpisodeOfferInMove,
+  type CareEpisodeOffer,
+} from "../services/care-episode";
+import {
+  careEpisodeOfferPrompt,
+  type CareEpisodeOfferPrompt,
+} from "../data/care-episode-offer.data";
+import {
+  MedicalEntryRefusal,
+  nameChipNumberHolder,
+} from "../services/medical-entry";
 import { toAnimalData } from "../utils/animal-data";
 import { del } from "@vercel/blob";
 import { isDemo } from "@/lib/flags";
@@ -35,6 +53,17 @@ import {
   effectiveApplicationStatuses,
   lockAnimal,
 } from "../data/application-status.data";
+
+/**
+ * Where the create form shows a refusal from the medical record. A chip's is
+ * on its number; a spay's or neuter's on its own fields.
+ */
+const intakeMedicalField = (field: string | null | undefined) => {
+  if (!field) return null;
+  return field === "chipNumber"
+    ? "intakeMedical.chipNumber"
+    : `intakeMedical.altered.${field}`;
+};
 
 const _createAnimal = async (
   user: SessionUser,
@@ -61,7 +90,28 @@ const _createAnimal = async (
     };
   }
 
-  const { intakeType, surrenderingPersonId } = validatedFields.data;
+  const { intakeType, surrenderingPersonId, intakeMedical, applyProtocol } =
+    validatedFields.data;
+
+  // A chip or a spay or neuter recorded at intake goes on the medical record,
+  // which only someone who may record medical care writes to. The form shows
+  // the fields to them alone.
+  if (
+    hasIntakeMedical(intakeMedical) &&
+    !can(user.role, AppPermissions.MEDICAL_MANAGE)
+  ) {
+    return {
+      ok: false,
+      message:
+        "You don't have permission to record a microchip or a spay/neuter at intake.",
+    };
+  }
+
+  // The protocol is the shelter's policy for every new animal; leaving it
+  // out is a medical decision.
+  if (!applyProtocol && !can(user.role, AppPermissions.MEDICAL_MANAGE)) {
+    return { ok: false, message: SKIP_PROTOCOL_REFUSAL };
+  }
 
   if (intakeType === IntakeType.OWNER_SURRENDER) {
     const parsedPersonId = cuidSchema.safeParse(surrenderingPersonId);
@@ -76,10 +126,11 @@ const _createAnimal = async (
     }
   }
 
+  let created: Awaited<ReturnType<typeof createAnimalFromForm>>;
   try {
     // The day check reads the shelter's settings, so it sits inside the try
     // with the writes.
-    const created = await createAnimalFromForm(
+    created = await createAnimalFromForm(
       validatedFields.data,
       staffMemberId,
     );
@@ -91,6 +142,20 @@ const _createAnimal = async (
       };
     }
   } catch (error) {
+    // The medical record's refusal (a chip number already on another
+    // animal's record, maybe taken at the same moment) rolled the intake
+    // back. It goes under the intake's own field.
+    const named = await nameChipNumberHolder(prisma, error);
+    if (named instanceof MedicalEntryRefusal) {
+      const field = intakeMedicalField(named.field);
+      return {
+        ok: false,
+        message: named.message,
+        fieldErrors: field
+          ? ({ [field]: [named.message] } as FieldErrors<CreateAnimalFormInput>)
+          : undefined,
+      };
+    }
     console.error("Database Error creating intake record:", error);
     return {
       ok: false,
@@ -99,19 +164,33 @@ const _createAnimal = async (
   }
 
   revalidatePath("/dashboard/animals");
+  if (created.protocol) {
+    revalidatePath(`/dashboard/animals/${created.animalId}`);
+    revalidatePath("/dashboard/medical/due");
+  }
 
   return {
     ok: true,
-    message: "Animal intake created successfully.",
+    message: withProtocolHeadline(
+      "Animal intake created successfully.",
+      created.protocol,
+    ),
     redirectTo: "/dashboard/animals",
   };
 };
+
+/**
+ * A changed unit into or out of a medical one offers a holder of
+ * MEDICAL_MANAGE to open or close a care episode, which the form asks about
+ * before it leaves. Only an offer: the save is the same either way.
+ */
+export type UpdateAnimalData = { careEpisodeOffer: CareEpisodeOfferPrompt | null };
 
 const _updateAnimal = async (
   user: SessionUser,
   animalId: string,
   values: AnimalEditFormInput,
-): Promise<FormResult<AnimalEditFormInput>> => {
+): Promise<FormResult<AnimalEditFormInput, UpdateAnimalData>> => {
   const parsedId = cuidSchema.safeParse(animalId);
   if (!parsedId.success) {
     return { ok: false, message: "Invalid Animal ID." };
@@ -134,7 +213,6 @@ const _updateAnimal = async (
     animalName,
     estimatedBirthDate,
     sex,
-    healthStatus,
     listingStatus,
     species: speciesId,
     breed: breedId,
@@ -158,6 +236,8 @@ const _updateAnimal = async (
     new Set([primaryColorId, ...additionalColorIds]),
   );
 
+  const offersCare = can(user.role, AppPermissions.MEDICAL_MANAGE);
+  let offer: CareEpisodeOffer | null = null;
   try {
     await prisma.$transaction(async (tx) => {
       // The update below writes the listing status back whether or not it
@@ -299,11 +379,8 @@ const _updateAnimal = async (
           // as null (never ""), so no more "" ? undefined : heightCm guard
           // that silently left a stale value in place.
           heightCm,
-          healthStatus: healthStatus,
           listingStatus: listingStatus,
           publishedAt: publishedAt,
-          microchipNumber: mapped.microchipNumber,
-          isSpayedNeutered: mapped.isSpayedNeutered,
           currentUnit: resolvedUnitId
             ? { connect: { id: resolvedUnitId } }
             : { disconnect: true },
@@ -339,6 +416,15 @@ const _updateAnimal = async (
             ),
           },
         });
+        // A failed read gives no offer and leaves the save be.
+        if (offersCare) {
+          offer = await careEpisodeOfferInMove(
+            tx,
+            validatedAnimalId,
+            currentAnimal.currentUnitId,
+            resolvedUnitId,
+          );
+        }
       }
     });
   } catch (error) {
@@ -355,9 +441,18 @@ const _updateAnimal = async (
   revalidatePath("/dashboard/animals");
   revalidatePath(`/dashboard/animals/${validatedAnimalId}`);
 
+  let careEpisodeOffer: CareEpisodeOfferPrompt | null = null;
+  try {
+    careEpisodeOffer = await careEpisodeOfferPrompt(offer);
+  } catch (error) {
+    // The save already succeeded; the offer is a convenience, so don't fail.
+    console.error("Database Error reading the care episode offer:", error);
+  }
+
   return {
     ok: true,
     message: "Animal updated successfully.",
+    data: { careEpisodeOffer },
     redirectTo: `/dashboard/animals/${validatedAnimalId}`,
   };
 };

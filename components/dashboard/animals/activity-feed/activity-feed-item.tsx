@@ -9,7 +9,6 @@ import {
   LogIn,
   LogOut,
   Pencil,
-  HeartPulse,
   PackagePlus,
   ArrowRightLeft,
   MapPin,
@@ -18,6 +17,15 @@ import {
   Trash2,
   Weight,
   UserPlus,
+  Syringe,
+  Ban,
+  CalendarPlus,
+  CalendarClock,
+  CircleSlash,
+  Stethoscope,
+  Hospital,
+  CalendarCheck,
+  Pill,
   LucideProps,
 } from "lucide-react";
 import { AnimalActivityType } from "@/prisma/generated/enums";
@@ -70,10 +78,6 @@ const activityConfig: Record<
     icon: Undo2,
     text: "reversed an outcome",
   },
-  [AnimalActivityType.MEDICAL_RECORD_ADDED]: {
-    icon: HeartPulse,
-    text: "added a medical record",
-  },
   [AnimalActivityType.CREATED]: {
     icon: PackagePlus,
     text: "added this animal to the system",
@@ -101,6 +105,114 @@ const activityConfig: Record<
   [AnimalActivityType.VITALS_RECORDED]: {
     icon: Weight,
     text: "recorded vitals",
+  },
+  [AnimalActivityType.MEDICAL_ENTRY_RECORDED]: {
+    icon: Syringe,
+    text: "recorded a medical entry",
+  },
+  [AnimalActivityType.MEDICAL_ENTRY_EDITED]: {
+    icon: Pencil,
+    text: "edited a medical entry",
+  },
+  [AnimalActivityType.MEDICAL_ENTRY_VOIDED]: {
+    icon: Ban,
+    text: "voided a medical entry",
+  },
+  [AnimalActivityType.MEDICAL_ENTRY_SCHEDULED]: {
+    icon: CalendarPlus,
+    text: "scheduled a medical entry",
+  },
+  [AnimalActivityType.MEDICAL_ENTRY_RESCHEDULED]: {
+    icon: CalendarClock,
+    text: "rescheduled a medical entry",
+  },
+  [AnimalActivityType.MEDICAL_ENTRY_DECLINED]: {
+    icon: CircleSlash,
+    text: "declined a medical entry",
+  },
+  [AnimalActivityType.MEDICAL_CONDITION_ADDED]: {
+    icon: Stethoscope,
+    text: "added to the problem list",
+  },
+  [AnimalActivityType.MEDICAL_CONDITION_EDITED]: {
+    icon: Pencil,
+    text: "edited the problem list",
+  },
+  [AnimalActivityType.MEDICAL_CONDITION_VOIDED]: {
+    icon: Ban,
+    text: "voided a problem-list entry",
+  },
+  [AnimalActivityType.CARE_EPISODE_OPENED]: {
+    icon: Hospital,
+    text: "opened a care episode",
+  },
+  [AnimalActivityType.CARE_EPISODE_CLOSED]: {
+    icon: CalendarCheck,
+    text: "closed a care episode",
+  },
+  [AnimalActivityType.CARE_EPISODE_EDITED]: {
+    icon: Pencil,
+    text: "edited a care episode",
+  },
+  [AnimalActivityType.CARE_EPISODE_VOIDED]: {
+    icon: Ban,
+    text: "voided a care episode",
+  },
+  [AnimalActivityType.MEDICAL_PROTOCOL_APPLIED]: {
+    icon: CalendarPlus,
+    text: "applied a medical protocol",
+  },
+  [AnimalActivityType.MEDICATION_ORDERED]: {
+    icon: Pill,
+    text: "ordered a medication",
+  },
+  [AnimalActivityType.MEDICATION_ORDER_EDITED]: {
+    icon: Pencil,
+    text: "corrected a medication order",
+  },
+  [AnimalActivityType.MEDICATION_DISCONTINUED]: {
+    icon: CircleSlash,
+    text: "discontinued a medication",
+  },
+  [AnimalActivityType.MEDICATION_ORDER_VOIDED]: {
+    icon: Ban,
+    text: "voided a medication order",
+  },
+  [AnimalActivityType.MEDICATION_DOSE_NOT_GIVEN]: {
+    icon: CircleSlash,
+    text: "recorded a dose not given",
+  },
+  [AnimalActivityType.MEDICATION_DOSE_VOIDED]: {
+    icon: Ban,
+    text: "voided a dose",
+  },
+  [AnimalActivityType.MEDICAL_DOCUMENT_ADDED]: {
+    icon: FileText,
+    text: "added a medical document",
+  },
+  [AnimalActivityType.MEDICAL_DOCUMENT_EDITED]: {
+    icon: Pencil,
+    text: "corrected a medical document",
+  },
+  [AnimalActivityType.MEDICAL_DOCUMENT_VOIDED]: {
+    icon: Ban,
+    text: "voided a medical document",
+  },
+  [AnimalActivityType.MEDICAL_DOCUMENT_FILE_REMOVED]: {
+    icon: Trash2,
+    text: "removed a medical document's file",
+  },
+  [AnimalActivityType.VET_VISIT_REPORTED]: {
+    icon: Stethoscope,
+    text: "reported an outside vet visit",
+  },
+  [AnimalActivityType.VET_VISIT_REPORT_REVIEWED]: {
+    icon: CalendarCheck,
+    text: "reviewed a foster's report",
+  },
+  [AnimalActivityType.VET_VISIT_REPORT_DISMISSED]: {
+    icon: CircleSlash,
+    text: "dismissed a foster's report",
   },
   [AnimalActivityType.TASK_CREATED]: {
     icon: ClipboardList,

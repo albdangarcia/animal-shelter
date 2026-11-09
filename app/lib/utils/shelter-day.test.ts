@@ -7,10 +7,14 @@ import {
   countByShelterDay,
   formatShelterDay,
   formatShelterDayOrNA,
+  formatTimeOfDay,
   parseCalendarDay,
   shelterDayKey as rawShelterDayKey,
   shelterToday as rawShelterToday,
   shelterDaysBetween as rawShelterDaysBetween,
+  shelterClock,
+  shelterInstant,
+  shelterNow,
   shelterDaysBetweenKeys,
   shiftDayKey,
   startOfShelterDay as rawStartOfShelterDay,
@@ -102,6 +106,68 @@ test("across a DST change, a day begins at the offset in force", inNewYork, () =
   );
   assert.equal(shelterDayKey(utc("2026-11-02T04:59:59Z")), "2026-11-01");
   assert.equal(shelterDayKey(utc("2026-11-02T05:00:00Z")), "2026-11-02");
+});
+
+test("where the clocks spring forward at midnight, the day begins when the jump lands", () => {
+  // Each of these days has no 00:00: the clocks go from 23:59 to 01:00. Read
+  // at the old offset, 00:00 would be 23:00 the evening before.
+  const cases: [string, string, string][] = [
+    // Santiago, Sep 6, 2026: from UTC-4 to UTC-3.
+    ["America/Santiago", "2026-09-06", "2026-09-06T04:00:00Z"],
+    // Havana, Mar 8, 2026: from UTC-5 to UTC-4.
+    ["America/Havana", "2026-03-08", "2026-03-08T05:00:00Z"],
+    // Beirut, Mar 29, 2026: from UTC+2 to UTC+3.
+    ["Asia/Beirut", "2026-03-29", "2026-03-28T22:00:00Z"],
+  ];
+  for (const [timezone, value, expected] of cases) {
+    const start = rawStartOfShelterDay(day(value), timezone);
+    assert.deepEqual(start, utc(expected), timezone);
+    assert.equal(rawShelterDayKey(start, timezone), value, timezone);
+    // A minute earlier is still the day before.
+    assert.equal(
+      rawShelterDayKey(new Date(start.getTime() - 60_000), timezone),
+      shiftDayKey(day(value), -1),
+      timezone,
+    );
+  }
+});
+
+test("a day begins at its first instant, however the clock changed around midnight", () => {
+  const cases: [string, string, string][] = [
+    // Colombo, Apr 15, 2006: at 00:30 the clocks went back to 00:00, so the
+    // day's 00:00 came twice; it begins at the first.
+    ["Asia/Colombo", "2006-04-15", "2006-04-14T18:00:00Z"],
+    // Goose Bay, Nov 4, 2007: at 00:01 the clocks went back to 23:01 on the
+    // day before, so the day's first minute came an hour before its second.
+    ["America/Goose_Bay", "2007-11-04", "2007-11-04T03:00:00Z"],
+    // Vostok, Nov 1, 1994: a jump of seven hours.
+    ["Antarctica/Vostok", "1994-11-01", "1994-11-01T00:00:00Z"],
+    // Monrovia, Jan 7, 1972: an offset of 44 minutes 30 seconds ended.
+    ["Africa/Monrovia", "1972-01-07", "1972-01-07T00:44:30Z"],
+  ];
+  for (const [timezone, value, expected] of cases) {
+    const start = rawStartOfShelterDay(day(value), timezone);
+    assert.deepEqual(start, utc(expected), timezone);
+    assert.equal(rawShelterDayKey(start, timezone), value, timezone);
+    assert.equal(
+      rawShelterDayKey(new Date(start.getTime() - 1), timezone),
+      shiftDayKey(day(value), -1),
+      timezone,
+    );
+  }
+  // The first day there is: the day before it is year zero, 1 BC.
+  const yearOne = new Date(0);
+  yearOne.setUTCFullYear(1, 0, 1);
+  assert.deepEqual(rawStartOfShelterDay(day("0001-01-01"), "UTC"), yearOne);
+  // Apia skipped Dec 30, 2011 whole: it reads as the start of Dec 31.
+  assert.deepEqual(
+    rawStartOfShelterDay(day("2011-12-30"), "Pacific/Apia"),
+    utc("2011-12-30T10:00:00Z"),
+  );
+  assert.equal(
+    rawShelterDayKey(utc("2011-12-30T10:00:00Z"), "Pacific/Apia"),
+    "2011-12-31",
+  );
 });
 
 test("a report of one day counts that day, and no other", () => {
@@ -199,4 +265,92 @@ test("counting by day groups the days that are equal", () => {
     ["2026-09-18", 3],
     ["2026-09-19", 1],
   ]);
+});
+
+test("the shelter's clock reads its day and time of day, as today does", () => {
+  const at = new Date("2026-10-15T14:05:30Z");
+  assert.deepEqual(shelterClock(at, "America/New_York"), {
+    day: "2026-10-15",
+    time: "10:05",
+  });
+  assert.equal(shelterClock(at, "America/New_York").day, rawShelterToday("America/New_York", at));
+  // Midnight reads 00:00, never 24:00.
+  assert.deepEqual(shelterClock(new Date("2026-10-15T04:00:00Z"), "America/New_York"), {
+    day: "2026-10-15",
+    time: "00:00",
+  });
+});
+
+test("the shelter's clock jumps with a spring-forward and repeats the fall-back hour", () => {
+  // New York springs forward at 02:00 on Mar 8, 2026: 01:59 is followed by 03:00.
+  assert.equal(shelterClock(new Date("2026-03-08T06:59:00Z"), "America/New_York").time, "01:59");
+  assert.deepEqual(shelterClock(new Date("2026-03-08T07:30:00Z"), "America/New_York"), {
+    day: "2026-03-08",
+    time: "03:30",
+  });
+  // And falls back at 02:00 on Nov 1, 2026: 01:30 comes twice, an hour apart.
+  const first = shelterClock(new Date("2026-11-01T05:30:00Z"), "America/New_York");
+  const second = shelterClock(new Date("2026-11-01T06:30:00Z"), "America/New_York");
+  assert.deepEqual(first, { day: "2026-11-01", time: "01:30" });
+  assert.deepEqual(second, first);
+});
+
+test("east of UTC the shelter's clock is on a later day than UTC's", () => {
+  const at = new Date("2026-10-15T20:00:00Z");
+  assert.deepEqual(shelterClock(at, "Asia/Tokyo"), { day: "2026-10-16", time: "05:00" });
+  assert.equal(shelterClock(at, "Asia/Tokyo").day, rawShelterDayKey(at, "Asia/Tokyo"));
+});
+
+test("a time of day reads on a twelve-hour clock", () => {
+  assert.equal(formatTimeOfDay("00:05"), "12:05 AM");
+  assert.equal(formatTimeOfDay("09:30"), "9:30 AM");
+  assert.equal(formatTimeOfDay("12:00"), "12:00 PM");
+  assert.equal(formatTimeOfDay("20:00"), "8:00 PM");
+  assert.equal(formatTimeOfDay("23:59"), "11:59 PM");
+});
+
+test("one reading of the shelter's time gives today and the clock from the same instant", () => {
+  // The last millisecond of Oct 14 in New York, and the first of Oct 15.
+  for (const [at, day, time] of [
+    ["2026-10-15T03:59:59.999Z", "2026-10-14", "23:59"],
+    ["2026-10-15T04:00:00.000Z", "2026-10-15", "00:00"],
+  ] as const) {
+    const now = new Date(at);
+    const reading = shelterNow(now, "America/New_York");
+    assert.equal(reading.now, now);
+    assert.deepEqual(reading.clock, { day, time });
+    assert.equal(reading.today, reading.clock.day);
+    assert.equal(reading.today, rawShelterToday("America/New_York", now));
+  }
+});
+
+test("a day and a time on the shelter's clock is the instant the clock reads them", () => {
+  const day = calendarDay("2026-10-15");
+  assert.equal(shelterInstant(day, "08:12", "America/New_York").toISOString(), "2026-10-15T12:12:00.000Z");
+  assert.equal(shelterInstant(day, "00:00", "America/New_York").toISOString(), "2026-10-15T04:00:00.000Z");
+  assert.equal(shelterInstant(day, "23:59", "America/New_York").toISOString(), "2026-10-16T03:59:00.000Z");
+  // East of UTC the instant is on the day before UTC's.
+  assert.equal(shelterInstant(day, "05:00", "Asia/Tokyo").toISOString(), "2026-10-14T20:00:00.000Z");
+  // Read back, it is the same day and time.
+  const at = shelterInstant(day, "19:45", "America/Los_Angeles");
+  assert.deepEqual(shelterClock(at, "America/Los_Angeles"), { day, time: "19:45" });
+});
+
+test("a skipped time reads as the jump's landing, a repeated one as the first", () => {
+  // New York springs forward at 02:00 on Mar 8, 2026: 02:30 never happens,
+  // and the clock reads 03:00 at 07:00Z.
+  const spring = calendarDay("2026-03-08");
+  assert.equal(shelterInstant(spring, "02:30", "America/New_York").toISOString(), "2026-03-08T07:00:00.000Z");
+  assert.equal(shelterInstant(spring, "01:59", "America/New_York").toISOString(), "2026-03-08T06:59:00.000Z");
+  assert.equal(shelterInstant(spring, "03:00", "America/New_York").toISOString(), "2026-03-08T07:00:00.000Z");
+  // And falls back at 02:00 on Nov 1, 2026: 01:30 comes at 05:30Z and 06:30Z.
+  const fall = calendarDay("2026-11-01");
+  assert.equal(shelterInstant(fall, "01:30", "America/New_York").toISOString(), "2026-11-01T05:30:00.000Z");
+  assert.equal(shelterInstant(fall, "02:30", "America/New_York").toISOString(), "2026-11-01T07:30:00.000Z");
+  // A midnight the clock skips is when the day begins.
+  const santiago = calendarDay("2026-09-06");
+  assert.equal(
+    shelterInstant(santiago, "00:00", "America/Santiago").toISOString(),
+    rawStartOfShelterDay(santiago, "America/Santiago").toISOString(),
+  );
 });

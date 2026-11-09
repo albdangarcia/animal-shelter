@@ -24,6 +24,7 @@ import {
   restoreColor,
 } from "@/app/lib/actions/colors-catalog.actions";
 import { toast } from "sonner";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface Props {
   color: ColorModel;
@@ -32,6 +33,7 @@ interface Props {
 export function ColorActions({ color }: Props) {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const onSoftDelete = () => {
     startTransition(() => {
@@ -66,7 +68,12 @@ export function ColorActions({ color }: Props) {
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-7 w-7">
+          <Button
+            ref={triggerRef}
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+          >
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -90,7 +97,10 @@ export function ColorActions({ color }: Props) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-[480px]">
+      <DialogContent
+        className="sm:max-w-[480px]"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Color</DialogTitle>
           <DialogDescription>

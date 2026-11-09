@@ -1,0 +1,30 @@
+import DoseTimes from "@/components/dashboard/settings/medical/dose-times";
+import { MedicalSettingsNav } from "@/components/dashboard/settings/medical/medical-settings-nav";
+import { Authorize } from "@/components/auth/authorize";
+import StatusPage from "@/components/StatusPage";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
+
+const Page = async () => {
+  return (
+    <Authorize
+      permission={AppPermissions.MEDICAL_SETTINGS_MANAGE}
+      fallback={<StatusPage type="accessDenied" />}
+    >
+      <PageContent />
+    </Authorize>
+  );
+};
+
+const PageContent = async () => {
+  const { doseSlotEnds } = await getShelterSettings();
+
+  return (
+    <div className="flex flex-col gap-4">
+      <MedicalSettingsNav />
+      <DoseTimes ends={doseSlotEnds} />
+    </div>
+  );
+};
+
+export default Page;

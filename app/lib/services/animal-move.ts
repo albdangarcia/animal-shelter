@@ -34,7 +34,7 @@ export class AnimalArchivedError extends PreconditionFailedError {
 
 /**
  * Moves an animal to `targetUnitId`, or to Unplaced when it is null. Returns
- * the live target unit, or null for Unplaced.
+ * the live target unit (null for Unplaced) and the unit it came from.
  */
 export const moveAnimal = async (
   tx: TransactionClient,
@@ -110,5 +110,5 @@ export const moveAnimal = async (
     });
   }
 
-  return target;
+  return { unit: target, fromUnitId: previousUnitId };
 };

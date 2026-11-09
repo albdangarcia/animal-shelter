@@ -98,6 +98,7 @@ before(async () => {
 });
 
 after(async () => {
+  await prisma.medicalEntry.deleteMany({ where: { createdById: staffId } });
   await prisma.outcome.deleteMany({ where: { staffMemberId: staffId } });
   await prisma.intake.deleteMany({ where: { staffMemberId: staffId } });
   await prisma.adoptionApplication.deleteMany({ where: { applicantId } });
@@ -177,7 +178,7 @@ const deceased = (outcomeDate: string, notes = ""): OutcomeFormOutput =>
 
 const record = (animalId: string, outcomeDate: string) =>
   prisma.$transaction((tx) =>
-    recordOutcome(tx, { animalId, values: deceased(outcomeDate) }, staffId),
+    recordOutcome(tx, { animalId, values: { ...deceased(outcomeDate), medical: { kind: "DEATH" as const, source: null, cause: null, circumstanceNotes: null, bodyDisposition: null, circumstances: "FOUND_DEAD" as const, causeKnowledge: "UNKNOWN" as const, necropsyRequested: null } } }, staffId),
   );
 
 const readAnimal = async (animalId: string) => {
@@ -190,7 +191,8 @@ const readAnimal = async (animalId: string) => {
         select: { id: true, outcomeDate: true, notes: true },
         orderBy: { outcomeDate: "asc" },
       },
-      activityLog: { select: { activityType: true, changeSummary: true } },
+      activityLog: {
+        where: { activityType: { notIn: [AnimalActivityType.MEDICAL_ENTRY_RECORDED, AnimalActivityType.MEDICAL_ENTRY_EDITED, AnimalActivityType.MEDICAL_ENTRY_VOIDED] } }, select: { activityType: true, changeSummary: true } },
     },
   });
   return {
@@ -444,7 +446,7 @@ const LONG_AGO = new Date("2026-02-01T12:00:00Z");
 const recordedOutcome = async (label: string, values: OutcomeFormOutput) => {
   const { animalId } = await makeAnimal(label, [{ intake: "2026-01-03" }]);
   await prisma.$transaction((tx) =>
-    recordOutcome(tx, { animalId, values }, staffId),
+    recordOutcome(tx, { animalId, values: { ...values, ...(values.outcomeType === "DECEASED" ? { medical: { kind: "DEATH" as const, source: null, cause: null, circumstanceNotes: null, bodyDisposition: null, circumstances: "FOUND_DEAD" as const, causeKnowledge: "UNKNOWN" as const, necropsyRequested: null } } : {}) } }, staffId),
   );
   const { id } = await prisma.outcome.findFirstOrThrow({
     where: { animalId },
@@ -680,6 +682,7 @@ const recordWithLinks = (
         animalId,
         values: OutcomeFormSchema.parse({
           outcomeType,
+          ...(outcomeType === "DECEASED" ? { medical: { kind: "DEATH" as const, source: null, cause: null, circumstanceNotes: null, bodyDisposition: null, circumstances: "FOUND_DEAD" as const, causeKnowledge: "UNKNOWN" as const, necropsyRequested: null } } : {}),
           outcomeDate: "2026-02-01",
           ...links,
         }),

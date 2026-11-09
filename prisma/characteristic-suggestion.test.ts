@@ -17,6 +17,8 @@ import {
   AnimalListingStatus,
   CharacteristicCategory,
   FieldType,
+  MedicalConditionStatus,
+  MedicalConditionType,
   Sex,
 } from "@/prisma/generated/enums";
 import { fromZonedTime } from "date-fns-tz";
@@ -24,6 +26,7 @@ import { _fetchAnimalCharacteristics } from "@/app/lib/data/animals/animal-chara
 import { loadAssessmentCharacteristicsSummary } from "@/app/lib/data/animals/assessment-characteristic-review";
 import { getShelterSettings } from "@/app/lib/data/shelter-settings.data";
 import { recordCharacteristicSuggestion } from "@/app/lib/services/characteristic-suggestion";
+import { addCharacteristicFromCondition } from "@/app/lib/services/medical-condition";
 import { formatDateToLongString } from "@/app/lib/utils/date-utils";
 
 const runId = Date.now().toString(36);
@@ -291,6 +294,74 @@ test("citing this assessment for a hand-assigned trait moves the citation and lo
   const row = await tabRow(animalId, DOGS);
   assert.equal(row.assignment?.sourceAssessment?.id, here.id);
   assert.equal(row.assignment?.sourceAssessment?.templateName, TEMPLATE_NAME);
+});
+
+test("a trait citing a problem-list condition reads so on the tab, and an assessment and a condition each take the citation from the other", async () => {
+  const animalId = await createAnimal("Condition-cited");
+  const { id: conditionId } = await prisma.medicalCondition.create({
+    data: {
+      animalId,
+      type: MedicalConditionType.CONDITION,
+      name: "Feline leukemia",
+      status: MedicalConditionStatus.ACTIVE,
+      createdById: staffId,
+    },
+    select: { id: true },
+  });
+  await prisma.animalCharacteristic.create({
+    data: {
+      animalId,
+      characteristicId: traitId[CATS],
+      assignedById: otherStaffId,
+      assignedAt: ASSIGNED_AT,
+      sourceConditionId: conditionId,
+    },
+  });
+  const source = async () => (await tabRow(animalId, CATS)).assignment?.sourceCondition;
+  assert.deepEqual(await source(), {
+    id: conditionId,
+    name: "Feline leukemia",
+    resolvedDate: null,
+    voidedAt: null,
+  });
+  // Resolved: the tab says when.
+  await prisma.medicalCondition.update({
+    where: { id: conditionId },
+    data: { status: MedicalConditionStatus.RESOLVED, resolvedDate: "2026-01-05" },
+  });
+  assert.equal((await source())?.resolvedDate, "2026-01-05");
+
+  const here = await recordPairTest(animalId, 10, { [CATS]: AFFIRMING });
+  await actOn(here.id, animalId, CATS, new Date(Date.UTC(2026, 0, 11, 15)));
+  const [row] = await prisma.animalCharacteristic.findMany({
+    where: { animalId },
+    select: { sourceAssessmentId: true, sourceConditionId: true },
+  });
+  // A trait has one source.
+  assert.deepEqual(row, { sourceAssessmentId: here.id, sourceConditionId: null });
+  assert.equal(await source(), null);
+
+  // And the other way: made active again, the condition takes the citation
+  // back from the assessment.
+  await prisma.medicalCondition.update({
+    where: { id: conditionId },
+    data: { status: MedicalConditionStatus.ACTIVE, resolvedDate: null, characteristicId: traitId[CATS] },
+  });
+  await prisma.$transaction((tx) =>
+    addCharacteristicFromCondition(
+      tx,
+      { animalId, conditionId },
+      staffId,
+      new Date(Date.UTC(2026, 0, 12, 15)),
+    ),
+  );
+  assert.deepEqual(
+    await prisma.animalCharacteristic.findFirst({
+      where: { animalId },
+      select: { sourceAssessmentId: true, sourceConditionId: true },
+    }),
+    { sourceAssessmentId: null, sourceConditionId: conditionId },
+  );
 });
 
 test("acting again on a suggestion this assessment already cites changes nothing", async () => {

@@ -27,3 +27,20 @@ export function applyFieldErrors<TValues extends FieldValues>(
     });
   }
 }
+/**
+ * Server-side field errors keyed by each issue's whole path, joined with dots
+ * ("steps.2.itemId"), for a form with nested fields. `applyFieldErrors`
+ * resolves those keys, so each message lands on its own field. An issue on
+ * the whole form (an empty path) has no field and is left out.
+ */
+export function fieldErrorsByPath<TValues>(
+  issues: readonly { path: readonly PropertyKey[]; message: string }[],
+): FieldErrors<TValues> {
+  const fieldErrors: Record<string, string[]> = {};
+  for (const issue of issues) {
+    const key = issue.path.map(String).join(".");
+    if (!key) continue;
+    (fieldErrors[key] ??= []).push(issue.message);
+  }
+  return fieldErrors as FieldErrors<TValues>;
+}

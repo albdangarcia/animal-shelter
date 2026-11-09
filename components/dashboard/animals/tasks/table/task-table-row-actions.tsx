@@ -46,6 +46,7 @@ import {
   DirtyFormHandle,
   useConfirmedOpenChange,
 } from "@/hooks/use-confirmed-open-change";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface DataTableRowActionsProps {
   row: Row<StockFeatures, FetchAnimalTasksPayload>;
@@ -66,6 +67,7 @@ export function DataTableRowActions({
   const task = row.original;
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const formRef = useRef<DirtyFormHandle>(null);
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
 
   const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
     useConfirmedOpenChange(
@@ -97,6 +99,7 @@ export function DataTableRowActions({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
+            ref={triggerRef}
             variant="ghost"
             className="flex h-8 w-8 p-0 data-[state=open]:bg-muted"
           >
@@ -146,7 +149,10 @@ export function DataTableRowActions({
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent
+        className="sm:max-w-[600px]"
+        onCloseAutoFocus={returnFocus}
+      >
         <DialogHeader>
           <DialogTitle>Edit Task</DialogTitle>
           <DialogDescription>

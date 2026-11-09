@@ -74,12 +74,15 @@ interface StaffApplicationUpdateFormProps {
   animal: AnimalForAdoptionApplicationPayload;
   application: AdoptionApplicationWithOutcome;
   returnTo?: string;
+  /** Whether the viewer may record an outcome; the create page refuses anyone else. */
+  canCreateOutcome: boolean;
 }
 
 export function StaffApplicationUpdateForm({
   animal,
   application,
   returnTo,
+  canCreateOutcome,
 }: StaffApplicationUpdateFormProps) {
   // `application.status` is the effective status, derived from the animal's
   // outcomes by the fetch: the column alone never says adopted or closed.
@@ -208,13 +211,15 @@ export function StaffApplicationUpdateForm({
                     <span>
                       This application is approved and ready for the final step.
                     </span>
-                    <Button asChild>
-                      <Link
-                        href={`/dashboard/outcomes/create?applicationId=${application.id}`}
-                      >
-                        Create Outcome
-                      </Link>
-                    </Button>
+                    {canCreateOutcome && (
+                      <Button asChild>
+                        <Link
+                          href={`/dashboard/outcomes/create?applicationId=${application.id}`}
+                        >
+                          Create Outcome
+                        </Link>
+                      </Button>
+                    )}
                   </AlertDescription>
                 </Alert>
               )}

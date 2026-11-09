@@ -81,16 +81,30 @@ test("people search excludes ADMIN accounts", async () => {
   });
 });
 
-test("microchip matches exactly, and only for a single token of 9+ characters", () => {
-  const microchipClause = (query: string) =>
-    (animalSearchWhere(query).OR ?? []).find((c) => "microchipNumber" in c);
-
-  assert.deepEqual(microchipClause("985141000100001"), {
-    microchipNumber: { equals: "985141000100001" },
+test("a chip-shaped query matches a current chip exactly, read as chip numbers are stored", () => {
+  const chipClause = (query: string) =>
+    (animalSearchWhere(query).OR ?? []).find((c) => "medicalEntries" in c);
+  const current = (chipNumber: string) => ({
+    medicalEntries: {
+      some: {
+        kind: "MICROCHIP",
+        status: "COMPLETED",
+        voidedAt: null,
+        chipNumber,
+      },
+    },
   });
-  assert.ok(microchipClause("123456789"));
-  assert.equal(microchipClause("12345678"), undefined);
-  assert.equal(microchipClause("98514 1000100001"), undefined);
+
+  assert.deepEqual(chipClause("985141000100001"), current("985141000100001"));
+  // Spaces and hyphens between groups, and lower case, are how a number is
+  // often typed; the stored form has none of them.
+  assert.deepEqual(chipClause("985 141-000 100 001"), current("985141000100001"));
+  assert.deepEqual(chipClause("ab12-cd34e"), current("AB12CD34E"));
+  // Too short, too long, or not letters and digits: no chip lookup.
+  assert.equal(chipClause("12345678"), undefined);
+  assert.equal(chipClause("1234 5678"), undefined);
+  assert.equal(chipClause("9851410001000012"), undefined);
+  assert.equal(chipClause("985141000/100"), undefined);
   assert.deepEqual(
     (animalSearchWhere("bella").OR ?? []).find((c) => "name" in c),
     { name: { contains: "bella", mode: "insensitive" } },

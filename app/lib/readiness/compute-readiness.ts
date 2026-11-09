@@ -7,12 +7,31 @@
  * Every blocker carries `since`: when the recorded evidence says it began.
  * Nothing about a blocker is stored, so this is read off dates the evidence
  * already has — the start of the current stay, an observation, a deletion,
- * an edit. `null` means nothing in the app dates the onset at all.
+ * an edit, the day after a spay/neuter exemption lapsed, the day of an exam,
+ * the day a condition resolved or the moment it was voided.
+ * `null` means nothing in the app dates the onset at all.
+ *
+ * The medical record's exams count for the stay they were done in: an
+ * intake exam from an earlier stay doesn't stand for this one, and an
+ * earlier stay's call for a vet's review doesn't hold this one up. An open
+ * care episode holds the animal up from the day it started.
  */
 
-import type { AssessmentSignal, AnimalHealthStatus } from "@/prisma/generated/enums";
-import { ACUTE_HEALTH_STATUSES } from "../data/animals/attention-queue";
+import type {
+  AssessmentSignal,
+  CareEpisodeType,
+  ExamType,
+} from "@/prisma/generated/enums";
 import type { ReadinessRequirement } from "./requirements";
+import type { SpayNeuterStatus } from "../utils/spay-neuter";
+import type { OpenCareEpisode } from "../utils/care-status";
+import { stayExams, type ExamFact } from "../utils/exams";
+import {
+  shelterDayKey,
+  shiftDayKey,
+  startOfShelterDay,
+  type CalendarDay,
+} from "../utils/shelter-day";
 
 export type CharacteristicClaimIssue =
   /** A live finding on the animal argues against the trait. */
@@ -21,7 +40,11 @@ export type CharacteristicClaimIssue =
   | "SOURCE_DELETED"
   /** The sourcing assessment's current answers no longer propose the trait
    *  (an edit took it away). */
-  | "NO_LONGER_SUPPORTED";
+  | "NO_LONGER_SUPPORTED"
+  /** The problem-list condition that sourced the trait has been resolved. */
+  | "CONDITION_RESOLVED"
+  /** The problem-list condition that sourced the trait has been voided. */
+  | "CONDITION_VOIDED";
 
 export type ReadinessBlocker =
   | {
@@ -47,7 +70,26 @@ export type ReadinessBlocker =
        *  can't be undermined before it was made. */
       since: Date;
     }
-  | { kind: "NOT_SPAYED_NEUTERED"; since: Date }
+  | {
+      kind: "NO_INTAKE_EXAM";
+      /** The start of the current stay — the exam was due from arrival. */
+      since: Date;
+    }
+  | {
+      kind: "NEEDS_VET_REVIEW";
+      /** The stay's latest exam, which asked for the review. */
+      entryId: string;
+      examType: ExamType;
+      examDate: CalendarDay;
+      /** The start of that exam's day on the shelter's calendar. */
+      since: Date;
+    }
+  | {
+      kind: "NOT_SPAYED_NEUTERED";
+      /** The start of the current stay, or the day after an exemption
+       *  lapsed when that is later. */
+      since: Date;
+    }
   | {
       kind: "NO_PHOTO";
       /** The start of the current stay. Removing a photo isn't dated, so an
@@ -56,12 +98,19 @@ export type ReadinessBlocker =
       since: Date;
     }
   | {
-      kind: "ACUTE_HEALTH";
-      healthStatus: AnimalHealthStatus;
-      /** Health status changes aren't dated anywhere, so there is no honest
-       *  onset to report. */
-      since: null;
+      kind: "UNDER_CARE";
+      /** The open care episode. */
+      episodeId: string;
+      episodeType: CareEpisodeType;
+      startDate: CalendarDay;
+      /** The clinic, for a stay off site or vet care that names one. */
+      partnerName: string | null;
+      /** The start of the episode's first day on the shelter's calendar. */
+      since: Date;
     };
+
+/** One of the animal's completed, unvoided exams, from any stay. */
+export type ReadinessExam = ExamFact;
 
 /** One recorded, non-deleted assessment, as far as readiness cares. */
 export interface ReadinessAssessment {
@@ -93,6 +142,12 @@ export interface ReadinessCharacteristicClaim {
    *  later than that. Ignored when `sourceDeletedAt` is set: a deleted
    *  source's current answers aren't a separate thing to report. */
   supportLostAt: Date | null;
+  /** When the citing condition was voided. */
+  conditionVoidedAt: Date | null;
+  /** The start of the day the citing condition resolved, on the shelter's
+   *  calendar. Ignored when `conditionVoidedAt` is set: a voided condition
+   *  counts for nothing, resolved or not. */
+  conditionResolvedAt: Date | null;
 }
 
 export interface ComputeReadinessInputs {
@@ -102,12 +157,22 @@ export interface ComputeReadinessInputs {
   assessments: ReadinessAssessment[];
   /** The animal's active characteristic assignments. */
   claims: ReadinessCharacteristicClaim[];
-  isSpayedNeutered: boolean;
+  /** From the medical record: no spay or neuter given and no exemption in
+   *  force reads as UNKNOWN, or as INTACT when the latest exam to look found
+   *  the animal intact. Both block, dated the same way. */
+  spayNeuter: SpayNeuterStatus;
+  /** Every completed, unvoided exam on the animal's medical record. Only
+   *  those dated on or after the stay's first day (`inCareSince` on the
+   *  shelter's calendar) count. */
+  exams: ReadinessExam[];
   hasPhoto: boolean;
-  healthStatus: AnimalHealthStatus | null;
+  /** The animal's open care episode, if it is under care. */
+  openEpisode: OpenCareEpisode | null;
   /** When the animal's current stay began (its latest intake). What it needs
    *  from arrival — required checks, a photo, spay/neuter — is due from here. */
   inCareSince: Date;
+  /** The shelter's timezone, to read a lapsed exemption's day as an instant. */
+  timezone: string;
 }
 
 const laterOf = (a: Date, b: Date): Date => (a > b ? a : b);
@@ -182,9 +247,43 @@ function characteristicClaimBlockers(
     } else if (claim.supportLostAt) {
       blocker("NO_LONGER_SUPPORTED", claim.supportLostAt);
     }
+    if (claim.conditionVoidedAt) {
+      blocker("CONDITION_VOIDED", claim.conditionVoidedAt);
+    } else if (claim.conditionResolvedAt) {
+      blocker("CONDITION_RESOLVED", claim.conditionResolvedAt);
+    }
     if (claim.contradictedAt) {
       blocker("CONTRADICTED", claim.contradictedAt);
     }
+  }
+  return blockers;
+}
+
+/**
+ * The stay needs an intake exam, and its latest exam of any type speaks for
+ * the animal now: one that asked for a vet's review holds it up until a
+ * later exam says otherwise. "Needs treatment" doesn't: the treatment is
+ * recorded as care.
+ */
+function examBlockers(
+  exams: ReadinessExam[],
+  inCareSince: Date,
+  timezone: string,
+): ReadinessBlocker[] {
+  const blockers: ReadinessBlocker[] = [];
+  const thisStay = stayExams(exams, shelterDayKey(inCareSince, timezone));
+  if (!thisStay.some((exam) => exam.examType === "INTAKE")) {
+    blockers.push({ kind: "NO_INTAKE_EXAM", since: inCareSince });
+  }
+  const latest = thisStay[0];
+  if (latest?.overallResult === "NEEDS_VET_REVIEW") {
+    blockers.push({
+      kind: "NEEDS_VET_REVIEW",
+      entryId: latest.entryId,
+      examType: latest.examType,
+      examDate: latest.completedDate,
+      since: startOfShelterDay(latest.completedDate, timezone),
+    });
   }
   return blockers;
 }
@@ -200,24 +299,38 @@ export function computeReadiness(
     ),
     ...escalatedFindingBlockers(inputs.assessments),
     ...characteristicClaimBlockers(inputs.claims),
+    ...examBlockers(inputs.exams, inputs.inCareSince, inputs.timezone),
   ];
 
-  if (!inputs.isSpayedNeutered) {
-    blockers.push({ kind: "NOT_SPAYED_NEUTERED", since: inputs.inCareSince });
+  if (
+    inputs.spayNeuter.status === "UNKNOWN" ||
+    inputs.spayNeuter.status === "INTACT"
+  ) {
+    // An exemption covered the animal up to and including its review day, so
+    // the need starts the day after — unless that was before this stay.
+    const { lapsedOn } = inputs.spayNeuter;
+    blockers.push({
+      kind: "NOT_SPAYED_NEUTERED",
+      since: lapsedOn
+        ? laterOf(
+            inputs.inCareSince,
+            startOfShelterDay(shiftDayKey(lapsedOn, 1), inputs.timezone),
+          )
+        : inputs.inCareSince,
+    });
   }
   if (!inputs.hasPhoto) {
     blockers.push({ kind: "NO_PHOTO", since: inputs.inCareSince });
   }
-  if (
-    inputs.healthStatus &&
-    (ACUTE_HEALTH_STATUSES as readonly AnimalHealthStatus[]).includes(
-      inputs.healthStatus,
-    )
-  ) {
+  if (inputs.openEpisode) {
+    const { id, type, startDate, clinicName } = inputs.openEpisode;
     blockers.push({
-      kind: "ACUTE_HEALTH",
-      healthStatus: inputs.healthStatus,
-      since: null,
+      kind: "UNDER_CARE",
+      episodeId: id,
+      episodeType: type,
+      startDate,
+      partnerName: clinicName,
+      since: startOfShelterDay(startDate, inputs.timezone),
     });
   }
 

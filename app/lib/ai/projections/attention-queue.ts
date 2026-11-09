@@ -1,5 +1,7 @@
 import type {
-  AnimalHealthStatus,
+  CareEpisodeType,
+  DoseSlot,
+  MedicalEntryKind,
   TaskPriority,
 } from "@/prisma/generated/enums";
 import type { AttentionQueueItem } from "@/app/lib/data/animals/attention-queue.data";
@@ -26,7 +28,31 @@ export type AttentionReasonView =
       overdue: boolean;
       priority: TaskPriority;
     }
-  | { kind: "UNTASKED_ACUTE_HEALTH"; healthStatus: AnimalHealthStatus }
+  | {
+      kind: "DOSE_MISSED";
+      /** How many medication dose slots were missed yesterday and today. */
+      missedDoses: number;
+      /** The first one missed: its day, and AM, MIDDAY or PM. */
+      earliest: { date: string; slot: DoseSlot };
+      /** The medications missed, by name. */
+      medications: string[];
+    }
+  | {
+      kind: "MEDICAL_DUE";
+      entryId: string;
+      itemName: string;
+      entryKind: MedicalEntryKind;
+      dueDate: string;
+      /** Stated, not implied, for the reason given on a task's `overdue`. */
+      overdue: boolean;
+    }
+  | {
+      kind: "CARE_UNPLANNED";
+      /** Under vet care, or hospitalised in house or at a clinic. */
+      episodeType: CareEpisodeType;
+      /** The day the open care episode started. */
+      startDate: string;
+    }
   | {
       kind: "FOSTER_OVERDUE";
       placementId: string;
@@ -77,10 +103,28 @@ function toReasonView(
         overdue: reason.dueDate < today,
         priority: reason.priority,
       };
-    case "UNTASKED_ACUTE_HEALTH":
+    case "DOSE_MISSED":
       return {
-        kind: "UNTASKED_ACUTE_HEALTH",
-        healthStatus: reason.healthStatus,
+        kind: "DOSE_MISSED",
+        missedDoses: reason.count,
+        earliest: { date: reason.earliestSlotDate, slot: reason.earliestSlot },
+        medications: reason.medications,
+      };
+    case "MEDICAL_DUE":
+      return {
+        kind: "MEDICAL_DUE",
+        entryId: reason.entryId,
+        itemName: reason.itemName,
+        entryKind: reason.entryKind,
+        dueDate: reason.dueDate,
+        // Care due at any point today is today's work, as for tasks.
+        overdue: reason.dueDate < today,
+      };
+    case "CARE_UNPLANNED":
+      return {
+        kind: "CARE_UNPLANNED",
+        episodeType: reason.episodeType,
+        startDate: reason.startDate,
       };
     case "FOSTER_OVERDUE":
       return {

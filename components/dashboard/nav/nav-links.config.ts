@@ -29,6 +29,7 @@ export type IconName =
   | "IconDog"
   | "IconClipboardCheck"
   | "IconDoorEnter"
+  | "IconFirstAidKit"
 
 export interface NavItem {
   title: string;
@@ -67,6 +68,7 @@ export interface NavItem {
 export const SETTINGS_PERMISSIONS: readonly AppPermission[] = [
   AppPermissions.MANAGE_ROLES,
   AppPermissions.MANAGE_CHARACTERISTICS_CATALOG,
+  AppPermissions.MEDICAL_SETTINGS_MANAGE,
   AppPermissions.MANAGE_ANIMAL_TAXONOMY,
   AppPermissions.MANAGE_LOCATIONS,
   AppPermissions.AI_ACTIVITY_READ,
@@ -179,6 +181,29 @@ export const navMainItems: readonly NavItem[] = [
     url: "/dashboard/reports",
     icon: "IconReport",
     permission: AppPermissions.REPORTS_READ,
+  },
+  {
+    title: "Medical",
+    url: "/dashboard/medical",
+    icon: "IconFirstAidKit",
+    permission: AppPermissions.MEDICAL_READ,
+    items: [
+      {
+        title: "Due",
+        url: "/dashboard/medical/due",
+        permission: AppPermissions.MEDICAL_READ,
+      },
+      {
+        title: "Dose sheet",
+        url: "/dashboard/medical/doses",
+        permission: AppPermissions.MEDICAL_READ,
+      },
+      {
+        title: "Batch entry",
+        url: "/dashboard/medical/batch",
+        permission: AppPermissions.MEDICAL_MANAGE,
+      },
+    ],
   },
   {
     title: "Animal Tasks",

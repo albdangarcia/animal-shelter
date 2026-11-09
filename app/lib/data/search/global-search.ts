@@ -14,13 +14,14 @@ import {
 } from "@/app/lib/utils/derive-application-status";
 import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
 import { personSearchWhereClause } from "../people-directory/person-search";
+import { CURRENT_CHIP_WHERE } from "../animals/medical-status";
+import {
+  chipNumberIssue,
+  normaliseChipNumber,
+} from "@/app/lib/utils/microchip";
 
 export const GLOBAL_SEARCH_MIN_QUERY_LENGTH = 2;
 export const GLOBAL_SEARCH_GROUP_LIMIT = 5;
-
-// A microchip lookup is an exact match, and only when the query could be one:
-// a single token of at least this many characters.
-const MICROCHIP_MIN_LENGTH = 9;
 
 // Each group is gated by its own permission. A group the caller can't read is
 // skipped rather than failing the whole search.
@@ -102,14 +103,20 @@ export type GlobalSearchDb = Pick<
 const contains = (query: string) =>
   ({ contains: query, mode: "insensitive" }) as const;
 
+// A microchip lookup is an exact match on a chip the animal carries now (given
+// and not voided), and only when the query could be a chip number. It's read
+// the way chip numbers are stored, so "985 141-000 100 001" finds the chip
+// stored as 985141000100001. It stays in the animals group: it is how an
+// animal is identified, and only the animal is shown, never the number.
 export const animalSearchWhere = (query: string): Prisma.AnimalWhereInput => {
-  const couldBeMicrochip =
-    query.length >= MICROCHIP_MIN_LENGTH && !/\s/.test(query);
+  const chipNumber = normaliseChipNumber(query);
 
   return {
     OR: [
       { name: contains(query) },
-      ...(couldBeMicrochip ? [{ microchipNumber: { equals: query } }] : []),
+      ...(chipNumberIssue(chipNumber) === null
+        ? [{ medicalEntries: { some: { ...CURRENT_CHIP_WHERE, chipNumber } } }]
+        : []),
     ],
   };
 };

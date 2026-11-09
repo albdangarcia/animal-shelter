@@ -29,6 +29,9 @@ import {
   formatShelterDay,
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
+import { recordOutcomeMedical, correctOutcomeMedical } from "./outcome-medical";
+import { OutcomeMedicalCreateSchema, OutcomeMedicalCorrectionSchema } from "../zod-schemas/outcome-medical.schemas";
+import { MedicalEntryRefusal } from "./medical-entry-values";
 import type { OutcomeFormOutput } from "@/app/lib/zod-schemas/outcome.schema";
 
 /**
@@ -272,6 +275,15 @@ export const recordOutcome = async (
     select: { id: true },
   });
 
+  const clinical = OutcomeMedicalCreateSchema.safeParse(values);
+  if (!clinical.success) {
+    const issue = clinical.error.issues[0];
+    throw new MedicalEntryRefusal(issue.message, issue.path.join(".") || "medical");
+  }
+  if (clinical.data.medical) {
+    await recordOutcomeMedical(tx, outcome.id, animalId, clinical.data.medical, actorId);
+  }
+
   // Log this closing event in the animal's history, mirroring the
   // INTAKE_PROCESSED log written on every intake — without this, the
   // activity feed shows consecutive intakes with no outcome between them.
@@ -353,6 +365,7 @@ interface OutcomeCorrectionFields {
 // echoed, since they can be long and the outcome record already holds them.
 // A foster placement the outcome ended moves with the day, in the same row.
 const describeOutcomeCorrection = async (
+  tx: TransactionClient,
   before: OutcomeCorrectionFields,
   after: OutcomeCorrectionFields,
   endedPlacement: boolean,
@@ -372,7 +385,7 @@ const describeOutcomeCorrection = async (
     const ids = [before.destinationPartnerId, after.destinationPartnerId].filter(
       (id): id is string => !!id,
     );
-    const partners = await prisma.partner.findMany({
+    const partners = await tx.partner.findMany({
       where: { id: { in: ids } },
       select: { id: true, name: true },
     });
@@ -387,7 +400,7 @@ const describeOutcomeCorrection = async (
     const ids = [before.ownerId, after.ownerId].filter(
       (id): id is string => !!id,
     );
-    const owners = await prisma.person.findMany({
+    const owners = await tx.person.findMany({
       where: { id: { in: ids } },
       select: { id: true, name: true },
     });
@@ -425,171 +438,116 @@ export type OutcomeCorrection = RecordedOutcome & {
  * Corrects the day, notes, partner or owner of one outcome, and logs the
  * correction against its animal. A save that changes nothing writes neither.
  *
- * `options` is passed to the transaction this opens. The action passes none;
- * a test that holds the animal's lock while this waits on it passes a longer
+ * `options.authorize` checks the locked operation at the action boundary.
+ * A test that holds the animal's lock while this waits on it passes a longer
  * timeout, because the transaction's clock includes the wait.
  */
 export const recordOutcomeCorrection = async (
   outcomeId: string,
   values: OutcomeFormOutput,
   actorId: string,
-  options?: { timeout: number },
+  options?: {
+    timeout?: number;
+    authorize?: (operation: {
+      type: OutcomeType;
+      linked: boolean;
+      dayChanges: boolean;
+      medicalSupplied: boolean;
+    }) => void;
+  },
 ): Promise<OutcomeCorrection> => {
-  const { outcomeDate, outcomeType, destinationPartnerId, ownerId, notes } =
-    values;
+  const { outcomeDate, outcomeType, destinationPartnerId, ownerId, notes } = values;
 
-  const existingOutcome = await prisma.outcome.findUnique({
+  // Only the immutable animal identity is located before the lock.
+  const located = await prisma.outcome.findUnique({
     where: { id: outcomeId },
-    select: {
-      animalId: true,
-      outcomeDate: true,
-      type: true,
-      notes: true,
-      destinationPartnerId: true,
-      ownerId: true,
-      reversedAt: true,
-      fosterPlacement: { select: { id: true } },
-    },
+    select: { animalId: true },
   });
+  if (!located) throw new NotFoundError("Error: Outcome record not found.");
+  const { animalId } = located;
 
-  if (!existingOutcome) {
-    throw new NotFoundError("Error: Outcome record not found.");
-  }
-
-  const { animalId } = existingOutcome;
-
-  // A reversed outcome is kept as it stood when it was voided. Correcting it
-  // afterwards would change a record that no longer counts for anything, and
-  // blur what the reversal was a reversal of.
-  if (existingOutcome.reversedAt) {
-    throw new ConflictError(REVERSED_MESSAGE);
-  }
-
-  // The form disables the type select in edit mode, so a different type here
-  // means the client and server disagree about what is editable. That is
-  // refused outright rather than ignored, so the disagreement surfaces.
-  //
-  // The date, notes, partner and owner correct an attribute of the event that
-  // happened. The type asserts a different event happened, and carries
-  // structure the others do not: an adoption's link to the winning
-  // application (which is what makes that application adopted and closes the
-  // rest), the archive reason, and the partner or owner that only mean
-  // something under one type. Retyping in place would have to rewire all of
-  // that. Reversing the outcome and recording the right one does it through
-  // the path that already knows how, and keeps the mistake on the record.
-  if (outcomeType !== existingOutcome.type) {
-    throw new PreconditionFailedError(
-      "The outcome type can't be changed once an outcome is recorded. To fix a wrong type, reverse this outcome and record the right one.",
-    );
-  }
-
-  // The partner only applies to a transfer and the owner only to a return to
-  // owner, so each is dropped for any other type.
-  //
-  // Re-picking the day already on record submits the same day back, so the
-  // comparison below finds nothing changed and no correction is logged for
-  // it. The picker cannot express anything finer than a day, which is what
-  // makes the comparison exact.
-  const nextValues: OutcomeCorrectionFields = {
-    outcomeDate,
-    notes: notes || null,
-    destinationPartnerId:
-      outcomeType === OutcomeType.TRANSFER_OUT
-        ? destinationPartnerId || null
-        : null,
-    ownerId:
-      outcomeType === OutcomeType.RETURN_TO_OWNER ? ownerId || null : null,
-  };
-
-  const changeSummary = await describeOutcomeCorrection(
-    {
-      ...existingOutcome,
-      outcomeDate: calendarDay(existingOutcome.outcomeDate),
-    },
-    nextValues,
-    !!existingOutcome.fosterPlacement,
-  );
-
-  // A save that changes nothing leaves no trace in the animal's history.
-  if (!changeSummary) {
-    return { status: "unchanged", animalId, fosterPersonId: null };
-  }
-
-  const fosterPersonId = await prisma.$transaction(async (tx) => {
-    // Taken before the day is checked, so the animal's other intakes and
-    // outcomes are still as the check reads them when the correction is
-    // written. No person lock is held here, so this keeps the order
-    // `lockAnimal` documents.
+  return prisma.$transaction(async (tx) => {
     await lockAnimal(tx, animalId);
-
-    // Read again behind the lock. A reversal takes the same lock, so this
-    // sees one that landed since the read above, and a reversed outcome is
-    // no longer on the timeline the check reads.
     const stored = await tx.outcome.findUnique({
       where: { id: outcomeId },
       select: {
-        outcomeDate: true,
-        reversedAt: true,
-        // The placement this outcome ended, when it ended one: a conversion,
-        // or an outcome recorded while the animal was in foster. Its end is
-        // the outcome's day, so it moves with the day.
-        fosterPlacement: {
-          select: {
-            id: true,
-            fosterProfile: { select: { person: { select: { id: true } } } },
-          },
-        },
+        type: true, outcomeDate: true, notes: true,
+        destinationPartnerId: true, ownerId: true, reversedAt: true,
       },
     });
-    if (!stored || stored.reversedAt) {
-      throw new ConflictError(REVERSED_MESSAGE);
+    if (!stored) throw new NotFoundError("Error: Outcome record not found.");
+    if (stored.reversedAt) throw new ConflictError(REVERSED_MESSAGE);
+    if (stored.type !== outcomeType) {
+      throw new PreconditionFailedError(
+        "The outcome type can't be changed once an outcome is recorded. To fix a wrong type, reverse this outcome and record the right one.",
+      );
     }
-    const placement = stored.fosterPlacement;
-
-    // Only a new day is checked: a save that leaves the day alone moves
-    // nothing, so a notes fix on an animal whose timeline already has a break
-    // is not refused for it. The day is compared with the one stored now,
-    // not the one read above, so a correction racing another that moved the
-    // day is checked against where the outcome actually sits.
-    const dayMoves = calendarDay(stored.outcomeDate) !== nextValues.outcomeDate;
-    if (dayMoves) {
-      // The placement this outcome ended moves with it, so its start bounds
-      // the day, and so does the end of any other placement in the stay.
-      await assertOutcomeDayFits(tx, animalId, {
-        kind: "moveOutcome",
-        outcomeId,
-        day: nextValues.outcomeDate,
-      });
-    }
-
-    // Guarded as well as checked above, so that nothing reaching this without
-    // the lock can correct an outcome already reversed.
-    const updated = await tx.outcome.updateMany({
-      where: { id: outcomeId, reversedAt: null },
-      data: nextValues,
+    // Read sibling relations sequentially on the transaction's one connection.
+    const placement = await tx.fosterPlacement.findUnique({
+      where: { outcomeId },
+      select: { id: true, fosterProfile: { select: { personId: true } } },
     });
-    if (updated.count === 0) {
-      throw new ConflictError(REVERSED_MESSAGE);
+    const link = await tx.medicalEntry.findUnique({
+      where: { outcomeId }, select: { id: true },
+    });
+    if (link && stored.type !== "EUTHANIZED" && stored.type !== "DECEASED") {
+      throw new ConflictError(
+        "The outcome and its medical record disagree. Resolve the linked record before continuing.",
+      );
     }
-
+    const nextValues: OutcomeCorrectionFields = {
+      outcomeDate, notes: notes || null,
+      destinationPartnerId: outcomeType === OutcomeType.TRANSFER_OUT ? destinationPartnerId || null : null,
+      ownerId: outcomeType === OutcomeType.RETURN_TO_OWNER ? ownerId || null : null,
+    };
+    const dayMoves = stored.outcomeDate !== outcomeDate;
+    options?.authorize?.({
+      type: stored.type, linked: !!link, dayChanges: dayMoves,
+      medicalSupplied: values.medical !== undefined,
+    });
+    const clinical = OutcomeMedicalCorrectionSchema.safeParse(values);
+    if (!clinical.success) {
+      const issue = clinical.error.issues[0];
+      throw new MedicalEntryRefusal(issue.message, issue.path.join(".") || "medical");
+    }
+    let changeSummary = await describeOutcomeCorrection(
+      tx, { ...stored, outcomeDate: calendarDay(stored.outcomeDate) },
+      nextValues, !!placement,
+    );
+    // Notes/details-only corrections tolerate an unchanged historical day.
+    if (dayMoves) {
+      await assertOutcomeDayFits(tx, animalId, { kind: "moveOutcome", outcomeId, day: outcomeDate });
+    }
+    if (changeSummary) {
+      const updated = await tx.outcome.updateMany({
+        where: { id: outcomeId, reversedAt: null }, data: nextValues,
+      });
+      if (!updated.count) throw new ConflictError(REVERSED_MESSAGE);
+    }
     if (placement && dayMoves) {
       await tx.fosterPlacement.update({
-        where: { id: placement.id },
-        data: { endDate: nextValues.outcomeDate },
+        where: { id: placement.id }, data: { endDate: outcomeDate },
       });
     }
-
+    // The helper reads the outcome day just written in this transaction.
+    if (stored.type === "EUTHANIZED" || stored.type === "DECEASED") {
+      const medical = await correctOutcomeMedical(tx, outcomeId, animalId, clinical.data.medical, actorId);
+      if (medical.status !== "unchanged" && (!changeSummary || values.medical !== undefined)) {
+        changeSummary = changeSummary
+          ? `${changeSummary} Medical details were corrected.`
+          : "Outcome was corrected: medical details were recorded or corrected.";
+      }
+    }
+    if (!changeSummary) return { status: "unchanged", animalId, fosterPersonId: null };
     await tx.animalActivityLog.create({
       data: {
-        animalId,
-        activityType: AnimalActivityType.OUTCOME_CORRECTED,
-        changedById: actorId,
-        changeSummary,
+        animalId, activityType: AnimalActivityType.OUTCOME_CORRECTED,
+        changedById: actorId, changeSummary,
       },
     });
-
-    return placement && dayMoves ? placement.fosterProfile.person.id : null;
-  }, options);
-
-  return { status: "corrected", animalId, fosterPersonId };
+    return {
+      status: "corrected", animalId,
+      fosterPersonId: placement && dayMoves ? placement.fosterProfile.personId : null,
+    };
+  }, options?.timeout ? { timeout: options.timeout } : undefined);
 };

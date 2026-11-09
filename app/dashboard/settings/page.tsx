@@ -36,6 +36,13 @@ const settingsCards: readonly SettingsCard[] = [
         permission: AppPermissions.MANAGE_CHARACTERISTICS_CATALOG,
     },
     {
+        title: "Medical",
+        description:
+            "Manage the vaccines, tests, treatments and medications staff record on animals, the protocols that schedule care at intake, and the times doses are due.",
+        url: "/dashboard/settings/medical",
+        permission: AppPermissions.MEDICAL_SETTINGS_MANAGE,
+    },
+    {
         title: "Animal Taxonomy",
         description:
             "Manage species, breeds, and colors used to describe animals.",

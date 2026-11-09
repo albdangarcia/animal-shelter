@@ -30,13 +30,19 @@ const Page = async ({ searchParams }: Props) => {
 const PageContent = async ({ searchParams }: Props) => {
   const { species, location, stage, kind, page = "1" } = await searchParams;
 
-  const [readiness, manageAssessments, manageAnimalInfo, managePhotos] =
-    await Promise.all([
-      fetchReadinessForAnimals(),
-      hasPermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE),
-      hasPermission(AppPermissions.ANIMAL_INFO_MANAGE),
-      hasPermission(AppPermissions.ANIMAL_PHOTO_MANAGE),
-    ]);
+  const [
+    readiness,
+    manageAssessments,
+    manageAnimalInfo,
+    managePhotos,
+    manageMedical,
+  ] = await Promise.all([
+    fetchReadinessForAnimals(),
+    hasPermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE),
+    hasPermission(AppPermissions.ANIMAL_INFO_MANAGE),
+    hasPermission(AppPermissions.ANIMAL_PHOTO_MANAGE),
+    hasPermission(AppPermissions.MEDICAL_MANAGE),
+  ]);
 
   const board = buildReadinessBoard(
     readiness,
@@ -52,7 +58,7 @@ const PageContent = async ({ searchParams }: Props) => {
       filterOptions={readinessBoardFilterOptions(
         readiness.map((r) => r.animal),
       )}
-      can={{ manageAssessments, manageAnimalInfo, managePhotos }}
+      can={{ manageAssessments, manageAnimalInfo, managePhotos, manageMedical }}
       filterParams={{ species, location, stage }}
     />
   );

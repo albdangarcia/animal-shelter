@@ -32,6 +32,7 @@ import {
   reactivateUser,
   updateUserRole,
 } from "@/app/lib/actions/role-management.actions";
+import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface DataTableRowActionsProps {
   row: Row<StockFeatures, RoleManagementPayload>;
@@ -44,6 +45,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
   const [isPending, startTransition] = useTransition();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const { triggerRef, returnFocus } = useMenuDialogFocus();
   const isDeactivated = !!user.deactivatedAt;
   const accountLabel = user.person?.name ?? user.email;
 
@@ -91,6 +93,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
+            ref={triggerRef}
             variant="ghost"
             className="flex h-8 w-8 p-0"
             disabled={isPending}
@@ -124,7 +127,7 @@ export function DataTableRowActions({ row }: DataTableRowActionsProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <AlertDialogContent>
+      <AlertDialogContent onCloseAutoFocus={returnFocus}>
         <AlertDialogHeader>
           <AlertDialogTitle>
             {isDeactivated ? "Reactivate" : "Deactivate"} {accountLabel}&apos;s

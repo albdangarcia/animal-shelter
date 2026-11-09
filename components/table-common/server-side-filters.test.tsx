@@ -87,6 +87,18 @@ describe("ServerSideFacetedFilter", () => {
     await expect.element(colorTrigger()).toHaveTextContent("Color");
   });
 
+  test("a parameter given more than once is read whole, and a pick writes it back as one", async () => {
+    resetNavigation("/list?color=Black&query=bud&color=White%2CBlack&page=2");
+    await renderColorFilter();
+    await expect.element(colorTrigger()).toHaveTextContent("Color2BlackWhite");
+
+    // The value stays where its first copy was; the other copies go.
+    await colorTrigger().click();
+    await option("Brown").click();
+    await expectUrl("/list?color=Black%2CWhite%2CBrown&query=bud&page=1");
+    await expect.element(colorTrigger()).toHaveTextContent("Color33 selected");
+  });
+
   test("Clear filters deletes the parameter, back on page 1, keeping the others, then goes", async () => {
     resetNavigation("/list?query=bud&color=Black%2CWhite&page=3");
     await renderColorFilter();
