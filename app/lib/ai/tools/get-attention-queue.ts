@@ -1,10 +1,10 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { AppPermissions } from "@/app/lib/auth/permissions";
 import { requireFor } from "@/app/lib/auth/actor";
 import { _fetchAttentionQueue } from "@/app/lib/data/animals/attention-queue.data";
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { actorContextSchema } from "../context";
+import { GET_ATTENTION_QUEUE_PERMISSIONS } from "../tool-permissions";
 import {
   toAttentionQueueView,
   type AttentionQueueEntry,
@@ -14,14 +14,6 @@ import {
   toolFailure,
   type ToolResult,
 } from "./tool-result";
-
-// All three reads: the queue puts task detail, missed medication doses and
-// scheduled medical care next to animal identity.
-export const GET_ATTENTION_QUEUE_PERMISSIONS = [
-  AppPermissions.ANIMAL_INFO_READ,
-  AppPermissions.ANIMAL_TASK_READ,
-  AppPermissions.MEDICAL_READ,
-];
 
 export const getAttentionQueueTool = tool({
   description:

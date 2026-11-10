@@ -10,6 +10,7 @@ import {
   headingSlug,
   isExternalHref,
   remarkHeadingIds,
+  rewriteGuideLinks,
 } from "./markdown";
 
 const parse = (body: string): Root =>
@@ -71,4 +72,36 @@ test("the remark plugin gives each heading the id the loader checks", () => {
     .map((node) => (node.data as { hProperties?: { id?: string } }).hProperties?.id);
   assert.deepEqual(ids, ["due-dates", "overdue", "missed"]);
   assert.deepEqual(ids, headingIds(parse("## Due dates\n\n### Overdue\n\nText.\n\n### Missed")));
+});
+
+test("rewriteGuideLinks sends guide links to the help pages and leaves the rest as written", () => {
+  const body = [
+    "Read [the glossary](./medical-status-glossary.md#overdue) and [**Record an exam**](./record-an-exam.md).",
+    "",
+    "A [site](https://example.com) and `[code](./record-an-exam.md)` stay.",
+  ].join("\n");
+  const { body: rewritten, linked } = rewriteGuideLinks(body, () => true);
+  // The slug in code is text, not a link, so it isn't linked.
+  assert.deepEqual(linked, ["medical-status-glossary", "record-an-exam"]);
+  assert.equal(
+    rewritten,
+    [
+      "Read [the glossary](/dashboard/help/medical-status-glossary#overdue) and [**Record an exam**](/dashboard/help/record-an-exam).",
+      "",
+      "A [site](https://example.com) and `[code](./record-an-exam.md)` stay.",
+    ].join("\n"),
+  );
+});
+
+test("rewriteGuideLinks leaves only the text of a link to a guide it may not link", () => {
+  assert.deepEqual(
+    rewriteGuideLinks(
+      "See [the settings](./medical-settings.md), [an exam](./record-an-exam.md) and [it again](./record-an-exam.md#steps).",
+      (slug) => slug === "record-an-exam",
+    ),
+    {
+      body: "See the settings, [an exam](/dashboard/help/record-an-exam) and [it again](/dashboard/help/record-an-exam#steps).",
+      linked: ["record-an-exam"],
+    },
+  );
 });

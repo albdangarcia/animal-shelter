@@ -37,12 +37,15 @@ const STICK_TO_BOTTOM_PX = 80;
 export function AiChat({
   examples,
   availableTools,
+  initialDraft = "",
 }: {
   examples: ChatExample[];
   availableTools: AiToolName[];
+  /** Put in the message box, not sent: the person sends it when ready. */
+  initialDraft?: string;
 }) {
   const router = useRouter();
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialDraft);
   const scrollRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
 
@@ -191,11 +194,12 @@ export function AiChat({
           onStop={stop}
           isStreaming={isBusy}
           disabled={Boolean(awaitingApproval)}
+          autoFocus={initialDraft !== ""}
         />
         <p className="text-muted-foreground mt-2 text-center text-xs">
           {awaitingApproval
             ? "Approve or deny the change above to continue."
-            : "Answers come from live shelter data. This conversation isn’t saved — refreshing clears it."}
+            : "Answers come from live shelter data and the staff guides. This conversation isn’t saved — refreshing clears it."}
         </p>
       </div>
     </div>

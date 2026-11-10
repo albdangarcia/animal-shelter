@@ -1,6 +1,7 @@
 "use client";
 
 import { IconAlertTriangle } from "@tabler/icons-react";
+import { guideSlugsFromParts } from "@/app/lib/ai/answer-links";
 import { collectToolFailures } from "@/app/lib/ai/chat-progress";
 import type { ShelterUIMessage } from "@/app/lib/ai/ui-message";
 import { MarkdownAnswer } from "./markdown-answer";
@@ -81,7 +82,10 @@ export function ChatMessage({
 
       {text && (
         <div className="max-w-[95%]">
-          <MarkdownAnswer text={text} />
+          <MarkdownAnswer
+            text={text}
+            guideSlugs={guideSlugsFromParts(message.parts)}
+          />
           {isIncomplete && (
             <p className="text-muted-foreground mt-2 text-xs italic">
               This answer was cut off before it finished.

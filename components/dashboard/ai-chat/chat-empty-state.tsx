@@ -33,8 +33,9 @@ export function ChatEmptyState({
       <div className="space-y-1.5">
         <h2 className="text-lg font-semibold">Ask about the shelter</h2>
         <p className="text-muted-foreground max-w-md text-sm">
-          I can look up animals by name, summarise a record, and tell you what
-          needs attention today. I only answer from live shelter data.
+          I can look up animals by name, summarise a record, tell you what
+          needs attention today, and walk you through a task from the staff
+          guides. I only answer from live shelter data and the guides.
         </p>
       </div>
 

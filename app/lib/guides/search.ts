@@ -1,4 +1,5 @@
-// Keyword search over the guides, for the Help page and the command palette.
+// Keyword search over the guides, for the Help page, the command palette and
+// the assistant's `searchGuides` tool.
 //
 // An in-memory MiniSearch index, built from the guides the reader can see:
 // the caller filters first (see `visibleGuides`), so a guide the reader can't
@@ -6,14 +7,14 @@
 // With a few dozen short guides the index takes well under a millisecond to
 // build, so it is built per search rather than cached per permission set.
 //
-// No auth and no next/* imports: PR 4's assistant tools reuse this.
+// No auth and no next/* imports: the assistant's tools reuse this.
 import MiniSearch, { type SearchOptions } from "minisearch";
 import type { Guide } from "./guides";
 
 export type GuideSearchHit = Pick<Guide, "slug" | "title" | "summary">;
 
 /** Where a search came from. It decides how loosely words match and whether a miss is logged. */
-export type GuideSearchSurface = "help" | "palette";
+export type GuideSearchSurface = "help" | "palette" | "assistant";
 
 export const GUIDE_SEARCH_NO_RESULTS_EVENT = "guides.search.no_results";
 
@@ -29,10 +30,19 @@ export const GUIDE_SEARCH_NO_RESULTS_EVENT = "guides.search.no_results";
  *   miss on the Help page is someone who wanted a guide and didn't find one. A miss in the palette is
  *   nearly always a record lookup, and its query is a person's name, email,
  *   phone number or chip number, which must not reach the log.
+ *
+ * The assistant searches like the Help page: its query is the model's own
+ * wording of a "how do I…" question, so a partial match is worth reading, and
+ * a miss is a question the guides don't answer. That wording can carry a name
+ * from the person's question ("update Jane Smith's application"), so the
+ * `searchGuides` tool tells the model to search with task words only. That is
+ * an instruction, not a filter: a model that ignores it puts the name in the
+ * log line.
  */
 const SURFACE_RULES = {
   help: { anyWordFallback: true, logMisses: true },
   palette: { anyWordFallback: false, logMisses: false },
+  assistant: { anyWordFallback: true, logMisses: true },
 } as const satisfies Record<
   GuideSearchSurface,
   { anyWordFallback: boolean; logMisses: boolean }

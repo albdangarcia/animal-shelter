@@ -7,6 +7,7 @@ import { can } from "@/app/lib/auth/can";
 import { _fetchAnimalReadinessForAssistant } from "@/app/lib/data/animals/readiness.data";
 import type { ReadinessViewerCan } from "@/app/lib/readiness/board";
 import { actorContextSchema } from "../context";
+import { GET_ANIMAL_READINESS_PERMISSIONS } from "../tool-permissions";
 import {
   toAnimalReadinessView,
   type AnimalReadinessView,
@@ -16,16 +17,6 @@ import {
   toolFailure,
   type ToolResult,
 } from "./tool-result";
-
-// All four reads, as the readiness board and panel require: outstanding
-// items come from assessments, characteristic claims and the medical record
-// as well as the animal record.
-export const GET_ANIMAL_READINESS_PERMISSIONS = [
-  AppPermissions.ANIMAL_INFO_READ,
-  AppPermissions.ANIMAL_ASSESSMENT_READ,
-  AppPermissions.ANIMAL_CHARACTERISTICS_READ,
-  AppPermissions.MEDICAL_READ,
-];
 
 /** What this actor may change — decides whether each item's next step
  *  is the fix itself or only a look at the page where it's made. */

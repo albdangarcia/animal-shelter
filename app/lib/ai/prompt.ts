@@ -16,8 +16,30 @@ import type { AiToolName } from "./tool-names";
  * a suggestion, not a control. But it *is* told which tools this request
  * actually carries: a role with no write tool should say it cannot make the
  * change, not promise to and then fail. That is describing the tools on hand,
- * not gating them.
+ * not gating them. The same goes for the guide tools: each returns only the
+ * guides this actor can see, so the guide rules below say how to answer from
+ * a guide, never which guides someone may read.
  */
+/**
+ * How to answer "how do I…" questions, added only when the request carries
+ * `searchGuides` and `readGuide`. The answer's guide links are rendered as
+ * links only when they point at a guide these tools returned in the same
+ * message (see `allowedGuideHref`), so the link format here has to match it.
+ */
+export const GUIDE_RULES: readonly string[] = [
+  "- For a \"how do I…\" question about using the app, call searchGuides,",
+  "  then readGuide on the best match, and answer from that guide alone —",
+  "  not from what you know about other software. Copy button, field and",
+  "  page names exactly as the guide writes them, in **bold**.",
+  "- Name the guide you used and link it as [Guide title](/dashboard/help/<slug>),",
+  "  with the slug the tool returned. Link no other pages and no other sites.",
+  "- If no guide matches, say so and point the person to **Help** in the",
+  "  sidebar; do not make up steps. If the guide doesn't cover a step they",
+  "  ask about, say that too, rather than filling the gap.",
+  "- A question can need both shelter data and a guide, such as an animal's",
+  "  overdue rabies vaccine and how to record it. Use both kinds of tool.",
+];
+
 export function buildSystemPrompt(input: {
   actor: Actor;
   displayName: string;
@@ -25,6 +47,9 @@ export function buildSystemPrompt(input: {
   today: CalendarDay;
 }): string {
   const canSetTaskStatus = input.availableTools.includes("setTaskStatus");
+  const canReadGuides =
+    input.availableTools.includes("searchGuides") &&
+    input.availableTools.includes("readGuide");
 
   return [
     "You are the staff assistant for an animal shelter management app. Shelter",
@@ -69,6 +94,7 @@ export function buildSystemPrompt(input: {
           "- A tool may return { ok: false, reason }. Relay it in plain language;",
           "  do not retry blindly.",
         ]),
+    ...(canReadGuides ? GUIDE_RULES : []),
     "- Be concise. Prefer short, scannable answers over long prose.",
     "- Reply in plain Markdown. Never use HTML tags — they are shown to the",
     "  user literally, not rendered.",

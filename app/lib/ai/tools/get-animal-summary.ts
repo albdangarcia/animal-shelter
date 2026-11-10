@@ -10,16 +10,17 @@ import {
 } from "@/app/lib/data/animals/animal.data";
 import { _fetchAnimalReadinessForAssistant } from "@/app/lib/data/animals/readiness.data";
 import { actorContextSchema } from "../context";
+import {
+  GET_ANIMAL_READINESS_PERMISSIONS,
+  GET_ANIMAL_SUMMARY_PERMISSIONS,
+} from "../tool-permissions";
 import { toReadinessLine } from "../projections/animal-readiness";
 import { toAnimalSummary, type AnimalSummary } from "../projections/animal-summary";
-import { GET_ANIMAL_READINESS_PERMISSIONS } from "./get-animal-readiness";
 import {
   describeToolError,
   toolFailure,
   type ToolResult,
 } from "./tool-result";
-
-export const GET_ANIMAL_SUMMARY_PERMISSIONS = [AppPermissions.ANIMAL_INFO_READ];
 
 export const getAnimalSummaryTool = tool({
   description:

@@ -262,3 +262,28 @@ test("a successful tool leaves no note behind", () => {
     [],
   );
 });
+
+test("the guide tools are named in human terms", () => {
+  const step = (part: Part) =>
+    describeActiveStep({ status: "streaming", messages: [assistant(part)] })
+      ?.label;
+
+  assert.equal(
+    step({
+      type: "tool-searchGuides",
+      toolCallId: "call-search",
+      state: "input-available",
+      input: { query: "record rabies vaccine" },
+    }),
+    "Searching the guides",
+  );
+  assert.equal(
+    step({
+      type: "tool-readGuide",
+      toolCallId: "call-read",
+      state: "input-available",
+      input: { slug: "record-a-vaccine-test-or-treatment" },
+    }),
+    "Reading a guide",
+  );
+});

@@ -33,6 +33,8 @@ const STEP_LABELS: Record<AiToolName, string> = {
   findAnimals: "Looking up animals",
   getAnimalSummary: "Reading the record",
   getAnimalReadiness: "Checking adoption readiness",
+  searchGuides: "Searching the guides",
+  readGuide: "Reading a guide",
   setTaskStatus: "Updating the task",
 };
 

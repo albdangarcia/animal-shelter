@@ -1,27 +1,13 @@
 import type { Actor } from "@/app/lib/auth/actor";
-import { can } from "@/app/lib/auth/can";
-import type { AppPermission } from "@/app/lib/auth/permissions";
 import type { AiToolName } from "./tool-names";
-import {
-  FIND_ANIMALS_PERMISSIONS,
-  findAnimalsTool,
-} from "./tools/find-animals";
-import {
-  GET_ANIMAL_READINESS_PERMISSIONS,
-  getAnimalReadinessTool,
-} from "./tools/get-animal-readiness";
-import {
-  GET_ANIMAL_SUMMARY_PERMISSIONS,
-  getAnimalSummaryTool,
-} from "./tools/get-animal-summary";
-import {
-  GET_ATTENTION_QUEUE_PERMISSIONS,
-  getAttentionQueueTool,
-} from "./tools/get-attention-queue";
-import {
-  SET_TASK_STATUS_PERMISSIONS,
-  setTaskStatusTool,
-} from "./tools/set-task-status";
+import { findAnimalsTool } from "./tools/find-animals";
+import { getAnimalReadinessTool } from "./tools/get-animal-readiness";
+import { getAnimalSummaryTool } from "./tools/get-animal-summary";
+import { getAttentionQueueTool } from "./tools/get-attention-queue";
+import { readGuideTool } from "./tools/read-guide";
+import { searchGuidesTool } from "./tools/search-guides";
+import { setTaskStatusTool } from "./tools/set-task-status";
+import { toolNamesForActor } from "./tool-permissions";
 
 export type { AiToolName };
 
@@ -34,30 +20,17 @@ const AI_TOOLS = {
   getAnimalReadiness: getAnimalReadinessTool,
   getAnimalSummary: getAnimalSummaryTool,
   getAttentionQueue: getAttentionQueueTool,
+  searchGuides: searchGuidesTool,
+  readGuide: readGuideTool,
   setTaskStatus: setTaskStatusTool,
 } satisfies Record<AiToolName, unknown>;
 
 export type AiToolSet = typeof AI_TOOLS;
 
-// The permission requirement is declared once, next to each tool; this table
-// only references those constants, so the registry filter and each tool's own
-// `requireFor` cannot drift.
-const TOOL_PERMISSIONS: Record<AiToolName, readonly AppPermission[]> = {
-  findAnimals: FIND_ANIMALS_PERMISSIONS,
-  getAnimalReadiness: GET_ANIMAL_READINESS_PERMISSIONS,
-  getAnimalSummary: GET_ANIMAL_SUMMARY_PERMISSIONS,
-  getAttentionQueue: GET_ATTENTION_QUEUE_PERMISSIONS,
-  setTaskStatus: SET_TASK_STATUS_PERMISSIONS,
-};
-
-const TOOL_NAMES = Object.keys(TOOL_PERMISSIONS) as AiToolName[];
-
-/** The tool names an actor's role can use — filtered by `can`. */
-export function toolNamesForActor(actor: Actor): AiToolName[] {
-  return TOOL_NAMES.filter((name) =>
-    TOOL_PERMISSIONS[name].every((permission) => can(actor.role, permission)),
-  );
-}
+// Which tools an actor gets is `toolNamesForActor`, in `tool-permissions.ts`:
+// the permission each tool needs is declared there once, apart from the tools
+// (most of which import Prisma) so the filter is unit-testable, and each
+// tool's `execute` enforces the same constant again with `requireFor`.
 
 /**
  * The tools an actor's request should carry, plus the matching `toolsContext`

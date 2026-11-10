@@ -10,9 +10,16 @@ import { getCachedSession } from "@/app/lib/auth/session";
 import { can } from "@/app/lib/auth/can";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { toActor } from "@/app/lib/auth/actor";
-import { toolNamesForActor } from "@/app/lib/ai/registry";
+import { toolNamesForActor } from "@/app/lib/ai/tool-permissions";
 import { examplesForTools } from "@/app/lib/ai/chat-examples";
 import { AiChat } from "@/components/dashboard/ai-chat/ai-chat";
+
+/**
+ * The longest draft `?q=` puts in the message box. The Help page's "Ask the
+ * assistant" sends at most a Help query (100 characters); this only stops a
+ * hand-made URL filling the box with pages of text.
+ */
+const DRAFT_MAX_LENGTH = 500;
 
 /**
  * The assistant's own route rather than a floating widget: the sidebar
@@ -23,7 +30,7 @@ import { AiChat } from "@/components/dashboard/ai-chat/ai-chat";
  * The nav gate hides the link. It does not protect the route — this page checks
  * `AI_CHAT_USE` itself, because a URL can be typed.
  */
-const Page = async () => {
+const Page = async ({ searchParams }: PageProps<"/dashboard/ai-chat">) => {
   const session = await getCachedSession();
 
   if (!session?.user || !can(session.user.role, AppPermissions.AI_CHAT_USE)) {
@@ -41,6 +48,14 @@ const Page = async () => {
   // answered is never shown it — and there is no second copy of the role
   // matrix to fall out of sync.
   const availableTools = toolNamesForActor(toActor(session.user));
+
+  // `?q=` is a draft, from the Help page's "Ask the assistant": it goes in
+  // the message box and is never sent on its own, so the person can reword
+  // it or add detail first.
+  const { q } = await searchParams;
+  const draft = (Array.isArray(q) ? q[0] : q ?? "")
+    .trim()
+    .slice(0, DRAFT_MAX_LENGTH);
 
   return (
     /*
@@ -60,13 +75,15 @@ const Page = async () => {
         <CardHeader className="shrink-0">
           <CardTitle className="@[650px]/card:text-xl">AI Assistant</CardTitle>
           <CardDescription>
-            Ask about animals, tasks, and what needs attention today.
+            Ask about animals, tasks, what needs attention today, or how to
+            do something in the app.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex min-h-0 flex-1 flex-col">
           <AiChat
             examples={examplesForTools(availableTools)}
             availableTools={availableTools}
+            initialDraft={draft}
           />
         </CardContent>
       </Card>

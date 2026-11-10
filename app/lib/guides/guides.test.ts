@@ -235,7 +235,7 @@ test("good links, anchors, outside links and links in code pass", () => {
   validateGuides([
     guide("a", {
       body: [
-        "See [b](./b.md), [its steps](./b.md#steps), [b again][ref],",
+        "See [b](./b.md), [its steps](./b.md#steps), [the site again][ref],",
         "[the site](https://example.com), [mail us](mailto:help@example.com)",
         "and [above](#top). In code, `[x](./missing.md)` is not a link.",
         "A footnote isn't a link either.[^1]",
@@ -244,7 +244,7 @@ test("good links, anchors, outside links and links in code pass", () => {
         "[x](./missing.md)",
         "```",
         "",
-        "[ref]: ./b.md",
+        "[ref]: https://example.com",
         "[^1]: Required.",
         "",
         "## Top",
@@ -302,10 +302,19 @@ test("every form of a broken link fails", () => {
     '[x](./missing.md "a \\" b")',
     "[x](<./my missing.md>)",
     "[see [b]](./missing.md)",
-    "[x][r]\n\n[r]: ./missing.md",
   ];
   for (const body of broken) {
     assert.match(linkError(body), /a\.md: link ".*" points at no guide/, body);
+  }
+});
+
+test("a link to a guide written as a reference fails: only inline links reach the assistant as help links", () => {
+  for (const body of ["[b][r]\n\n[r]: ./b.md", "[b][r]\n\n[r]: ./b.md#steps", "[b]\n\n[b]: ./b.md"]) {
+    assert.match(
+      linkError(body),
+      /a\.md: link "\.\/b\.md(#steps)?": write a link to a guide inline, \[text\]\(\.\/b\.md(#steps)?\), not as a reference/,
+      body,
+    );
   }
 });
 
