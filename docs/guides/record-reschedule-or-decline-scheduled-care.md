@@ -3,7 +3,7 @@ title: Record, reschedule or decline scheduled care
 summary: Work through the care due on one animal's record, whether you gave it, it moves to another day, or it won't be given.
 permissions: [MEDICAL_ADMINISTER, MEDICAL_MANAGE]
 aliases: [mark scheduled care done, move a due date, push back a vaccine, skip scheduled care, cancel a due vaccine, protocol care, due list on an animal]
-related: [record-a-vaccine-test-or-treatment, schedule-care-and-read-the-due-page, give-or-schedule-care-for-several-animals, record-a-surgery-spay-neuter-or-exemption, record-an-exam, record-or-correct-a-microchip, correct-or-void-an-entry, medical-status-glossary]
+related: [record-a-vaccine-test-or-treatment, schedule-care-and-read-the-due-page, give-or-schedule-care-for-several-animals, record-a-surgery-spay-neuter-or-exemption, record-an-exam, record-or-correct-a-microchip, correct-or-void-an-entry, medical-status-glossary, set-up-or-change-a-medical-protocol]
 verified: 2026-11-10
 ---
 

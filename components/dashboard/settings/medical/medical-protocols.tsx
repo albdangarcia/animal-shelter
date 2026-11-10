@@ -10,6 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 import type {
   MedicalProtocolListing,
   ProtocolStepItem,
@@ -29,6 +31,8 @@ interface Props {
   protocols: MedicalProtocolListing[];
   species: { id: string; name: string }[];
   items: ProtocolStepItem[];
+  /** The guide the "?" opens, or null for no "?". */
+  help: HelpLinkGuide | null;
 }
 
 /** The protocols of each species, in the order they are listed. */
@@ -45,7 +49,7 @@ const bySpecies = (protocols: MedicalProtocolListing[]) => {
   return [...groups.entries()];
 };
 
-const MedicalProtocols = ({ protocols, species, items }: Props) => {
+const MedicalProtocols = ({ protocols, species, items, help }: Props) => {
   return (
     <Card className="@container/card">
       <CardHeader>
@@ -55,7 +59,8 @@ const MedicalProtocols = ({ protocols, species, items }: Props) => {
           its age on the intake day. A change applies to animals admitted
           afterwards; care already scheduled stays as it was.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-1">
+          <HelpLink guide={help} />
           <AddMedicalProtocolButton species={species} items={items} />
         </CardAction>
       </CardHeader>

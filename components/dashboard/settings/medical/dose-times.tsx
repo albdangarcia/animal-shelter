@@ -19,6 +19,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 import { DOSE_SLOT_LABELS, DOSE_SLOT_ORDER } from "@/app/lib/constants/medical";
 import type { DoseSlotEnds } from "@/app/lib/utils/medication-slots";
 import { formatTimeOfDay } from "@/app/lib/utils/shelter-day";
@@ -28,10 +30,12 @@ import { DoseTimesForm, type DoseTimesFormHandle } from "./dose-times-form";
 
 interface Props {
   ends: DoseSlotEnds;
+  /** The guide the "?" opens, or null for no "?". */
+  help: HelpLinkGuide | null;
 }
 
 /** The dose slots' end times, and the dialog that changes them. */
-export default function DoseTimes({ ends }: Props) {
+export default function DoseTimes({ ends, help }: Props) {
   const [isOpen, setIsOpen] = useState(false);
   const formRef = useRef<DoseTimesFormHandle>(null);
   const { guardedOnOpenChange, isConfirmOpen, confirmDiscard, cancelDiscard } =
@@ -46,7 +50,8 @@ export default function DoseTimes({ ends }: Props) {
           dose recorded by then reads as missed. A change applies to every
           slot from then on; doses already recorded keep their slot.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-1">
+          <HelpLink guide={help} />
           {/* Not closed under a save: its result closes the dialog. */}
           <Dialog
             open={isOpen}
