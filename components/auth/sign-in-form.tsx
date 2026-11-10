@@ -40,7 +40,9 @@ export const SignInForm = ({ callbackUrl }: SignInFormProps) => {
   };
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+    // POST, so a submit before hydration (the browser's own fallback) sends
+    // the password in the body, not in a URL that logs and history keep.
+    <form method="post" onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
       <div>
         <label
           htmlFor="email"

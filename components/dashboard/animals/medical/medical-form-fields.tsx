@@ -79,10 +79,13 @@ export function MedicalTextareaField<TValues extends FieldValues>({
   control,
   name,
   label,
+  required = false,
 }: {
   control: Control<TValues>;
   name: Path<TValues>;
   label: string;
+  /** Marks the label with the required asterisk. Not passed to the textarea. */
+  required?: boolean;
 }) {
   return (
     <FormField
@@ -90,7 +93,7 @@ export function MedicalTextareaField<TValues extends FieldValues>({
       name={name}
       render={({ field }) => (
         <FormItem className="md:col-span-2">
-          <FormLabel htmlFor={name}>{label}</FormLabel>
+          <FormLabel htmlFor={name} required={required}>{label}</FormLabel>
           <FormControl>
             <Textarea id={name} {...field} value={field.value ?? ""} />
           </FormControl>

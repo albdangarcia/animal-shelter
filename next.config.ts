@@ -21,6 +21,10 @@ const nextConfig: NextConfig = {
     typescript: { tsconfigPath: "tsconfig.e2e.json" },
   }),
   reactCompiler: true,
+  // `next dev` logs every server function call with its arguments, so signing
+  // in printed the email and password in plain text. Next has no per-argument
+  // redaction, so the call log is off.
+  logging: { serverFunctions: false },
   images: {
     ...(e2eUnoptimizedImages && { unoptimized: true }),
     // Allow loading images from specific remote domains
