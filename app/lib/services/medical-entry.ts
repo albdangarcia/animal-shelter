@@ -1365,7 +1365,9 @@ export interface RecordSpayNeuterExemptionInput extends SpayNeuterExemptionTerms
  * scheduling is, and for one already spayed or neutered on its record.
  *
  * Like any decline, it is final. An exemption is extended by recording a new
- * one, and ended by scheduling or recording the spay or neuter.
+ * one, and ended by recording the spay or neuter. Scheduling one closes the
+ * exemption's review (`openExemptionReview`), but the animal stays exempt
+ * until the spay or neuter is given (`spayNeuterStatus`).
  */
 export async function recordSpayNeuterExemption(
   tx: TransactionClient,

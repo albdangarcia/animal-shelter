@@ -3,8 +3,8 @@ title: "Glossary: what Overdue, Missed, Altered and Exempt mean"
 summary: What the status words on medical pages mean, exactly as the app works them out.
 permissions: [MEDICAL_READ, MEDICAL_ADMINISTER, MEDICAL_MANAGE]
 aliases: [overdue meaning, missed dose, what does altered mean, spay neuter status, exemption lapsed, declined vs voided]
-related: [schedule-care-and-read-the-due-page, record-a-vaccine-test-or-treatment, correct-or-void-an-entry]
-verified: 2026-11-09
+related: [schedule-care-and-read-the-due-page, record-a-vaccine-test-or-treatment, correct-or-void-an-entry, record-reschedule-or-decline-scheduled-care, order-a-medication-and-record-doses, open-a-care-episode-add-a-condition-or-allergy, record-or-correct-a-microchip, verify-a-fosters-vet-visit-report]
+verified: 2026-11-10
 ---
 
 ## When to use this
@@ -52,6 +52,16 @@ dose can still be recorded with **Give** if it was given late.
 
 What was recorded for the dose: it was given, the animal wouldn't take it, or
 it wasn't given for a reason someone wrote down.
+
+## Medication orders
+
+- **Active**: it has started, and hasn't ended or been stopped. An order
+  given every few days or as needed can be active on a day with no dose due.
+- **Starts** *day*: ordered for a later start. No dose is expected yet.
+- **Ended** *day*: its end date has passed.
+- **Discontinued from** *day*: someone stopped it, with a reason. No dose is
+  expected from that day on.
+- **Voided**: it should never have been ordered. Its doses count for nothing.
 
 ## Spay and neuter
 
@@ -101,3 +111,36 @@ the due list and stays on the record. A decline is final.
 An entry that should never have been recorded. It stays on **History**,
 struck through, with who voided it and why, and no longer counts anywhere
 else. A void can't be undone.
+
+## Problem list
+
+### Active, Chronic, Resolved
+
+A condition or allergy is **Active** while the animal has it, **Chronic** when
+it is long term, and **Resolved** once it has cleared up, with the day. The
+list shows allergies first, then the conditions the animal lives with, then
+those resolved.
+
+### Open care episode
+
+The animal is under vet care or hospitalised now. It has no end date yet, and
+shows at the top of the animal's page. An animal has one open episode at a
+time; once closed, the episode shows its start and end days.
+
+## Microchip registration
+
+- **Unknown**: nobody has checked.
+- **Not registered**: the chip isn't registered with any registry.
+- **Pending**: sent to a registry, not confirmed yet. Shows the registry, if
+  given.
+- **Registered**: confirmed with a registry. Shows the registry and, if known,
+  the day.
+
+## Foster reports
+
+- **Waiting for review**: a foster reported an outside vet visit and nobody
+  at the shelter has looked at it. It is listed on the Due page.
+- **Reviewed**: staff recorded what the paperwork supports and marked it
+  reviewed.
+- **Dismissed**: staff decided there was nothing to record, and said why. The
+  report and its paperwork stay on the record.
