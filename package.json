@@ -78,6 +78,9 @@
     "date-fns-tz": "^3.2.0",
     "libphonenumber-js": "^1.13.11",
     "lucide-react": "^1.31.0",
+    "mdast-util-from-markdown": "^2.1.0",
+    "mdast-util-gfm": "^3.1.0",
+    "micromark-extension-gfm": "^3.0.0",
     "next": "^16.3.8",
     "next-themes": "^0.4.6",
     "pg": "^8.23.0",
@@ -92,6 +95,7 @@
     "sonner": "^2.0.5",
     "use-debounce": "^10.0.4",
     "vaul": "^1.1.2",
+    "yaml": "^2.9.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {
@@ -99,6 +103,7 @@
     "@playwright/test": "^1.60.0",
     "@rolldown/plugin-babel": "^0.2.4",
     "@tailwindcss/postcss": "^4.1.14",
+    "@types/mdast": "^4.0.4",
     "@types/node": "^24.19.1",
     "@types/pg": "^8.21.0",
     "@types/react": "^19.2.18",

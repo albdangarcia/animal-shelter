@@ -42,3 +42,7 @@ Setup and commands: the README's "Tests" and "End-to-End Tests" sections.
 - A new worktree has no `.env` and no `node_modules` (both are gitignored). Run `npm ci` with the Node version in `.nvmrc`; without `.env`, its `prisma generate` needs a placeholder URL, as in CI: `DATABASE_URL_UNPOOLED=postgresql://placeholder@127.0.0.1/placeholder npm ci`. `npm run test:db` and `npm run e2e` then work without `.env`; `npm run dev` needs a copy of the main checkout's.
 - Each checkout gets its own e2e and `test:db` containers and ports, so e2e and `test:db` can run at once, in one worktree or in several. If a run fails on a busy port, another worktree has the same slot: set `E2E_SLOT=<n>` (1 to 99) and run again.
 - Dev servers in different worktrees share the dev database. If your change touches `prisma/schema.prisma`, give the worktree its own database before you push the schema: see the README, "Two worktrees that change the schema".
+
+# Staff guides
+
+`docs/guides/` holds how-to guides for staff. When you change a screen a guide describes (its labels, steps or error messages), update that guide in the same branch and set its `verified` date. `npm test` checks every guide's front matter and links. How to write one: `docs/guides/README.md`.
