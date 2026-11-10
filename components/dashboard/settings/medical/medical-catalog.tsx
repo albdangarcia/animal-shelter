@@ -21,6 +21,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 import { MedicalItemKind } from "@/prisma/generated/enums";
 import type { MedicalCatalogItem } from "@/app/lib/data/medical-catalog";
 import {
@@ -34,6 +36,8 @@ import { MedicalItemActions } from "./medical-item-actions";
 interface Props {
   items: MedicalCatalogItem[];
   species: { id: string; name: string }[];
+  /** The guide the "?" opens, or null for no "?". */
+  help: HelpLinkGuide | null;
 }
 
 /** What a row says under its name: who it's for and what it defaults to. */
@@ -58,7 +62,7 @@ const describe = (item: MedicalCatalogItem): string[] => {
   return parts;
 };
 
-const MedicalCatalog = ({ items, species }: Props) => {
+const MedicalCatalog = ({ items, species, help }: Props) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const addFormRef = useRef<MedicalItemFormHandle>(null);
 
@@ -81,7 +85,8 @@ const MedicalCatalog = ({ items, species }: Props) => {
           picked for new entries or orders; entries and orders that already
           use them keep them.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-1">
+          <HelpLink guide={help} />
           {/* Not closed under a save: its result closes the dialog, which
               would otherwise be a new item opened since. */}
           <Dialog

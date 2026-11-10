@@ -3,7 +3,7 @@ title: Order a medication and record doses; use the Dose sheet
 summary: Order a course of medication for an animal, record each dose given, refused or not given, and work through the shelter's Dose sheet.
 permissions: [MEDICAL_MANAGE, MEDICAL_ADMINISTER]
 aliases: [prescribe, start antibiotics, medication order, give meds, gave the pill, refused medication, med sheet, dose sheet, MAR, stop a medication, discontinue meds]
-related: [open-a-care-episode-add-a-condition-or-allergy, medical-status-glossary]
+related: [open-a-care-episode-add-a-condition-or-allergy, medical-status-glossary, set-the-dose-times]
 verified: 2026-11-10
 ---
 

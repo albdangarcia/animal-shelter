@@ -3,7 +3,7 @@ title: Record a vaccine, test or treatment
 summary: Record care an animal was given, whether it was scheduled or not, and plan its next dose.
 permissions: [MEDICAL_ADMINISTER, MEDICAL_MANAGE]
 aliases: [give a shot, add vaccination, log rabies shot, record dewormer, enter test result, mark care as given]
-related: [schedule-care-and-read-the-due-page, correct-or-void-an-entry, medical-status-glossary, record-reschedule-or-decline-scheduled-care, give-or-schedule-care-for-several-animals, verify-a-fosters-vet-visit-report, print-the-adopter-history-and-rabies-certificate]
+related: [schedule-care-and-read-the-due-page, correct-or-void-an-entry, medical-status-glossary, record-reschedule-or-decline-scheduled-care, give-or-schedule-care-for-several-animals, verify-a-fosters-vet-visit-report, print-the-adopter-history-and-rabies-certificate, add-edit-or-retire-a-medical-catalog-item]
 verified: 2026-11-09
 ---
 

@@ -105,6 +105,7 @@ export const HELP_PERMISSIONS: readonly AppPermission[] = [
   AppPermissions.MEDICAL_MANAGE,
   AppPermissions.MY_FOSTER_ANIMALS_CARE,
   AppPermissions.OUTCOMES_MANAGE,
+  AppPermissions.MEDICAL_SETTINGS_MANAGE,
 ] as const;
 
 export interface NavDocument {

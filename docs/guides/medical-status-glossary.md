@@ -3,7 +3,7 @@ title: "Glossary: what Overdue, Missed, Altered and Exempt mean"
 summary: What the status words on medical pages mean, exactly as the app works them out.
 permissions: [MEDICAL_READ, MEDICAL_ADMINISTER, MEDICAL_MANAGE]
 aliases: [overdue meaning, missed dose, what does altered mean, spay neuter status, exemption lapsed, declined vs voided]
-related: [schedule-care-and-read-the-due-page, record-a-vaccine-test-or-treatment, correct-or-void-an-entry, record-reschedule-or-decline-scheduled-care, order-a-medication-and-record-doses, open-a-care-episode-add-a-condition-or-allergy, record-or-correct-a-microchip, verify-a-fosters-vet-visit-report]
+related: [schedule-care-and-read-the-due-page, record-a-vaccine-test-or-treatment, correct-or-void-an-entry, record-reschedule-or-decline-scheduled-care, order-a-medication-and-record-doses, open-a-care-episode-add-a-condition-or-allergy, record-or-correct-a-microchip, verify-a-fosters-vet-visit-report, set-the-dose-times]
 verified: 2026-11-10
 ---
 

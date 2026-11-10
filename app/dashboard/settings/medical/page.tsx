@@ -7,6 +7,8 @@ import {
   fetchMedicalCatalog,
   fetchMedicalCatalogSpecies,
 } from "@/app/lib/data/medical-catalog.data";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 const Page = async () => {
   return (
@@ -20,15 +22,16 @@ const Page = async () => {
 };
 
 const PageContent = async () => {
-  const [items, species] = await Promise.all([
+  const [items, species, help] = await Promise.all([
     fetchMedicalCatalog(),
     fetchMedicalCatalogSpecies(),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.settingsMedicalCatalog),
   ]);
 
   return (
     <div className="flex flex-col gap-4">
       <MedicalSettingsNav />
-      <MedicalCatalog items={items} species={species} />
+      <MedicalCatalog items={items} species={species} help={help} />
     </div>
   );
 };

@@ -27,4 +27,7 @@ export const PAGE_HELP_GUIDES = {
   medicalBatch: "give-or-schedule-care-for-several-animals",
   animalMedical: "record-a-vaccine-test-or-treatment",
   fosterAnimal: "foster-give-care-and-report-a-vet-visit",
+  settingsMedicalCatalog: "add-edit-or-retire-a-medical-catalog-item",
+  settingsMedicalProtocols: "set-up-or-change-a-medical-protocol",
+  settingsMedicalDoseTimes: "set-the-dose-times",
 } as const;
