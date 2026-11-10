@@ -3,7 +3,7 @@ title: Schedule care and read the Due page
 summary: Plan a vaccine, test or treatment for a later day, and work through what is due across the shelter.
 permissions: [MEDICAL_MANAGE, MEDICAL_ADMINISTER]
 aliases: [plan a vaccine, set a due date, what's due today, overdue care, reschedule a vaccine, skip a dose, record several at once]
-related: [record-a-vaccine-test-or-treatment, correct-or-void-an-entry, medical-status-glossary]
+related: [record-a-vaccine-test-or-treatment, correct-or-void-an-entry, medical-status-glossary, record-reschedule-or-decline-scheduled-care, give-or-schedule-care-for-several-animals, record-a-surgery-spay-neuter-or-exemption, verify-a-fosters-vet-visit-report]
 verified: 2026-11-09
 ---
 

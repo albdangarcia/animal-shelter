@@ -527,7 +527,7 @@ function DeclineAsExemptionButton({
               Declining a {procedure} records that the animal is exempt from
               it, and why. The entry stays on the record as declined.{" "}
               {inCare
-                ? `A decline is final: to extend the exemption, record a new one, and to end it, schedule or record the ${procedure}.`
+                ? `A decline is final: to extend the exemption, record a new one, and to end it, record the ${procedure}. Scheduling one closes the exemption's review, but the animal stays exempt until the ${procedure} is recorded.`
                 : `A decline is final. The animal has left the shelter's care, so the exemption has no review date; if the ${procedure} is done, record it.`}
             </DialogDescription>
           </DialogHeader>

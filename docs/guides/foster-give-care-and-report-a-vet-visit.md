@@ -3,6 +3,7 @@ title: "Fosters: give care and report an outside vet visit"
 summary: For fosters. Record the doses and treatments you give your foster animal, and tell the shelter about a vet visit.
 permissions: [MY_FOSTER_ANIMALS_CARE]
 aliases: [foster medication, gave the pill, foster dewormer, missed a dose, took my foster to the vet, upload vet paperwork]
+related: [verify-a-fosters-vet-visit-report]
 verified: 2026-11-09
 ---
 
@@ -73,7 +74,8 @@ example) is given by the shelter, not by you.
 
 You should see "Visit reported. You can now add paperwork." The report
 appears with "Waiting for the shelter". Once the shelter has looked at it, it
-reads "Reviewed on" and the date.
+reads "Reviewed on" and the date, or "Dismissed:" and the shelter's reason
+when there was nothing to add to the record.
 
 ## Add the vet's paperwork
 

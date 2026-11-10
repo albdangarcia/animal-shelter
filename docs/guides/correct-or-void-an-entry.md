@@ -3,7 +3,7 @@ title: Correct or void an entry
 summary: Fix a detail on a medical entry, or void one that should never have been recorded.
 permissions: [MEDICAL_MANAGE]
 aliases: [edit a vaccine, fix a typo, wrong lot number, delete an entry, remove a record, wrong animal, undo a vaccine]
-related: [record-a-vaccine-test-or-treatment, schedule-care-and-read-the-due-page, medical-status-glossary]
+related: [record-a-vaccine-test-or-treatment, schedule-care-and-read-the-due-page, medical-status-glossary, record-reschedule-or-decline-scheduled-care, record-a-surgery-spay-neuter-or-exemption, record-an-exam, record-or-correct-a-microchip, record-an-end-of-life-outcome, upload-and-manage-medical-documents, print-the-adopter-history-and-rabies-certificate]
 verified: 2026-11-09
 ---
 
