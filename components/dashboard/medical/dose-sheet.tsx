@@ -5,9 +5,12 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardAction,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 import { DOSE_SHEET_PAST_DAYS } from "@/app/lib/constants/medical";
 import type {
   DoseSheetPage,
@@ -88,9 +91,11 @@ const selectableOf = (
 interface Props {
   page: DoseSheetPage;
   canAdminister: boolean;
+  /** The guide the "?" opens, or null for no "?". */
+  help: HelpLinkGuide | null;
 }
 
-export function DoseSheet({ page, canAdminister }: Props) {
+export function DoseSheet({ page, canAdminister, help }: Props) {
   const rows = page.sections.flatMap((section) =>
     section.groups.flatMap((group) => group.rows),
   );
@@ -127,6 +132,11 @@ export function DoseSheet({ page, canAdminister }: Props) {
               {DOSE_SHEET_TITLE}
             </h1>
           </CardTitle>
+          {help && (
+            <CardAction>
+              <HelpLink guide={help} />
+            </CardAction>
+          )}
           <CardDescription>{DOSE_SHEET_DESCRIPTION}</CardDescription>
           <DayNav page={page} />
           {page.refused && (

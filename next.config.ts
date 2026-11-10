@@ -21,6 +21,14 @@ const nextConfig: NextConfig = {
     typescript: { tsconfigPath: "tsconfig.e2e.json" },
   }),
   reactCompiler: true,
+  // Staff guides are markdown read from docs/guides/ at request time
+  // (app/lib/guides/store.ts), which the build's file trace can't see. List
+  // them for every dashboard route, since the Help pages and the "?" links on
+  // the medical pages read them, and for the search route's Help group.
+  outputFileTracingIncludes: {
+    "/dashboard/**": ["./docs/guides/*.md"],
+    "/api/search": ["./docs/guides/*.md"],
+  },
   // `next dev` logs every server function call with its arguments, so signing
   // in printed the email and password in plain text. Next has no per-argument
   // redaction, so the call log is off.

@@ -48,16 +48,20 @@ permission ticks, so don't rely on one role holding both.
 ### Links
 
 Guides are plain GitHub-flavoured markdown. The check parses each body the
-way the help page will render it, so links inside code aren't checked and
+way the help page renders it, so links inside code aren't checked and
 footnotes aren't links. A link may point at:
 
 - another guide, written `./<slug>.md`:
   `[Correct or void an entry](./correct-or-void-an-entry.md)`. A section
   anchor is fine: `./medical-status-glossary.md#missed`. These work on
-  GitHub, and the help page will rewrite them to its own routes. Anchors
-  aren't checked against the headings yet.
+  GitHub, and the help page (`/dashboard/help/<slug>`) rewrites them to its
+  own routes. The anchor must be the id of a heading in that guide, made the
+  way GitHub makes it: lower case, punctuation dropped, spaces turned into
+  `-` (`### Active, Chronic, Resolved` is `#active-chronic-resolved`). A
+  repeated heading gets `-1`, `-2`. The check fails on an anchor that names
+  no heading and lists the guide's heading ids.
 - a web page, `https://…` or `http://…`, or a mail address, `mailto:…`.
-- a heading in the same guide, `#…`.
+- a heading in the same guide, `#…`, checked the same way.
 
 Anything else fails the check:
 

@@ -6,6 +6,8 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { fetchMedicalDue } from "@/app/lib/data/medical-due.data";
 import { MedicalDue } from "@/components/dashboard/medical/medical-due";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   // A param given more than once arrives as a list.
@@ -25,11 +27,12 @@ const Page = async ({ searchParams }: Props) => {
 
 const PageContent = async ({ searchParams }: Props) => {
   const { kind } = await searchParams;
-  const [{ groups, today, kinds }, canManage, canAdminister, reports] = await Promise.all([
+  const [{ groups, today, kinds }, canManage, canAdminister, reports, help] = await Promise.all([
     fetchMedicalDue(kind),
     hasPermission(AppPermissions.MEDICAL_MANAGE),
     hasPermission(AppPermissions.MEDICAL_ADMINISTER),
     fetchWaitingVetVisitReports(),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.medicalDue),
   ]);
 
   return (
@@ -40,6 +43,7 @@ const PageContent = async ({ searchParams }: Props) => {
         filtered={kinds.length > 0}
         canManage={canManage}
         canAdminister={canAdminister}
+        help={help}
       />
       <WaitingVetReports groups={reports} />
     </div>

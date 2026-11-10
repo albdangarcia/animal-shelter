@@ -13,9 +13,12 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardAction,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 import {
   Select,
   SelectContent,
@@ -84,7 +87,14 @@ const GROUP_LABELS: Record<MedicalBatchAnimalGroup["type"], string | null> = {
   NOT_HOUSED: null,
 };
 
-export function MedicalBatch({ options }: { options: MedicalBatchOptions }) {
+export function MedicalBatch({
+  options,
+  help,
+}: {
+  options: MedicalBatchOptions;
+  /** The guide the "?" opens, or null for no "?". */
+  help: HelpLinkGuide | null;
+}) {
   const { groups, species, items, vetClinics, today } = options;
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [speciesId, setSpeciesId] = useState(ALL_SPECIES);
@@ -235,6 +245,11 @@ export function MedicalBatch({ options }: { options: MedicalBatchOptions }) {
         <CardTitle className="@[650px]/main:text-xl">
           <h1>{MEDICAL_BATCH_TITLE}</h1>
         </CardTitle>
+        {help && (
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
+        )}
         <CardDescription>{MEDICAL_BATCH_DESCRIPTION}</CardDescription>
       </CardHeader>
       <CardContent>

@@ -1,5 +1,8 @@
 import { IDParamType } from "@/app/lib/types";
 import { LinkTabs } from "@/components/dashboard/animals/tabs-nav/link-tabs";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   children: React.ReactNode;
@@ -19,19 +22,27 @@ const sections = [
 ];
 
 const Layout = async ({ children, params }: Props) => {
-  const { id } = await params;
+  const [{ id }, help] = await Promise.all([
+    params,
+    getHelpLinkGuide(PAGE_HELP_GUIDES.animalMedical),
+  ]);
   const base = `/dashboard/animals/${id}/medical`;
 
   return (
     <div className="flex flex-col gap-4">
-      <nav aria-label="Medical sections" className="min-w-0">
-        <LinkTabs
-          scrollable
-          links={sections.map((section) => ({
-            href: `${base}${section.suffix}`,
-            label: section.label,
-          }))}
-        />
+      {/* The "?" sits in the nav, beside the tabs, so the nav stays a direct
+          child of this column (the loading-layout spec reads its parent). */}
+      <nav aria-label="Medical sections" className="flex min-w-0 items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <LinkTabs
+            scrollable
+            links={sections.map((section) => ({
+              href: `${base}${section.suffix}`,
+              label: section.label,
+            }))}
+          />
+        </div>
+        <HelpLink guide={help} />
       </nav>
       {children}
     </div>

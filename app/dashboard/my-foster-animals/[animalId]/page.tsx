@@ -5,6 +5,8 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { fetchFosterMedical } from "@/app/lib/data/fosters/foster-medical.data";
 import { FosterMedical } from "@/components/dashboard/my-foster-animals/foster-medical";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 export default async function Page({ params }: PageProps<"/dashboard/my-foster-animals/[animalId]">) {
   const { animalId } = await params;
@@ -14,7 +16,11 @@ export default async function Page({ params }: PageProps<"/dashboard/my-foster-a
 }
 
 async function Content({ animalId }: { animalId: string }) {
-  const [data, canCare] = await Promise.all([fetchFosterMedical(animalId), hasPermission(AppPermissions.MY_FOSTER_ANIMALS_CARE)]);
+  const [data, canCare, help] = await Promise.all([
+    fetchFosterMedical(animalId),
+    hasPermission(AppPermissions.MY_FOSTER_ANIMALS_CARE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.fosterAnimal),
+  ]);
   if (!data) notFound();
-  return <FosterMedical data={data} canCare={canCare} />;
+  return <FosterMedical data={data} canCare={canCare} help={help} />;
 }

@@ -12,6 +12,12 @@ import { gfm } from "micromark-extension-gfm";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import {
+  decodeAnchor,
+  GUIDE_LINK_PATTERN,
+  headingIds,
+  parseGuideLink,
+} from "./markdown";
 
 export type GuidePermission = keyof typeof AppPermissions;
 
@@ -229,11 +235,16 @@ export type GuideLink = {
 
 /**
  * Parses a guide body as GitHub-flavoured markdown, as the help page renders
- * it, and returns its links, images and link definitions, and any raw HTML.
- * Links in code are left out, reference links are found through their
- * definitions, and footnotes aren't links.
+ * it, and returns its links, images and link definitions, any raw HTML, and
+ * the ids the help page gives its headings. Links in code are left out,
+ * reference links are found through their definitions, and footnotes aren't
+ * links.
  */
-function scanBody(body: string): { links: GuideLink[]; html: string[] } {
+function scanBody(body: string): {
+  links: GuideLink[];
+  html: string[];
+  headings: string[];
+} {
   const links: GuideLink[] = [];
   const html: string[] = [];
   const visit = (node: Nodes) => {
@@ -248,21 +259,18 @@ function scanBody(body: string): { links: GuideLink[]; html: string[] } {
     }
     if ("children" in node) node.children.forEach(visit);
   };
-  visit(
-    fromMarkdown(body, {
-      extensions: [gfm()],
-      mdastExtensions: [gfmFromMarkdown()],
-    }),
-  );
-  return { links, html };
+  const tree = fromMarkdown(body, {
+    extensions: [gfm()],
+    mdastExtensions: [gfmFromMarkdown()],
+  });
+  visit(tree);
+  return { links, html, headings: headingIds(tree) };
 }
 
 /** Every link, image and link definition in a guide body. */
 export function guideLinks(body: string): GuideLink[] {
   return scanBody(body).links;
 }
-
-const GUIDE_LINK_PATTERN = /^\.\/([^/#?]+)\.md(?:#.*)?$/;
 
 /**
  * Why a link target isn't allowed, or null when it is. Guides link to other
@@ -292,8 +300,8 @@ function targetIssue(url: string): string | null {
 /**
  * The problems that span files: unique slugs, every `related` slug exists,
  * every link is allowed and every link to a guide points at a real one that
- * everyone who can see the linking guide can see too, and no images or raw
- * HTML. `knownSlugs` adds guides that exist but failed to parse, so they
+ * everyone who can see the linking guide can see too, every anchor lands on a
+ * heading, and no images or raw HTML. `knownSlugs` adds guides that exist but failed to parse, so they
  * aren't also reported as missing.
  */
 function crossFileProblems(
@@ -309,6 +317,11 @@ function crossFileProblems(
     bySlug.set(guide.slug, guide);
   }
   const exists = new Set([...bySlug.keys(), ...knownSlugs]);
+  const scans = new Map(guides.map((guide) => [guide, scanBody(guide.body)]));
+  const headingsOf = (slug: string) => {
+    const target = bySlug.get(slug);
+    return target ? new Set(scans.get(target)!.headings) : null;
+  };
 
   for (const guide of guides) {
     const fileName = `${guide.slug}.md`;
@@ -319,7 +332,7 @@ function crossFileProblems(
         problems.push(`${fileName}: related "${related}" is not a guide`);
       }
     }
-    const { links, html } = scanBody(guide.body);
+    const { links, html } = scans.get(guide)!;
     for (const value of html) {
       problems.push(
         `${fileName}: raw HTML ${JSON.stringify(value)}: guides are plain markdown`,
@@ -337,19 +350,46 @@ function crossFileProblems(
         problems.push(`${fileName}: link "${url}": ${issue}`);
         continue;
       }
-      const match = GUIDE_LINK_PATTERN.exec(url);
-      if (!match) continue;
-      if (!exists.has(match[1])) {
+      if (url.startsWith("#")) {
+        problems.push(...anchorProblem(fileName, url, url.slice(1), guide.slug, headingsOf(guide.slug)));
+        continue;
+      }
+      const link = parseGuideLink(url);
+      if (!link) continue;
+      if (!exists.has(link.slug)) {
         problems.push(`${fileName}: link "${url}" points at no guide`);
         continue;
       }
-      const target = bySlug.get(match[1]);
+      const target = bySlug.get(link.slug);
       if (target) {
         problems.push(...visibilityProblem(guide, target, url));
+        if (link.anchor !== null) {
+          problems.push(...anchorProblem(fileName, url, link.anchor, target.slug, headingsOf(target.slug)));
+        }
       }
     }
   }
   return problems;
+}
+
+/**
+ * An anchor must name a heading of the guide it points into, as the help page
+ * gives ids to headings (see `headingSlug`). `headings` is null when that
+ * guide failed to parse, which is reported on its own.
+ */
+function anchorProblem(
+  fileName: string,
+  url: string,
+  anchor: string,
+  targetSlug: string,
+  headings: Set<string> | null,
+): string[] {
+  if (headings === null || headings.has(decodeAnchor(anchor))) return [];
+  const known = [...headings].map((id) => `#${id}`).join(", ");
+  return [
+    `${fileName}: link "${url}": ${targetSlug}.md has no heading with the id ` +
+      `"${anchor}". Its headings are ${known || "none"}`,
+  ];
 }
 
 /**
@@ -381,7 +421,7 @@ function visibilityProblem(
 /**
  * Checks that span files: unique slugs, every `related` slug exists, every
  * link is allowed and every link to a guide points at one its readers can
- * see, and no images or raw HTML. Throws one error listing every problem.
+ * see, every anchor lands on a heading, and no images or raw HTML. Throws one error listing every problem.
  */
 export function validateGuides(guides: Guide[]): void {
   const problems = crossFileProblems(guides);

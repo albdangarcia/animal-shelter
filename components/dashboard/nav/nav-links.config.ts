@@ -30,6 +30,7 @@ export type IconName =
   | "IconClipboardCheck"
   | "IconDoorEnter"
   | "IconFirstAidKit"
+  | "IconHelp"
 
 export interface NavItem {
   title: string;
@@ -88,6 +89,23 @@ export const SEARCH_PERMISSIONS = [
   AppPermissions.APPLICATIONS_READ,
   AppPermissions.FOSTERS_READ,
 ] as const satisfies readonly GlobalSearchPermission[];
+
+/**
+ * Every permission that shows at least one staff guide in `docs/guides/`: a
+ * reader sees a guide when they hold any of its `permissions`. Gates the Help
+ * sidebar entry (`anyPermissions`) and so the palette's Help page.
+ *
+ * A unit test (`app/lib/guides/help-permissions.test.ts`) fails when this
+ * differs from the union of every guide's `permissions`, so a guide written
+ * for a new permission can't be left with no way to reach it.
+ */
+export const HELP_PERMISSIONS: readonly AppPermission[] = [
+  AppPermissions.MEDICAL_READ,
+  AppPermissions.MEDICAL_ADMINISTER,
+  AppPermissions.MEDICAL_MANAGE,
+  AppPermissions.MY_FOSTER_ANIMALS_CARE,
+  AppPermissions.OUTCOMES_MANAGE,
+] as const;
 
 export interface NavDocument {
   name: string;
@@ -232,6 +250,12 @@ export const navSecondaryItems: readonly NavItem[] = [
     url: "/dashboard/settings",
     icon: "IconSettings",
     anyPermissions: SETTINGS_PERMISSIONS,
+  },
+  {
+    title: "Help",
+    url: "/dashboard/help",
+    icon: "IconHelp",
+    anyPermissions: HELP_PERMISSIONS,
   },
 ] as const;
 

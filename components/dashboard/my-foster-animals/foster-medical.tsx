@@ -1,6 +1,8 @@
 import { VetVisitReportButton } from "./vet-visit-report-form";
 import { ReportPaperworkButton } from "./report-paperwork-button";
 import Link from "next/link";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 import type { ReactNode } from "react";
 import type { FosterMedical as FosterMedicalData } from "@/app/lib/data/fosters/foster-medical";
 import { recordFosterDose } from "@/app/lib/actions/foster-care.actions";
@@ -20,11 +22,14 @@ function Section({ id, title, children }: { id: string; title: string; children:
 
 const Contact = () => <p className="text-xs text-muted-foreground">Questions? Contact the shelter.</p>;
 
-export function FosterMedical({ data, canCare }: { data: FosterMedicalData; canCare: boolean }) {
+export function FosterMedical({ data, canCare, help }: { data: FosterMedicalData; canCare: boolean; help: HelpLinkGuide | null }) {
   const controls = { canAdminister: canCare, canManage: false, inCare: true, today: data.today, time: data.time, recordDoseAction: recordFosterDose };
   return <div className="flex min-w-0 flex-col gap-4 break-words md:gap-6">
     <Link href="/dashboard/my-foster-animals" className="text-sm text-muted-foreground hover:underline">← My foster animals</Link>
-    <h1 className="text-2xl font-semibold">Medical care for {data.animalName}</h1>
+    <div className="flex items-start justify-between gap-2">
+      <h1 className="text-2xl font-semibold">Medical care for {data.animalName}</h1>
+      <HelpLink guide={help} />
+    </div>
     <Section id="foster-alerts" title="Alerts">
       {data.alerts.length ? <ul className="space-y-3">{data.alerts.map((alert) => <li key={alert.id}>
         <p className="font-medium">{alert.type === "ALLERGY" ? "Allergy: " : ""}{alert.name}</p>
