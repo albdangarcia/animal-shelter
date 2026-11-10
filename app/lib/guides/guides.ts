@@ -299,7 +299,8 @@ function targetIssue(url: string): string | null {
 
 /**
  * The problems that span files: unique slugs, every `related` slug exists,
- * every link is allowed and every link to a guide points at a real one that
+ * every link is allowed, a link to a guide is written inline, and every link
+ * to a guide points at a real one that
  * everyone who can see the linking guide can see too, every anchor lands on a
  * heading, and no images or raw HTML. `knownSlugs` adds guides that exist but failed to parse, so they
  * aren't also reported as missing.
@@ -356,6 +357,16 @@ function crossFileProblems(
       }
       const link = parseGuideLink(url);
       if (!link) continue;
+      // `rewriteGuideLinks`, which gives the assistant its copy of a guide,
+      // rewrites inline links only. A reference would reach the model as
+      // `./<slug>.md` and never become a link in its answer.
+      if (kind === "definition") {
+        problems.push(
+          `${fileName}: link "${url}": write a link to a guide inline, ` +
+            `[text](${url}), not as a reference ([text][ref])`,
+        );
+        continue;
+      }
       if (!exists.has(link.slug)) {
         problems.push(`${fileName}: link "${url}" points at no guide`);
         continue;

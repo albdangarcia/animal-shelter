@@ -3,12 +3,12 @@ import type { ModelMessage, ToolApprovalStatus } from "ai";
 import { z } from "zod";
 import { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
-import { AppPermissions } from "@/app/lib/auth/permissions";
 import { requireFor, type Actor } from "@/app/lib/auth/actor";
 import { AiActionTargetType, TaskStatus } from "@/prisma/generated/enums";
 import { applyTaskStatusChange } from "@/app/lib/tasks/apply-task-status-change";
 import { ConflictError, PreconditionFailedError } from "@/app/lib/utils/errors";
 import { actorContextSchema } from "../context";
+import { SET_TASK_STATUS_PERMISSIONS } from "../tool-permissions";
 import {
   buildApprovalReason,
   formatUnitLabel,
@@ -20,13 +20,6 @@ import {
 } from "./tool-result";
 
 export { buildApprovalReason } from "./set-task-status-reason";
-
-/**
- * Declared once, here — `registry.ts` filters the tool set on the same
- * constant and `execute` enforces it again. Staff and admin only; a volunteer's
- * registry never contains this tool.
- */
-export const SET_TASK_STATUS_PERMISSIONS = [AppPermissions.ANIMAL_TASK_MANAGE];
 
 // `z.looseObject` would preserve unknown keys for the forensic log, but Groq's
 // tool schema path is happier with a plain object and this schema has no

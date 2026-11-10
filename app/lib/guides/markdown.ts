@@ -1,10 +1,13 @@
 // How a guide body becomes a help page: heading ids, and where its links go.
 //
 // No auth and no next/* imports, like the rest of app/lib/guides: the loader
-// checks anchors with the same ids the help page renders, and PR 4's assistant
-// tools link guides the same way.
-import type { Heading, Nodes, Root } from "mdast";
+// checks anchors with the same ids the help page renders, and the assistant's
+// `readGuide` tool links guides the same way.
+import type { Heading, Link, Nodes, Root } from "mdast";
+import { fromMarkdown } from "mdast-util-from-markdown";
+import { gfmFromMarkdown } from "mdast-util-gfm";
 import { toString } from "mdast-util-to-string";
+import { gfm } from "micromark-extension-gfm";
 import { helpGuidePath } from "./help-paths";
 
 /**
@@ -101,4 +104,53 @@ export function guideHref(url: string): string {
 /** A link to another site, which the help page opens in a new tab. */
 export function isExternalHref(url: string): boolean {
   return /^https?:\/\//i.test(url);
+}
+
+/**
+ * A guide body with its links between guides pointing at the help pages, for
+ * a reader who isn't looking at the help page: `[the Due page](./schedule-care-and-read-the-due-page.md)`
+ * becomes `[the Due page](/dashboard/help/schedule-care-and-read-the-due-page)`.
+ *
+ * A link to a guide `canLink` refuses (one the reader can't see) keeps its
+ * text and loses the link, so the body never names a guide's slug to someone
+ * who can't open it. Every other link, and all other text, is left exactly as
+ * written. Only inline links are rewritten: the loader refuses a guide link
+ * written as a reference (`[text][ref]`).
+ *
+ * `linked` is the slugs the new body links to, in order, each once: the chat
+ * lets a link through only to these (see `guideSlugsFromParts`).
+ */
+export function rewriteGuideLinks(
+  body: string,
+  canLink: (slug: string) => boolean,
+): { body: string; linked: string[] } {
+  const tree = fromMarkdown(body, {
+    extensions: [gfm()],
+    mdastExtensions: [gfmFromMarkdown()],
+  });
+  const links: Link[] = [];
+  const visit = (node: Nodes) => {
+    if (node.type === "link") links.push(node);
+    if ("children" in node) node.children.forEach(visit);
+  };
+  visit(tree);
+
+  let result = body;
+  const linked: string[] = [];
+  // From the end, so each edit leaves the offsets before it valid.
+  for (const link of links.reverse()) {
+    const target = parseGuideLink(link.url);
+    const start = link.position?.start.offset;
+    const end = link.position?.end.offset;
+    if (!target || start === undefined || end === undefined) continue;
+    const first = link.children[0]?.position?.start.offset;
+    const last = link.children.at(-1)?.position?.end.offset;
+    const text =
+      first === undefined || last === undefined ? "" : body.slice(first, last);
+    const keep = canLink(target.slug);
+    if (keep) linked.unshift(target.slug);
+    const replacement = keep ? `[${text}](${guideHref(link.url)})` : text;
+    result = result.slice(0, start) + replacement + result.slice(end);
+  }
+  return { body: result, linked: [...new Set(linked)] };
 }

@@ -1,21 +1,15 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { AppPermissions } from "@/app/lib/auth/permissions";
 import { requireFor } from "@/app/lib/auth/actor";
 import { _findAnimalsByName } from "@/app/lib/data/animals/animal.data";
 import { actorContextSchema } from "../context";
+import { FIND_ANIMALS_PERMISSIONS } from "../tool-permissions";
 import { toAnimalMatch, type AnimalMatch } from "../projections/animal-match";
 import {
   describeToolError,
   toolFailure,
   type ToolResult,
 } from "./tool-result";
-
-/**
- * Declared once, here. `registry.ts` filters the tool set on the same constant
- * and `execute` enforces it again — so the two cannot drift.
- */
-export const FIND_ANIMALS_PERMISSIONS = [AppPermissions.ANIMAL_INFO_READ];
 
 export const findAnimalsTool = tool({
   description:

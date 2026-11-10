@@ -20,6 +20,7 @@ export function ChatComposer({
   onStop,
   isStreaming,
   disabled = false,
+  autoFocus = false,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -29,6 +30,8 @@ export function ChatComposer({
   /** Held open but not streaming — e.g. a pending approval. Input is blocked
    * and the send button is disabled, but no Stop button is shown. */
   disabled?: boolean;
+  /** Focus the box on mount, with the cursor after a draft already in it. */
+  autoFocus?: boolean;
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -42,6 +45,15 @@ export function ChatComposer({
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
   }, [value]);
+
+  // Once, on mount: a draft from the Help page is ready to edit or send.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!autoFocus || !el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
+  }, []);
 
   const canSend = value.trim().length > 0 && !isStreaming && !disabled;
 
@@ -58,7 +70,7 @@ export function ChatComposer({
         value={value}
         rows={1}
         disabled={isStreaming || disabled}
-        placeholder="Ask about an animal, a task, or today's priorities…"
+        placeholder="Ask about an animal, a task, or how to do something…"
         aria-label="Message the shelter assistant"
         onChange={(event) => onChange(event.target.value)}
         onKeyDown={(event) => {

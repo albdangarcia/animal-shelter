@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { allowedGuideHref } from "@/app/lib/ai/answer-links";
 import { normalizeAnswerMarkdown } from "@/app/lib/ai/answer-markdown";
 
 /**
@@ -20,8 +22,18 @@ import { normalizeAnswerMarkdown } from "@/app/lib/ai/answer-markdown";
  *
  * The flip side is that HTML the model does emit shows up as literal text, so
  * the answer is normalised first (see `normalizeAnswerMarkdown`).
+ *
+ * Links are text too, with one exception: a link to the help page of a guide
+ * that `searchGuides` or `readGuide` returned in this same message, whose
+ * slugs the caller passes as `guideSlugs` (see `allowedGuideHref`).
  */
-export function MarkdownAnswer({ text }: { text: string }) {
+export function MarkdownAnswer({
+  text,
+  guideSlugs = new Set<string>(),
+}: {
+  text: string;
+  guideSlugs?: ReadonlySet<string>;
+}) {
   return (
     <div className="text-sm leading-relaxed [&>*+*]:mt-3">
       <Markdown
@@ -58,9 +70,25 @@ export function MarkdownAnswer({ text }: { text: string }) {
             </code>
           ),
           hr: () => <hr className="border-border" />,
-          // The tools return no URLs, so a link means the model invented one.
-          // Rendered as plain text rather than something clickable.
-          a: ({ children }) => <span className="underline">{children}</span>,
+          // Any other link is the model's own invention: a made-up page or
+          // a look-alike site. Rendered as plain text, not something
+          // clickable. A guide link opens in a new tab: the conversation
+          // isn't saved, so leaving this page would lose it.
+          a: ({ href, children }) => {
+            const guideHref = allowedGuideHref(href, guideSlugs);
+            return guideHref ? (
+              <Link
+                href={guideHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline underline-offset-4"
+              >
+                {children}
+              </Link>
+            ) : (
+              <span className="underline">{children}</span>
+            );
+          },
           // Wide tables must scroll inside the bubble, not stretch it.
           table: ({ children }) => (
             <div className="overflow-x-auto">

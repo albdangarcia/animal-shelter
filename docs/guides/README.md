@@ -59,7 +59,9 @@ footnotes aren't links. A link may point at:
   way GitHub makes it: lower case, punctuation dropped, spaces turned into
   `-` (`### Active, Chronic, Resolved` is `#active-chronic-resolved`). A
   repeated heading gets `-1`, `-2`. The check fails on an anchor that names
-  no heading and lists the guide's heading ids.
+  no heading and lists the guide's heading ids. Write it inline, as above,
+  not as a reference (`[text][ref]` with `[ref]: ./<slug>.md`): the
+  assistant's copy of a guide rewrites only inline links.
 - a web page, `https://…` or `http://…`, or a mail address, `mailto:…`.
 - a heading in the same guide, `#…`, checked the same way.
 

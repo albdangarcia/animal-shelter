@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { MessageCircleQuestionMark } from "lucide-react";
 import StatusPage from "@/components/StatusPage";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -9,6 +11,8 @@ import {
 } from "@/components/ui/card";
 import { HelpSearch } from "@/components/dashboard/help/help-search";
 import { getVisibleGuides } from "@/app/lib/data/guides.data";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { AppPermissions } from "@/app/lib/auth/permissions";
 import {
   HELP_QUERY_MAX_LENGTH,
   helpGuidePath,
@@ -32,6 +36,12 @@ const Page = async ({ searchParams }: PageProps<"/dashboard/help">) => {
   const guides: GuideSearchHit[] = query
     ? searchGuides(query, visible, { surface: "help" })
     : sortByTitle(visible);
+
+  // A search that found nothing can go to the assistant, which reads the
+  // same guides and can say so plainly when none covers the question.
+  // Fosters don't hold AI_CHAT_USE, so they never see the offer.
+  const canAskAssistant =
+    guides.length === 0 && (await hasPermission(AppPermissions.AI_CHAT_USE));
 
   return (
     <Card className="@container/card">
@@ -72,6 +82,16 @@ const Page = async ({ searchParams }: PageProps<"/dashboard/help">) => {
             <p className="text-muted-foreground mt-1 text-sm">
               Try other words, such as the name of the button or page.
             </p>
+            {canAskAssistant && (
+              <Button asChild variant="outline" className="mt-4">
+                {/* The chat fills its message box with the query and waits,
+                    so the question can be reworded before it's sent. */}
+                <Link href={`/dashboard/ai-chat?${new URLSearchParams({ q: query })}`}>
+                  <MessageCircleQuestionMark aria-hidden="true" />
+                  Ask the assistant
+                </Link>
+              </Button>
+            )}
           </div>
         )}
       </CardContent>

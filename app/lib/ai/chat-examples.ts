@@ -8,7 +8,8 @@ import type { AiToolName } from "./tool-names";
  * actually answer, which makes the empty state double as the demo path: the
  * attention queue, the deliberate two-Bruno collision, an animal under care
  * with nothing planned for it, what's still outstanding before an animal is ready for
- * adoption, a summary with open tasks attached, and — staff only — a task
+ * adoption, a summary with open tasks attached, a "how do I" answered from the
+ * staff guides, and — staff only — a task
  * status change behind the approval card (Daisy's overdue post-op recheck).
  *
  * Because the animal names are seed fixtures, they change when the seed does —
@@ -52,6 +53,11 @@ const CHAT_EXAMPLES: readonly ChatExample[] = [
     label: "Does Juniper have open tasks?",
     prompt: "Does Juniper have any open tasks?",
     requiresTools: ["findAnimals", "getAnimalSummary"],
+  },
+  {
+    label: "How do I record a rabies vaccine?",
+    prompt: "How do I record a rabies vaccine?",
+    requiresTools: ["searchGuides", "readGuide"],
   },
   {
     label: "Mark Daisy's post-op recheck done",
