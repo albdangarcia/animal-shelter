@@ -58,7 +58,7 @@ test("a foster reports a visit with paperwork, staff record care and close it, a
       await expect(dialog.getByRole("button", { name: /^Visit date \*:/, exact: true })).toBeVisible();
       await dialog.getByRole("combobox", { name: "Clinic" }).click();
       await jane.getByRole("option", { name: "Downtown Veterinary Clinic", exact: true }).click();
-      await dialog.getByLabel("What happened", { exact: true }).fill(summary);
+      await dialog.getByLabel("What happened *", { exact: true }).fill(summary);
       await dialog.getByRole("button", { name: "Send report", exact: true }).click();
       await expect(dialog).toBeHidden();
     };
