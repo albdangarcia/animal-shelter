@@ -246,10 +246,52 @@ test("good links, anchors, outside links and links in code pass", () => {
         "",
         "[ref]: ./b.md",
         "[^1]: Required.",
+        "",
+        "## Top",
       ].join("\n"),
     }),
-    guide("b"),
+    guide("b", { body: "## Steps\n\n1. Do it." }),
   ]);
+});
+
+test("an anchor must land on a heading of the guide it points into", () => {
+  const b = guide("b", {
+    body: [
+      "## When to use this",
+      "### Active, Chronic, Resolved",
+      "### Given, *Refused*, `Not given`",
+      "## Steps",
+      "## Steps",
+    ].join("\n\n"),
+  });
+  const error = (body: string) => {
+    try {
+      validateGuides([guide("a", { body: `${body}\n\n## Here` }), b]);
+    } catch (caught) {
+      return (caught as Error).message;
+    }
+    return "";
+  };
+
+  // Punctuation and formatting drop out, a repeated heading gets -1, and a
+  // percent-escaped anchor is read decoded, as on GitHub.
+  for (const ok of [
+    "[x](./b.md#active-chronic-resolved)",
+    "[x](./b.md#given-refused-not-given)",
+    "[x](./b.md#steps-1)",
+    "[x](./b.md#when-to-use-this)",
+    "[x](#here)",
+  ]) {
+    assert.equal(error(ok), "", ok);
+  }
+
+  assert.match(
+    error("[x](./b.md#missed)"),
+    /a\.md: link "\.\/b\.md#missed": b\.md has no heading with the id "missed"\. Its headings are #when-to-use-this, #active-chronic-resolved/,
+  );
+  assert.match(error("[x](#nowhere)"), /a\.md: link "#nowhere": a\.md has no heading with the id "nowhere"\. Its headings are #here$/);
+  // A case difference is a broken anchor: browsers match ids exactly.
+  assert.match(error("[x](./b.md#Steps)"), /no heading with the id "Steps"/);
 });
 
 test("every form of a broken link fails", () => {

@@ -17,10 +17,12 @@ import type {
   AdoptionAppHit,
   AnimalHit,
   FosterAppHit,
-  GlobalSearchResults,
   PartnerHit,
   PersonHit,
 } from "@/app/lib/data/search/global-search";
+import type { SearchResponse } from "@/app/api/search/search-handler";
+import type { GuideSearchHit } from "@/app/lib/guides/search";
+import { helpGuidePath } from "@/app/lib/guides/help-paths";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { getIcon } from "@/components/dashboard/nav/icon-map";
 import type { IconName } from "@/components/dashboard/nav/nav-links.config";
@@ -130,9 +132,16 @@ const fosterAppRow = (hit: FosterAppHit): ResultRow => ({
   badge: formatSingleEnumOption(hit.status),
 });
 
+const guideRow = (hit: GuideSearchHit): ResultRow => ({
+  href: helpGuidePath(hit.slug),
+  primary: hit.title,
+  secondary: hit.summary,
+  badge: null,
+});
+
 // A null group means the caller may not read it and an empty one means nothing
 // matched. Both are hidden, so they collapse to the same thing here.
-const toResultGroups = (results: GlobalSearchResults | null): ResultGroup[] => {
+const toResultGroups = (results: SearchResponse | null): ResultGroup[] => {
   if (!results) return [];
 
   return [
@@ -161,6 +170,11 @@ const toResultGroups = (results: GlobalSearchResults | null): ResultGroup[] => {
       heading: "Foster applications",
       rows: (results.fosterApplications ?? []).map(fosterAppRow),
     },
+    {
+      key: "help",
+      heading: "Help",
+      rows: (results.help ?? []).map(guideRow),
+    },
   ].filter((group) => group.rows.length > 0);
 };
 
@@ -175,8 +189,8 @@ interface CommandPaletteProps {
 }
 
 /**
- * The ⌘K palette. Record groups come from `/api/search`, which decides what
- * this viewer may see; Pages are matched here against the nav items the layout
+ * The ⌘K palette. Record groups and the Help group (guides) come from
+ * `/api/search`, which decides what this viewer may see; Pages are matched here against the nav items the layout
  * already filtered by permission, so an empty query still works as a keyboard
  * navigator without touching the network.
  *
@@ -191,7 +205,7 @@ export const CommandPalette = ({
 }: CommandPaletteProps) => {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<GlobalSearchResults | null>(null);
+  const [results, setResults] = useState<SearchResponse | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [failed, setFailed] = useState(false);
   // The highlighted row, as its href. See `activeHref`.
@@ -215,7 +229,7 @@ export const CommandPalette = ({
       if (!response.ok) {
         throw new Error(`Search failed with status ${response.status}.`);
       }
-      const payload: GlobalSearchResults = await response.json();
+      const payload: SearchResponse = await response.json();
       if (abortControllerRef.current !== controller) return;
       setResults(payload);
       setFailed(false);
@@ -365,8 +379,8 @@ export const CommandPalette = ({
         <DialogHeader className="sr-only">
           <DialogTitle>Search</DialogTitle>
           <DialogDescription>
-            Search animals, people, partners and applications, or jump to a
-            page.
+            Search animals, people, partners, applications and help guides,
+            or jump to a page.
           </DialogDescription>
         </DialogHeader>
         <Command

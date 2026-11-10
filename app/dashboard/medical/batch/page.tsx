@@ -3,6 +3,8 @@ import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchMedicalBatchOptions } from "@/app/lib/data/medical-batch.data";
 import { MedicalBatch } from "@/components/dashboard/medical/medical-batch";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 const Page = async () => {
   return (
@@ -16,8 +18,11 @@ const Page = async () => {
 };
 
 const PageContent = async () => {
-  const options = await fetchMedicalBatchOptions();
-  return <MedicalBatch options={options} />;
+  const [options, help] = await Promise.all([
+    fetchMedicalBatchOptions(),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.medicalBatch),
+  ]);
+  return <MedicalBatch options={options} help={help} />;
 };
 
 export default Page;

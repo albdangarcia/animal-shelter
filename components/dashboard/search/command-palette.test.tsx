@@ -35,11 +35,33 @@ const animal = (id: string, name: string) => ({
   listingStatus: "PUBLISHED" as const,
 });
 
+const guide = (slug: string, title: string, summary: string) => ({
+  slug,
+  title,
+  summary,
+});
+
 // What the stub answers, by the `q` the palette sent; any other query finds
-// nothing.
-const ANSWERS: Record<string, GlobalSearchResults> = {
+// nothing. The route adds `help` (guides) to the record groups.
+const ANSWERS: Record<string, GlobalSearchResults & { help?: unknown }> = {
   ja: { ...NO_HITS, animals: [animal("a1", "Jack"), animal("a2", "Jasper")] },
   go: { ...NO_HITS, animals: [animal("g1", "Godzilla")] },
+  shot: {
+    ...NO_HITS,
+    animals: [animal("s1", "Shotgun")],
+    help: [
+      guide(
+        "record-a-vaccine-test-or-treatment",
+        "Record a vaccine, test or treatment",
+        "Record care you gave, whether it was scheduled or not.",
+      ),
+      guide(
+        "schedule-care-and-read-the-due-page",
+        "Schedule care and read the Due page",
+        "Plan care ahead and see what is due.",
+      ),
+    ],
+  },
 };
 
 const A1 = "/dashboard/animals/a1";
@@ -131,6 +153,27 @@ test("the search bar opens the palette on Pages alone, and asks the server for n
   // is debounced, so a request would come 200ms after the open, not at it.
   await new Promise((resolve) => setTimeout(resolve, 350));
   expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+test("the Help group lists guides with their summaries, and a row opens the guide", async () => {
+  await renderPalette();
+  await openWithShortcut();
+  await userEvent.fill(searchBox(), "shot");
+
+  const vaccine = "/dashboard/help/record-a-vaccine-test-or-treatment";
+  const due = "/dashboard/help/schedule-care-and-read-the-due-page";
+  await rowIsThere(vaccine);
+  // After the record groups, in the order the server ranked them.
+  expect(headings()).toEqual(["Animals", "Help"]);
+  expect(rowFor(vaccine)?.textContent).toBe(
+    "Record a vaccine, test or treatmentRecord care you gave, whether it was scheduled or not.",
+  );
+  expect(rowFor(due)?.textContent).toContain("Schedule care and read the Due page");
+
+  await userEvent.click(rowFor(vaccine)!);
+
+  expect(routerCalls).toEqual([{ method: "push", href: vaccine }]);
+  await expect.element(palette()).not.toBeInTheDocument();
 });
 
 test("Escape closes the palette, and the next open starts blank", async () => {

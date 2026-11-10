@@ -5,9 +5,12 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardAction,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { MedicalEntryKind } from "@/prisma/generated/enums";
 import {
@@ -75,6 +78,8 @@ interface Props {
   filtered: boolean;
   canManage: boolean;
   canAdminister: boolean;
+  /** The guide the "?" opens, or null for no "?". */
+  help: HelpLinkGuide | null;
 }
 
 /**
@@ -124,6 +129,7 @@ export function MedicalDue({
   filtered,
   canManage,
   canAdminister,
+  help,
 }: Props) {
   const rows = groups.flatMap((group) =>
     group.sections.flatMap((section) => section.rows),
@@ -146,6 +152,7 @@ export function MedicalDue({
         filtered={filtered}
         canManage={canManage}
         canAdminister={canAdminister}
+        help={help}
       />
     </DueSelection>
   );
@@ -158,6 +165,7 @@ function DueCard({
   filtered,
   canManage,
   canAdminister,
+  help,
 }: Props & { names: DueNames }) {
   return (
     <Card className="@container/main">
@@ -168,6 +176,11 @@ function DueCard({
             {MEDICAL_DUE_TITLE}
           </h1>
         </CardTitle>
+        {help && (
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
+        )}
         <CardDescription>{MEDICAL_DUE_DESCRIPTION}</CardDescription>
         <div className="mt-4 flex flex-row flex-wrap items-center gap-3">
           <ServerSideFacetedFilter
