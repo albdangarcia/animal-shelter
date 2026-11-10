@@ -222,6 +222,48 @@ test.describe("as staff", () => {
     await expect(feed.nth(1)).toContainText("edited a medical entry");
     await expect(feed.nth(2)).toContainText("recorded a medical entry");
   });
+
+  test("care by an outside vet names the vet, and picking a clinic settles it", async ({
+    page,
+  }) => {
+    // Nothing is saved, so no other spec's counts move.
+    const id = await animalId(page, "Flash");
+    await page.goto(`/dashboard/animals/${id}/medical`);
+    await pickFromMenu(
+      page,
+      page.getByRole("button", { name: "Add entry" }),
+      "Vaccine",
+    );
+    const dialog = page.getByRole("dialog", { name: "Record a vaccine" });
+    await dialog.getByRole("combobox", { name: /^Vaccine/ }).click();
+    await page.getByRole("option", { name: "Rabies 1-year" }).click();
+    await dialog.getByRole("radio", { name: "Outside vet", exact: true }).check();
+    await dialog.getByRole("button", { name: "Record Vaccine" }).click();
+
+    // Shown under the name field, not as a toast after a round trip.
+    const vetName = dialog.getByRole("textbox", { name: "Vet or clinic name" });
+    const needsVet = dialog.getByText("Pick a clinic or give the vet's name.", { exact: true });
+    await expect(needsVet).toBeVisible();
+    await expect(vetName).toHaveAttribute("aria-invalid", "true");
+
+    // The clinic checks the name field again: that error goes, and a name
+    // too long is still refused.
+    const vetClinic = dialog.getByRole("combobox", { name: "Vet clinic" });
+    await vetClinic.click();
+    await page.getByRole("option", { name: "Downtown Veterinary Clinic" }).click();
+    // The message flickers out while the picker closes, so wait on the
+    // field's own state.
+    await expect(vetName).toHaveAttribute("aria-invalid", "false");
+    await expect(needsVet).toBeHidden();
+    await vetName.fill("x".repeat(201));
+    await dialog.getByRole("button", { name: "Record Vaccine" }).click();
+    const tooLong = dialog.getByText("Must be 200 characters or fewer.", { exact: true });
+    await expect(tooLong).toBeVisible();
+    await vetClinic.click();
+    await page.getByRole("option", { name: "Not a partner clinic" }).click();
+    await expect(vetName).toHaveAttribute("aria-invalid", "true");
+    await expect(tooLong).toBeVisible();
+  });
 });
 
 test.describe("as a volunteer", () => {

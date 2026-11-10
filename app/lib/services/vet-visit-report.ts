@@ -6,7 +6,7 @@ import { MedicalEntryRefusal, tidy } from "./medical-entry-values";
 import { waitingVetVisitReport } from "./vet-visit-report-values";
 import { NotFoundError } from "@/app/lib/utils/errors";
 import { calendarDay, formatShelterDayOrNA, type CalendarDay } from "@/app/lib/utils/shelter-day";
-import { VET_VISIT_SUMMARY_MAX_LENGTH, MEDICAL_REASON_MAX_LENGTH } from "@/app/lib/constants/medical";
+import { VET_VISIT_SUMMARY_MAX_LENGTH, MEDICAL_REASON_MAX_LENGTH, OUTSIDE_VET_NEEDS_VET, VET_VISIT_ONE_VET } from "@/app/lib/constants/medical";
 
 export interface VetVisitReportInput {
   animalId: string;
@@ -25,8 +25,8 @@ export async function submitVetVisitReport(tx: TransactionClient, input: VetVisi
   if (visitDate > today) throw new MedicalEntryRefusal("The visit date can't be in the future.", "visitDate");
   const vetPartnerId = tidy(input.vetPartnerId);
   const vetName = tidy(input.vetName);
-  if (!vetPartnerId && !vetName) throw new MedicalEntryRefusal("Pick a clinic or give the vet's name.", "vetName");
-  if (vetPartnerId && vetName) throw new MedicalEntryRefusal("Pick a clinic or give the vet's name, rather than both.", "vetName");
+  if (!vetPartnerId && !vetName) throw new MedicalEntryRefusal(OUTSIDE_VET_NEEDS_VET, "vetName");
+  if (vetPartnerId && vetName) throw new MedicalEntryRefusal(VET_VISIT_ONE_VET, "vetName");
   if (vetName && vetName.length > 120) throw new MedicalEntryRefusal("The vet's name must be 120 characters or fewer.", "vetName");
   if (vetPartnerId) await checkVetClinic(tx, vetPartnerId, "vetPartnerId");
   const summary = tidy(input.summary);

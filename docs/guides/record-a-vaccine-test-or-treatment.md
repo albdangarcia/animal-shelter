@@ -26,7 +26,9 @@ medical care.
    [Due page](./schedule-care-and-read-the-due-page.md).)
 3. A form opens, titled with the item, for example **Record DHPP as given**.
    The item's usual details are already filled in.
-4. Under **Given**, pick **In house** or **Outside vet**.
+4. Under **Given**, pick **In house** or **Outside vet**. For **Outside vet**,
+   you must name the vet: pick the clinic under **Vet clinic**, or type the
+   vet or clinic under **Vet or clinic name**.
 5. Check **Date given**. It starts on today.
 6. Fill in what you know, such as **Manufacturer**, **Lot number** and
    **Site** for a vaccine. These are optional.
@@ -47,8 +49,9 @@ the next dose appears under **Due**.
    **Test**). Its usual details fill in the rest.
 4. Under **Given**, pick **In house**, **Outside vet** or **Before intake**
    (care the animal had before it came to the shelter).
-5. For **Outside vet**, pick the clinic under **Vet clinic**, or pick **Not a
-   partner clinic** and type it under **Vet or clinic name**.
+5. For **Outside vet**, you must name the vet: pick the clinic under **Vet
+   clinic**, or pick **Not a partner clinic** and type it under **Vet or
+   clinic name**. Care in house or before intake needs no vet.
 6. Check **Date given**.
 7. For a test, choose a result for each line under **Results**.
 8. Fill in anything else you know, then click **Record Test** (or
@@ -72,6 +75,9 @@ and on the **Vaccines & Tests** or **History** page.
 - **"The date given is required. Only care given before intake can have an
   unknown date."** Pick a date, or choose **Before intake** if nobody knows
   when it was given.
+- **"Pick a clinic or give the vet's name."** Care given by an outside vet
+  must name the vet. Pick the clinic under **Vet clinic**, or type the vet or
+  clinic under **Vet or clinic name**.
 - **"Pick a vet clinic from the partner directory."** The clinic you picked
   isn't an active vet clinic any more. Pick another, or type the name under
   **Vet or clinic name**.

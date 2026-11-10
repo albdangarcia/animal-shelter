@@ -53,6 +53,7 @@ import {
 import {
   MEDICAL_REASON_MAX_LENGTH,
   ORDINARY_CARE_KINDS,
+  OUTSIDE_VET_NEEDS_VET,
   SURGERY_PROCEDURE_LABELS,
   isCatalogEntryKind,
   type CatalogEntryKind,
@@ -867,8 +868,26 @@ const checkVet = async (
     }
     return;
   }
+  // Before the clinic short-cut, so an edit that leaves the clinic alone is
+  // still held to it.
+  checkOutsideVetNamed(source, vetPartnerId, vetName);
   if (!vetPartnerId || !partnerChanged) return;
   await checkVetClinic(tx, vetPartnerId, "vetPartnerId");
+};
+
+/**
+ * Refuses care given by an outside vet that names neither a clinic nor the
+ * vet. In house and before intake care need none. Both together are allowed.
+ * `vetName` is expected tidied: blank reads as none.
+ */
+export const checkOutsideVetNamed = (
+  source: MedicalEntrySource,
+  vetPartnerId: string | null | undefined,
+  vetName: string | null | undefined,
+) => {
+  if (source === MedicalEntrySource.OUTSIDE_VET && !vetPartnerId && !tidy(vetName)) {
+    throw new MedicalEntryRefusal(OUTSIDE_VET_NEEDS_VET, "vetName");
+  }
 };
 
 /**

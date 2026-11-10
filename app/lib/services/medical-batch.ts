@@ -18,6 +18,7 @@ import {
 } from "@/app/lib/constants/medical";
 import {
   MedicalEntryRefusal,
+  checkOutsideVetNamed,
   recordMedicalEntry,
   recordScheduledMedicalEntry,
   scheduleMedicalEntry,
@@ -258,6 +259,9 @@ export async function recordMedicalBatch(
         "source",
       );
     }
+    // The vet is shared, so it is refused once, on its field, rather than
+    // once for every animal.
+    checkOutsideVetNamed(input.entry.source, input.entry.vetPartnerId, input.entry.vetName);
   }
 
   await lockAnimals(tx, animalIds);
@@ -332,6 +336,7 @@ export async function recordScheduledMedicalBatch(
     input.entries.map((entry) => entry.rabiesTagNumber),
     "entries",
   );
+  checkOutsideVetNamed(input.details.source, input.details.vetPartnerId, input.details.vetName);
 
   // An entry's animal and, while it is scheduled, its item never change, so
   // they can be read before the locks. Each entry's status is read again

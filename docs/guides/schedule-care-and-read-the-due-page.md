@@ -87,6 +87,9 @@ is added.
   that is already late is recorded, not scheduled.
 - **"That is already its due date. Pick another day."** You picked the day it
   is already due.
+- **"Pick a clinic or give the vet's name."** Care recorded as given by an
+  outside vet must name the vet. Pick the clinic under **Vet clinic**, or type
+  the vet or clinic under **Vet or clinic name**.
 - **"This animal has left the shelter's care, so nothing can be scheduled for
   it."** The animal has an outcome, so no new care can be planned for it.
 - **Record selected as given is greyed out.** The message beside it says why:

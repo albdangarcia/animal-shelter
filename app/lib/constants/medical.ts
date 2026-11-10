@@ -348,6 +348,17 @@ export const MEDICAL_DOCUMENT_NAME_MAX_LENGTH = 200;
 export const VET_VISIT_SUMMARY_MAX_LENGTH = 2000;
 
 /**
+ * Care given by an outside vet names the vet: a clinic from the partner
+ * directory or a typed name. Shown under the vet's name field, when neither
+ * is given, by staff entries and a foster's vet visit report alike.
+ */
+export const OUTSIDE_VET_NEEDS_VET = "Pick a clinic or give the vet's name.";
+
+/** A foster's vet visit report names one vet, so it refuses both. Staff
+ * entries may keep both. */
+export const VET_VISIT_ONE_VET = "Pick a clinic or give the vet's name, rather than both.";
+
+/**
  * How many days back a foster's page lists an animal's doses: as far as the
  * dose sheets go, and never before the placement began.
  */

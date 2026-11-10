@@ -52,17 +52,45 @@ test("a foster reports a visit with paperwork, staff record care and close it, a
     await expect(rosa.getByRole("region", { name: "Your vet visit reports" })).toContainText("Waiting for the shelter");
     await expect(rosa.getByRole("region", { name: "Your vet visit reports" })).toContainText("Reviewed on");
     await jane.goto(`/dashboard/my-foster-animals/${fixture.jane.animal_id}`);
-    const reportVisit = async (summary: string) => {
+    const reportVisit = async (summary: string, { checkVet = false } = {}) => {
       await jane.getByRole("button", { name: "Report outside vet visit", exact: true }).click();
       const dialog = jane.getByRole("dialog", { name: "Report outside vet visit", exact: true });
       await expect(dialog.getByRole("button", { name: /^Visit date \*:/, exact: true })).toBeVisible();
-      await dialog.getByRole("combobox", { name: "Clinic" }).click();
-      await jane.getByRole("option", { name: "Downtown Veterinary Clinic", exact: true }).click();
+      const clinic = dialog.getByRole("combobox", { name: "Clinic" });
+      const pickClinic = async (name: string) => { await clinic.click(); await jane.getByRole("option", { name, exact: true }).click(); };
       await dialog.getByLabel("What happened *", { exact: true }).fill(summary);
+      if (checkVet) {
+        // The report names one vet. After a submit, the clinic checks the
+        // name field again, so each message goes when its mistake is fixed
+        // and comes back when it is made again. A message flickers out while
+        // the picker closes, so "gone" waits on the field's own state.
+        const send = dialog.getByRole("button", { name: "Send report", exact: true });
+        const vetName = dialog.getByRole("textbox", { name: "Vet's name" });
+        const neither = dialog.getByText("Pick a clinic or give the vet's name.", { exact: true });
+        const both = dialog.getByText("Pick a clinic or give the vet's name, rather than both.", { exact: true });
+        await send.click();
+        await expect(neither).toBeVisible();
+        await pickClinic("Downtown Veterinary Clinic");
+        await expect(vetName).toHaveAttribute("aria-invalid", "false");
+        await expect(neither).toBeHidden();
+        await vetName.fill("Dr. Patel");
+        await send.click();
+        await expect(both).toBeVisible();
+        await pickClinic("A different vet");
+        await expect(vetName).toHaveAttribute("aria-invalid", "false");
+        await expect(both).toBeHidden();
+        await pickClinic("Downtown Veterinary Clinic");
+        await expect(both).toBeVisible();
+        await vetName.fill("");
+        await expect(vetName).toHaveAttribute("aria-invalid", "false");
+        await expect(both).toBeHidden();
+      } else {
+        await pickClinic("Downtown Veterinary Clinic");
+      }
       await dialog.getByRole("button", { name: "Send report", exact: true }).click();
       await expect(dialog).toBeHidden();
     };
-    await reportVisit(`${marker} · Vaccine paperwork`);
+    await reportVisit(`${marker} · Vaccine paperwork`, { checkVet: true });
     const reportRow = jane.getByRole("region", { name: "Your vet visit reports" }).getByRole("listitem").filter({ hasText: `${marker} · Vaccine paperwork` });
     await expect(reportRow).toContainText("Waiting for the shelter");
     await reportRow.getByRole("button", { name: "Add paperwork", exact: true }).click();

@@ -338,6 +338,29 @@ test("batch entry gives two animals in one unit a treatment, and two due rows ar
   await expect(recordSelected).toBeFocused();
   await recordSelected.click();
   await expect(record.getByRole("checkbox", { name: "Schedule the next one" })).toHaveCount(0);
+  // Care by an outside vet names the vet. This form has no resolver, so a
+  // clinic picked after a submit clears only that error: a name too long
+  // still shows.
+  const needsVet = record.getByText("Pick a clinic or give the vet's name.", { exact: true });
+  const tooLong = record.getByText("Must be 200 characters or fewer.", { exact: true });
+  const vetClinic = record.getByRole("combobox", { name: "Vet clinic" });
+  const vetName = record.getByRole("textbox", { name: "Vet or clinic name" });
+  await record.getByRole("radio", { name: "Outside vet", exact: true }).check();
+  await record.getByRole("button", { name: "Record 2 as given" }).click();
+  await expect(needsVet).toBeVisible();
+  await chooseOption(page, vetClinic, "Downtown Veterinary Clinic");
+  // The message flickers out while the picker closes, so wait on the
+  // field's own state.
+  await expect(vetName).toHaveAttribute("aria-invalid", "false");
+  await expect(needsVet).toBeHidden();
+  await vetName.fill("x".repeat(201));
+  await record.getByRole("button", { name: "Record 2 as given" }).click();
+  await expect(tooLong).toBeVisible();
+  await chooseOption(page, vetClinic, "Not a partner clinic");
+  await chooseOption(page, vetClinic, "Downtown Veterinary Clinic");
+  await expect(vetName).toHaveAttribute("aria-invalid", "true");
+  await expect(tooLong).toBeVisible();
+  await vetName.fill("");
   await record.getByRole("button", { name: "Record 2 as given" }).click();
   await expect(record).toBeHidden();
   await expect(
