@@ -45,7 +45,7 @@ export function VetVisitReportButton({ data }: { data: Pick<FosterMedical, "anim
         <Form {...form}><form onSubmit={form.handleSubmit(submit)} className="space-y-6">
           <fieldset disabled={pending} className="m-0 min-w-0 space-y-6 border-0 p-0">
             <DayField control={form.control} name="visitDate" label="Visit date" required triggerClassName="w-full" disabledDates={(date) => { const day = format(date, "yyyy-MM-dd"); return day < data.placementStart || day > data.today; }} />
-            <OptionalSelectField control={form.control} name="vetPartnerId" label="Clinic" noneLabel="A different vet" options={data.vetClinics.map((clinic) => ({ value: clinic.id, label: clinic.name }))} disabled={pending} />
+            <OptionalSelectField control={form.control} name="vetPartnerId" label="Clinic" noneLabel="A different vet" deps={["vetName"]} options={data.vetClinics.map((clinic) => ({ value: clinic.id, label: clinic.name }))} disabled={pending} />
             <MedicalTextField control={form.control} name="vetName" label="Vet's name" />
             <MedicalTextareaField control={form.control} name="summary" label="What happened" required />
           </fieldset>

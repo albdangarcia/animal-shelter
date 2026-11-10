@@ -29,7 +29,10 @@ import {
   MedicalRoute,
 } from "@/prisma/generated/enums";
 import type { MedicalBatchItem } from "@/app/lib/data/medical-catalog";
-import { MEDICAL_ENTRY_SOURCE_LABELS } from "@/app/lib/constants/medical";
+import {
+  MEDICAL_ENTRY_SOURCE_LABELS,
+  OUTSIDE_VET_NEEDS_VET,
+} from "@/app/lib/constants/medical";
 import { RABIES_MAX_MONTHS } from "@/app/lib/zod-schemas/medical-entry.schemas";
 import { latestDueDate, nextDueDate } from "@/app/lib/utils/medical-days";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
@@ -311,6 +314,16 @@ export function BatchGivenFields({
             control={form.control}
             name="vetPartnerId"
             vetClinics={vetClinics}
+            onPick={(vetPartnerId) => {
+              // This form has no resolver, so nothing else is checked again
+              // before the next submit: a clinic settles only this error.
+              if (
+                vetPartnerId &&
+                form.getFieldState("vetName").error?.message === OUTSIDE_VET_NEEDS_VET
+              ) {
+                form.clearErrors("vetName");
+              }
+            }}
           />
           <MedicalTextField
             control={form.control}

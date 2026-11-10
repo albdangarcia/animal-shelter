@@ -83,6 +83,28 @@ test("MedicalEntryFormSchema: a vet clinic or vet's name is refused for in-house
   );
 });
 
+test("MedicalEntryFormSchema: care by an outside vet names a clinic, the vet, or both", () => {
+  const outside = { ...vaccine, source: "OUTSIDE_VET" } as const;
+  for (const vetName of [undefined, "", "   "]) {
+    const errors = fieldErrorsOf({ ...outside, vetPartnerId: "", vetName });
+    assert.deepEqual(errors.vetName, ["Pick a clinic or give the vet's name."]);
+    assert.equal(errors.vetPartnerId, undefined);
+  }
+  for (const vet of [
+    { vetPartnerId: "c00000000000000000000000" },
+    { vetName: "Dr. Ruiz" },
+    { vetPartnerId: "c00000000000000000000000", vetName: "Dr. Ruiz" },
+  ]) {
+    assert.equal(MedicalEntryFormSchema.safeParse({ ...outside, ...vet }).success, true);
+  }
+  // In house and before intake need no vet.
+  assert.equal(MedicalEntryFormSchema.safeParse(vaccine).success, true);
+  assert.equal(
+    MedicalEntryFormSchema.safeParse({ ...vaccine, source: "BEFORE_INTAKE" }).success,
+    true,
+  );
+});
+
 test("MedicalEntryFormSchema: a rabies duration is a whole number of months, 1 to 36", () => {
   for (const durationMonths of [0, 37, 1.5]) {
     assert.ok(fieldErrorsOf({ ...vaccine, durationMonths }).durationMonths);
@@ -476,7 +498,8 @@ test("MedicalEntryFormSchema: an exam is in house or by an outside vet, never be
     ["An exam is recorded in house or by an outside vet."],
   );
   assert.equal(
-    MedicalEntryFormSchema.safeParse({ ...exam, source: "OUTSIDE_VET" }).success,
+    MedicalEntryFormSchema.safeParse({ ...exam, source: "OUTSIDE_VET", vetName: "Dr. Ruiz" })
+      .success,
     true,
   );
 });
@@ -692,6 +715,35 @@ test("MedicalBatchSchema: one to 50 animals, errors filed on the list", () => {
       ...batchRecord,
       animals: [{ animalId: "cmbatchanimal0001", rabiesTagNumber: "x".repeat(101) }],
     }).animals,
+  );
+});
+
+test("MedicalBatchSchema: care given by an outside vet names a clinic or the vet", () => {
+  const outside = { ...batchRecord, source: "OUTSIDE_VET" } as const;
+  assert.deepEqual(batchErrorsOf(MedicalBatchSchema, outside).vetName, [
+    "Pick a clinic or give the vet's name.",
+  ]);
+  assert.equal(MedicalBatchSchema.safeParse({ ...outside, vetName: "Dr. Lee" }).success, true);
+  assert.equal(
+    MedicalBatchSchema.safeParse({ ...outside, vetPartnerId: "c00000000000000000000000" })
+      .success,
+    true,
+  );
+});
+
+test("RecordScheduledBatchSchema: care given by an outside vet names a clinic or the vet", () => {
+  const outside = {
+    kind: "TREATMENT",
+    entries: [{ entryId: "cmbatchentry0001" }],
+    completedDate: "2026-09-01",
+    source: "OUTSIDE_VET",
+  } as const;
+  assert.deepEqual(batchErrorsOf(RecordScheduledBatchSchema, outside).vetName, [
+    "Pick a clinic or give the vet's name.",
+  ]);
+  assert.equal(
+    RecordScheduledBatchSchema.safeParse({ ...outside, vetName: "Lakeside" }).success,
+    true,
   );
 });
 

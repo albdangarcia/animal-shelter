@@ -56,6 +56,12 @@ You should see "Entry voided."
 
 - **"No changes to save."** You clicked **Save Changes** without changing
   anything. Nothing was saved.
+- **"Pick a clinic or give the vet's name."** The entry says it was given by
+  an outside vet, so it must name the vet. Pick the clinic under **Vet
+  clinic**, or type the vet or clinic under **Vet or clinic name**. An older
+  entry saved without a vet shows this on every save, even with nothing
+  changed, while **Given** is **Outside vet**. Name the vet, or, if the care
+  wasn't given by an outside vet, change **Given**.
 - **The menu shows only Void….** The entry is scheduled, not given. To change
   its day, use **Reschedule** under **Due** on the animal's **Overview**.
   "This entry is scheduled and hasn't been given, so it can't be edited.

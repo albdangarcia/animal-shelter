@@ -231,6 +231,7 @@ export function GivenCareFields<TValues extends GivenCareState>({
           <VetClinicField
             control={given.control}
             name="vetPartnerId"
+            vetNameField="vetName"
             vetClinics={vetClinics}
           />
           <MedicalTextField
@@ -267,6 +268,8 @@ export function OptionalSelectField<TValues extends FieldValues>({
   options,
   required = false,
   disabled = false,
+  deps,
+  onPick,
 }: {
   control: Control<TValues>;
   name: Path<TValues>;
@@ -278,18 +281,30 @@ export function OptionalSelectField<TValues extends FieldValues>({
   /** A disabled fieldset doesn't stop a Radix select from opening, so a
    * form saving says so here too. */
   disabled?: boolean;
+  /** Fields checked again when this one changes, once the form has been
+   * submitted: those whose error this choice can settle. Only for a form
+   * with a resolver: without one, the check finds nothing wrong and clears
+   * whatever error those fields had. */
+  deps?: Path<TValues>[];
+  /** Told after a choice is made, as the stored value. */
+  onPick?: (value: string | null) => void;
 }) {
   return (
     <FormField
       control={control}
       name={name}
+      rules={deps ? { deps } : undefined}
       render={({ field }) => (
         <FormItem>
           <FormLabel htmlFor={name} required={required}>
             {label}
           </FormLabel>
           <Select
-            onValueChange={(value) => field.onChange(value === NONE ? null : value)}
+            onValueChange={(value) => {
+              const picked = value === NONE ? null : value;
+              field.onChange(picked);
+              onPick?.(picked);
+            }}
             value={field.value ?? NONE}
             name={field.name}
             disabled={disabled}
@@ -361,20 +376,33 @@ export function DoseUnitField<TValues extends FieldValues>({
   );
 }
 
-/** A vet clinic from the partner directory, or none. */
+/**
+ * A vet clinic from the partner directory, or none. Care by an outside vet
+ * names a clinic or the vet, and that error shows under the name field, so a
+ * clinic picked after a submit must clear it:
+ * - a form with a resolver passes `vetNameField`, checked again on a change,
+ *   so a real error there (a name too long) stays;
+ * - a form without one passes `onPick`, and clears only that error itself.
+ */
 export function VetClinicField<TValues extends FieldValues>({
   control,
   name,
   vetClinics,
+  ...settle
 }: {
   control: Control<TValues>;
   name: Path<TValues>;
   vetClinics: { id: string; name: string }[];
-}) {
+} & (
+  | { vetNameField: Path<TValues>; onPick?: never }
+  | { onPick: (vetPartnerId: string | null) => void; vetNameField?: never }
+)) {
   return (
     <OptionalSelectField
       control={control}
       name={name}
+      deps={settle.vetNameField ? [settle.vetNameField] : undefined}
+      onPick={settle.onPick}
       label="Vet clinic"
       noneLabel="Not a partner clinic"
       options={vetClinics.map((clinic) => ({ value: clinic.id, label: clinic.name }))}

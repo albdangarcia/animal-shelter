@@ -20,6 +20,7 @@ import {
   ORDINARY_CARE_KINDS,
   MAX_BATCH_SIZE,
   MEDICAL_REASON_MAX_LENGTH,
+  OUTSIDE_VET_NEEDS_VET,
   type CatalogEntryKind,
 } from "@/app/lib/constants/medical";
 import { chipNumberIssue, normaliseChipNumber } from "@/app/lib/utils/microchip";
@@ -357,6 +358,18 @@ const givenCareRules = (
         message: "A vet's name is only for care given outside the shelter.",
       });
     }
+  }
+  // A clinic, a name or both; the name field shows it, as the service keys it.
+  if (
+    entry.source === MedicalEntrySource.OUTSIDE_VET &&
+    !entry.vetPartnerId &&
+    !entry.vetName
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["vetName"],
+      message: OUTSIDE_VET_NEEDS_VET,
+    });
   }
   if (
     entry.kind === MedicalEntryKind.TREATMENT &&
