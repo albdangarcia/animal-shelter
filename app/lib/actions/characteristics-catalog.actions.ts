@@ -9,22 +9,19 @@ import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { CharacteristicFormSchema } from "../zod-schemas/characteristic.schemas";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+import {
+  findLiveCharacteristicNamed,
+  restoreCharacteristic as restoreCharacteristicRow,
+} from "@/app/lib/services/settings-catalog";
 
 type CharacteristicFormInput = z.input<typeof CharacteristicFormSchema>;
 type CharacteristicResult = FormResult<CharacteristicFormInput>;
 
-// Shared duplicate check: case-insensitive, global (name is unique across the
-// whole table regardless of category), ignores the row being edited (so
-// renaming a characteristic to itself doesn't collide).
+// Shared duplicate check, the one restore uses: case-insensitive, global
+// (name is unique across the whole table regardless of category), ignores the
+// row being edited (so renaming a characteristic to itself doesn't collide).
 const findDuplicate = async (name: string, excludeId?: string) => {
-  return prisma.characteristic.findFirst({
-    where: {
-      name: { equals: name, mode: "insensitive" },
-      deletedAt: null,
-      ...(excludeId ? { NOT: { id: excludeId } } : {}),
-    },
-    select: { id: true },
-  });
+  return findLiveCharacteristicNamed(prisma, name, excludeId);
 };
 
 const _createCharacteristic = async (
@@ -181,10 +178,12 @@ const _restoreCharacteristic = async (
   }
 
   try {
-    await prisma.characteristic.update({
-      where: { id: parsedId.data },
-      data: { deletedAt: null },
-    });
+    const refusal = await prisma.$transaction((tx) =>
+      restoreCharacteristicRow(tx, parsedId.data),
+    );
+    if (refusal) {
+      return { success: false, message: refusal };
+    }
     revalidatePath("/dashboard/settings/characteristics");
     return { success: true, message: "Characteristic restored successfully." };
   } catch (error) {

@@ -111,7 +111,7 @@ test("a location with units cannot be deleted", async ({ page }) => {
 
   await expect(
     page.getByText(
-      "Can't delete this location while it still has units. Delete or move its units first.",
+      "Can't delete this location while it still has units. Delete its units first.",
     ),
   ).toBeVisible();
   // Still active — no Deleted badge on the card.

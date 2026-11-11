@@ -87,11 +87,14 @@ Animals and fosters that already have a deleted entry:
 You should see "Color restored successfully.", "Species restored
 successfully." or "Breed restored successfully." The entry is no longer
 faded, and the Add Animal form offers it again. To bring back a breed of a
-deleted species, restore the species first.
+deleted species, restore the species first. If a live entry now has its
+name, in any capitals, rename or delete that one first.
 
 ## If something goes wrong
 
 - **"Name is required."** Type a name.
+- **"Pick a species."** A breed needs a species. Pick its **Species**, then
+  click **Create Breed** again.
 - **"A color with that name already exists."** or **"A species with that name
   already exists."** No two live colors, or live species, can share a name,
   in any capitals. Pick another name, or edit the one that has it. If one
@@ -102,3 +105,10 @@ deleted species, restore the species first.
 - **"This species can't be deleted because it still has breeds or animals
   associated with it."** Delete each of its breeds first. A species that
   animals have can't be deleted.
+- **Can't restore "Merle": a color named "MERLE" already exists. Rename or
+  delete that one first.** (with the names; the same for a species, or a
+  breed "for this species") A live entry has the same name, perhaps in other
+  capitals. Edit it to rename it, or delete it, then restore the one you
+  wanted.
+- **"Can't restore a breed of a deleted species. Restore the species
+  first."** Restore the species, then the breed.

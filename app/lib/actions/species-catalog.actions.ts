@@ -9,19 +9,19 @@ import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { SpeciesFormSchema } from "../zod-schemas/taxonomy.schemas";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+import {
+  deleteSpeciesIfUnused,
+  findLiveSpeciesNamed,
+  restoreSpecies as restoreSpeciesRow,
+} from "@/app/lib/services/settings-catalog";
 
 type SpeciesFormInput = z.input<typeof SpeciesFormSchema>;
 type SpeciesResult = FormResult<SpeciesFormInput>;
 
+// Shared duplicate check, the one restore uses: case-insensitive, global,
+// ignores the row being edited.
 const findDuplicate = async (name: string, excludeId?: string) => {
-  return prisma.species.findFirst({
-    where: {
-      name: { equals: name, mode: "insensitive" },
-      deletedAt: null,
-      ...(excludeId ? { NOT: { id: excludeId } } : {}),
-    },
-    select: { id: true },
-  });
+  return findLiveSpeciesNamed(prisma, name, excludeId);
 };
 
 const _createSpecies = async (
@@ -120,26 +120,15 @@ const _deleteSpecies = async (
   try {
     // Block deletion if the species has dependents: any non-deleted breed,
     // or any animal. Species is a required parent, so removing it would
-    // orphan breeds and break animal records.
-    const [breedCount, animalCount] = await Promise.all([
-      prisma.breed.count({
-        where: { speciesId: parsedId.data, deletedAt: null },
-      }),
-      prisma.animal.count({ where: { speciesId: parsedId.data } }),
-    ]);
-
-    if (breedCount > 0 || animalCount > 0) {
-      return {
-        success: false,
-        message:
-          "This species can't be deleted because it still has breeds or animals associated with it.",
-      };
+    // orphan breeds and break animal records. Checked behind the species'
+    // lock, so a breed restored at the same moment is counted or refused.
+    const refusal = await prisma.$transaction((tx) =>
+      deleteSpeciesIfUnused(tx, parsedId.data),
+    );
+    if (refusal) {
+      return { success: false, message: refusal };
     }
 
-    await prisma.species.update({
-      where: { id: parsedId.data },
-      data: { deletedAt: new Date() },
-    });
     revalidatePath("/dashboard/settings/animal-taxonomy");
     return { success: true, message: "Species deleted successfully." };
   } catch (error) {
@@ -160,10 +149,12 @@ const _restoreSpecies = async (
   }
 
   try {
-    await prisma.species.update({
-      where: { id: parsedId.data },
-      data: { deletedAt: null },
-    });
+    const refusal = await prisma.$transaction((tx) =>
+      restoreSpeciesRow(tx, parsedId.data),
+    );
+    if (refusal) {
+      return { success: false, message: refusal };
+    }
     revalidatePath("/dashboard/settings/animal-taxonomy");
     return { success: true, message: "Species restored successfully." };
   } catch (error) {

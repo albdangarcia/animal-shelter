@@ -9,35 +9,15 @@ import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { BreedFormSchema } from "../zod-schemas/taxonomy.schemas";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+import {
+  addBreed,
+  BREED_NAME_TAKEN,
+  editBreed,
+  restoreBreed as restoreBreedRow,
+} from "@/app/lib/services/settings-catalog";
 
 type BreedFormInput = z.input<typeof BreedFormSchema>;
 type BreedResult = FormResult<BreedFormInput>;
-
-// Duplicate check scoped per species (matches @@unique([name, speciesId])).
-const findDuplicate = async (
-  name: string,
-  speciesId: string,
-  excludeId?: string,
-) => {
-  return prisma.breed.findFirst({
-    where: {
-      speciesId,
-      name: { equals: name, mode: "insensitive" },
-      deletedAt: null,
-      ...(excludeId ? { NOT: { id: excludeId } } : {}),
-    },
-    select: { id: true },
-  });
-};
-
-// Ensure the chosen species exists and isn't soft-deleted.
-const isActiveSpecies = async (speciesId: string) => {
-  const species = await prisma.species.findFirst({
-    where: { id: speciesId, deletedAt: null },
-    select: { id: true },
-  });
-  return Boolean(species);
-};
 
 const _createBreed = async (values: BreedFormInput): Promise<BreedResult> => {
   const validatedFields = BreedFormSchema.safeParse(values);
@@ -54,21 +34,14 @@ const _createBreed = async (values: BreedFormInput): Promise<BreedResult> => {
   const { name, speciesId, typicalSize } = validatedFields.data;
 
   try {
-    if (!(await isActiveSpecies(speciesId))) {
-      return { ok: false, message: "The selected species no longer exists." };
+    // Checked behind the species' lock, so a species deleted at the same
+    // moment either sees this breed or refuses it.
+    const refusal = await prisma.$transaction((tx) =>
+      addBreed(tx, { name, speciesId, typicalSize: typicalSize || null }),
+    );
+    if (refusal) {
+      return { ok: false, message: refusal };
     }
-
-    const existing = await findDuplicate(name, speciesId);
-    if (existing) {
-      return {
-        ok: false,
-        message: "A breed with that name already exists for this species.",
-      };
-    }
-
-    await prisma.breed.create({
-      data: { name, speciesId, typicalSize: typicalSize || null },
-    });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -76,7 +49,7 @@ const _createBreed = async (values: BreedFormInput): Promise<BreedResult> => {
     ) {
       return {
         ok: false,
-        message: "A breed with that name already exists for this species.",
+        message: BREED_NAME_TAKEN,
       };
     }
     console.error("Database Error creating breed:", error);
@@ -110,22 +83,18 @@ const _updateBreed = async (
   const { name, speciesId, typicalSize } = validatedFields.data;
 
   try {
-    if (!(await isActiveSpecies(speciesId))) {
-      return { ok: false, message: "The selected species no longer exists." };
+    // Behind the species' lock, as adding a breed is: the form can move a
+    // breed to another species.
+    const refusal = await prisma.$transaction((tx) =>
+      editBreed(tx, parsedId.data, {
+        name,
+        speciesId,
+        typicalSize: typicalSize || null,
+      }),
+    );
+    if (refusal) {
+      return { ok: false, message: refusal };
     }
-
-    const existing = await findDuplicate(name, speciesId, parsedId.data);
-    if (existing) {
-      return {
-        ok: false,
-        message: "A breed with that name already exists for this species.",
-      };
-    }
-
-    await prisma.breed.update({
-      where: { id: parsedId.data },
-      data: { name, speciesId, typicalSize: typicalSize || null },
-    });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -133,7 +102,7 @@ const _updateBreed = async (
     ) {
       return {
         ok: false,
-        message: "A breed with that name already exists for this species.",
+        message: BREED_NAME_TAKEN,
       };
     }
     console.error("Database Error updating breed:", error);
@@ -179,10 +148,12 @@ const _restoreBreed = async (
   }
 
   try {
-    await prisma.breed.update({
-      where: { id: parsedId.data },
-      data: { deletedAt: null },
-    });
+    const refusal = await prisma.$transaction((tx) =>
+      restoreBreedRow(tx, parsedId.data),
+    );
+    if (refusal) {
+      return { success: false, message: refusal };
+    }
     revalidatePath("/dashboard/settings/animal-taxonomy");
     return { success: true, message: "Breed restored successfully." };
   } catch (error) {

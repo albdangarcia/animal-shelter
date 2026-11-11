@@ -9,21 +9,19 @@ import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { ColorFormSchema } from "../zod-schemas/color.schemas";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+import {
+  findLiveColorNamed,
+  restoreColor as restoreColorRow,
+} from "@/app/lib/services/settings-catalog";
 
 type ColorFormInput = z.input<typeof ColorFormSchema>;
 type ColorResult = FormResult<ColorFormInput>;
 
-// Shared duplicate check: case-insensitive, global, ignores the row being
-// edited (so renaming a color to itself doesn't collide).
+// Shared duplicate check, the one restore uses: case-insensitive, global,
+// ignores the row being edited (so renaming a color to itself doesn't
+// collide).
 const findDuplicate = async (name: string, excludeId?: string) => {
-  return prisma.color.findFirst({
-    where: {
-      name: { equals: name, mode: "insensitive" },
-      deletedAt: null,
-      ...(excludeId ? { NOT: { id: excludeId } } : {}),
-    },
-    select: { id: true },
-  });
+  return findLiveColorNamed(prisma, name, excludeId);
 };
 
 const _createColor = async (values: ColorFormInput): Promise<ColorResult> => {
@@ -142,10 +140,12 @@ const _restoreColor = async (
   }
 
   try {
-    await prisma.color.update({
-      where: { id: parsedId.data },
-      data: { deletedAt: null },
-    });
+    const refusal = await prisma.$transaction((tx) =>
+      restoreColorRow(tx, parsedId.data),
+    );
+    if (refusal) {
+      return { success: false, message: refusal };
+    }
     revalidatePath("/dashboard/settings/animal-taxonomy");
     return { success: true, message: "Color restored successfully." };
   } catch (error) {

@@ -8,9 +8,12 @@ export const LocationFormSchema = z.object({
     .trim()
     .transform((s) => s.replace(/\s+/g, " "))
     .pipe(z.string().min(1, "Name is required.").max(50, "Name is too long.")),
+  // The form sends "" when no type is picked.
   type: z.enum(LocationType, {
     error: (issue) =>
-      issue.input === undefined ? "Please select a location type." : undefined,
+      issue.input === undefined || issue.input === ""
+        ? "Pick a location type."
+        : undefined,
   }),
 });
 

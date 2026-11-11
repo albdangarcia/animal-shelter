@@ -43,6 +43,10 @@ import { ServerSideFacetedFilter } from "@/components/table-common/server-side-f
 import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 import { HelpLink } from "@/components/dashboard/help/help-link";
 import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
+import {
+  emptyLocationsState,
+  type LocationStatusView,
+} from "@/app/lib/data/locations/location-status";
 
 const locationStatusOptions = [
   { value: "active", label: "Active" },
@@ -327,10 +331,13 @@ function LocationBlock({ location }: { location: LocationWithUnits }) {
 interface Props {
   locations: LocationWithUnits[];
   help: HelpLinkGuide | null;
+  /** Which statuses the filter shows, so the empty state can say so. */
+  view: LocationStatusView;
 }
 
-export const LocationsSection = ({ locations, help }: Props) => {
+export const LocationsSection = ({ locations, help, view }: Props) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const empty = emptyLocationsState(view);
 
   return (
     <Card className="@container/card">
@@ -377,18 +384,18 @@ export const LocationsSection = ({ locations, help }: Props) => {
           </div>
         ) : (
           <div className="text-center py-8 px-4 border-2 border-dashed rounded-lg">
-            <p className="text-muted-foreground text-sm">
-              No locations have been created yet.
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-4"
-              onClick={() => setIsAddDialogOpen(true)}
-            >
-              <PlusCircle className="size-4 mr-2" />
-              Add Location
-            </Button>
+            <p className="text-muted-foreground text-sm">{empty.message}</p>
+            {empty.offerAdd && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => setIsAddDialogOpen(true)}
+              >
+                <PlusCircle className="size-4 mr-2" />
+                Add Location
+              </Button>
+            )}
           </div>
         )}
       </CardContent>
