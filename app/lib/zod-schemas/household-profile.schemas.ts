@@ -87,13 +87,10 @@ export const householdSuperRefine = (
   data: HouseholdRefineInput,
   ctx: z.RefinementCtx,
 ) => {
-  if (data.hasChildren === "false" && data.childrenAges.trim().length > 0) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["childrenAges"],
-      message: "If 'No children' is selected, ages should not be provided.",
-    });
-  }
+  // No rule for "No" plus ages. Every form hides Children's Ages unless the
+  // answer is Yes, and a hidden field keeps its prefilled value, so a refusal
+  // here landed on a field nobody could see: Submit silently did nothing.
+  // Leftover ages are dropped instead — toHouseholdData() stores [] for "No".
   if (data.hasChildren === "true" && data.childrenAges.trim().length === 0) {
     ctx.addIssue({
       code: "custom",
@@ -138,8 +135,11 @@ export const toHouseholdData = (data: HouseholdFieldsOutput) => ({
     : null,
   householdSize: data.householdSize,
   hasChildren: data.hasChildren === "true",
+  // [] for "No" whatever the hidden field still held (see householdSuperRefine);
+  // likewise landlordPermission above is null whenever the household is not
+  // renting, so a stale hidden answer is never saved.
   childrenAges:
-    data.childrenAges.trim() === ""
+    data.hasChildren !== "true" || data.childrenAges.trim() === ""
       ? []
       : data.childrenAges
           .split(",")

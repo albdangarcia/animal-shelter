@@ -123,6 +123,50 @@ test("adding a household from the empty state saves it and shows the new values 
   ).toBeVisible();
 });
 
+// Every household form hides "Ages of children" unless the answer is Yes, and
+// the hidden field keeps the ages the profile was loaded with. Those leftover
+// ages used to fail a rule on a field nobody could see, so Save did nothing:
+// no message, no request. Builds on the household the test above added.
+test("answering No to children saves even though the profile listed ages", async ({
+  page,
+}) => {
+  const alexId = await personIdByName(page, "Alex Duplicate");
+  const editPath = `/dashboard/people-directory/${alexId}/household/edit`;
+  const childrenAges = page
+    .locator("span", { hasText: /^Children Ages$/ })
+    .locator("xpath=following-sibling::span[1]");
+
+  // Re-picked until it sticks, for the same reason as fillStable: the form's
+  // defaults can land after an early pick.
+  const answerChildren = async (answer: "Yes" | "No") => {
+    await page.goto(editPath);
+    const trigger = page.getByLabel("Do you have children at home? *");
+    await expect(async () => {
+      await trigger.click();
+      await page.getByRole("option", { name: answer, exact: true }).click();
+      await expect(trigger).toHaveText(answer, { timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
+  };
+  const save = async () => {
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText("Household profile updated.")).toBeVisible();
+    await page.waitForURL(`**/dashboard/people-directory/${alexId}`, {
+      timeout: 60_000,
+    });
+  };
+
+  await answerChildren("Yes");
+  await fillStable(page.getByLabel("Ages of children *"), "3, 8");
+  await save();
+  await expect(childrenAges).toHaveText("3, 8");
+
+  // The form now loads with "3, 8" behind the hidden field.
+  await answerChildren("No");
+  await expect(page.getByLabel("Ages of children *")).toBeHidden();
+  await save();
+  await expect(childrenAges).toHaveText("N/A");
+});
+
 // The household profile is the shelter's record of a household, not something
 // an account takes ownership of. Someone who has signed up is still the person
 // staff took these answers from at the desk, and the one who most needs them
