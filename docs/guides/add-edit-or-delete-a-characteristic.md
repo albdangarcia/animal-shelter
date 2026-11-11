@@ -54,7 +54,8 @@ that had it.
 
 To bring it back, click **Undo** on the message, or click **…**, then
 **Restore**. You should see "Characteristic restored successfully." Animals
-that had it show it again.
+that had it show it again. If a live characteristic now has its name, in any
+capitals, rename or delete that one first.
 
 ## If something goes wrong
 
@@ -62,6 +63,10 @@ that had it show it again.
 - **"A characteristic with that name already exists."** Each name can be used
   once, in any category. Pick another name, or edit the one that has it. If
   that one is marked **Deleted**, restore it instead.
+- **Can't restore "Good with cats": a characteristic named "good with cats"
+  already exists. Rename or delete that one first.** (with the names) A live
+  characteristic has the same name, perhaps in other capitals. Edit it to
+  rename it, or delete it, then restore the one you wanted.
 - **"Good with cats is proposed by the Cat Test assessment template, so it
   can't be deleted."** (with the characteristic's and template's names) An
   assessment template suggests this characteristic from its findings, so it

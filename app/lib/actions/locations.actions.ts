@@ -16,8 +16,13 @@ import {
   deleteLocationIfEmpty,
   deleteUnitIfEmpty,
   lockLiveLocation,
-  restoreUnitIfLocationLive,
 } from "@/app/lib/services/unit-housing";
+import {
+  findLiveLocationNamed,
+  findLiveUnitNamed,
+  restoreLocation as restoreLocationRow,
+  restoreUnit as restoreUnitRow,
+} from "@/app/lib/services/settings-catalog";
 
 type LocationFormInput = z.input<typeof LocationFormSchema>;
 type LocationResult = FormResult<LocationFormInput>;
@@ -25,18 +30,11 @@ type LocationResult = FormResult<LocationFormInput>;
 type UnitFormInput = z.input<typeof UnitFormSchema>;
 type UnitResult = FormResult<UnitFormInput>;
 
-// case-insensitive, global, ignores the row being
-// edited (so renaming a location to itself doesn't collide). Among non-deleted
-// rows only.
+// Shared duplicate check, the one restore uses: case-insensitive, global,
+// among non-deleted rows only, ignoring the row being edited (so renaming a
+// location to itself doesn't collide).
 const findDuplicateLocation = async (name: string, excludeId?: string) => {
-  return prisma.location.findFirst({
-    where: {
-      name: { equals: name, mode: "insensitive" },
-      deletedAt: null,
-      ...(excludeId ? { NOT: { id: excludeId } } : {}),
-    },
-    select: { id: true },
-  });
+  return findLiveLocationNamed(prisma, name, excludeId);
 };
 
 const _createLocation = async (
@@ -146,7 +144,7 @@ const _deleteLocation = async (
 
   try {
     // Block deleting a location that still has any non-deleted unit (empty or
-    // occupied). The admin must delete or move its units first. Checked and
+    // occupied). The admin must delete its units first. Checked and
     // written behind the location's lock, so a unit added or restored at the
     // same moment is either counted or refused.
     const deleted = await prisma.$transaction((tx) =>
@@ -156,7 +154,7 @@ const _deleteLocation = async (
       return {
         success: false,
         message:
-          "Can't delete this location while it still has units. Delete or move its units first.",
+          "Can't delete this location while it still has units. Delete its units first.",
       };
     }
 
@@ -180,10 +178,12 @@ const _restoreLocation = async (
   }
 
   try {
-    await prisma.location.update({
-      where: { id: parsedId.data },
-      data: { deletedAt: null },
-    });
+    const refusal = await prisma.$transaction((tx) =>
+      restoreLocationRow(tx, parsedId.data),
+    );
+    if (refusal) {
+      return { success: false, message: refusal };
+    }
     revalidatePath("/dashboard/settings/locations");
     return { success: true, message: "Location restored successfully." };
   } catch (error) {
@@ -206,17 +206,9 @@ const findDuplicateUnit = async (
   name: string,
   locationId: string,
   excludeId?: string,
-  db: Pick<TransactionClient, "unit"> = prisma,
+  db: Pick<TransactionClient, "$queryRaw"> = prisma,
 ) => {
-  return db.unit.findFirst({
-    where: {
-      locationId,
-      name: { equals: name, mode: "insensitive" },
-      deletedAt: null,
-      ...(excludeId ? { NOT: { id: excludeId } } : {}),
-    },
-    select: { id: true },
-  });
+  return findLiveUnitNamed(db, name, locationId, excludeId);
 };
 
 const _createUnit = async (values: UnitFormInput): Promise<UnitResult> => {
@@ -375,16 +367,13 @@ const _restoreUnit = async (
   try {
     // A unit comes back only into a live location: a location is deleted only
     // once it has no live unit, and the pickers hide a deleted one's units.
-    // Checked behind the location's lock, like adding a unit.
-    const restored = await prisma.$transaction((tx) =>
-      restoreUnitIfLocationLive(tx, parsedId.data),
+    // Checked behind the location's lock, like adding a unit. Nor does it
+    // come back beside a live unit of the same name.
+    const refusal = await prisma.$transaction((tx) =>
+      restoreUnitRow(tx, parsedId.data),
     );
-    if (!restored) {
-      return {
-        success: false,
-        message:
-          "Can't restore a unit in a deleted location. Restore the location first.",
-      };
+    if (refusal) {
+      return { success: false, message: refusal };
     }
     revalidatePath("/dashboard/settings/locations");
     return { success: true, message: "Unit restored successfully." };

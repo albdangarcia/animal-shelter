@@ -3,6 +3,7 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchLocationsWithUnits } from "@/app/lib/data/locations/locations.data";
+import { parseLocationStatus } from "@/app/lib/data/locations/location-status";
 import type { SearchParamsType } from "@/app/lib/types";
 import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
 import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
@@ -31,7 +32,11 @@ const PageContent = async ({ searchParams }: Props) => {
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
-      <LocationsSection locations={locations} help={help} />
+      <LocationsSection
+        locations={locations}
+        help={help}
+        view={parseLocationStatus(status)}
+      />
     </div>
   );
 };

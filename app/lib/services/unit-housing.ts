@@ -22,6 +22,9 @@ import type { TransactionClient } from "@/app/lib/prisma";
  * not enough: the delete's check can run first and see an empty unit, and the
  * placement then read the unit as still live.
  *
+ * Restoring a unit takes the location's lock through `lockLiveLocation` (see
+ * `restoreUnit` in `settings-catalog`).
+ *
  * A path that also holds the animal (`lockAnimal`) takes it before the unit.
  * Nothing takes them the other way round: the delete locks no animal.
  *
@@ -106,27 +109,6 @@ export const deleteLocationIfEmpty = async (
   await tx.location.update({
     where: { id: locationId },
     data: { deletedAt: new Date() },
-  });
-  return true;
-};
-
-/**
- * Restores a soft-deleted unit unless its location is deleted. Returns false,
- * and changes nothing, when it is. A unit's location never changes, so it is
- * read without a lock.
- */
-export const restoreUnitIfLocationLive = async (
-  tx: TransactionClient,
-  unitId: string,
-): Promise<boolean> => {
-  const unit = await tx.unit.findUniqueOrThrow({
-    where: { id: unitId },
-    select: { locationId: true },
-  });
-  if (!(await lockLiveLocation(tx, unit.locationId))) return false;
-  await tx.unit.update({
-    where: { id: unitId },
-    data: { deletedAt: null },
   });
   return true;
 };

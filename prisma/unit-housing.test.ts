@@ -20,8 +20,11 @@ import {
   deleteUnitIfEmpty,
   findLiveUnitForPlacement,
   lockLiveLocation,
-  restoreUnitIfLocationLive,
 } from "@/app/lib/services/unit-housing";
+import {
+  restoreUnit,
+  UNIT_LOCATION_DELETED,
+} from "@/app/lib/services/settings-catalog";
 import { recordOutcomeReversal } from "@/app/lib/services/outcome-reversal";
 
 const runId = Date.now().toString(36);
@@ -395,8 +398,8 @@ test("a unit is not restored into a deleted location", async () => {
   await prisma.$transaction((tx) => deleteLocationIfEmpty(tx, unit.locationId));
 
   assert.equal(
-    await prisma.$transaction((tx) => restoreUnitIfLocationLive(tx, unit.id)),
-    false,
+    await prisma.$transaction((tx) => restoreUnit(tx, unit.id)),
+    UNIT_LOCATION_DELETED,
   );
   assert.ok(await unitDeletedAt(unit.id));
 
@@ -405,8 +408,8 @@ test("a unit is not restored into a deleted location", async () => {
     data: { deletedAt: null },
   });
   assert.equal(
-    await prisma.$transaction((tx) => restoreUnitIfLocationLive(tx, unit.id)),
-    true,
+    await prisma.$transaction((tx) => restoreUnit(tx, unit.id)),
+    null,
   );
   assert.equal(await unitDeletedAt(unit.id), null);
 });
@@ -416,10 +419,10 @@ test("a location delete waits for a unit restore, then sees the unit and refuses
   await prisma.$transaction((tx) => deleteUnitIfEmpty(tx, unit.id));
 
   const restore = await holdOpen(async (tx) => ({
-    restored: await restoreUnitIfLocationLive(tx, unit.id),
+    refusal: await restoreUnit(tx, unit.id),
     pid: await backendPid(tx),
   }));
-  assert.equal(restore.result.restored, true);
+  assert.equal(restore.result.refusal, null);
 
   const deletion = prisma.$transaction(
     (tx) => deleteLocationIfEmpty(tx, unit.locationId),
@@ -446,7 +449,7 @@ test("a unit restore waits for a location delete, then is refused", async () => 
   assert.equal(deletion.result.deleted, true);
 
   const restore = prisma.$transaction(
-    (tx) => restoreUnitIfLocationLive(tx, unit.id),
+    (tx) => restoreUnit(tx, unit.id),
     { timeout: lockWaitTimeout },
   );
   void restore.catch(() => {});
@@ -454,7 +457,7 @@ test("a unit restore waits for a location delete, then is refused", async () => 
 
   deletion.release();
   await deletion.done;
-  assert.equal(await restore, false);
+  assert.equal(await restore, UNIT_LOCATION_DELETED);
   assert.ok(await locationDeletedAt(unit.locationId));
   assert.ok(await unitDeletedAt(unit.id));
 });
