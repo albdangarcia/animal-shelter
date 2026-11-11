@@ -29,12 +29,15 @@ import {
 } from "@/app/lib/constants/characteristic-categories";
 import { CharacteristicForm } from "./characteristic-form";
 import { CharacteristicActions } from "./characteristic-actions";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 
 interface Props {
   characteristics: CharacteristicModel[];
+  help: HelpLinkGuide | null;
 }
 
-const CharacteristicsCatalog = ({ characteristics }: Props) => {
+const CharacteristicsCatalog = ({ characteristics, help }: Props) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   const groupedCharacteristics = characteristics.reduce
@@ -57,7 +60,8 @@ const CharacteristicsCatalog = ({ characteristics }: Props) => {
           Manage the catalog of tags used to describe animals across the
           shelter.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-1">
+          <HelpLink guide={help} />
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm">

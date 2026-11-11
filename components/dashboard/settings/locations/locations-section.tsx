@@ -41,6 +41,8 @@ import {
 import { toast } from "sonner";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 
 const locationStatusOptions = [
   { value: "active", label: "Active" },
@@ -324,9 +326,10 @@ function LocationBlock({ location }: { location: LocationWithUnits }) {
 
 interface Props {
   locations: LocationWithUnits[];
+  help: HelpLinkGuide | null;
 }
 
-export const LocationsSection = ({ locations }: Props) => {
+export const LocationsSection = ({ locations, help }: Props) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   return (
@@ -336,7 +339,8 @@ export const LocationsSection = ({ locations }: Props) => {
         <CardDescription>
           Manage the kennel locations and the units within each one.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-1">
+          <HelpLink guide={help} />
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm">

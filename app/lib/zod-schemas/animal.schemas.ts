@@ -107,13 +107,13 @@ const animalFieldsShape = {
     error: "Animal name is required.",
   }),
   species: z.cuid2({
-    error: "A valid species ID is required.",
+    error: "Pick a species.",
   }),
   breed: z.cuid2({
-    error: "A valid primary breed ID is required.",
+    error: "Pick a breed.",
   }),
   primaryColor: z.cuid2({
-    error: "A valid primary color ID is required.",
+    error: "Pick a primary color.",
   }),
   additionalColors: z
     .array(z.cuid2({ error: "A valid color ID is required." }))

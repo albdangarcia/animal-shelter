@@ -30,4 +30,8 @@ export const PAGE_HELP_GUIDES = {
   settingsMedicalCatalog: "add-edit-or-retire-a-medical-catalog-item",
   settingsMedicalProtocols: "set-up-or-change-a-medical-protocol",
   settingsMedicalDoseTimes: "set-the-dose-times",
+  settingsCharacteristics: "add-edit-or-delete-a-characteristic",
+  settingsAnimalTaxonomy: "add-edit-or-delete-a-species-breed-or-color",
+  settingsLocations: "add-edit-or-delete-a-location-or-unit",
+  settingsAiActivity: "review-and-undo-the-assistants-changes",
 } as const;

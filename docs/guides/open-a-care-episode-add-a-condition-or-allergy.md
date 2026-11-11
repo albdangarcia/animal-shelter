@@ -3,7 +3,7 @@ title: Open and close a care episode, add a condition or allergy
 summary: Keep an animal's problem list of conditions and allergies, and record when it is under vet care or hospitalised.
 permissions: [MEDICAL_MANAGE]
 aliases: [add an allergy, allergic to, add a diagnosis, problem list, chronic condition, mark resolved, hospitalised, at the vet clinic, under vet care, medical hold]
-related: [record-an-exam, order-a-medication-and-record-doses, medical-status-glossary]
+related: [record-an-exam, order-a-medication-and-record-doses, medical-status-glossary, add-edit-or-delete-a-characteristic]
 verified: 2026-11-10
 ---
 

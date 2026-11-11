@@ -244,7 +244,7 @@ test("an unknown species or color is refused, and no animal is left behind", asy
     );
     await assert.rejects(
       create("Bad species", { species: "clnotaspecies0000000000000" }),
-      /Invalid Species ID/,
+      /species is no longer available/,
     );
     assert.equal(
       await prisma.animal.count({

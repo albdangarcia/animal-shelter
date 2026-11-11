@@ -29,6 +29,10 @@ import { ConflictError, NotFoundError } from "../utils/errors";
 import { findLiveUnitForPlacement } from "../services/unit-housing";
 import { createAnimalFromForm } from "../services/animal-creation";
 import {
+  assertLiveTaxonomy,
+  TaxonomyRefusal,
+} from "../services/animal-taxonomy";
+import {
   SKIP_PROTOCOL_REFUSAL,
   withProtocolHeadline,
 } from "../services/medical-protocol-application";
@@ -142,6 +146,16 @@ const _createAnimal = async (
       };
     }
   } catch (error) {
+    // A species, breed or color deleted since the form was opened.
+    if (error instanceof TaxonomyRefusal) {
+      return {
+        ok: false,
+        message: error.message,
+        fieldErrors: {
+          [error.field]: [error.message],
+        } as FieldErrors<CreateAnimalFormInput>,
+      };
+    }
     // The medical record's refusal (a chip number already on another
     // animal's record, maybe taken at the same moment) rolled the intake
     // back. It goes under the intake's own field.
@@ -319,24 +333,15 @@ const _updateAnimal = async (
       const isArchived =
         currentAnimal.listingStatus === AnimalListingStatus.ARCHIVED;
 
-      const speciesRecord = await tx.species.findUnique({
-        where: { id: speciesId },
-        select: { name: true },
+      // The species, its breed and every color must exist and not be
+      // deleted. An animal whose breed or color was deleted since its last
+      // save has to swap it for a live one: the form no longer offers it.
+      await assertLiveTaxonomy(tx, {
+        speciesId,
+        breedId,
+        primaryColorId,
+        additionalColorIds,
       });
-
-      if (!speciesRecord) {
-        throw new NotFoundError("The specified species does not exist.");
-      }
-
-      // Guard: all submitted colors must exist and not be soft-deleted.
-      const validColorCount = await tx.color.count({
-        where: { id: { in: allColorIds }, deletedAt: null },
-      });
-      if (validColorCount !== allColorIds.length) {
-        throw new ConflictError(
-          "One or more selected colors are no longer available. Please refresh and try again.",
-        );
-      }
 
       // verify the chosen unit still exists and isn't
       // soft-deleted. Treat a stale/deleted unit as Unplaced rather than
@@ -428,6 +433,15 @@ const _updateAnimal = async (
       }
     });
   } catch (error) {
+    if (error instanceof TaxonomyRefusal) {
+      return {
+        ok: false,
+        message: error.message,
+        fieldErrors: {
+          [error.field]: [error.message],
+        } as FieldErrors<AnimalEditFormInput>,
+      };
+    }
     console.error("Database Error updating animal:", error);
     if (error instanceof ConflictError || error instanceof NotFoundError) {
       return { ok: false, message: error.message };

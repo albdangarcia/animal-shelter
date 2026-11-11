@@ -24,12 +24,15 @@ import {
 import { PlusCircle } from "lucide-react";
 import { ColorForm } from "./color-form";
 import { ColorActions } from "./color-actions";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 
 interface Props {
   colors: ColorModel[];
+  help: HelpLinkGuide | null;
 }
 
-export const ColorsSection = ({ colors }: Props) => {
+export const ColorsSection = ({ colors, help }: Props) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
 
   return (
@@ -39,7 +42,8 @@ export const ColorsSection = ({ colors }: Props) => {
         <CardDescription>
           Manage the colors used to describe animals&apos; coats and markings.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-1">
+          <HelpLink guide={help} />
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button size="sm">

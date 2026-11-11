@@ -233,8 +233,20 @@ const AnimalForm = ({
       ? {
           animalName: animal.name,
           species: animal.speciesId,
-          breed: animal.breeds[0]?.id || "",
-          primaryColor: animal.primaryColorId || "",
+          // A breed moved to another species since isn't offered for this
+          // one, so it starts empty and must be picked again, rather than
+          // sit unseen in the field. Deleted breeds aren't loaded at all.
+          breed:
+            speciesList
+              .find((s) => s.id === animal.speciesId)
+              ?.breeds.some((b) => b.id === animal.breeds[0]?.id)
+              ? animal.breeds[0].id
+              : "",
+          // A deleted primary color isn't offered, so it starts empty and
+          // must be picked again, rather than sit unseen in the field.
+          primaryColor: colors.some((c) => c.id === animal.primaryColorId)
+            ? animal.primaryColorId
+            : "",
           additionalColors: animal.colors
             .filter((c) => c.id !== animal.primaryColorId)
             .map((c) => c.id),

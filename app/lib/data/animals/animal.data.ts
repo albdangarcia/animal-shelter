@@ -30,6 +30,7 @@ import {
 import { getShelterToday } from "../shelter-settings.data";
 import { findMedicalStatus } from "./medical-status";
 import { findCareStatus } from "./care-status";
+import { findColorOptions, findSpeciesOptions } from "./taxonomy-options";
 import type { CareStatus } from "@/app/lib/utils/care-status";
 
 // data for the animals table in the dashboard
@@ -311,12 +312,17 @@ const _fetchAnimalById = async (
         speciesId: true,
         primaryColorId: true,
         currentUnitId: true,
+        // Deleted breeds and colors are left out, as the form's pickers leave
+        // them out: the save refuses them, so the form must not hold one the
+        // user can't see.
         breeds: {
+          where: { deletedAt: null },
           select: {
             id: true,
           },
         },
         colors: {
+          where: { deletedAt: null },
           select: {
             id: true,
           },
@@ -357,18 +363,10 @@ const _fetchPartners = async (): Promise<PartnerPayload[]> => {
   }
 };
 
+// The animal form's pickers: deleted species, breeds and colors left out.
 export const fetchColors = async (): Promise<ColorPayload[]> => {
   try {
-    const colors = await prisma.color.findMany({
-      select: {
-        id: true,
-        name: true,
-      },
-      orderBy: {
-        name: "asc",
-      },
-    });
-    return colors;
+    return await findColorOptions(prisma);
   } catch (error) {
     console.error("Error fetching colors.", error);
     throw new Error("Error fetching colors.");
@@ -377,23 +375,7 @@ export const fetchColors = async (): Promise<ColorPayload[]> => {
 
 export const fetchSpecies = async (): Promise<SpeciesPayload[]> => {
   try {
-    const species = await prisma.species.findMany({
-      select: {
-        id: true,
-        name: true,
-        breeds: {
-          select: {
-            id: true,
-            name: true,
-            typicalSize: true,
-          },
-        },
-      },
-      orderBy: {
-        name: "asc",
-      },
-    });
-    return species;
+    return await findSpeciesOptions(prisma);
   } catch (error) {
     console.error("Error fetching species.", error);
     throw new Error("Error fetching species.");
