@@ -1,5 +1,6 @@
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -17,6 +18,9 @@ import {
 } from "@/app/lib/data/ai-activity.data";
 import { getColumns } from "@/components/dashboard/ai-activity/table/ai-activity-table-columns";
 import AiActivityTableToolbar from "@/components/dashboard/ai-activity/table/ai-activity-table-toolbar";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -44,11 +48,13 @@ const PageContent = async ({ searchParams }: Props) => {
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
-  const [canManage, { rows, totalPages, totalRows }, actors] = await Promise.all([
-    hasPermission(AppPermissions.ANIMAL_TASK_MANAGE),
-    fetchAiActivityLog(currentPage, currentPageSize, sort, state, actor),
-    fetchAiActivityActors(),
-  ]);
+  const [canManage, { rows, totalPages, totalRows }, actors, help] =
+    await Promise.all([
+      hasPermission(AppPermissions.ANIMAL_TASK_MANAGE),
+      fetchAiActivityLog(currentPage, currentPageSize, sort, state, actor),
+      fetchAiActivityActors(),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.settingsAiActivity),
+    ]);
 
   const actorOptions = actors.map((a) => ({ label: a.name, value: a.id }));
 
@@ -60,6 +66,9 @@ const PageContent = async ({ searchParams }: Props) => {
           Every change the assistant made to shelter data, and whether it has
           been undone. Chat history is not kept, so this is the durable record.
         </CardDescription>
+        <CardAction>
+          <HelpLink guide={help} />
+        </CardAction>
       </CardHeader>
       <CardContent>
         <div className="flex flex-1 flex-col">

@@ -4,6 +4,8 @@ import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchLocationsWithUnits } from "@/app/lib/data/locations/locations.data";
 import type { SearchParamsType } from "@/app/lib/types";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -22,11 +24,14 @@ const Page = async ({ searchParams }: Props) => {
 
 const PageContent = async ({ searchParams }: Props) => {
   const { status } = await searchParams;
-  const locations = await fetchLocationsWithUnits(status);
+  const [locations, help] = await Promise.all([
+    fetchLocationsWithUnits(status),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.settingsLocations),
+  ]);
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
-      <LocationsSection locations={locations} />
+      <LocationsSection locations={locations} help={help} />
     </div>
   );
 };

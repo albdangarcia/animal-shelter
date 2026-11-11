@@ -6,6 +6,7 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { fetchFosterProfileByPersonId } from "@/app/lib/data/fosters/fosters.data";
 import { fetchSpecies } from "@/app/lib/data/animals/animal.data";
+import { fosterSpeciesOptions } from "@/app/lib/utils/foster-species-options";
 import { FosterProfileEmptyState } from "@/components/dashboard/fosters/profile/foster-profile-empty-state";
 import { FosterProfileStatusCard } from "@/components/dashboard/fosters/profile/foster-profile-status-card";
 import { FosterCurrentPlacementsCard } from "@/components/dashboard/fosters/profile/foster-current-placements-card";
@@ -39,7 +40,9 @@ const PageContent = async ({ params }: Props) => {
   }
 
   // Only needed for the capability edit form, which is manage-gated.
-  const species = canManage ? await fetchSpecies() : [];
+  const species = canManage
+    ? fosterSpeciesOptions(await fetchSpecies(), profile.speciesCapabilities)
+    : [];
 
   const openPlacementsCount = profile.placements.filter(
     (p) => p.endDate === null,

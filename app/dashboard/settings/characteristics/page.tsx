@@ -3,6 +3,8 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchCharacteristicsCatalog } from "@/app/lib/data/animals/characteristics-catalog.data";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 const Page = async () => {
   return (
@@ -16,9 +18,12 @@ const Page = async () => {
 };
 
 const PageContent = async () => {
-  const characteristics = await fetchCharacteristicsCatalog();
+  const [characteristics, help] = await Promise.all([
+    fetchCharacteristicsCatalog(),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.settingsCharacteristics),
+  ]);
 
-  return <CharacteristicsCatalog characteristics={characteristics} />;
+  return <CharacteristicsCatalog characteristics={characteristics} help={help} />;
 };
 
 export default Page;

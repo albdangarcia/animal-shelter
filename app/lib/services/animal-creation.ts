@@ -5,6 +5,7 @@ import {
   getShelterToday,
 } from "@/app/lib/data/shelter-settings.data";
 import { findLiveUnitForPlacement } from "@/app/lib/services/unit-housing";
+import { assertLiveTaxonomy } from "@/app/lib/services/animal-taxonomy";
 import { recordMedicalEntry } from "@/app/lib/services/medical-entry";
 import {
   applyIntakeProtocol,
@@ -77,22 +78,13 @@ export const recordAnimalCreation = async (
     new Set([primaryColorId, ...additionalColorIds]),
   );
 
-  const speciesRecord = await tx.species.findUnique({
-    where: { id: speciesId },
-    select: { name: true },
+  // The species, its breed and every color must exist and not be deleted.
+  await assertLiveTaxonomy(tx, {
+    speciesId,
+    breedId,
+    primaryColorId,
+    additionalColorIds,
   });
-
-  if (!speciesRecord) {
-    throw new Error("Invalid Species ID provided.");
-  }
-
-  // Guard: all submitted colors must exist and not be soft-deleted.
-  const validColorCount = await tx.color.count({
-    where: { id: { in: allColorIds }, deletedAt: null },
-  });
-  if (validColorCount !== allColorIds.length) {
-    throw new Error("One or more selected colors are no longer available.");
-  }
 
   // verify the chosen unit still exists and isn't
   // soft-deleted. Treat a stale/deleted unit as Unplaced rather than
