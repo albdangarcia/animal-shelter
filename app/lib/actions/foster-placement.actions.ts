@@ -4,12 +4,6 @@ import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import {
-  AnimalActivityType,
-  AnimalListingStatus,
-  FosterPlacementType,
-  FosterStatus,
-} from "@/prisma/generated/enums";
 import prisma from "@/app/lib/prisma";
 import {
   RequirePermission,
@@ -23,8 +17,6 @@ import {
   type CreateFosterPlacementSchema,
   ReturnFromFosterSchema,
 } from "../zod-schemas/foster.schemas";
-import { computeStays, type StayEvent } from "../utils/stay-utils";
-import { calendarDay } from "../utils/shelter-day";
 import {
   ConflictError,
   NotFoundError,
@@ -34,6 +26,10 @@ import {
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import { recordFosterReturn } from "../services/foster-return";
 import { recordFosterConversion } from "../services/foster-conversion";
+import {
+  makeFosterPlacement,
+  isSerializationFailure,
+} from "../services/foster-placement";
 
 const ADOPTION_APPLICATIONS_PATH = "/dashboard/adoption-applications";
 
@@ -66,124 +62,23 @@ const _createFosterPlacement = async (
     };
   }
 
-  const { animalId, fosterProfileId, type, expectedEndDate, notes } =
-    validatedFields.data;
+  const { animalId } = validatedFields.data;
 
   try {
-    // Serializable: the capacity/uniqueness checks below aren't expressible
-    // as a single guarded row update (unlike return/convert's "must be
-    // open" check), so isolate against concurrent placements the same way
+    // Serializable: the capacity/uniqueness checks aren't expressible as a
+    // single guarded row update (unlike return/convert's "must be open"
+    // check), so isolate against concurrent placements the same way
     // createMyFosterApplication isolates its "one active application" check.
-    await prisma.$transaction(
-      async (tx) => {
-        const fosterProfile = await tx.fosterProfile.findUnique({
-          where: { id: fosterProfileId },
-          select: {
-            status: true,
-            maxAnimals: true,
-            person: { select: { name: true } },
-            _count: { select: { placements: { where: { endDate: null } } } },
-          },
-        });
-
-        if (!fosterProfile) {
-          throw new NotFoundError("Foster profile not found.");
-        }
-        if (fosterProfile.status !== FosterStatus.ACTIVE) {
-          throw new PreconditionFailedError(
-            `Cannot place an animal with this foster: their profile status is ${fosterProfile.status.toLowerCase()}.`,
-          );
-        }
-        if (fosterProfile._count.placements >= fosterProfile.maxAnimals) {
-          throw new PreconditionFailedError(
-            "This foster is already at capacity.",
-          );
-        }
-
-        const animal = await tx.animal.findUnique({
-          where: { id: animalId },
-          select: {
-            currentUnitId: true,
-            listingStatus: true,
-            intake: { select: { intakeDate: true } },
-            Outcome: { where: { reversedAt: null }, select: { outcomeDate: true } },
-            fosterPlacements: {
-              where: { endDate: null },
-              select: { id: true },
-            },
-          },
-        });
-
-        if (!animal) {
-          throw new NotFoundError("Animal not found.");
-        }
-        if (animal.fosterPlacements.length > 0) {
-          throw new ConflictError(
-            "This animal already has an open foster placement.",
-          );
-        }
-
-        const events: StayEvent[] = [
-          ...animal.intake.map(
-            (intake): StayEvent => ({
-              kind: "intake",
-              date: calendarDay(intake.intakeDate),
-            }),
-          ),
-          ...animal.Outcome.map(
-            (outcome): StayEvent => ({
-              kind: "outcome",
-              date: calendarDay(outcome.outcomeDate),
-            }),
-          ),
-        ];
-        if (!computeStays(events, today).isInCare) {
-          throw new PreconditionFailedError(
-            "This animal is not currently in the shelter's care.",
-          );
-        }
-
-        await tx.fosterPlacement.create({
-          data: {
-            type,
-            startDate: today,
-            expectedEndDate,
-            animalId,
-            fosterProfileId,
-            previousUnitId: animal.currentUnitId,
-            previousListingStatus:
-              type === FosterPlacementType.FOSTER_TO_ADOPT
-                ? animal.listingStatus
-                : undefined,
-            placedById: staffMemberId,
-          },
-        });
-
-        await tx.animal.update({
-          where: { id: animalId },
-          data: {
-            currentUnitId: null,
-            ...(type === FosterPlacementType.FOSTER_TO_ADOPT && {
-              listingStatus: AnimalListingStatus.PENDING_ADOPTION,
-            }),
-          },
-        });
-
-        await tx.animalActivityLog.create({
-          data: {
-            animalId,
-            activityType: AnimalActivityType.FOSTER_PLACED,
-            changedById: staffMemberId,
-            changeSummary: `Placed with foster ${fosterProfile.person.name}.${
-              notes ? ` ${notes}` : ""
-            }`,
-          },
-        });
-      },
-      { isolationLevel: "Serializable" },
-    );
+    await makeFosterPlacement(validatedFields.data, staffMemberId, today);
   } catch (error) {
     console.error("Database error creating foster placement:", error);
+    if (isSerializationFailure(error)) {
+      return {
+        ok: false,
+        message:
+          "This animal or foster changed while the placement was being made. Please try again.",
+      };
+    }
     if (
       error instanceof NotFoundError ||
       error instanceof ConflictError ||

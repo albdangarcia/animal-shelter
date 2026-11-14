@@ -27,6 +27,11 @@ import {
   recordOutcomeReversal,
 } from "@/app/lib/services/outcome-reversal";
 import {
+  recordIntakeCorrection,
+  toIntakeCorrectionValues,
+} from "@/app/lib/services/intake-correction";
+import { IntakeCorrectionFormSchema } from "@/app/lib/zod-schemas/intake.schema";
+import {
   DERIVATION_APPLICATION_SELECT,
   effectiveApplicationStatuses,
   effectiveStatusBehindLock,
@@ -297,6 +302,37 @@ const waitForSessionBlockedBy = async (holderPid: number) => {
   throw new Error(`No session was seen waiting on backend ${holderPid}.`);
 };
 
+/**
+ * Corrects an intake's day through the intake-correction service, the way
+ * the Edit Intake form submits it: the stored type and notes, with a found
+ * location in case the intake is a stray.
+ */
+const correctIntakeDay = async (intakeId: string, intakeDate: string) => {
+  const stored = await prisma.intake.findUniqueOrThrow({
+    where: { id: intakeId },
+    select: { type: true, notes: true },
+  });
+  return prisma.$transaction((tx) =>
+    recordIntakeCorrection(
+      tx,
+      intakeId,
+      toIntakeCorrectionValues(
+        IntakeCorrectionFormSchema.parse({
+          intakeType: stored.type,
+          intakeDate,
+          notes: stored.notes ?? "",
+          sourcePartnerId: "",
+          surrenderingPersonId: "",
+          foundAddress: "1 Elm St",
+          foundCity: "Springfield",
+          foundState: "IL",
+        }),
+      ),
+      staffId,
+    ),
+  );
+};
+
 const reversalRows = (animalId: string) =>
   prisma.animalActivityLog.findMany({
     where: { animalId, activityType: AnimalActivityType.OUTCOME_REVERSED },
@@ -504,6 +540,57 @@ test("the listing is left alone when a later outcome archived the animal", async
     listingStatus: AnimalListingStatus.ARCHIVED,
     archiveReason: OutcomeType.RETURN_TO_OWNER,
   });
+  await assertNoListingMismatch(animalId);
+});
+
+test("an earlier outcome is not reversed when the final outcome would then read as before a same-day intake", async () => {
+  // Arrived Aug 1, left Sep 1, came back Oct 1 and left again that day.
+  // Without Sep 1 the stay is open into Oct 1, so that day would read as the
+  // final outcome and then a return: archived, but in care by its timeline.
+  const animalId = await makeAnimal("Same-day final", AnimalListingStatus.PUBLISHED);
+  const earlier = await recordOutcome(animalId, {
+    previousListingStatus: AnimalListingStatus.PUBLISHED,
+    createdAt: hoursAgo(3),
+  });
+  await reIntake(animalId, "2026-10-01");
+  const final = await recordOutcome(animalId, {
+    previousListingStatus: AnimalListingStatus.DRAFT,
+    createdAt: hoursAgo(1),
+    outcomeDate: "2026-10-01",
+  });
+  await assertNoListingMismatch(animalId);
+
+  await assert.rejects(
+    reverse(earlier),
+    (error: unknown) =>
+      error instanceof PreconditionFailedError &&
+      error.message ===
+        "This outcome can't be reversed: without it, the intake on Oct 1, 2026 would read as a return after this animal's latest outcome that same day, and its record would say it is back in care. If this outcome never happened, the animal never left, so that intake repeats its arrival: correct it to an earlier day first, then reverse this outcome.",
+  );
+  assert.equal((await readOutcome(earlier)).reversedAt, null);
+  assert.deepEqual(await reversalRows(animalId), []);
+  assert.equal(
+    (await readAnimal(animalId)).listingStatus,
+    AnimalListingStatus.ARCHIVED,
+  );
+  await assertNoListingMismatch(animalId);
+
+  // The step the refusal gives: the Oct 1 intake repeats the arrival, so it
+  // is corrected to an earlier day, and then the reversal goes through,
+  // leaving the animal archived by its final outcome.
+  const duplicate = await prisma.intake.findFirstOrThrow({
+    where: { animalId, intakeDate: "2026-10-01" },
+    select: { id: true },
+  });
+  const corrected = await correctIntakeDay(duplicate.id, "2026-09-10");
+  assert.equal(corrected.status, "corrected");
+  await reverse(earlier);
+  assert.notEqual((await readOutcome(earlier)).reversedAt, null);
+  assert.equal((await readOutcome(final)).reversedAt, null);
+  assert.equal(
+    (await readAnimal(animalId)).listingStatus,
+    AnimalListingStatus.ARCHIVED,
+  );
   await assertNoListingMismatch(animalId);
 });
 

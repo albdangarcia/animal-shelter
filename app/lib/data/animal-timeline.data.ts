@@ -1,10 +1,14 @@
 import type { TransactionClient } from "@/app/lib/prisma";
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
+import { AnimalListingStatus } from "@/prisma/generated/enums";
 import {
+  evaluateListingAgreement,
+  evaluateOutcomeReversal,
   evaluatePlacementBounds,
   evaluateTimelineChange,
   refuseFutureDay,
+  type ListingState,
   type TimelineChange,
   type TimelineEvent,
 } from "./animal-timeline";
@@ -14,8 +18,10 @@ export type { TimelineChange } from "./animal-timeline";
 /**
  * The gate every writer of an intake or outcome day passes before writing it.
  * Returns null when the change is accepted, or the refusal to show staff,
- * naming the event the day would cross (`evaluateTimelineChange` has the
- * rules).
+ * naming the event the day would cross. The day must keep the timeline in
+ * order (`evaluateTimelineChange`), and keep it agreeing with the animal's
+ * listing (`evaluateListingAgreement`): an archived animal's timeline ends on
+ * the outcome that archived it.
  *
  * Must be called after `lockAnimal(tx, animalId)`, in the transaction that
  * then writes the change. The decision rests on the animal's other intakes and
@@ -30,12 +36,58 @@ export async function checkTimelineChange(
   animalId: string,
   change: TimelineChange,
 ): Promise<string | null> {
-  return evaluateTimelineChange(
-    await readTimelineEvents(tx, animalId),
-    change,
-    await getShelterToday(),
+  const events = await readTimelineEvents(tx, animalId);
+  return (
+    evaluateTimelineChange(events, change, await getShelterToday()) ??
+    evaluateListingAgreement(events, change, await readListingState(tx, animalId))
   );
 }
+
+/**
+ * The gate a reversal passes before voiding an outcome: whether the animal's
+ * listing still agrees with its timeline once the outcome is gone. Returns
+ * null when it does, or the refusal to show staff
+ * (`evaluateOutcomeReversal` has the rule).
+ *
+ * Unlike `checkTimelineChange`, it does not judge the timeline's order: a
+ * reversal that leaves two intakes in a row is the truthful record. Must be
+ * called after `lockAnimal(tx, animalId)`, in the transaction that then
+ * reverses the outcome, and while the outcome is still live.
+ */
+export async function checkOutcomeReversal(
+  tx: TransactionClient,
+  animalId: string,
+  outcomeId: string,
+): Promise<string | null> {
+  return evaluateOutcomeReversal(
+    await readTimelineEvents(tx, animalId),
+    outcomeId,
+    await readListingState(tx, animalId),
+  );
+}
+
+// Whether the animal is archived, and by which outcome. Only recording an
+// outcome archives an animal, and only a re-intake or reversing that outcome
+// takes it back out, so an archived animal was archived by the latest live
+// outcome recorded for it, as `recordOutcomeReversal` reads it too.
+const readListingState = async (
+  tx: TransactionClient,
+  animalId: string,
+): Promise<ListingState> => {
+  const animal = await tx.animal.findUnique({
+    where: { id: animalId },
+    select: { listingStatus: true },
+  });
+  if (animal?.listingStatus !== AnimalListingStatus.ARCHIVED) {
+    return { archived: false, archivingOutcomeRef: null };
+  }
+  const archiving = await tx.outcome.findFirst({
+    where: { animalId, reversedAt: null },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    select: { id: true },
+  });
+  return { archived: true, archivingOutcomeRef: archiving?.id ?? null };
+};
 
 /**
  * The second gate for a change to an intake or outcome day: whether it keeps

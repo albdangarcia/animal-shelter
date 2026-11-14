@@ -3,9 +3,12 @@ import assert from "node:assert/strict";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
 import {
   applyTimelineChange,
+  evaluateListingAgreement,
+  evaluateOutcomeReversal,
   evaluatePlacementBounds,
   evaluateTimelineChange,
   NEW_EVENT_REF,
+  type ListingState,
   type PlacementSpan,
   type TimelineEvent,
 } from "./animal-timeline";
@@ -717,5 +720,222 @@ test("a returned placement stored ending before it began is named by its start",
       },
     ),
     "The outcome date can't be before the foster placement with Ada began on Jan 20, 2026.",
+  );
+});
+
+// Arrived Aug 1, left Sep 1, came back Sep 10, left Oct 1, came back Oct 10,
+// and then the Sep 1 outcome was reversed: the animal never left, so the
+// Sep 10 intake duplicates the arrival. It is in care.
+const gap = [
+  intake("i1", "2026-08-01"),
+  intake("i2", "2026-09-10"),
+  outcome("o2", "2026-10-01"),
+  intake("i3", "2026-10-10"),
+];
+const IN_CARE: ListingState = { archived: false, archivingOutcomeRef: null };
+const archivedBy = (ref: string): ListingState => ({
+  archived: true,
+  archivingOutcomeRef: ref,
+});
+
+// The whole gate, as `checkTimelineChange` runs it, on a day after them all.
+const LATER = day("2026-12-01");
+const gate = (
+  events: readonly TimelineEvent[],
+  change: Parameters<typeof evaluateListingAgreement>[1],
+  listing: ListingState,
+) =>
+  evaluateTimelineChange(events, change, LATER) ??
+  evaluateListingAgreement(events, change, listing);
+
+test("an outcome dated into a reversal's gap is refused, since it would archive an animal still here", () => {
+  // Removes the break, so the order alone accepts it.
+  assert.equal(
+    evaluateTimelineChange(gap, { kind: "addOutcome", day: day("2026-08-15") }, LATER),
+    null,
+  );
+  assert.equal(
+    gate(gap, { kind: "addOutcome", day: day("2026-08-15") }, IN_CARE),
+    "The outcome date can't be before this animal's latest intake on Oct 10, 2026.",
+  );
+  assert.equal(
+    gate(gap, { kind: "addOutcome", day: day("2026-10-10") }, IN_CARE),
+    null,
+  );
+  assert.equal(
+    gate(gap, { kind: "addOutcome", day: day("2026-10-20") }, IN_CARE),
+    null,
+  );
+});
+
+test("an outcome recorded before a same-day return is refused, though the timeline would end on an outcome", () => {
+  // Left Oct 1 and came back the same day. An outcome dated Sep 1 would
+  // read the Oct 1 pair as a zero-day stay after it.
+  const sameDayReturn = [
+    intake("i1", "2026-08-01"),
+    outcome("o1", "2026-10-01"),
+    intake("i2", "2026-10-01"),
+  ];
+  assert.equal(
+    gate(sameDayReturn, { kind: "addOutcome", day: day("2026-09-01") }, IN_CARE),
+    "The outcome date can't be before this animal's latest outcome on Oct 1, 2026.",
+  );
+});
+
+test("the outcome that archived the animal can't be corrected to before an event, or onto a day that reads it as before", () => {
+  // Archived by o3, after the gap was closed by a later outcome.
+  const archived = [...gap, outcome("o3", "2026-10-20")];
+  assert.equal(
+    gate(archived, { kind: "moveOutcome", outcomeId: "o3", day: day("2026-08-15") }, archivedBy("o3")),
+    "The outcome date can't be before this animal's latest intake on Oct 10, 2026.",
+  );
+  assert.equal(
+    gate(archived, { kind: "moveOutcome", outcomeId: "o3", day: day("2026-10-12") }, archivedBy("o3")),
+    null,
+  );
+  // On the gap's second intake's day, with a stay open, the outcome reads
+  // as before that intake.
+  const archivedInGap = [
+    intake("i1", "2026-08-01"),
+    intake("i2", "2026-09-10"),
+    outcome("o2", "2026-10-01"),
+  ];
+  assert.equal(
+    gate(archivedInGap, { kind: "moveOutcome", outcomeId: "o2", day: day("2026-09-10") }, archivedBy("o2")),
+    "The outcome date can't be on or before this animal's latest intake on Sep 10, 2026: that intake repeats an earlier one, with no outcome recorded between them, so the outcome would read as coming before it. The animal never left, so that intake marks no real return: correct it to an earlier day, or date the outcome later.",
+  );
+});
+
+test("an intake can't be corrected to after the outcome that archived the animal", () => {
+  const archivedInGap = [
+    intake("i1", "2026-08-01"),
+    intake("i2", "2026-09-10"),
+    outcome("o2", "2026-10-01"),
+  ];
+  // Removes the break, so the order alone accepts it.
+  assert.equal(
+    evaluateTimelineChange(archivedInGap, { kind: "moveIntake", intakeId: "i2", day: day("2026-10-05") }, LATER),
+    null,
+  );
+  assert.equal(
+    gate(archivedInGap, { kind: "moveIntake", intakeId: "i2", day: day("2026-10-05") }, archivedBy("o2")),
+    "The intake date can't be after this animal's latest outcome on Oct 1, 2026.",
+  );
+  assert.equal(
+    gate(archivedInGap, { kind: "moveIntake", intakeId: "i2", day: day("2026-09-20") }, archivedBy("o2")),
+    null,
+  );
+});
+
+test("a listing that already disagreed does not block a change", () => {
+  // Archived by o1, yet its timeline ends on the Oct 10 intake.
+  const broken = [
+    intake("i1", "2026-08-01"),
+    outcome("o1", "2026-08-15"),
+    intake("i2", "2026-09-10"),
+    outcome("o2", "2026-10-01"),
+    intake("i3", "2026-10-10"),
+  ];
+  assert.equal(
+    gate(broken, { kind: "moveOutcome", outcomeId: "o1", day: day("2026-08-20") }, archivedBy("o1")),
+    null,
+  );
+});
+
+test("a correction that keeps an archived animal's last outcome last is accepted", () => {
+  const archived = [
+    intake("i1", "2026-01-01"),
+    outcome("o1", "2026-02-01"),
+    intake("i2", "2026-03-01"),
+    outcome("o2", "2026-04-01"),
+  ];
+  assert.equal(
+    gate(archived, { kind: "moveOutcome", outcomeId: "o1", day: day("2026-02-10") }, archivedBy("o2")),
+    null,
+  );
+  assert.equal(
+    gate(archived, { kind: "moveIntake", intakeId: "i2", day: day("2026-04-01") }, archivedBy("o2")),
+    null,
+  );
+  assert.equal(
+    gate(archived, { kind: "addIntake", day: day("2026-04-01") }, archivedBy("o2")),
+    null,
+  );
+});
+
+// Arrived Aug 1, left Sep 1, came back Oct 1 and left again that day, which
+// archived it.
+const sameDayFinal = [
+  intake("i1", "2026-08-01"),
+  outcome("o1", "2026-09-01"),
+  intake("i2", "2026-10-01"),
+  outcome("o2", "2026-10-01"),
+];
+
+test("reversing an earlier outcome is refused when the final outcome would read as before a same-day intake", () => {
+  // With Sep 1 gone the stay is open into Oct 1, so that day reads as the
+  // outcome and then a return.
+  assert.equal(
+    evaluateOutcomeReversal(sameDayFinal, "o1", archivedBy("o2")),
+    "This outcome can't be reversed: without it, the intake on Oct 1, 2026 would read as a return after this animal's latest outcome that same day, and its record would say it is back in care. If this outcome never happened, the animal never left, so that intake repeats its arrival: correct it to an earlier day first, then reverse this outcome.",
+  );
+  // The outcome that archived the animal takes it out of the archive.
+  assert.equal(
+    evaluateOutcomeReversal(sameDayFinal, "o2", archivedBy("o2")),
+    null,
+  );
+});
+
+test("reversing an earlier outcome that leaves a duplicate intake is accepted", () => {
+  const archived = [
+    intake("i1", "2026-01-01"),
+    outcome("o1", "2026-02-01"),
+    intake("i2", "2026-03-01"),
+    outcome("o2", "2026-04-01"),
+  ];
+  assert.equal(evaluateOutcomeReversal(archived, "o1", archivedBy("o2")), null);
+  // In care, a reversal only ever leaves the timeline ending on an intake.
+  assert.equal(
+    evaluateOutcomeReversal([...archived, intake("i3", "2026-05-01")], "o1", IN_CARE),
+    null,
+  );
+});
+
+test("a listing that already disagreed does not block a reversal", () => {
+  const broken = [...sameDayFinal, intake("i3", "2026-10-10")];
+  assert.equal(evaluateOutcomeReversal(broken, "o1", archivedBy("o2")), null);
+});
+
+test("a day moved earlier is refused by name when it makes the final outcome's day read as a return", () => {
+  // Arrived Jul 1, back Aug 1 after a reversed Jul 20 departure, left Sep 1,
+  // back Oct 1 and adopted that day, which archived it.
+  const zeroDayFinal = [
+    intake("i1", "2026-07-01"),
+    intake("i2", "2026-08-01"),
+    outcome("o1", "2026-09-01"),
+    intake("i3", "2026-10-01"),
+    outcome("o2", "2026-10-01"),
+  ];
+  // Either change leaves a stay open going into Oct 1.
+  assert.equal(
+    gate(zeroDayFinal, { kind: "moveOutcome", outcomeId: "o1", day: day("2026-07-15") }, archivedBy("o2")),
+    "The outcome date can't be Jul 15, 2026: the intake on Oct 1, 2026 would then read as a return after this animal's latest outcome that same day, and its record would say it is back in care. If the animal never left before that day, that intake repeats its arrival: correct it to an earlier day first.",
+  );
+  assert.equal(
+    gate(zeroDayFinal, { kind: "moveIntake", intakeId: "i2", day: day("2026-09-15") }, archivedBy("o2")),
+    "The intake date can't be Sep 15, 2026: the intake on Oct 1, 2026 would then read as a return after this animal's latest outcome that same day, and its record would say it is back in care. If the animal never left before that day, that intake repeats its arrival: correct it to an earlier day first.",
+  );
+});
+
+test("an outcome on a duplicate intake's day is refused until that intake is moved earlier", () => {
+  const duplicateToday = [intake("i1", "2026-08-01"), intake("i2", "2026-11-14")];
+  assert.equal(
+    gate(duplicateToday, { kind: "addOutcome", day: day("2026-11-14") }, IN_CARE),
+    "The outcome date can't be on or before this animal's latest intake on Nov 14, 2026: that intake repeats an earlier one, with no outcome recorded between them, so the outcome would read as coming before it. The animal never left, so that intake marks no real return: correct it to an earlier day, or date the outcome later.",
+  );
+  const moved = [intake("i1", "2026-08-01"), intake("i2", "2026-11-01")];
+  assert.equal(
+    gate(moved, { kind: "addOutcome", day: day("2026-11-14") }, IN_CARE),
+    null,
   );
 });

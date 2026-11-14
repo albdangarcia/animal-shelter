@@ -52,6 +52,24 @@ Control)".
 - **"The intake date can't be before the previous outcome on Nov 3, 2026."**
   This is a return. The animal came back after it last left, so pick that
   day or a later one.
+- **"The intake date can't be after this animal's latest outcome on Nov 3,
+  2026."** (it may say "on or after") The animal's record is archived by
+  that outcome: it left for good on that day, so every intake comes before
+  it. Pick an earlier day. If the animal really came back after it, record
+  that as a return: see
+  [Take back an animal that left](./take-back-an-animal-that-left.md).
+- **"The intake date can't be Sep 15, 2026: the intake on Oct 1, 2026
+  would then read as a return after this animal's latest outcome that same
+  day…"** (with the days) With this intake on the new day, nothing on the
+  record says the animal left between it and that later day, so the later
+  intake reads as coming back after the animal left for good.
+  - If the animal stayed in care until that later day, that intake repeats
+    its arrival. Move it to an earlier day first (one after the day you are
+    picking here), then make this change.
+  - If the animal did leave again before that day, that departure is
+    missing from its record, and an outcome can't be added between two
+    intakes. Keep this intake's day as it was, and write the right day in
+    its **Notes**.
 - **"The intake date can't be Nov 14, 2026: this animal already has an
   intake and an outcome that day, and a day can hold only one of each."**
   (with the day; it may say "an intake" or "an outcome" alone) Pick another

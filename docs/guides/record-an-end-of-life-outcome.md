@@ -3,7 +3,7 @@ title: Record an end-of-life outcome and add missing details later
 summary: Record a euthanasia or a death with its medical details, add the details to an outcome recorded without them, and correct them.
 permissions: [OUTCOMES_MANAGE]
 aliases: [euthanasia, put to sleep, animal died, found dead, death record, cause of death, necropsy, body disposition, late euthanasia paperwork]
-related: [correct-or-void-an-entry, upload-and-manage-medical-documents, medical-status-glossary]
+related: [correct-or-void-an-entry, upload-and-manage-medical-documents, medical-status-glossary, correct-an-intake]
 verified: 2026-11-14
 ---
 
@@ -104,6 +104,34 @@ reverses it from the **Outcomes** list, and the animal is back in care.
 
 ## If something goes wrong
 
+- **"The outcome date can't be before this animal's latest intake on Nov
+  3, 2026."** (it may name its latest outcome instead) The outcome archives
+  the animal, so it has to come after every intake and outcome on its
+  record. Pick a day after the one named. If the animal really died before
+  that day, the records dated after the death are the ones that are wrong:
+  an admin reverses any outcome that never happened, someone who can
+  correct intakes moves the intakes dated after the death to before it, and
+  then you record this outcome.
+- **"The outcome date can't be on or before this animal's latest intake on
+  Nov 14, 2026: that intake repeats an earlier one…"** An earlier outcome
+  was reversed, so the animal never left, and that intake doesn't record a
+  real return: it repeats the arrival, and its day doesn't matter. Pick a
+  later day, or, if the outcome happened that day, ask someone who can
+  correct intakes to move that intake to an earlier day, then record the
+  outcome.
+- **"The outcome date can't be Jul 15, 2026: the intake on Oct 1, 2026
+  would then read as a return after this animal's latest outcome that same
+  day…"** (on **Edit Outcome**, with the days) With this outcome on the new
+  day, nothing on the record says the animal left between its return and
+  that later day, so the later intake reads as coming back after it left
+  for good.
+  - If the animal stayed in care until that later day, that intake repeats
+    its arrival. Ask someone who can correct intakes to move it to an
+    earlier day, then save this outcome again.
+  - If the animal did leave again before that day, that departure is
+    missing from its record, and an outcome can't be added between two
+    intakes. Keep this outcome's day as it was, and write the right day in
+    its **Notes**.
 - **"Pick a reason category."**, **"Pick who authorized it."**, **"The drug
   is required."**, **"The dose with its unit is required."** or **"The route
   is required."** Fill in every field marked with *.

@@ -485,6 +485,41 @@ test("an existing duplicate intake does not block a harmless move", async () => 
   await assertNoListingMismatch(animalId);
 });
 
+test("an intake can't be moved past the outcome that archived the animal", async () => {
+  // Left Sep 1, which was reversed, and left for good Oct 1: the Sep 10
+  // intake duplicates the arrival. Moved past Oct 1 it closes that break, so
+  // the order alone accepts it, and the archived animal's timeline would end
+  // on an intake.
+  const { animalId, intakeIds } = await makeAnimal("Past archive", [
+    { intake: "2026-08-01" },
+    { outcome: "2026-09-01", reversed: true },
+    { intake: "2026-09-10" },
+    { outcome: "2026-10-01" },
+  ]);
+
+  const result = await correct(
+    intakeIds[1],
+    await submission(intakeIds[1], { intakeDate: "2026-10-05" }),
+  );
+  assert.deepEqual(result, {
+    status: "refused",
+    animalId,
+    message:
+      "The intake date can't be after this animal's latest outcome on Oct 1, 2026.",
+  });
+  assert.equal((await readIntake(intakeIds[1])).intakeDate, "2026-09-10");
+  assert.equal((await correctionRows(animalId)).length, 0);
+  await assertNoListingMismatch(animalId);
+
+  // Within the archived stay, it moves.
+  const within = await correct(
+    intakeIds[1],
+    await submission(intakeIds[1], { intakeDate: "2026-09-20" }),
+  );
+  assert.equal(within.status, "corrected");
+  await assertNoListingMismatch(animalId);
+});
+
 test("the gate takes each kind of change", async () => {
   const { animalId, intakeIds, outcomeIds } = await makeAnimal("Gate", [
     { intake: "2026-01-01" },
