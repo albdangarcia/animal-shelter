@@ -32,6 +32,8 @@ import { findMedicalStatus } from "./medical-status";
 import { findCareStatus } from "./care-status";
 import { findColorOptions, findSpeciesOptions } from "./taxonomy-options";
 import type { CareStatus } from "@/app/lib/utils/care-status";
+// Null for an animal in care. The re-intake service refuses on the same read.
+import { findStayEndingDeath } from "@/app/lib/services/archiving-outcome";
 
 // data for the animals table in the dashboard
 const _fetchAnimals = async (
@@ -258,11 +260,13 @@ const _fetchSectionCardsAnimalData = async (
     }
 
     const today = await getShelterToday();
-    const [statuses, medicalStatus, careStatus] = await Promise.all([
-      effectiveApplicationStatuses(animal.adoptionApplications),
-      findMedicalStatus(prisma, animal.id, today),
-      findCareStatus(prisma, [animal.id], today),
-    ]);
+    const [statuses, medicalStatus, careStatus, stayEndingDeath] =
+      await Promise.all([
+        effectiveApplicationStatuses(animal.adoptionApplications),
+        findMedicalStatus(prisma, animal.id, today),
+        findCareStatus(prisma, [animal.id], today),
+        findStayEndingDeath(prisma, animal.id),
+      ]);
     return {
       ...animal,
       adoptionApplications: animal.adoptionApplications.map((application) => ({
@@ -271,6 +275,7 @@ const _fetchSectionCardsAnimalData = async (
       })),
       medicalStatus,
       careStatus: careStatus.get(animal.id)!,
+      stayEndingDeath,
     };
   } catch (error) {
     console.error("Error fetching animal by ID.", error);
@@ -478,7 +483,11 @@ const _fetchAnimalForReIntake = async (
         listingStatus: true,
       },
     });
-    return animal;
+    if (!animal) return null;
+    return {
+      ...animal,
+      stayEndingDeath: await findStayEndingDeath(prisma, animal.id),
+    };
   } catch (error) {
     console.error("Error fetching animal for re-intake form.", error);
     throw new Error("Error fetching animal data for re-intake.");

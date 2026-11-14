@@ -4,7 +4,7 @@ summary: Record a euthanasia or a death with its medical details, add the detail
 permissions: [OUTCOMES_MANAGE]
 aliases: [euthanasia, put to sleep, animal died, found dead, death record, cause of death, necropsy, body disposition, late euthanasia paperwork]
 related: [correct-or-void-an-entry, upload-and-manage-medical-documents, medical-status-glossary]
-verified: 2026-11-10
+verified: 2026-11-14
 ---
 
 ## When to use this
@@ -96,6 +96,11 @@ unknown → Communal cremation".
 These entries can't be edited or voided from **History**. An outcome
 recorded against the wrong animal, or of the wrong type, is reversed by an
 admin, which also voids its medical entry.
+
+After a death or a euthanasia the animal can't be taken back in: its page
+shows "Outcome: Deceased" (or "Outcome: Euthanized") where **Create
+Re-Intake** would be. If the outcome was recorded by mistake, an admin
+reverses it from the **Outcomes** list, and the animal is back in care.
 
 ## If something goes wrong
 

@@ -19,6 +19,10 @@ import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { fetchReIntakeProtocolPreview } from "@/app/lib/data/medical-protocol.data";
 import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
 import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import {
+  deathOutcomeLabel,
+  DEATH_REVERSAL_HINT,
+} from "@/app/lib/utils/death-outcome";
 
 interface Props {
   params: IDParamType;
@@ -77,6 +81,39 @@ const PageContent = async ({ animalId }: { animalId: string }) => {
           <p>
             Re-intake is only available for animals that are no longer in the
             shelter (i.e., have an <strong>ARCHIVED</strong> status).
+          </p>
+        </ActionBlockedMessage>
+      </main>
+    );
+  }
+
+  // An animal that died can't come back; the service refuses it too. A death
+  // recorded by mistake is reversed, which puts the animal back in care.
+  if (animal.stayEndingDeath) {
+    return (
+      <main className="container mx-auto">
+        <Button asChild variant="ghost" className="mb-4">
+          <Link href={`/dashboard/animals/${animalId}`}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Animal Profile
+          </Link>
+        </Button>
+
+        <ActionBlockedMessage
+          icon={TriangleAlert}
+          title="Cannot Process Re-Intake"
+        >
+          <p>
+            This animal, <strong>{animal.name}</strong>, can&apos;t be processed
+            for re-intake because its outcome was{" "}
+            <span className="font-semibold">
+              {deathOutcomeLabel(animal.stayEndingDeath)}
+            </span>
+            .
+          </p>
+          <p>
+            An animal that has died can&apos;t be taken back in.{" "}
+            {DEATH_REVERSAL_HINT}
           </p>
         </ActionBlockedMessage>
       </main>
