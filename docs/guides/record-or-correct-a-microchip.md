@@ -3,7 +3,7 @@ title: Record or correct a microchip
 summary: Record a chip implanted here or found on a scan, its registration, and fix a wrong number or registry.
 permissions: [MEDICAL_MANAGE, MEDICAL_ADMINISTER]
 aliases: [add a microchip, chip number, scanned a chip, register a chip, chip registry, wrong chip number, update chip registration]
-related: [record-reschedule-or-decline-scheduled-care, correct-or-void-an-entry, medical-status-glossary, print-the-adopter-history-and-rabies-certificate]
+related: [record-reschedule-or-decline-scheduled-care, correct-or-void-an-entry, medical-status-glossary, print-the-adopter-history-and-rabies-certificate, take-in-a-new-animal]
 verified: 2026-11-10
 ---
 

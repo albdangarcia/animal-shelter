@@ -10,6 +10,8 @@ import { fetchColors, fetchPartners, fetchSpecies } from "@/app/lib/data/animals
 import { fetchUnitPickerOptions } from "@/app/lib/data/locations/unit-picker.data";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { fetchIntakeProtocols } from "@/app/lib/data/medical-protocol.data";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 const Page = async () => {
   return (
@@ -30,6 +32,7 @@ const PageContent = async () => {
     unitOptions,
     canCreatePerson,
     canManageMedical,
+    help,
   ] = await Promise.all([
     fetchPartners(),
     fetchColors(),
@@ -37,6 +40,7 @@ const PageContent = async () => {
     fetchUnitPickerOptions(),
     hasPermission(AppPermissions.PERSONS_MANAGE),
     hasPermission(AppPermissions.MEDICAL_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.animalCreate),
   ]);
 
   // Only someone who may manage medical care sees the protocol and may leave
@@ -55,6 +59,7 @@ const PageContent = async () => {
         canManageMedical={canManageMedical}
         protocols={protocols}
         today={await getShelterToday()}
+        help={help}
       />
     </main>
   );

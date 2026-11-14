@@ -17,6 +17,8 @@ import ActionBlockedMessage from "@/components/action-blocked-message";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { fetchReIntakeProtocolPreview } from "@/app/lib/data/medical-protocol.data";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   params: IDParamType;
@@ -36,12 +38,14 @@ const Page = async ({ params }: Props) => {
 };
 
 const PageContent = async ({ animalId }: { animalId: string }) => {
-  const [animal, partners, canCreatePerson, canManageMedical] = await Promise.all([
-    fetchAnimalForReIntake(animalId),
-    fetchPartners(),
-    hasPermission(AppPermissions.PERSONS_MANAGE),
-    hasPermission(AppPermissions.MEDICAL_MANAGE),
-  ]);
+  const [animal, partners, canCreatePerson, canManageMedical, help] =
+    await Promise.all([
+      fetchAnimalForReIntake(animalId),
+      fetchPartners(),
+      hasPermission(AppPermissions.PERSONS_MANAGE),
+      hasPermission(AppPermissions.MEDICAL_MANAGE),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.animalReIntake),
+    ]);
 
   if (!animal) {
     return notFound();
@@ -100,6 +104,7 @@ const PageContent = async ({ animalId }: { animalId: string }) => {
         canCreatePerson={canCreatePerson}
         protocolPreview={protocolPreview}
         today={await getShelterToday()}
+        help={help}
       />
     </main>
   );
