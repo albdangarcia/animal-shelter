@@ -14,14 +14,16 @@ import { isDeathOutcome, type DeathOutcome } from "@/app/lib/utils/death-outcome
  * Only an outcome archives an animal, and an archived animal can't be given
  * another. So while the animal is archived, the outcome that archived it is
  * the live one recorded last. A re-intake or a reversal of this outcome is
- * meant to be the only way back out. Not yet: a foster placement checks the
- * timeline rather than the listing, so an archived animal whose timeline ends
- * on an intake can be placed, and a foster-to-adopt placement then lists it
- * as pending adoption. Being fixed separately (refuse a placement for an
- * archived animal); until then that path bypasses the death check. Recorded last, not dated last: a later write can date an
- * outcome before ones already on the timeline (an outcome recorded on a day
- * that a reversal left open, say), and the day order would then name an
- * outcome from a stay the animal came back from.
+ * the only way back out: a foster placement refuses an archived animal
+ * (`recordFosterPlacement`).
+ *
+ * Recorded last, and since the timeline gate's listing check
+ * (`evaluateListingAgreement`) also dated last: an outcome that archives the
+ * animal must come after every other intake and outcome. Rows written before
+ * that check can still hold an archiving outcome dated before a later stay
+ * (one recorded on a day a reversal left open, say), and the day order would
+ * then name an outcome from a stay the animal came back from. The order
+ * recorded is right for those too.
  *
  * Has no `next/*` and no auth imports, so a plain `node:test` can drive it.
  * A caller that acts on the answer reads it behind `lockAnimal`.

@@ -31,7 +31,7 @@ import { recordReIntake } from "@/app/lib/services/intake-recording";
 import { findStayEndingDeath } from "@/app/lib/services/archiving-outcome";
 import { OutcomeFormSchema } from "@/app/lib/zod-schemas/outcome.schema";
 import { ReIntakeFormSchema } from "@/app/lib/zod-schemas/intake.schema";
-import { ConflictError } from "@/app/lib/utils/errors";
+import { ConflictError, TimelineOrderError } from "@/app/lib/utils/errors";
 import { assertNoListingMismatch } from "./listing-consistency";
 
 const runId = Date.now().toString(36);
@@ -389,10 +389,12 @@ test("an animal that came back once and then died is refused", async () => {
 
 // The death archived the animal although it is dated before outcomes already
 // on its timeline. Reversing an outcome in the middle of the timeline leaves
-// its day open, and an outcome recorded into that gap is accepted, since it
-// mends the break rather than adding one. The outcome that archived the
-// animal is the one recorded last, not the one dated last, and that is the
-// one read, as a reversal reads it.
+// its day open, and an outcome recorded into that gap used to be accepted,
+// since it mends the break rather than adding one. Recording one is refused
+// now (see outcome-recording.test.ts), so the death is written as the rows
+// that rule left behind. The outcome that archived the animal is the one
+// recorded last, not the one dated last, and that is the one read, as a
+// reversal reads it.
 test("a death dated before the animal's later stays is still refused, and reversing it un-archives", async () => {
   const animalId = await makeAnimal("Died into a reversed gap");
   const firstLeft = await leave(animalId, OutcomeType.OTHER);
@@ -401,7 +403,32 @@ test("a death dated before the animal's later stays is still refused, and revers
   await reIntake(animalId, "2026-10-10");
   // In care, so the listing is left alone.
   assert.equal((await reverse(firstLeft)).restoredListingStatus, null);
-  const deathId = await leave(animalId, OutcomeType.DECEASED, "2026-08-15");
+  await assert.rejects(
+    leave(animalId, OutcomeType.DECEASED, "2026-08-15"),
+    (error: unknown) =>
+      error instanceof TimelineOrderError &&
+      error.message ===
+        "The outcome date can't be before this animal's latest intake on Oct 10, 2026.",
+  );
+  const deathId = (
+    await prisma.outcome.create({
+      data: {
+        animalId,
+        type: OutcomeType.DECEASED,
+        outcomeDate: "2026-08-15",
+        previousListingStatus: AnimalListingStatus.DRAFT,
+        staffMemberId: staffId,
+      },
+      select: { id: true },
+    })
+  ).id;
+  await prisma.animal.update({
+    where: { id: animalId },
+    data: {
+      listingStatus: AnimalListingStatus.ARCHIVED,
+      archiveReason: OutcomeType.DECEASED,
+    },
+  });
 
   const before = await readAnimal(animalId);
   assert.equal(before.listingStatus, AnimalListingStatus.ARCHIVED);

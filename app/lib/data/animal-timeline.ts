@@ -4,6 +4,7 @@
 
 import {
   computeStays,
+  findListingMismatch,
   findTimelineBreaks,
   orderStayEvents,
   type Stay,
@@ -214,6 +215,199 @@ export function evaluateTimelineChange(
   }
 
   return `The ${noun} date would put this animal's intakes and outcomes out of order.`;
+}
+
+/**
+ * Where the animal's listing says it is, as `evaluateListingAgreement` reads
+ * it: archived or not, and when archived, the live outcome that archived it
+ * (the latest one recorded), if it has one.
+ */
+export type ListingState = {
+  archived: boolean;
+  archivingOutcomeRef: string | null;
+};
+
+// Whether the listing and the timeline agree. The timeline must say the
+// animal is where its listing says (`findListingMismatch`), and an archived
+// animal's timeline must end on the day of the outcome that archived it: no
+// event may be dated after the animal's last departure.
+const listingAgrees = (
+  events: readonly TimelineEvent[],
+  listing: ListingState,
+): boolean => {
+  if (findListingMismatch(events, listing.archived)) return false;
+  if (!listing.archived) return true;
+  const archiving = events.find(
+    (event) =>
+      event.kind === "outcome" && event.ref === listing.archivingOutcomeRef,
+  );
+  return !archiving || events.every((event) => event.date <= archiving.date);
+};
+
+/**
+ * Whether `change` keeps the animal's listing agreeing with its timeline.
+ * Returns null when it does, or a refusal for staff naming the event the day
+ * would have to stay clear of.
+ *
+ * `evaluateTimelineChange` counts breaks, and a timeline can hold one
+ * truthfully: reversing an outcome that is not the latest leaves two intakes
+ * in a row. A day dated into that gap removes the break, so the order alone
+ * accepts it. But recording an outcome archives the animal whatever its day,
+ * so an outcome dated before a later return would leave an archived animal
+ * whose timeline ends on an intake, and a reversal or a re-intake would then
+ * read the wrong outcome as the one that archived it. So:
+ *  - recording an outcome archives the animal by it, so the outcome must come
+ *    after every other intake and outcome on the timeline (its day may be the
+ *    latest one's day, when the order reads it as after);
+ *  - correcting the outcome that archived the animal may not move it before
+ *    any of them, and correcting another intake or outcome may not move it
+ *    after that outcome;
+ *  - for an animal in care, no change may leave its timeline ending on an
+ *    outcome, and a re-intake must come after its last outcome.
+ *
+ * `listing` is the listing before the change, read behind the animal's lock.
+ * An outcome being recorded is taken to archive an animal that was not
+ * archived, and a re-intake to take an archived one out, whatever `listing`
+ * says: a writer may already have written the listing it is about to justify.
+ *
+ * As with the breaks, only a change that makes them disagree is refused. A
+ * listing that already disagreed is not this change's doing, and must not
+ * block an unrelated fix.
+ *
+ * Call it once `evaluateTimelineChange` has accepted the change.
+ */
+export function evaluateListingAgreement(
+  events: readonly TimelineEvent[],
+  change: TimelineChange,
+  listing: ListingState,
+): string | null {
+  const { before, after, subject } = applyTimelineChange(events, change);
+  const listedBefore: ListingState =
+    change.kind === "addOutcome"
+      ? { archived: false, archivingOutcomeRef: null }
+      : change.kind === "addIntake"
+        ? { ...listing, archived: true }
+        : listing;
+  const listedAfter: ListingState =
+    change.kind === "addOutcome"
+      ? { archived: true, archivingOutcomeRef: NEW_EVENT_REF }
+      : change.kind === "addIntake"
+        ? { archived: false, archivingOutcomeRef: null }
+        : listing;
+
+  if (!listingAgrees(before, listedBefore) || listingAgrees(after, listedAfter)) {
+    return null;
+  }
+
+  const noun = subject.kind;
+  const generic = `The ${noun} date would put this animal's intakes and outcomes out of order.`;
+  // Only an archived animal gets here. Making an in-care timeline end on an
+  // outcome always adds a break, which `evaluateTimelineChange` refuses first.
+  const archiving = after.find(
+    (event) =>
+      event.kind === "outcome" &&
+      event.ref === listedAfter.archivingOutcomeRef,
+  );
+  if (!listedAfter.archived || !archiving) {
+    return generic;
+  }
+
+  if (subject === archiving) {
+    // The archiving outcome has to be the timeline's last event.
+    const bound = orderStayEvents(after)
+      .filter((event) => event !== subject)
+      .at(-1);
+    if (!bound) {
+      return generic;
+    }
+    if (bound.date !== change.day) {
+      return `The outcome date can't be before this animal's latest ${
+        bound.kind
+      } on ${formatShelterDay(bound.date)}.`;
+    }
+    // On its own day the outcome is refused only when that day's intake
+    // reads as after it: when a stay was already open going into the day,
+    // because the intake repeats an earlier one with no outcome between
+    // them. Moving that intake to an earlier day lets the outcome through.
+    return `The outcome date can't be on or before this animal's latest intake on ${formatShelterDay(
+      bound.date,
+    )}: that intake repeats an earlier one, with no outcome recorded between them, so the outcome would read as coming before it. The animal never left, so that intake marks no real return: correct it to an earlier day, or date the outcome later.`;
+  }
+
+  // Nothing else may come after the archiving outcome.
+  if (change.day >= archiving.date) {
+    const relation = change.day === archiving.date ? "on or after" : "after";
+    return `The ${noun} date can't be ${relation} this animal's latest outcome on ${formatShelterDay(
+      archiving.date,
+    )}.`;
+  }
+  // The day is earlier than that outcome, but it changed whether a stay is
+  // open going into the outcome's day, and so the order that day is read in:
+  // an intake on it now reads as a return after the outcome.
+  const mismatch = findListingMismatch(after, true);
+  if (mismatch?.kind === "here-but-archived") {
+    return `The ${noun} date can't be ${formatShelterDay(
+      change.day,
+    )}: the intake on ${formatShelterDay(
+      mismatch.lastEvent.date,
+    )} would then read as a return after this animal's latest outcome that same day, and its record would say it is back in care. If the animal never left before that day, that intake repeats its arrival: correct it to an earlier day first.`;
+  }
+  return generic;
+}
+
+/**
+ * Whether reversing the outcome `outcomeId` keeps the animal's listing
+ * agreeing with its timeline. Returns null when it does, or a refusal for
+ * staff.
+ *
+ * A reversal is not passed through `evaluateTimelineChange`: reversing an
+ * outcome that is not the latest leaves two intakes in a row, and that is the
+ * truthful record. But it must not leave the listing saying one thing and the
+ * timeline another. Reversing the outcome that archived the animal takes it
+ * out of the archive and only removes the last event, so it is not judged.
+ * Reversing an earlier one leaves the animal archived, and can make
+ * the timeline read as in care: when the outcome that archived the animal
+ * shares its day with an intake, which comes first that day is read from
+ * whether a stay was open before it. With the earlier departure gone, the
+ * stay is open, so the intake reads as a return after the final outcome.
+ *
+ * `listing` is the listing before the reversal, read behind the animal's
+ * lock. As with the other checks, a listing that already disagreed does not
+ * block the reversal.
+ */
+export function evaluateOutcomeReversal(
+  events: readonly TimelineEvent[],
+  outcomeId: string,
+  listing: ListingState,
+): string | null {
+  // Reversing the outcome that archived the animal restores its listing and
+  // removes the timeline's last event, so it is not judged here: whatever
+  // the timeline then says, the animal is back where it was before that
+  // outcome, and an animal with no intake on record is left alone.
+  if (listing.archived && listing.archivingOutcomeRef === outcomeId) {
+    return null;
+  }
+  const after = events.filter(
+    (event) => !(event.kind === "outcome" && event.ref === outcomeId),
+  );
+  const listedAfter = listing;
+  if (!listingAgrees(events, listing) || listingAgrees(after, listedAfter)) {
+    return null;
+  }
+
+  const mismatch = findListingMismatch(after, listedAfter.archived);
+  const archiving = after.find(
+    (event) =>
+      event.kind === "outcome" && event.ref === listedAfter.archivingOutcomeRef,
+  );
+  // Removing an outcome only adds a disagreement through the order of the
+  // archiving outcome's own day, so the intake is on that day.
+  if (mismatch?.kind === "here-but-archived" && archiving) {
+    return `This outcome can't be reversed: without it, the intake on ${formatShelterDay(
+      mismatch.lastEvent.date,
+    )} would read as a return after this animal's latest outcome that same day, and its record would say it is back in care. If this outcome never happened, the animal never left, so that intake repeats its arrival: correct it to an earlier day first, then reverse this outcome.`;
+  }
+  return "This outcome can't be reversed: without it, this animal's intakes and outcomes would no longer agree with its listing.";
 }
 
 /**

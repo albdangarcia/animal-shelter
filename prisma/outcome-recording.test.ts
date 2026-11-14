@@ -27,12 +27,21 @@ import {
   recordOutcomeCorrection,
 } from "@/app/lib/services/outcome-recording";
 import { recordOutcomeReversal } from "@/app/lib/services/outcome-reversal";
+import {
+  recordIntakeCorrection,
+  toIntakeCorrectionValues,
+} from "@/app/lib/services/intake-correction";
+import { IntakeCorrectionFormSchema } from "@/app/lib/zod-schemas/intake.schema";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import {
   OutcomeFormSchema,
   type OutcomeFormOutput,
 } from "@/app/lib/zod-schemas/outcome.schema";
-import { shiftDayKey, shelterToday } from "@/app/lib/utils/shelter-day";
+import {
+  formatShelterDay,
+  shiftDayKey,
+  shelterToday,
+} from "@/app/lib/utils/shelter-day";
 import { fallbackShelterSettings } from "@/app/lib/utils/shelter-settings";
 import {
   ConflictError,
@@ -663,6 +672,257 @@ test("an animal left with a duplicate intake by a reversal can have a later outc
   assert.deepEqual(
     animal.outcomes.map((outcome) => outcome.outcomeDate),
     ["2026-04-01", "2026-06-01"],
+  );
+  await assertNoListingMismatch(animalId);
+});
+
+/**
+ * Arrived Aug 1, left Sep 1, came back Sep 10, left Oct 1, came back Oct 10,
+ * and then an admin reversed the Sep 1 outcome. The animal is in care, so the
+ * reversal left its listing alone, and its timeline has a gap: the Sep 10
+ * intake duplicates the arrival.
+ */
+const makeGapAnimal = async (label: string) => {
+  const made = await makeAnimal(label, [
+    { intake: "2026-08-01" },
+    { outcome: "2026-09-01" },
+    { intake: "2026-09-10" },
+    { outcome: "2026-10-01" },
+    { intake: "2026-10-10" },
+  ]);
+  const reversal = await prisma.$transaction((tx) =>
+    recordOutcomeReversal(
+      tx,
+      made.outcomeIds[0],
+      "Entered against the wrong animal.",
+      staffId,
+    ),
+  );
+  assert.equal(reversal.restoredListingStatus, null);
+  return made;
+};
+
+/**
+ * Corrects an intake's day through the intake-correction service, the way
+ * the Edit Intake form submits it: the stored type and notes, with a found
+ * location in case the intake is a stray.
+ */
+const correctIntakeDay = async (intakeId: string, intakeDate: string) => {
+  const stored = await prisma.intake.findUniqueOrThrow({
+    where: { id: intakeId },
+    select: { type: true, notes: true },
+  });
+  return prisma.$transaction((tx) =>
+    recordIntakeCorrection(
+      tx,
+      intakeId,
+      toIntakeCorrectionValues(
+        IntakeCorrectionFormSchema.parse({
+          intakeType: stored.type,
+          intakeDate,
+          notes: stored.notes ?? "",
+          sourcePartnerId: "",
+          surrenderingPersonId: "",
+          foundAddress: "1 Elm St",
+          foundCity: "Springfield",
+          foundState: "IL",
+        }),
+      ),
+      staffId,
+    ),
+  );
+};
+
+const activityTypes = async (animalId: string) =>
+  (await readAnimal(animalId)).activityLogs.map((row) => row.activityType);
+
+test("an outcome dated into a reversal's gap is refused, since the animal came back after it", async () => {
+  const { animalId } = await makeGapAnimal("Gap outcome");
+
+  // Dated into the gap it closes the break, so the order alone accepts it,
+  // and the animal would be archived with its timeline ending on Oct 10.
+  await assert.rejects(
+    record(animalId, "2026-08-15"),
+    refusedFor(
+      "The outcome date can't be before this animal's latest intake on Oct 10, 2026.",
+    ),
+  );
+  let animal = await readAnimal(animalId);
+  assert.equal(animal.listingStatus, AnimalListingStatus.DRAFT);
+  assert.deepEqual(
+    animal.outcomes.map((outcome) => outcome.outcomeDate),
+    ["2026-10-01"],
+  );
+  assert.deepEqual(await activityTypes(animalId), [
+    AnimalActivityType.OUTCOME_REVERSED,
+  ]);
+  await assertNoListingMismatch(animalId);
+
+  // On the latest intake's day, or after it, the animal can leave.
+  await record(animalId, "2026-10-10");
+  animal = await readAnimal(animalId);
+  assert.equal(animal.listingStatus, AnimalListingStatus.ARCHIVED);
+  assert.deepEqual(
+    animal.outcomes.map((outcome) => outcome.outcomeDate),
+    ["2026-10-01", "2026-10-10"],
+  );
+  await assertNoListingMismatch(animalId);
+});
+
+test("an outcome recorded before a same-day return is refused", async () => {
+  // Left Oct 1 and came back that day. Dated Sep 1, the outcome would read
+  // the Oct 1 pair as a zero-day stay after the animal had left for good.
+  const { animalId } = await makeAnimal("Before same-day return", [
+    { intake: "2026-08-01" },
+    { outcome: "2026-10-01" },
+    { intake: "2026-10-01" },
+  ]);
+
+  await assert.rejects(
+    record(animalId, "2026-09-01"),
+    refusedFor(
+      "The outcome date can't be before this animal's latest outcome on Oct 1, 2026.",
+    ),
+  );
+  const animal = await readAnimal(animalId);
+  assert.equal(animal.listingStatus, AnimalListingStatus.DRAFT);
+  assert.equal(animal.outcomes.length, 1);
+  assert.deepEqual(animal.activityLogs, []);
+  await assertNoListingMismatch(animalId);
+});
+
+test("the outcome that archived the animal can't be corrected to before its latest intake", async () => {
+  const { animalId } = await makeGapAnimal("Gap correction");
+  await record(animalId, "2026-10-20");
+  const archiving = (await readAnimal(animalId)).outcomes[1];
+  assert.equal(archiving.outcomeDate, "2026-10-20");
+
+  await assert.rejects(
+    recordOutcomeCorrection(archiving.id, deceased("2026-08-15"), staffId),
+    refusedFor(
+      "The outcome date can't be before this animal's latest intake on Oct 10, 2026.",
+    ),
+  );
+  let animal = await readAnimal(animalId);
+  assert.equal(animal.outcomes[1].outcomeDate, "2026-10-20");
+  assert.ok(
+    !(await activityTypes(animalId)).includes(
+      AnimalActivityType.OUTCOME_CORRECTED,
+    ),
+  );
+  await assertNoListingMismatch(animalId);
+
+  const result = await recordOutcomeCorrection(
+    archiving.id,
+    deceased("2026-10-12"),
+    staffId,
+  );
+  assert.equal(result.status, "corrected");
+  animal = await readAnimal(animalId);
+  assert.equal(animal.outcomes[1].outcomeDate, "2026-10-12");
+  assert.equal(animal.listingStatus, AnimalListingStatus.ARCHIVED);
+  await assertNoListingMismatch(animalId);
+});
+
+test("the outcome that archived the animal can't be corrected onto a duplicate intake's day", async () => {
+  // Archived Oct 1, with the Sep 1 outcome reversed. On Sep 10, with the
+  // stay open since Aug 1, the outcome reads as before that day's intake.
+  const { animalId, outcomeIds } = await makeAnimal("Onto duplicate", [
+    { intake: "2026-08-01" },
+    { outcome: "2026-09-01", reversed: true },
+    { intake: "2026-09-10" },
+    { outcome: "2026-10-01" },
+  ]);
+
+  await assert.rejects(
+    recordOutcomeCorrection(outcomeIds[1], deceased("2026-09-10"), staffId),
+    refusedFor(
+      "The outcome date can't be on or before this animal's latest intake on Sep 10, 2026: that intake repeats an earlier one, with no outcome recorded between them, so the outcome would read as coming before it. The animal never left, so that intake marks no real return: correct it to an earlier day, or date the outcome later.",
+    ),
+  );
+  const animal = await readAnimal(animalId);
+  assert.equal(animal.outcomes[0].outcomeDate, "2026-10-01");
+  assert.deepEqual(animal.activityLogs, []);
+  await assertNoListingMismatch(animalId);
+});
+
+test("an earlier outcome moved back is refused by name when the final outcome's day would read as a return", async () => {
+  // Back Aug 1 after a reversed Jul 20 departure, left Sep 1, back Oct 1 and
+  // left again that day. Sep 1 moved to Jul 15 leaves a stay open into Oct 1.
+  const { animalId, outcomeIds } = await makeAnimal("Flips final day", [
+    { intake: "2026-07-01" },
+    { outcome: "2026-07-20", reversed: true },
+    { intake: "2026-08-01" },
+    { outcome: "2026-09-01" },
+    { intake: "2026-10-01" },
+    { outcome: "2026-10-01" },
+  ]);
+
+  await assert.rejects(
+    recordOutcomeCorrection(outcomeIds[1], deceased("2026-07-15"), staffId),
+    refusedFor(
+      "The outcome date can't be Jul 15, 2026: the intake on Oct 1, 2026 would then read as a return after this animal's latest outcome that same day, and its record would say it is back in care. If the animal never left before that day, that intake repeats its arrival: correct it to an earlier day first.",
+    ),
+  );
+  const animal = await readAnimal(animalId);
+  assert.equal(animal.outcomes[0].outcomeDate, "2026-09-01");
+  assert.deepEqual(animal.activityLogs, []);
+  await assertNoListingMismatch(animalId);
+});
+
+test("an animal whose latest intake is a duplicate dated today leaves once that intake is moved earlier", async () => {
+  const today = shiftDayKey(shelterToday(fallbackShelterSettings().timezone), 0);
+  const { animalId } = await makeAnimal("Duplicate today", [
+    { intake: "2026-08-01" },
+    { outcome: "2026-09-01", reversed: true },
+    { intake: today },
+  ]);
+
+  await assert.rejects(
+    record(animalId, today),
+    refusedFor(
+      `The outcome date can't be on or before this animal's latest intake on ${formatShelterDay(
+        today,
+      )}: that intake repeats an earlier one, with no outcome recorded between them, so the outcome would read as coming before it. The animal never left, so that intake marks no real return: correct it to an earlier day, or date the outcome later.`,
+    ),
+  );
+  assert.equal(
+    (await readAnimal(animalId)).listingStatus,
+    AnimalListingStatus.DRAFT,
+  );
+
+  // The step the refusal gives: correct that intake to an earlier day.
+  const duplicate = await prisma.intake.findFirstOrThrow({
+    where: { animalId, intakeDate: today },
+    select: { id: true },
+  });
+  const corrected = await correctIntakeDay(duplicate.id, "2026-09-10");
+  assert.equal(corrected.status, "corrected");
+  await record(animalId, today);
+  assert.equal(
+    (await readAnimal(animalId)).listingStatus,
+    AnimalListingStatus.ARCHIVED,
+  );
+  await assertNoListingMismatch(animalId);
+});
+
+test("an earlier outcome of an archived animal can still be corrected within its stay", async () => {
+  const { animalId, outcomeIds } = await makeAnimal("Earlier outcome", [
+    { intake: "2026-01-01" },
+    { outcome: "2026-02-01" },
+    { intake: "2026-03-01" },
+    { outcome: "2026-04-01" },
+  ]);
+
+  const result = await recordOutcomeCorrection(
+    outcomeIds[0],
+    deceased("2026-02-10"),
+    staffId,
+  );
+  assert.equal(result.status, "corrected");
+  assert.equal(
+    (await readAnimal(animalId)).outcomes[0].outcomeDate,
+    "2026-02-10",
   );
   await assertNoListingMismatch(animalId);
 });

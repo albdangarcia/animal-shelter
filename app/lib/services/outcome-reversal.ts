@@ -1,6 +1,7 @@
 import { voidOutcomeMedical } from "./outcome-medical";
 import type { TransactionClient } from "@/app/lib/prisma";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
+import { checkOutcomeReversal } from "@/app/lib/data/animal-timeline.data";
 import { findLiveUnitForPlacement } from "@/app/lib/services/unit-housing";
 import { findArchivingOutcome } from "@/app/lib/services/archiving-outcome";
 import {
@@ -155,6 +156,15 @@ export const recordOutcomeReversal = async (
   // is the truthful record: the animal never left, so the return duplicates
   // the arrival. It is not a date mistake to refuse. Removing the duplicate
   // is a matter of reversing that intake, not of blocking this reversal.
+  //
+  // What it must not do is leave the listing and the timeline disagreeing:
+  // an animal left archived whose timeline reads as in care, because the
+  // duplicate shares its day with the outcome that archived it. That is
+  // refused, before anything is written.
+  const disagreement = await checkOutcomeReversal(tx, animalId, outcomeId);
+  if (disagreement) {
+    throw new PreconditionFailedError(disagreement);
+  }
 
   // Guarded as well as checked above, so that nothing reaching this without
   // the lock can overwrite a reversal already recorded.
