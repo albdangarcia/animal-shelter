@@ -13,6 +13,8 @@ import {
   applyIntakeProtocol,
   type AppliedProtocol,
 } from "@/app/lib/services/medical-protocol-application";
+import { findStayEndingDeath } from "@/app/lib/services/archiving-outcome";
+import { deathRefusalMessage } from "@/app/lib/utils/death-outcome";
 
 /**
  * Re-intaking an animal that has left: a new stay, opened with an intake on
@@ -80,6 +82,15 @@ export const recordReIntake = async (
     throw new ConflictError(NOT_ARCHIVED_MESSAGE);
   }
 
+  // An animal that died can't come back. A death recorded by mistake is
+  // reversed instead, which puts the animal back in care with no intake, and
+  // from then on this no longer reads it. Read behind the lock a reversal
+  // also takes, and refused before the day for the same reason as above.
+  const death = await findStayEndingDeath(tx, animalId);
+  if (death) {
+    throw new ConflictError(deathRefusalMessage(death));
+  }
+
   const refusal = await checkTimelineChange(tx, animalId, {
     kind: "addIntake",
     day: intakeDate,
@@ -101,8 +112,13 @@ export const recordReIntake = async (
     },
   });
 
+  // Unreachable while the lock is held, so this is a fault, not a refusal:
+  // something changed the listing without the lock. Thrown as a plain Error
+  // so the action logs it, rather than passing it to staff as a refusal.
   if (updateResult.count === 0) {
-    throw new ConflictError(NOT_ARCHIVED_MESSAGE);
+    throw new Error(
+      "Re-intake guard tripped: the animal's listing changed without its lock.",
+    );
   }
 
   // Create a new Intake record for this event

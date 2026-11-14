@@ -110,7 +110,8 @@ type Event = { intake: string } | { outcome: string };
 
 /**
  * An animal with the given intakes and outcomes, listed as its last event
- * leaves it. Every outcome is a death, so it needs no partner or owner.
+ * leaves it. Every outcome is "Other", so it needs no partner or owner, and
+ * is not a death, which no re-intake may follow.
  */
 const makeAnimal = async (
   label: string,
@@ -128,7 +129,7 @@ const makeAnimal = async (
       listingStatus: archived
         ? AnimalListingStatus.ARCHIVED
         : AnimalListingStatus.DRAFT,
-      archiveReason: archived ? OutcomeType.DECEASED : null,
+      archiveReason: archived ? OutcomeType.OTHER : null,
     },
     select: { id: true },
   });
@@ -148,7 +149,7 @@ const makeAnimal = async (
         data: {
           animalId: animal.id,
           outcomeDate: event.outcome,
-          type: OutcomeType.DECEASED,
+          type: OutcomeType.OTHER,
           staffMemberId: staffId,
         },
         select: { id: true },
@@ -572,13 +573,13 @@ test("a re-intake reads an exemption on the day the animal came back, not on tod
       data: {
         animalId,
         outcomeDate: "2026-02-01",
-        type: OutcomeType.DECEASED,
+        type: OutcomeType.OTHER,
         staffMemberId: staffId,
       },
     });
     await prisma.animal.update({
       where: { id: animalId },
-      data: { listingStatus: AnimalListingStatus.ARCHIVED, archiveReason: OutcomeType.DECEASED },
+      data: { listingStatus: AnimalListingStatus.ARCHIVED, archiveReason: OutcomeType.OTHER },
     });
     return animalId;
   };

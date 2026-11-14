@@ -5,6 +5,7 @@ import type {
 } from "@/app/lib/utils/derive-application-status";
 import type { MedicalStatus } from "@/app/lib/data/animals/medical-status";
 import type { CareStatus } from "@/app/lib/utils/care-status";
+import type { DeathOutcome } from "@/app/lib/utils/death-outcome";
 
 export type SearchParamsType = Promise<{ [key: string]: string | undefined }>;
 export type IDParamType = Promise<{ id: string }>;
@@ -136,6 +137,9 @@ export type AnimalSectionCardPayload = Omit<
   // shelter's today: its open episode, a recent surgery, the exam or surgery
   // it awaits, and its allergies.
   careStatus: CareStatus;
+  // Deceased or Euthanized when the animal is archived by a death, which
+  // can't be followed by a re-intake. Null otherwise.
+  stayEndingDeath: DeathOutcome | null;
 };
 
 export type AnimalIntakeFormPayload = Prisma.AnimalGetPayload<{
@@ -421,7 +425,11 @@ export type AnimalReIntakeFormPayload = Prisma.AnimalGetPayload<{
     name: true;
     listingStatus: true;
   };
-}>;
+}> & {
+  // Deceased or Euthanized when the animal is archived by a death, which
+  // can't be followed by a re-intake. Null otherwise.
+  stayEndingDeath: DeathOutcome | null;
+};
 
 export type PeopleDirectoryPayload = Prisma.PersonGetPayload<{
   select: {

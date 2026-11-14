@@ -31,6 +31,7 @@ import { reverseOutcome } from "@/app/lib/actions/outcome.actions";
 import { REVERSAL_REASON_MAX_LENGTH } from "@/app/lib/zod-schemas/outcome.schema";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { OutcomeType } from "@/prisma/generated/enums";
+import { isDeathOutcome } from "@/app/lib/utils/death-outcome";
 import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
 
 interface DataTableRowActionsProps {
@@ -154,8 +155,11 @@ export function DataTableRowActions({
           <AlertDialogDescription asChild>
             <div className="space-y-2">
               <p>
-                This is for an outcome that should never have been recorded. If{" "}
-                {animalName} left and came back, record a re-intake instead.
+                This is for an outcome that should never have been recorded.
+                {/* An animal that died never came back, so there is no
+                    re-intake to point to. */}
+                {!isDeathOutcome(outcome.type) &&
+                  ` If ${animalName} left and came back, record a re-intake instead.`}
               </p>
               <p>
                 The outcome stays on the record, marked as reversed, and stops

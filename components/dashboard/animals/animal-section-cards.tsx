@@ -47,6 +47,10 @@ import Image from "next/image";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { FosterPlacementBanner } from "@/components/dashboard/animals/foster-placement-banner";
+import {
+  deathOutcomeLabel,
+  DEATH_REVERSAL_HINT,
+} from "@/app/lib/utils/death-outcome";
 
 // "Yes (spay)", "Exempt until Nov 3, 2026", "Exempt", "Intact" or "Not on
 // record". The Medical tab has the detail.
@@ -149,7 +153,10 @@ const AnimalSectionCards = async ({ params }: Props) => {
   const applicationCount = animal.adoptionApplications?.length || 0;
   const approvedApplications =
     animal.adoptionApplications?.filter((a) => a.status === "APPROVED") ?? [];
+  // Null for an animal that died: it can't come back, so there is no next
+  // step to offer, and the card says why in its place.
   const outcomeAction = (() => {
+    if (animal.stayEndingDeath) return null;
     if (animal.listingStatus === AnimalListingStatus.ARCHIVED) {
       return {
         href: `/dashboard/animals/${animal.id}/intake/create`,
@@ -302,29 +309,46 @@ const AnimalSectionCards = async ({ params }: Props) => {
               </div>
 
               {/* Action Button */}
-              <span
-                className={cn(
-                  "inline-block w-full",
-                  !canManage && "cursor-not-allowed",
-                )}
-              >
-                <Button
-                  asChild
-                  variant={canManage ? "default" : "outline"}
+              {outcomeAction ? (
+                <span
                   className={cn(
-                    "w-full",
-                    !canManage && "pointer-events-none opacity-50",
+                    "inline-block w-full",
+                    !canManage && "cursor-not-allowed",
                   )}
                 >
-                  <Link
-                    href={outcomeAction.href}
-                    aria-disabled={!canManage}
-                    tabIndex={canManage ? undefined : -1}
+                  <Button
+                    asChild
+                    variant={canManage ? "default" : "outline"}
+                    className={cn(
+                      "w-full",
+                      !canManage && "pointer-events-none opacity-50",
+                    )}
                   >
-                    {outcomeAction.label}
-                  </Link>
-                </Button>
-              </span>
+                    <Link
+                      href={outcomeAction.href}
+                      aria-disabled={!canManage}
+                      tabIndex={canManage ? undefined : -1}
+                    >
+                      {outcomeAction.label}
+                    </Link>
+                  </Button>
+                </span>
+              ) : (
+                animal.stayEndingDeath && (
+                  <Alert>
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertDescription>
+                      <span className="font-medium text-foreground">
+                        Outcome: {deathOutcomeLabel(animal.stayEndingDeath)}
+                      </span>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        An animal that has died can&apos;t be taken back
+                        in. {DEATH_REVERSAL_HINT}
+                      </p>
+                    </AlertDescription>
+                  </Alert>
+                )
+              )}
 
               {canPlaceInFoster && (
                 <Button asChild variant="outline" className="w-full">

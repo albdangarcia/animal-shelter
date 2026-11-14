@@ -96,10 +96,11 @@ const _createReIntake = async (
         fieldErrors: { [error.field]: [error.message] },
       };
     }
-    console.error("Database error during re-intake:", error);
+    // A refusal says why to staff, and is not a failure to log.
     if (error instanceof ConflictError) {
       return { ok: false, message: error.message };
     }
+    console.error("Database error during re-intake:", error);
     return {
       ok: false,
       message: "Database Error: Failed to process re-intake.",

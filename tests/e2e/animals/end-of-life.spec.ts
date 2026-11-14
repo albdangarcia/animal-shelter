@@ -276,6 +276,25 @@ test("staff explicitly adds missing legacy details with current provenance", asy
   } finally { await context.close(); await cleanup(f); }
 });
 
+// The service's refusal is covered in prisma/re-intake-after-death.test.ts;
+// this shows that staff never reach it: no button, and the page says why.
+test("an animal that died offers no re-intake, and the re-intake page says why", async ({ browser }) => {
+  const f = await fixture(false, true);
+  const context = await browser.newContext({ storageState: states.staff });
+  const page = await context.newPage();
+  try {
+    await page.goto(`/dashboard/animals/${f.animalId}`);
+    await expect(page.getByText("Outcome: Deceased", { exact: true })).toBeVisible();
+    await expect(page.getByText("An animal that has died can't be taken back in. If the outcome was recorded by mistake, an admin can reverse it from the Outcomes list, which puts the animal back in care.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Create Re-Intake" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Create Outcome" })).toHaveCount(0);
+    await page.goto(`/dashboard/animals/${f.animalId}/intake/create`);
+    await expect(page.getByRole("heading", { name: "Cannot Process Re-Intake", exact: true })).toBeVisible();
+    await expect(page.getByText(`This animal, ${f.name}, can't be processed for re-intake because its outcome was Deceased.`, { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Process Re-Intake" })).toHaveCount(0);
+  } finally { await context.close(); await cleanup(f); }
+});
+
 test("an account with no outcome access sees the same 403 page on the edit and create URLs as on the list", async ({ browser }) => {
   const f = await fixture(false, true);
   const context = await browser.newContext({ storageState: states.foster });

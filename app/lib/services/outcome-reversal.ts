@@ -2,6 +2,7 @@ import { voidOutcomeMedical } from "./outcome-medical";
 import type { TransactionClient } from "@/app/lib/prisma";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import { findLiveUnitForPlacement } from "@/app/lib/services/unit-housing";
+import { findArchivingOutcome } from "@/app/lib/services/archiving-outcome";
 import {
   AnimalActivityType,
   AnimalListingStatus,
@@ -139,18 +140,14 @@ export const recordOutcomeReversal = async (
   // perhaps a later outcome. The snapshot is stale then, and restoring it
   // would overwrite what happened after, so the listing and unit are left
   // alone.
+  // `findArchivingOutcome` is the same read a re-intake refuses a death on,
+  // so the two agree on which outcome archived the animal.
   const animal = await tx.animal.findUnique({
     where: { id: animalId },
-    select: { listingStatus: true, currentUnitId: true },
-  });
-  const latestLive = await tx.outcome.findFirst({
-    where: { animalId, reversedAt: null },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { id: true },
+    select: { currentUnitId: true },
   });
   const archivedByThisOutcome =
-    animal?.listingStatus === AnimalListingStatus.ARCHIVED &&
-    latestLive?.id === outcomeId;
+    (await findArchivingOutcome(tx, animalId))?.id === outcomeId;
 
   // Unlike every write that records or moves an intake or outcome day, this
   // is not passed through `checkTimelineChange`, and must not be. Reversing
@@ -239,7 +236,7 @@ export const recordOutcomeReversal = async (
     // reads it, so a delete of the unit at the same moment either counts the
     // animal put back or is seen here.
     const previousUnit = outcome.previousUnit;
-    if (!outcome.fosterPlacement && !animal.currentUnitId) {
+    if (!outcome.fosterPlacement && !animal?.currentUnitId) {
       const liveUnit = previousUnit
         ? await findLiveUnitForPlacement(tx, previousUnit.id)
         : null;

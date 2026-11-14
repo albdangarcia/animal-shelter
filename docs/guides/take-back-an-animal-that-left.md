@@ -27,6 +27,12 @@ on, the animal's page shows **Create Re-Intake** where **Create Outcome**
 used to be. The animal still shows on the **Animals** list, marked
 **Archived**; search for it by name.
 
+An animal whose outcome was **Deceased** or **Euthanized** can't be taken
+back in. Its page has no **Create Re-Intake**, and shows "Outcome: Deceased"
+(or "Outcome: Euthanized") in its place. If the death was recorded by
+mistake, an admin reverses that outcome from the **Outcomes** list. The
+animal is then back in care, with no re-intake needed.
+
 ## Steps
 
 1. Open the animal and click **Create Re-Intake**. The form **Re-Intake
@@ -87,6 +93,18 @@ choice, and the message after saving still says what it scheduled.
   still in care, so it hasn't left. Opening the re-intake page anyway shows
   **Cannot Process Re-Intake**: "Re-intake is only available for animals
   that are no longer in the shelter (i.e., have an ARCHIVED status)."
+- **No Create Re-Intake button, and "Outcome: Deceased" or "Outcome:
+  Euthanized" instead.** The animal died, so it can't come back. Opening the
+  re-intake page anyway shows **Cannot Process Re-Intake**: "An animal that
+  has died can't be taken back in. If the outcome was recorded by mistake, an
+  admin can reverse it from the Outcomes list, which puts the animal back in
+  care." If the death was a mistake, ask an admin to reverse it.
+- **"Cannot process re-intake: This animal's outcome was Deceased, and an
+  animal that has died can't be taken back in. If the outcome was recorded
+  by mistake, an admin can reverse it from the Outcomes list, which puts the
+  animal back in care."** (it may say Euthanized) The animal's record changed
+  while you had the form open, and its stay now ends in a death. Nothing was
+  saved. If the death was a mistake, ask an admin to reverse it.
 - **"The intake date can't be before the previous outcome on Nov 3, 2026."**
   (with the outcome's day) The animal came back after it left. Pick that
   day or a later one.
