@@ -9,6 +9,7 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -32,6 +33,8 @@ import {
   type ProtocolPlanFacts,
 } from "@/app/lib/utils/medical-protocol-plan";
 import { ProtocolPreview } from "./protocol-preview";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 
 interface ReIntakeFormProps {
   animal: AnimalReIntakeFormPayload;
@@ -51,6 +54,8 @@ interface ReIntakeFormProps {
    * could disagree by a day.
    */
   today: CalendarDay;
+  /** The guide the header's "?" opens, or null for no "?". */
+  help?: HelpLinkGuide | null;
 }
 
 const ReIntakeForm = ({
@@ -59,6 +64,7 @@ const ReIntakeForm = ({
   canCreatePerson,
   protocolPreview = null,
   today,
+  help = null,
 }: ReIntakeFormProps) => {
   const router = useRouter();
   const [isPending, startSubmitTransition] = useTransition();
@@ -123,6 +129,11 @@ const ReIntakeForm = ({
               This animal is returning to the shelter. Record the new intake
               details below to reactivate their profile.
             </CardDescription>
+            {help && (
+              <CardAction>
+                <HelpLink guide={help} />
+              </CardAction>
+            )}
           </CardHeader>
 
           <CardContent className="space-y-10">

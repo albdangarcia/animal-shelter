@@ -1,5 +1,6 @@
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -14,6 +15,9 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -41,10 +45,12 @@ const PageContent = async ({ searchParams }: Props) => {
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
-  const [{ intakes, totalPages, totalRows }, canManage] = await Promise.all([
-    fetchIntakes(query, currentPage, sort, type, currentPageSize),
-    hasPermission(AppPermissions.INTAKE_MANAGE),
-  ]);
+  const [{ intakes, totalPages, totalRows }, canManage, help] =
+    await Promise.all([
+      fetchIntakes(query, currentPage, sort, type, currentPageSize),
+      hasPermission(AppPermissions.INTAKE_MANAGE),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.intakes),
+    ]);
 
   return (
     <Card className="@container/card">
@@ -53,6 +59,11 @@ const PageContent = async ({ searchParams }: Props) => {
         <CardDescription>
           Review every arrival at the shelter, first intakes and returns alike.
         </CardDescription>
+        {help && (
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent>
         <div className="flex flex-1 flex-col">

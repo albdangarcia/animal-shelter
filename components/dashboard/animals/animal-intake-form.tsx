@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -100,6 +101,8 @@ import { FieldInfo } from "@/components/forms/field-info";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import type { CareEpisodeOfferPrompt } from "@/app/lib/data/care-episode-offer.data";
 import { CareEpisodeOfferDialog } from "./medical/care-episode-offer-dialog";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 
 // Sentinel for the "Unplaced" option — Radix Select forbids empty-string item
 // values, so we map this back to "" (currentUnitId = null) on change.
@@ -157,6 +160,8 @@ interface AnimalFormProps {
    * could disagree by a day.
    */
   today: CalendarDay;
+  /** The guide the header's "?" opens, or null for no "?". */
+  help?: HelpLinkGuide | null;
 }
 
 const AnimalForm = ({
@@ -170,6 +175,7 @@ const AnimalForm = ({
   canManageMedical = false,
   protocols = [],
   today,
+  help = null,
 }: AnimalFormProps) => {
   const router = useRouter();
   const isEditMode = !!animal;
@@ -393,6 +399,11 @@ const AnimalForm = ({
                 ? `Editing the record for ${animal.name}.`
                 : "Enter all details for the incoming animal on this single form."}
             </CardDescription>
+            {help && (
+              <CardAction>
+                <HelpLink guide={help} />
+              </CardAction>
+            )}
           </CardHeader>
           <CardContent className="space-y-10">
             {/* Animal Information Section */}

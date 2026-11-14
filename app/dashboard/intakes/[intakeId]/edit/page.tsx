@@ -10,6 +10,8 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   params: Promise<{ intakeId: string }>;
@@ -31,11 +33,12 @@ const EditIntakePage = async ({ params }: Props) => {
 };
 
 const PageContent = async ({ intakeId }: { intakeId: string }) => {
-  const [intake, partners, canCreatePerson, today] = await Promise.all([
+  const [intake, partners, canCreatePerson, today, help] = await Promise.all([
     fetchIntakeById(intakeId),
     fetchPartners(),
     hasPermission(AppPermissions.PERSONS_MANAGE),
     getShelterToday(),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.intakeCorrection),
   ]);
 
   if (!intake || !partners) {
@@ -56,6 +59,7 @@ const PageContent = async ({ intakeId }: { intakeId: string }) => {
         partners={partners}
         canCreatePerson={canCreatePerson}
         today={today}
+        help={help}
       />
     </main>
   );

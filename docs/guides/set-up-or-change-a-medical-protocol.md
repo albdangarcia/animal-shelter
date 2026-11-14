@@ -3,7 +3,7 @@ title: Set up or change a medical protocol
 summary: Choose the care that is scheduled automatically when an animal is admitted, by species and age, and see what a change does to animals already in care.
 permissions: [MEDICAL_SETTINGS_MANAGE]
 aliases: [intake protocol, puppy protocol, kitten protocol, automatic vaccines, schedule vaccines at intake, auto schedule care, change the vaccine schedule, retire a protocol, protocol steps, default care for new animals]
-related: [add-edit-or-retire-a-medical-catalog-item, schedule-care-and-read-the-due-page, record-reschedule-or-decline-scheduled-care, medical-status-glossary]
+related: [add-edit-or-retire-a-medical-catalog-item, schedule-care-and-read-the-due-page, record-reschedule-or-decline-scheduled-care, medical-status-glossary, take-in-a-new-animal, take-back-an-animal-that-left]
 verified: 2026-11-10
 ---
 

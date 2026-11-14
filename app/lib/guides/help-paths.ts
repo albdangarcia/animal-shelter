@@ -34,4 +34,8 @@ export const PAGE_HELP_GUIDES = {
   settingsAnimalTaxonomy: "add-edit-or-delete-a-species-breed-or-color",
   settingsLocations: "add-edit-or-delete-a-location-or-unit",
   settingsAiActivity: "review-and-undo-the-assistants-changes",
+  intakes: "find-an-intake",
+  intakeCorrection: "correct-an-intake",
+  animalCreate: "take-in-a-new-animal",
+  animalReIntake: "take-back-an-animal-that-left",
 } as const;

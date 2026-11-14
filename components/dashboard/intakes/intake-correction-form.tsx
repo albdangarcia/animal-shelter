@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -27,6 +28,8 @@ import type { IntakeForCorrection } from "@/app/lib/data/animals/intake.data";
 import type { PartnerPayload } from "@/app/lib/types";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 
 interface IntakeCorrectionFormProps {
   intake: IntakeForCorrection;
@@ -34,6 +37,8 @@ interface IntakeCorrectionFormProps {
   canCreatePerson?: boolean;
   /** Today on the shelter's calendar, resolved on the server. */
   today: CalendarDay;
+  /** The guide the header's "?" opens, or null for no "?". */
+  help?: HelpLinkGuide | null;
 }
 
 // The row as it is stored, in the form's terms. A column the row leaves empty
@@ -57,6 +62,7 @@ export function IntakeCorrectionForm({
   partners,
   canCreatePerson,
   today,
+  help = null,
 }: IntakeCorrectionFormProps) {
   const router = useRouter();
   const [isPending, startSubmitTransition] = useTransition();
@@ -100,6 +106,11 @@ export function IntakeCorrectionForm({
               Correct the intake details recorded for {intake.animal.name}.
               Recorded by {intake.staffMember.name}.
             </CardDescription>
+            {help && (
+              <CardAction>
+                <HelpLink guide={help} />
+              </CardAction>
+            )}
           </CardHeader>
 
           <CardContent>

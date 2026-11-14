@@ -3,7 +3,7 @@ title: Record a surgery, spay/neuter or exemption
 summary: Record a spay, neuter or other surgery, one done before intake, or why an animal isn't to be spayed or neutered.
 permissions: [MEDICAL_MANAGE, MEDICAL_ADMINISTER]
 aliases: [record a spay, record a neuter, dental surgery, already fixed, spay tattoo, spay scar, too young to spay, spay exemption, not spaying, altered before intake]
-related: [record-reschedule-or-decline-scheduled-care, schedule-care-and-read-the-due-page, record-an-exam, correct-or-void-an-entry, medical-status-glossary]
+related: [record-reschedule-or-decline-scheduled-care, schedule-care-and-read-the-due-page, record-an-exam, correct-or-void-an-entry, medical-status-glossary, take-in-a-new-animal]
 verified: 2026-11-10
 ---
 
