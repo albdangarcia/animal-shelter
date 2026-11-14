@@ -2,6 +2,7 @@ import type { TransactionClient } from "@/app/lib/prisma";
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { calendarDay, type CalendarDay } from "@/app/lib/utils/shelter-day";
 import { AnimalListingStatus } from "@/prisma/generated/enums";
+import { findArchivingOutcome } from "@/app/lib/services/archiving-outcome";
 import {
   evaluateListingAgreement,
   evaluateOutcomeReversal,
@@ -66,10 +67,9 @@ export async function checkOutcomeReversal(
   );
 }
 
-// Whether the animal is archived, and by which outcome. Only recording an
-// outcome archives an animal, and only a re-intake or reversing that outcome
-// takes it back out, so an archived animal was archived by the latest live
-// outcome recorded for it, as `recordOutcomeReversal` reads it too.
+// Whether the animal is archived, and by which outcome: the one
+// `findArchivingOutcome` names, as a reversal and a re-intake read it too.
+// An archived animal with no live outcome is still archived, by none.
 const readListingState = async (
   tx: TransactionClient,
   animalId: string,
@@ -81,11 +81,7 @@ const readListingState = async (
   if (animal?.listingStatus !== AnimalListingStatus.ARCHIVED) {
     return { archived: false, archivingOutcomeRef: null };
   }
-  const archiving = await tx.outcome.findFirst({
-    where: { animalId, reversedAt: null },
-    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    select: { id: true },
-  });
+  const archiving = await findArchivingOutcome(tx, animalId);
   return { archived: true, archivingOutcomeRef: archiving?.id ?? null };
 };
 
