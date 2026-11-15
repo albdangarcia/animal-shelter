@@ -6,6 +6,8 @@ import HeadcountCards from "@/components/dashboard/home/headcount-cards";
 import HeadcountCardsSkeleton from "@/components/skeletons/headcountCardsSkeleton";
 import AttentionPanelSkeleton from "@/components/skeletons/attentionPanelSkeleton";
 import UnderCareCardSkeleton from "@/components/skeletons/underCareCardSkeleton";
+import ApplicationsWaitingCard from "@/components/dashboard/home/applications-waiting-card";
+import ApplicationsWaitingCardSkeleton from "@/components/skeletons/applicationsWaitingCardSkeleton";
 
 const Page = async () => {
   return (
@@ -16,7 +18,7 @@ const Page = async () => {
       </Suspense>
 
       {/* "Glance and jump": the attention panel wide, beside a column of
-          small cards (Under care first). Stacked on narrow screens. Each has
+          small cards (Under care, then Applications waiting). Stacked on narrow screens. Each has
           its own Suspense, so a slow read holds only its own card. */}
       <div className="grid grid-cols-1 items-start gap-4 @4xl/main:grid-cols-3">
         <Suspense fallback={<AttentionPanelSkeleton />}>
@@ -25,6 +27,9 @@ const Page = async () => {
         <div className="flex flex-col gap-4">
           <Suspense fallback={<UnderCareCardSkeleton />}>
             <UnderCareCard />
+          </Suspense>
+          <Suspense fallback={<ApplicationsWaitingCardSkeleton />}>
+            <ApplicationsWaitingCard />
           </Suspense>
         </div>
       </div>

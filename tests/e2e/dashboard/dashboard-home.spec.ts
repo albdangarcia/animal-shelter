@@ -119,3 +119,34 @@ test("the dashboard shows what needs attention and who is under care, and a grou
   // Overdue tasks lead the list.
   await expect(page.getByText(/^Overdue by /).first()).toBeVisible();
 });
+
+test("Applications waiting counts what its list shows, and a line opens the list filtered to it", async ({
+  page,
+}) => {
+  // What counts as waiting (effective status for adoption applications, the
+  // column for foster ones) and the oldest's age are covered by
+  // prisma/applications-waiting.test.ts and the unit tests of the wording.
+  // Here: the card renders from the seed's waiting applications, and its
+  // count is the number of rows its link lists.
+  await page.goto("/dashboard");
+
+  const waiting = cardIn(page, "Applications waiting");
+  await expect(waiting).toBeVisible();
+  const oldest = "· oldest (\\d+ days?|submitted today)";
+  await expect(
+    waiting.getByRole("link", {
+      name: new RegExp(`^\\d+ foster applications? ${oldest}$`),
+    }),
+  ).toBeVisible();
+  const adoption = waiting.getByRole("link", {
+    name: new RegExp(`^\\d+ adoption applications? ${oldest}$`),
+  });
+  await expect(adoption).toBeVisible();
+  const count = Number((await adoption.textContent())!.match(/^\d+/)![0]);
+
+  await adoption.click();
+  await expect(page).toHaveURL(
+    /\/dashboard\/adoption-applications\?status=PENDING(,|%2C)REVIEWING&sort=submittedAt\.asc$/,
+  );
+  await expect(page.getByText(`of ${count} row(s)`)).toBeVisible();
+});
