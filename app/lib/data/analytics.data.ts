@@ -1,4 +1,7 @@
-import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
+import {
+  getShelterSettings,
+  getShelterToday,
+} from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
 import type { CareEpisodeType } from "@/prisma/generated/enums";
 import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
@@ -11,7 +14,12 @@ import {
   countByShelterDay,
   shiftDayKey,
 } from "../utils/shelter-day";
+import type { ApplicationsWaiting } from "../utils/applications-waiting";
 import { countHeadcounts, type Headcounts } from "./animals/headcounts";
+import {
+  countAdoptionApplicationsWaiting,
+  countFosterApplicationsWaiting,
+} from "./applications-waiting";
 import {
   countOpenCareEpisodesByType,
   findOpenCareEpisodes,
@@ -134,3 +142,60 @@ export const UNDER_CARE_PERMISSIONS = [
 export const fetchUnderCareSummary = RequireAllPermissions(
   ...UNDER_CARE_PERMISSIONS,
 )(_fetchUnderCareSummary);
+
+// The dashboard's "Applications waiting" card, one count per kind, each gated
+// by the list it links to. Today and the timezone are the shelter's, so the
+// oldest's age is counted on its calendar.
+const waitingOptions = async () => ({
+  today: await getShelterToday(),
+  timezone: (await getShelterSettings()).timezone,
+});
+
+const _fetchAdoptionApplicationsWaiting =
+  async (): Promise<ApplicationsWaiting> => {
+    try {
+      return await countAdoptionApplicationsWaiting(
+        prisma,
+        await waitingOptions(),
+      );
+    } catch (error) {
+      console.error("Error fetching adoption applications waiting.", error);
+      throw new Error("Error fetching adoption applications waiting.");
+    }
+  };
+
+const _fetchFosterApplicationsWaiting =
+  async (): Promise<ApplicationsWaiting> => {
+    try {
+      return await countFosterApplicationsWaiting(
+        prisma,
+        await waitingOptions(),
+      );
+    } catch (error) {
+      console.error("Error fetching foster applications waiting.", error);
+      throw new Error("Error fetching foster applications waiting.");
+    }
+  };
+
+/** What the card's adoption line needs: the dashboard's permission and
+ *  `APPLICATIONS_READ`, the adoption list's. The card checks this same list
+ *  before it fetches, and leaves the line out without it. */
+export const ADOPTION_APPLICATIONS_WAITING_PERMISSIONS = [
+  AppPermissions.ANIMAL_READ_ANALYTICS,
+  AppPermissions.APPLICATIONS_READ,
+] as const satisfies readonly AppPermission[];
+
+export const fetchAdoptionApplicationsWaiting = RequireAllPermissions(
+  ...ADOPTION_APPLICATIONS_WAITING_PERMISSIONS,
+)(_fetchAdoptionApplicationsWaiting);
+
+/** What the card's foster line needs: the dashboard's permission and
+ *  `FOSTERS_READ`, the foster application list's. */
+export const FOSTER_APPLICATIONS_WAITING_PERMISSIONS = [
+  AppPermissions.ANIMAL_READ_ANALYTICS,
+  AppPermissions.FOSTERS_READ,
+] as const satisfies readonly AppPermission[];
+
+export const fetchFosterApplicationsWaiting = RequireAllPermissions(
+  ...FOSTER_APPLICATIONS_WAITING_PERMISSIONS,
+)(_fetchFosterApplicationsWaiting);
