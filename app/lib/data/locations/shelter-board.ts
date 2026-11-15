@@ -1,6 +1,53 @@
 import prisma from "@/app/lib/prisma";
+import type { Prisma } from "@/prisma/generated/client";
 import type { LocationType, Sex } from "@/prisma/generated/enums";
 import { ANIMAL_IMAGE_ORDER } from "../../utils/animal-image-order";
+
+// The board's buckets, as filters. The board's queries are built from these,
+// and so are the dashboard's headcount cards (`countHeadcounts` in
+// app/lib/data/animals/headcounts.ts), so the two pages count alike.
+//
+// Every animal in care is in exactly one bucket: on site (in a live unit),
+// in foster (no unit, an open placement) or not housed (no unit, no open
+// placement). An animal in a unit with an open placement is on site: the
+// unit wins. A unit or location can't be deleted while an animal points at
+// it (`deleteUnitIfEmpty`, `deleteLocationIfEmpty`), so no animal in care
+// falls between the buckets.
+
+/** In care: every animal that has not left the shelter. */
+export const IN_CARE = {
+  listingStatus: { not: "ARCHIVED" },
+} as const satisfies Prisma.AnimalWhereInput;
+
+/** A location that has not been soft-deleted. */
+export const LIVE_LOCATION = {
+  deletedAt: null,
+} as const satisfies Prisma.LocationWhereInput;
+
+/** A unit that has not been soft-deleted (its location checked apart). */
+export const LIVE_UNIT = {
+  deletedAt: null,
+} as const satisfies Prisma.UnitWhereInput;
+
+/** Bucket 1, on site: in care, housed in a live unit of a live location. */
+export const ON_SITE = {
+  ...IN_CARE,
+  currentUnit: { is: { ...LIVE_UNIT, location: LIVE_LOCATION } },
+} as const satisfies Prisma.AnimalWhereInput;
+
+/** Bucket 2, in foster: in care, no unit, an open foster placement. */
+export const IN_FOSTER = {
+  ...IN_CARE,
+  currentUnitId: null,
+  fosterPlacements: { some: { endDate: null } },
+} as const satisfies Prisma.AnimalWhereInput;
+
+/** Bucket 3, not housed: in care, no unit, no open foster placement. */
+export const NOT_HOUSED = {
+  ...IN_CARE,
+  currentUnitId: null,
+  fosterPlacements: { none: { endDate: null } },
+} as const satisfies Prisma.AnimalWhereInput;
 
 // Minimal per-animal payload rendered as an occupant/unplaced chip. Carries just
 // enough identity for the chip (thumbnail + species) and its hover-card (breed,
@@ -95,21 +142,22 @@ export const queryShelterBoard = async (): Promise<ShelterBoardData> => {
     const [locationRows, unplacedRows, fosteredRows] = await Promise.all([
       // locations -> units -> placed animals, in one query
       prisma.location.findMany({
-        where: { deletedAt: null },
+        where: LIVE_LOCATION,
         orderBy: { name: "asc" },
         select: {
           id: true,
           name: true,
           type: true,
           units: {
-            where: { deletedAt: null },
+            where: LIVE_UNIT,
             orderBy: { name: "asc" },
             select: {
               id: true,
               name: true,
               capacity: true,
               animals: {
-                where: { listingStatus: { not: "ARCHIVED" } },
+                // Bucket 1: the unit and location are live by the nesting.
+                where: IN_CARE,
                 orderBy: { name: "asc" },
                 select: animalChipSelect,
               },
@@ -119,21 +167,13 @@ export const queryShelterBoard = async (): Promise<ShelterBoardData> => {
       }),
       // bucket 3 — unplaced: no unit, no open foster placement
       prisma.animal.findMany({
-        where: {
-          currentUnitId: null,
-          fosterPlacements: { none: { endDate: null } },
-          listingStatus: { not: "ARCHIVED" },
-        },
+        where: NOT_HOUSED,
         orderBy: { name: "asc" },
         select: animalChipSelect,
       }),
       // bucket 2 — in foster: no unit, has an open foster placement
       prisma.animal.findMany({
-        where: {
-          currentUnitId: null,
-          fosterPlacements: { some: { endDate: null } },
-          listingStatus: { not: "ARCHIVED" },
-        },
+        where: IN_FOSTER,
         orderBy: { name: "asc" },
         select: {
           ...animalChipSelect,

@@ -1,17 +1,18 @@
-import { SectionCards } from "@/components/dashboard/analytics/section-cards";
 import { Suspense } from "react";
 import ChartWrapper from "@/components/dashboard/analytics/chart-wrapper";
 import AttentionPanel from "@/components/dashboard/home/attention-panel";
 import UnderCareCard from "@/components/dashboard/home/under-care-card";
-import SectionCardsSkeleton from "@/components/skeletons/sectionCards";
+import HeadcountCards from "@/components/dashboard/home/headcount-cards";
+import HeadcountCardsSkeleton from "@/components/skeletons/headcountCardsSkeleton";
 import AttentionPanelSkeleton from "@/components/skeletons/attentionPanelSkeleton";
 import UnderCareCardSkeleton from "@/components/skeletons/underCareCardSkeleton";
 
 const Page = async () => {
   return (
     <>
-      <Suspense fallback={<SectionCardsSkeleton />}>
-        <SectionCards />
+      {/* Where the animals are now, counted as the shelter board counts. */}
+      <Suspense fallback={<HeadcountCardsSkeleton />}>
+        <HeadcountCards />
       </Suspense>
 
       {/* "Glance and jump": the attention panel wide, beside a column of

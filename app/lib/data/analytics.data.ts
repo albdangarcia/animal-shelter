@@ -1,13 +1,6 @@
-import {
-  getShelterSettings,
-  getShelterToday,
-} from "@/app/lib/data/shelter-settings.data";
+import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
-import {
-  AnimalListingStatus,
-  OutcomeType,
-  type CareEpisodeType,
-} from "@/prisma/generated/enums";
+import type { CareEpisodeType } from "@/prisma/generated/enums";
 import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
 import {
   RequireAllPermissions,
@@ -18,186 +11,21 @@ import {
   countByShelterDay,
   shiftDayKey,
 } from "../utils/shelter-day";
-import { resolveDashboardMonthBoundaries } from "./dashboard-month-boundaries";
+import { countHeadcounts, type Headcounts } from "./animals/headcounts";
 import {
   countOpenCareEpisodesByType,
   findOpenCareEpisodes,
   type UnderCareRow,
 } from "./care-episodes";
 
-export type PetCardDataType = {
-  totalPets: number;
-  adoptedPetsCount: number;
-  pendingPetsCount: number;
-  publishedPetsCount: number;
-  todoTasksCount: number;
-  trends: {
-    totalPetsChange: number;
-    adoptedPetsChange: number;
-    publishedPetsChange: number;
-    todoTasksChange: number;
-  };
-};
-
-const _fetchAnimalCardData = async (): Promise<PetCardDataType> => {
+// The dashboard's headcount cards: the animals in care by the shelter board's
+// buckets, available and pending adoption, and how full the units are.
+const _fetchHeadcounts = async (): Promise<Headcounts> => {
   try {
-    const [today, settings] = await Promise.all([
-      getShelterToday(),
-      getShelterSettings(),
-    ]);
-    const {
-      currentMonthFromDay,
-      lastMonthFromDay,
-      lastMonthToDay,
-      startOfCurrentMonth,
-      startOfLastMonth,
-    } = resolveDashboardMonthBoundaries(today, settings.timezone);
-
-    // Current totals
-    const [
-      totalPets,
-      adoptedPetsCount,
-      pendingPetsCount,
-      publishedPetsCount,
-      todoTasksCount,
-    ] = await Promise.all([
-      prisma.animal.count(),
-      // A reversed outcome was recorded in error, so none of these counts it.
-      prisma.outcome.count({
-        where: {
-          type: OutcomeType.ADOPTION,
-          reversedAt: null,
-        },
-      }),
-      prisma.animal.count({
-        where: {
-          listingStatus: AnimalListingStatus.PENDING_ADOPTION,
-        },
-      }),
-      prisma.animal.count({
-        where: {
-          listingStatus: AnimalListingStatus.PUBLISHED,
-        },
-      }),
-      prisma.task.count({
-        where: {
-          status: "TODO",
-        },
-      }),
-    ]);
-
-    // Current month counts (for trend calculation)
-    const [
-      currentMonthAnimals,
-      currentMonthAdoptions,
-      currentMonthPublished,
-      currentMonthTasks,
-    ] = await Promise.all([
-      prisma.animal.count({
-        where: {
-          createdAt: {
-            gte: startOfCurrentMonth,
-          },
-        },
-      }),
-      prisma.outcome.count({
-        where: {
-          type: OutcomeType.ADOPTION,
-          reversedAt: null,
-          outcomeDate: {
-            gte: currentMonthFromDay,
-          },
-        },
-      }),
-      prisma.animal.count({
-        where: {
-          publishedAt: {
-            gte: startOfCurrentMonth,
-          },
-        },
-      }),
-      prisma.task.count({
-        where: {
-          status: "TODO",
-          createdAt: {
-            gte: startOfCurrentMonth,
-          },
-        },
-      }),
-    ]);
-
-    // Last month counts (for comparison)
-    const [
-      lastMonthAnimals,
-      lastMonthAdoptions,
-      lastMonthPublished,
-      lastMonthTasks,
-    ] = await Promise.all([
-      prisma.animal.count({
-        where: {
-          createdAt: {
-            gte: startOfLastMonth,
-            lt: startOfCurrentMonth,
-          },
-        },
-      }),
-      prisma.outcome.count({
-        where: {
-          type: OutcomeType.ADOPTION,
-          reversedAt: null,
-          outcomeDate: {
-            gte: lastMonthFromDay,
-            lte: lastMonthToDay,
-          },
-        },
-      }),
-      prisma.animal.count({
-        where: {
-          publishedAt: {
-            gte: startOfLastMonth,
-            lt: startOfCurrentMonth,
-          },
-        },
-      }),
-      prisma.task.count({
-        where: {
-          status: "TODO",
-          createdAt: {
-            gte: startOfLastMonth,
-            lt: startOfCurrentMonth,
-          },
-        },
-      }),
-    ]);
-
-    // Calculate percentage changes
-    const calculateChange = (current: number, previous: number) => {
-      if (previous === 0) return current > 0 ? 100 : 0;
-      return ((current - previous) / previous) * 100;
-    };
-
-    return {
-      totalPets,
-      adoptedPetsCount,
-      pendingPetsCount,
-      publishedPetsCount,
-      todoTasksCount,
-      trends: {
-        totalPetsChange: calculateChange(currentMonthAnimals, lastMonthAnimals),
-        adoptedPetsChange: calculateChange(
-          currentMonthAdoptions,
-          lastMonthAdoptions,
-        ),
-        publishedPetsChange: calculateChange(
-          currentMonthPublished,
-          lastMonthPublished,
-        ),
-        todoTasksChange: calculateChange(currentMonthTasks, lastMonthTasks),
-      },
-    };
+    return await countHeadcounts(prisma);
   } catch (error) {
-    console.error("Error fetching card data.", error);
-    throw new Error("Error fetching card data.");
+    console.error("Error fetching the headcounts.", error);
+    throw new Error("Error fetching the headcounts.");
   }
 };
 
@@ -280,9 +108,16 @@ const _fetchUnderCareSummary = async (): Promise<UnderCareSummary> => {
   }
 };
 
-export const fetchPetCardData = RequirePermission(
+/** What the dashboard's headcount cards need: `ANIMAL_READ_ANALYTICS`, the
+ *  dashboard's own permission. The cards check this same list before they
+ *  fetch. */
+export const HEADCOUNT_PERMISSIONS = [
   AppPermissions.ANIMAL_READ_ANALYTICS,
-)(_fetchAnimalCardData);
+] as const satisfies readonly AppPermission[];
+
+export const fetchHeadcounts = RequireAllPermissions(
+  ...HEADCOUNT_PERMISSIONS,
+)(_fetchHeadcounts);
 
 export const fetchChartData = RequirePermission(
   AppPermissions.ANIMAL_READ_ANALYTICS,
