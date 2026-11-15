@@ -85,6 +85,30 @@ test("the worklist is longest stay first, then longest in care overall, then by 
   );
 });
 
+test("animals alike in stay and name keep one order, by id, whatever order they come in", () => {
+  const kitten = (id: string): AnimalStayHistory => ({
+    id,
+    name: "Kitten",
+    speciesName: "Cat",
+    events: [intake("2026-09-10")],
+  });
+  const order = (animals: AnimalStayHistory[]) =>
+    summarizeLengthOfStay(animals, ALL_YEAR, TODAY).worklist.map(
+      (row) => row.animalId,
+    );
+
+  assert.deepEqual(order([kitten("b"), kitten("a"), kitten("c")]), [
+    "a",
+    "b",
+    "c",
+  ]);
+  assert.deepEqual(order([kitten("c"), kitten("b"), kitten("a")]), [
+    "a",
+    "b",
+    "c",
+  ]);
+});
+
 test("the worklist stops at 20, while the in-care counts take every animal", () => {
   // 30 animals, taken in 119 down to 90 days ago: more than 20 of them over
   // 90 days, so a count taken from the cut list would come up short, and the

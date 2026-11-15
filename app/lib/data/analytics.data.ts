@@ -26,6 +26,11 @@ import {
   summariseReadiness,
   type ReadinessSummary,
 } from "../readiness/summary";
+import { _fetchAnimalStayEvents } from "./reports/report-shared.data";
+import {
+  summarizeLongestStays,
+  type LongestStays,
+} from "../utils/longest-stays";
 import {
   countOpenCareEpisodesByType,
   findOpenCareEpisodes,
@@ -235,3 +240,32 @@ export const READINESS_PERMISSIONS = [
 export const fetchReadinessSummary = RequireAllPermissions(
   ...READINESS_PERMISSIONS,
 )(_fetchReadinessSummary);
+
+// The dashboard's "Longest stays" card: the length-of-stay report's own read
+// and summary, cut to the first five. "In care" is the report's intake/outcome
+// pairing, not `IN_CARE` (listing status), so the card's rows and counts are
+// always the report's. The report's PERF note applies: this walks every
+// animal's history.
+const _fetchLongestStays = async (): Promise<LongestStays> => {
+  try {
+    const today = await getShelterToday();
+    const animals = await _fetchAnimalStayEvents();
+    return summarizeLongestStays(animals, today);
+  } catch (error) {
+    console.error("Error fetching the longest stays.", error);
+    throw new Error("Error fetching the longest stays.");
+  }
+};
+
+/** What the card needs: the dashboard's permission and `REPORTS_READ`, the
+ *  length-of-stay report's, since the rows are the report's and the card
+ *  links to it. The card checks this same list before it fetches, and is
+ *  left out without it. */
+export const LONGEST_STAYS_PERMISSIONS = [
+  AppPermissions.ANIMAL_READ_ANALYTICS,
+  AppPermissions.REPORTS_READ,
+] as const satisfies readonly AppPermission[];
+
+export const fetchLongestStays = RequireAllPermissions(
+  ...LONGEST_STAYS_PERMISSIONS,
+)(_fetchLongestStays);

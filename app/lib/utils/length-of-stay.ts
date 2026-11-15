@@ -124,11 +124,16 @@ export function summarizeLengthOfStay(
 
   // Sort the full in-care set before slicing, but derive the counts from the
   // unsliced set so they reflect every in-care animal, not just the top 20.
+  // The id is the last tie-break, so two animals alike in all else (a litter
+  // of "Kitten"s taken in on one day) keep one order whatever order the
+  // database returned them in: the dashboard's card and this report read
+  // separately and must list them alike.
   inCareRows.sort(
     (a, b) =>
       b.currentStayDays - a.currentStayDays ||
       b.cumulativeDays - a.cumulativeDays ||
-      a.name.localeCompare(b.name),
+      a.name.localeCompare(b.name) ||
+      (a.animalId < b.animalId ? -1 : a.animalId > b.animalId ? 1 : 0),
   );
   const over90 = inCareRows.filter(
     (row) => row.currentStayDays > LONG_STAY_DAY_THRESHOLD,
