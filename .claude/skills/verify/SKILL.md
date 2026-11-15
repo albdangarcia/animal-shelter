@@ -196,12 +196,13 @@ legacy rows whose stored value predates the current option list.
 
 ### Expected noise, not bugs
 
-A logged-out request to `/dashboard` logs three `Access Denied. You do not have
+A logged-out request to `/dashboard` logs two `Access Denied. You do not have
 permission to perform this action.` errors from `protected-actions.ts` — one each from
-`SectionCards`, `ChartWrapper`, and `AnalyticsTables` — immediately before
-`GET /dashboard 307`. Each guarded component calls `protectedAction` independently and
-React renders them concurrently, so all three throw before the layout's `redirect()`
-lands. Authorization held; the 307 is the proof. It's one message per guarded
+`SectionCards` and `ChartWrapper` — immediately before `GET /dashboard 307`. Each
+guarded component calls `protectedAction` independently and React renders them
+concurrently, so both throw before the layout's `redirect()` lands. (The attention
+panel and the Under care card check `hasPermission` first and render nothing, so
+they add none.) Authorization held; the 307 is the proof. It's one message per guarded
 component, not per request. Don't try to silence it, and don't read it as a permissions
 bug.
 

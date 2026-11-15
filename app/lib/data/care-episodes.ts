@@ -1,5 +1,6 @@
 // Care episodes across the shelter: the attention queue's "under care with
-// nothing planned" signal, and the dashboard's list of animals under care.
+// nothing planned" signal, and the dashboard's "Under care" card (the count
+// by type and the latest few).
 // No auth or `next/*` imports, so database tests can call them; the queue's
 // and the dashboard's data modules wrap them with their permissions.
 //
@@ -135,6 +136,34 @@ export const findOpenCareEpisodes = async (
     animal: { id: row.animal.id, name: row.animal.name },
     where: whereUnderCare(row.type, row.partner?.name ?? null, row.animal),
   }));
+};
+
+/**
+ * How many open episodes on animals in care there are of each type, every
+ * type present (0 when there are none). The same episodes as
+ * `findOpenCareEpisodes`, uncapped. An animal has at most one open episode,
+ * so this is also how many animals are under care.
+ *
+ * `animal` narrows it to some animals. The dashboard counts them all; the
+ * database tests narrow it to their own, since the test files share one
+ * database and run at once.
+ */
+export const countOpenCareEpisodesByType = async (
+  db: Db,
+  { animal }: { animal?: Prisma.AnimalWhereInput } = {},
+): Promise<Record<CareEpisodeType, number>> => {
+  const groups = await db.careEpisode.groupBy({
+    by: ["type"],
+    // Both under `AND`, so a narrowing can't loosen or replace any part of
+    // the "in care" filter, whatever keys it has.
+    where: { AND: [OPEN_EPISODE_IN_CARE, ...(animal ? [{ animal }] : [])] },
+    _count: { _all: true },
+  });
+  const counts = Object.fromEntries(
+    Object.values(CareEpisodeType).map((type) => [type, 0]),
+  ) as Record<CareEpisodeType, number>;
+  for (const group of groups) counts[group.type] = group._count._all;
+  return counts;
 };
 
 const whereUnderCare = (

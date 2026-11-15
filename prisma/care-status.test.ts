@@ -1,9 +1,9 @@
 // The care each animal is under, read from its medical record against a real
 // Postgres: the open episode, recovering, awaited care and the problem list
 // (`findCareStatus`), the attention queue's "under care with nothing
-// planned" signal (`findUnplannedCareForQueue`), and the dashboard's list of
-// animals under care (`findOpenCareEpisodes`). Every row is written through
-// the services, as the pages write them.
+// planned" signal (`findUnplannedCareForQueue`), and the dashboard's "Under
+// care" card (`findOpenCareEpisodes`, `countOpenCareEpisodesByType`). Every
+// row is written through the services, as the pages write them.
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
@@ -59,6 +59,7 @@ import {
 } from "@/app/lib/services/medication-order";
 import { findCareStatus } from "@/app/lib/data/animals/care-status";
 import {
+  countOpenCareEpisodesByType,
   findOpenCareEpisodes,
   findUnplannedCareForQueue,
 } from "@/app/lib/data/care-episodes";
@@ -734,4 +735,92 @@ test("the dashboard lists open episodes in care, the latest start first, with wh
   ]);
 
   assert.ok((await findOpenCareEpisodes(prisma, { take: 2 })).length <= 2);
+});
+
+// ---------------------------------------------------------------------------
+// countOpenCareEpisodesByType
+// ---------------------------------------------------------------------------
+
+test("the dashboard counts open episodes in care by type, leaving out closed, voided and animals that left", async () => {
+  // Its own species, so the count reads only this test's animals: the other
+  // tests in this file open episodes too.
+  const countSpeciesId = (
+    await prisma.species.create({
+      data: { name: name("Count species") },
+      select: { id: true },
+    })
+  ).id;
+  const countAnimal = async (label: string) => {
+    const id = await makeAnimal(label);
+    await prisma.animal.update({
+      where: { id },
+      data: { speciesId: countSpeciesId },
+    });
+    return id;
+  };
+  const count = () =>
+    countOpenCareEpisodesByType(prisma, {
+      animal: { speciesId: countSpeciesId },
+    });
+
+  try {
+    // No episodes: every type is there, at 0.
+    assert.deepEqual(await count(), {
+      UNDER_VET_CARE: 0,
+      HOSPITALISED_IN_HOUSE: 0,
+      HOSPITALISED_OFF_SITE: 0,
+    });
+
+    await openEpisode(await countAnimal("Count in house 1"));
+    await openEpisode(await countAnimal("Count in house 2"));
+    await openEpisode(await countAnimal("Count off site"), {
+      type: CareEpisodeType.HOSPITALISED_OFF_SITE,
+      partnerId: clinicId,
+    });
+
+    // Closed: no longer under care.
+    const closedEpisode = await openEpisode(await countAnimal("Count closed"), {
+      type: CareEpisodeType.UNDER_VET_CARE,
+      startDate: day("2026-10-10"),
+    });
+    await prisma.$transaction((tx) =>
+      closeCareEpisode(tx, closedEpisode, day("2026-10-12"), staffId, TODAY),
+    );
+    // Voided: entered in error.
+    const voidedEpisode = await openEpisode(await countAnimal("Count voided"), {
+      type: CareEpisodeType.UNDER_VET_CARE,
+    });
+    await prisma.$transaction((tx) =>
+      voidCareEpisode(tx, voidedEpisode, "Entered in error.", staffId),
+    );
+    // Left care with the episode still open.
+    const left = await countAnimal("Count left");
+    await openEpisode(left, { type: CareEpisodeType.UNDER_VET_CARE });
+    await archive(left);
+
+    assert.deepEqual(await count(), {
+      UNDER_VET_CARE: 0,
+      HOSPITALISED_IN_HOUSE: 2,
+      HOSPITALISED_OFF_SITE: 1,
+    });
+
+    // A narrowing can't bring back an animal that left.
+    assert.equal(
+      (
+        await countOpenCareEpisodesByType(prisma, {
+          animal: {
+            speciesId: countSpeciesId,
+            listingStatus: AnimalListingStatus.ARCHIVED,
+          },
+        })
+      ).UNDER_VET_CARE,
+      0,
+    );
+  } finally {
+    await prisma.intake.deleteMany({
+      where: { animal: { speciesId: countSpeciesId } },
+    });
+    await prisma.animal.deleteMany({ where: { speciesId: countSpeciesId } });
+    await prisma.species.delete({ where: { id: countSpeciesId } });
+  }
 });

@@ -133,7 +133,7 @@ export type AttentionQueueItem = {
 };
 
 // An animal's tier is its most time-sensitive reason. Lower = surfaced first.
-const TIER = {
+export const TIER = {
   TASK_DUE: 1,
   DOSE_MISSED: 2,
   MEDICAL_DUE: 3,
@@ -158,30 +158,123 @@ function reasonTier(reason: AttentionReason): number {
   return TIER[reason.kind];
 }
 
-// Order reasons within a single animal: overdue tasks first (earliest due, then
-// priority), then missed doses (one reason per animal), then medical care
-// (earliest due), then care with nothing planned (an animal has at most one
-// open episode), then foster. Deterministic.
-function compareReasons(a: AttentionReason, b: AttentionReason): number {
-  const byTier = reasonTier(a) - reasonTier(b);
-  if (byTier !== 0) return byTier;
+/**
+ * The order of two reasons of the same kind, by that kind's own keys: tasks
+ * by due date, then priority; missed doses by the earliest missed slot;
+ * medical care by due date; care with nothing planned by the episode's start;
+ * fosters by the expected end. 0 when the keys tie, or the kinds differ.
+ *
+ * The one place these keys live: the queue orders animals within a tier by
+ * them, and the dashboard's summary (`attention-summary.ts`) orders each
+ * group by them, so the two list animals in the same order.
+ */
+export function compareTierKeys(a: AttentionReason, b: AttentionReason): number {
+  // `yyyy-MM-dd` days sort chronologically as plain strings.
   if (a.kind === "TASK_DUE" && b.kind === "TASK_DUE") {
-    // `yyyy-MM-dd` days sort chronologically as plain strings.
-    const byDue = a.dueDate.localeCompare(b.dueDate);
-    if (byDue !== 0) return byDue;
-    const byPriority = PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
-    if (byPriority !== 0) return byPriority;
-    return a.taskId.localeCompare(b.taskId);
+    return (
+      a.dueDate.localeCompare(b.dueDate) ||
+      PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
+    );
   }
   if (a.kind === "DOSE_MISSED" && b.kind === "DOSE_MISSED") {
     return compareSlots(earliestMissed(a), earliestMissed(b));
   }
   if (a.kind === "MEDICAL_DUE" && b.kind === "MEDICAL_DUE") {
-    return (
-      a.dueDate.localeCompare(b.dueDate) || a.entryId.localeCompare(b.entryId)
-    );
+    return a.dueDate.localeCompare(b.dueDate);
+  }
+  if (a.kind === "CARE_UNPLANNED" && b.kind === "CARE_UNPLANNED") {
+    return a.startDate.localeCompare(b.startDate);
+  }
+  if (a.kind === "FOSTER_OVERDUE" && b.kind === "FOSTER_OVERDUE") {
+    return a.expectedEndDate.localeCompare(b.expectedEndDate);
   }
   return 0;
+}
+
+// Order reasons within a single animal: by tier, then by the tier's keys
+// (`compareTierKeys`), then by the task's or entry's id, so two tasks due the
+// same day at the same priority still have an order. Deterministic.
+export function compareReasons(a: AttentionReason, b: AttentionReason): number {
+  const byTier = reasonTier(a) - reasonTier(b);
+  if (byTier !== 0) return byTier;
+  const byKeys = compareTierKeys(a, b);
+  if (byKeys !== 0) return byKeys;
+  if (a.kind === "TASK_DUE" && b.kind === "TASK_DUE") {
+    return a.taskId.localeCompare(b.taskId);
+  }
+  if (a.kind === "MEDICAL_DUE" && b.kind === "MEDICAL_DUE") {
+    return a.entryId.localeCompare(b.entryId);
+  }
+  return 0;
+}
+
+/** The five signals' row sets, as `findAttentionSignals`
+ * (`attention-signals.ts`) reads them. Uncapped. */
+export type AttentionSignals = {
+  tasksDue: TaskDueRow[];
+  dosesMissed: MissedDoseRow[];
+  medicalDue: MedicalDueRow[];
+  careUnplanned: CareUnplannedRow[];
+  fostersOverdue: FosterOverdueRow[];
+};
+
+/** Every signal row as a reason on its animal, in signal order (tasks, missed
+ * doses, medical care, care with nothing planned, fosters). Shared by the
+ * queue and the dashboard's summary (`attention-summary.ts`), so the two word
+ * nothing differently. */
+export function attentionReasons(
+  input: AttentionSignals,
+): { animal: AttentionAnimal; reason: AttentionReason }[] {
+  return [
+    ...input.tasksDue.map((row) => ({
+      animal: row.animal,
+      reason: {
+        kind: "TASK_DUE",
+        taskId: row.taskId,
+        title: row.title,
+        dueDate: row.dueDate,
+        priority: row.priority,
+      } satisfies AttentionReason,
+    })),
+    ...input.dosesMissed.map((row) => ({
+      animal: row.animal,
+      reason: {
+        kind: "DOSE_MISSED",
+        count: row.count,
+        earliestSlotDate: row.earliest.slotDate,
+        earliestSlot: row.earliest.slot,
+        medications: row.medications,
+      } satisfies AttentionReason,
+    })),
+    ...input.medicalDue.map((row) => ({
+      animal: row.animal,
+      reason: {
+        kind: "MEDICAL_DUE",
+        entryId: row.entryId,
+        itemName: row.itemName,
+        entryKind: row.kind,
+        dueDate: row.dueDate,
+      } satisfies AttentionReason,
+    })),
+    ...input.careUnplanned.map((row) => ({
+      animal: row.animal,
+      reason: {
+        kind: "CARE_UNPLANNED",
+        episodeId: row.episodeId,
+        episodeType: row.episodeType,
+        startDate: row.startDate,
+      } satisfies AttentionReason,
+    })),
+    ...input.fostersOverdue.map((row) => ({
+      animal: row.animal,
+      reason: {
+        kind: "FOSTER_OVERDUE",
+        placementId: row.placementId,
+        expectedEndDate: row.expectedEndDate,
+        fosterName: row.fosterName,
+      } satisfies AttentionReason,
+    })),
+  ];
 }
 
 /**
@@ -200,69 +293,21 @@ function compareReasons(a: AttentionReason, b: AttentionReason): number {
  *   5. overdue foster placement — by earliest expected end date
  * An animal in more than one tier sorts by its highest (lowest-numbered) tier.
  */
-export function buildAttentionQueue(input: {
-  tasksDue: TaskDueRow[];
-  dosesMissed: MissedDoseRow[];
-  medicalDue: MedicalDueRow[];
-  careUnplanned: CareUnplannedRow[];
-  fostersOverdue: FosterOverdueRow[];
-}): AttentionQueueItem[] {
+export function buildAttentionQueue(
+  input: AttentionSignals,
+): AttentionQueueItem[] {
   const byAnimal = new Map<
     string,
     { animal: AttentionAnimal; reasons: AttentionReason[] }
   >();
 
-  const ensure = (animal: AttentionAnimal) => {
+  for (const { animal, reason } of attentionReasons(input)) {
     let entry = byAnimal.get(animal.id);
     if (!entry) {
       entry = { animal, reasons: [] };
       byAnimal.set(animal.id, entry);
     }
-    return entry;
-  };
-
-  for (const row of input.tasksDue) {
-    ensure(row.animal).reasons.push({
-      kind: "TASK_DUE",
-      taskId: row.taskId,
-      title: row.title,
-      dueDate: row.dueDate,
-      priority: row.priority,
-    });
-  }
-  for (const row of input.dosesMissed) {
-    ensure(row.animal).reasons.push({
-      kind: "DOSE_MISSED",
-      count: row.count,
-      earliestSlotDate: row.earliest.slotDate,
-      earliestSlot: row.earliest.slot,
-      medications: row.medications,
-    });
-  }
-  for (const row of input.medicalDue) {
-    ensure(row.animal).reasons.push({
-      kind: "MEDICAL_DUE",
-      entryId: row.entryId,
-      itemName: row.itemName,
-      entryKind: row.kind,
-      dueDate: row.dueDate,
-    });
-  }
-  for (const row of input.careUnplanned) {
-    ensure(row.animal).reasons.push({
-      kind: "CARE_UNPLANNED",
-      episodeId: row.episodeId,
-      episodeType: row.episodeType,
-      startDate: row.startDate,
-    });
-  }
-  for (const row of input.fostersOverdue) {
-    ensure(row.animal).reasons.push({
-      kind: "FOSTER_OVERDUE",
-      placementId: row.placementId,
-      expectedEndDate: row.expectedEndDate,
-      fosterName: row.fosterName,
-    });
+    entry.reasons.push(reason);
   }
 
   const items = [...byAnimal.values()].map(({ animal, reasons }) => {
@@ -275,58 +320,20 @@ export function buildAttentionQueue(input: {
         currentUnit: animal.currentUnit,
         reasons: sortedReasons,
       } satisfies AttentionQueueItem,
-      // Sort keys derived from the (now ordered) reasons.
-      tier: Math.min(...sortedReasons.map(reasonTier)),
-      firstTask: sortedReasons.find((r) => r.kind === "TASK_DUE"),
-      firstMissed: sortedReasons.find((r) => r.kind === "DOSE_MISSED"),
-      firstMedical: sortedReasons.find((r) => r.kind === "MEDICAL_DUE"),
-      firstCare: sortedReasons.find((r) => r.kind === "CARE_UNPLANNED"),
-      firstFoster: sortedReasons.find((r) => r.kind === "FOSTER_OVERDUE"),
+      // Reasons are sorted by tier first, so the first is the animal's tier
+      // and the reason it is ordered by within that tier.
+      first: sortedReasons[0],
     };
   });
 
-  items.sort((a, b) => {
-    if (a.tier !== b.tier) return a.tier - b.tier;
-
-    if (a.tier === TIER.TASK_DUE && a.firstTask && b.firstTask) {
-      const byDue = a.firstTask.dueDate.localeCompare(b.firstTask.dueDate);
-      if (byDue !== 0) return byDue;
-      const byPriority =
-        PRIORITY_RANK[a.firstTask.priority] - PRIORITY_RANK[b.firstTask.priority];
-      if (byPriority !== 0) return byPriority;
-    }
-
-    if (a.tier === TIER.DOSE_MISSED && a.firstMissed && b.firstMissed) {
-      const byEarliest = compareSlots(
-        earliestMissed(a.firstMissed),
-        earliestMissed(b.firstMissed),
-      );
-      if (byEarliest !== 0) return byEarliest;
-    }
-
-    if (a.tier === TIER.MEDICAL_DUE && a.firstMedical && b.firstMedical) {
-      const byDue = a.firstMedical.dueDate.localeCompare(b.firstMedical.dueDate);
-      if (byDue !== 0) return byDue;
-    }
-
-    if (a.tier === TIER.CARE_UNPLANNED && a.firstCare && b.firstCare) {
-      const byStart = a.firstCare.startDate.localeCompare(b.firstCare.startDate);
-      if (byStart !== 0) return byStart;
-    }
-
-    if (a.tier === TIER.FOSTER_OVERDUE && a.firstFoster && b.firstFoster) {
-      const byExpected = a.firstFoster.expectedEndDate.localeCompare(
-        b.firstFoster.expectedEndDate,
-      );
-      if (byExpected !== 0) return byExpected;
-    }
-
-    // Total order — keeps the queue identical between identical inputs.
-    return (
+  items.sort(
+    (a, b) =>
+      reasonTier(a.first) - reasonTier(b.first) ||
+      compareTierKeys(a.first, b.first) ||
+      // Total order — keeps the queue identical between identical inputs.
       a.item.name.localeCompare(b.item.name) ||
-      a.item.animalId.localeCompare(b.item.animalId)
-    );
-  });
+      a.item.animalId.localeCompare(b.item.animalId),
+  );
 
   return items.slice(0, ATTENTION_QUEUE_CAP).map(({ item }) => item);
 }
