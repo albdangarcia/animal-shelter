@@ -6,7 +6,8 @@ import {
 } from "../support/applications";
 
 // The dashboard home's headcount cards, "Needs attention today" panel and
-// "Under care" card, read against the seed. This shows the page is wired to
+// its small cards (Under care, Applications waiting, Readiness), read
+// against the seed. This shows the page is wired to
 // them: each renders from seeded data, and a link lands on the page where the
 // work is done.
 //
@@ -149,4 +150,69 @@ test("Applications waiting counts what its list shows, and a line opens the list
     /\/dashboard\/adoption-applications\?status=PENDING(,|%2C)REVIEWING&sort=submittedAt\.asc$/,
   );
   await expect(page.getByText(`of ${count} row(s)`)).toBeVisible();
+});
+
+test("Readiness sums up the readiness board, and a group link opens that group with the same count", async ({
+  page,
+}) => {
+  // What the card counts, which groups it picks and its wording are covered
+  // by the unit tests of the summary (app/lib/readiness/summary.test.ts),
+  // which read every number off the board's own builder. Here: the card
+  // renders from the seed, its ready count is the board header's, and a
+  // group line lands on that group's page showing the same number.
+  await page.goto("/dashboard");
+
+  const readiness = cardIn(page, "Readiness");
+  await expect(readiness).toBeVisible();
+  const headline = readiness.getByText(/^\d+ of \d+ animals? ready$/);
+  await expect(headline).toBeVisible();
+  const [, ready, total] = (await headline.textContent())!.match(
+    /^(\d+) of (\d+)/,
+  )!;
+  await expect(
+    readiness.getByText(/^(\d+|None) ready but not published$/),
+  ).toBeVisible();
+  // The seed's published animals are not ready (49 of 49 on a fresh seed),
+  // so this line is always a link.
+  await expect(
+    readiness.getByRole("link", {
+      name: /^\d+ published with something outstanding$/,
+    }),
+  ).toHaveAttribute("href", "/dashboard/readiness?stage=PUBLISHED");
+
+  // The seed leaves nearly every animal missing an intake check, so there is
+  // always a group to follow.
+  // Visibly "No photo · 7"; the link's name adds "animals" for screen
+  // readers.
+  const groupLink = readiness
+    .getByRole("listitem")
+    .getByRole("link", { name: / · \d+ animals?$/ })
+    .first();
+  await expect(groupLink).toBeVisible();
+  const [, title, count] = (await groupLink.textContent())!.match(
+    /^(.+) · (\d+) animals?$/,
+  )!;
+
+  const href = (await groupLink.getAttribute("href"))!;
+  expect(href).toMatch(/^\/dashboard\/readiness\?kind=[A-Z_]+$/);
+
+  await groupLink.click();
+  await expect(page).toHaveURL(new URL(href, page.url()).href);
+  // The group's heading carries its count as a badge. Exact, so "Missing
+  // assessments 6" can't match "Missing assessments 61".
+  await expect(
+    page.getByRole("heading", {
+      level: 2,
+      name: `${title} ${count}`,
+      exact: true,
+    }),
+  ).toBeVisible();
+  // The board header counts the same animals as the card.
+  const notReady = Number(total) - Number(ready);
+  await expect(
+    page.getByText(
+      `${notReady} of ${total} animals not ready · ${ready} ready`,
+      { exact: true },
+    ),
+  ).toBeVisible();
 });

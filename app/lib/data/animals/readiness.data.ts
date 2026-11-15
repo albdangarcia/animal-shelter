@@ -16,7 +16,9 @@ import {
 
 // The shelter's today is read once per request, so the board judges every
 // animal on the same day, and the panel agrees with the card beside it.
-const shelterDay = async (): Promise<ShelterDay> => {
+// Exported for the dashboard's Readiness card, which reads the board's
+// animals on the same day.
+export const shelterDay = async (): Promise<ShelterDay> => {
   const [settings, today] = await Promise.all([
     getShelterSettings(),
     getShelterToday(),

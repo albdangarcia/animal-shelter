@@ -8,6 +8,8 @@ import AttentionPanelSkeleton from "@/components/skeletons/attentionPanelSkeleto
 import UnderCareCardSkeleton from "@/components/skeletons/underCareCardSkeleton";
 import ApplicationsWaitingCard from "@/components/dashboard/home/applications-waiting-card";
 import ApplicationsWaitingCardSkeleton from "@/components/skeletons/applicationsWaitingCardSkeleton";
+import ReadinessCard from "@/components/dashboard/home/readiness-card";
+import ReadinessCardSkeleton from "@/components/skeletons/readinessCardSkeleton";
 
 const Page = async () => {
   return (
@@ -18,8 +20,9 @@ const Page = async () => {
       </Suspense>
 
       {/* "Glance and jump": the attention panel wide, beside a column of
-          small cards (Under care, then Applications waiting). Stacked on narrow screens. Each has
-          its own Suspense, so a slow read holds only its own card. */}
+          small cards (Under care, Applications waiting, then Readiness).
+          Stacked on narrow screens. Each has its own Suspense, so a slow
+          read holds only its own card. */}
       <div className="grid grid-cols-1 items-start gap-4 @4xl/main:grid-cols-3">
         <Suspense fallback={<AttentionPanelSkeleton />}>
           <AttentionPanel />
@@ -30,6 +33,9 @@ const Page = async () => {
           </Suspense>
           <Suspense fallback={<ApplicationsWaitingCardSkeleton />}>
             <ApplicationsWaitingCard />
+          </Suspense>
+          <Suspense fallback={<ReadinessCardSkeleton />}>
+            <ReadinessCard />
           </Suspense>
         </div>
       </div>

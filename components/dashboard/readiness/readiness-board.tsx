@@ -15,6 +15,8 @@ import {
 } from "@tabler/icons-react";
 import type { ReadinessBlocker } from "@/app/lib/readiness/compute-readiness";
 import {
+  BLOCKER_KIND_TITLES,
+  URGENT_BLOCKER_KINDS,
   blockerAction,
   describeBlocker,
   stageLabel,
@@ -53,60 +55,71 @@ import { ReadinessBoardToolbar } from "./readiness-board-toolbar";
 // request's clock and the shelter's timezone, so nothing re-renders them in
 // the browser with a different "now".
 
-export const KIND_META: Record<
+// Titles and urgency live beside `BLOCKER_KIND_ORDER` in `board.ts`, so the
+// dashboard's Readiness card names each group in the same words.
+const KIND_DISPLAY: Record<
   ReadinessBlockerKind,
-  { title: string; description: string; icon: TablerIcon; urgent?: boolean }
+  { description: string; icon: TablerIcon }
 > = {
   ESCALATED_FINDING: {
-    title: "Escalated findings",
     description:
       "The latest check of a template was escalated. Review the finding; a later, calmer check of the same template clears it.",
     icon: IconAlertTriangle,
-    urgent: true,
   },
   NEEDS_VET_REVIEW: {
-    title: "Needs vet review",
     description:
       "The latest exam this stay asked for a vet's review. A later exam with another result clears it.",
     icon: IconHeartbeat,
-    urgent: true,
   },
   UNDER_CARE: {
-    title: "Under care",
     description:
       "An open care episode on the medical record. Closing the episode clears it.",
     icon: IconStethoscope,
-    urgent: true,
   },
   UNSUPPORTED_CHARACTERISTIC: {
-    title: "Unsupported characteristics",
     description:
       "A trait on the profile that a live finding contradicts, whose citing assessment was deleted or no longer supports it, or whose citing condition was resolved or voided.",
     icon: IconTagOff,
   },
   MISSING_ASSESSMENT: {
-    title: "Missing assessments",
     description: "Required checks with nothing on file for the current stay.",
     icon: IconClipboardX,
   },
   NO_INTAKE_EXAM: {
-    title: "No intake exam",
     description:
       "No intake exam on the medical record for the current stay.",
     icon: IconStethoscopeOff,
   },
   NOT_SPAYED_NEUTERED: {
-    title: "Not spayed or neutered",
     description:
       "No spay or neuter on the medical record, and no exemption in force.",
     icon: IconMedicalCross,
   },
   NO_PHOTO: {
-    title: "No photo",
     description: "Nothing for adopters to see yet.",
     icon: IconPhotoOff,
   },
 };
+
+type KindMeta = {
+  title: string;
+  description: string;
+  icon: TablerIcon;
+  urgent: boolean;
+};
+
+// Keyed off `KIND_DISPLAY`, which the compiler checks has every kind, so
+// the cast below can't hide a missing one.
+export const KIND_META = Object.fromEntries(
+  (Object.keys(KIND_DISPLAY) as ReadinessBlockerKind[]).map((kind) => [
+    kind,
+    {
+      ...KIND_DISPLAY[kind],
+      title: BLOCKER_KIND_TITLES[kind],
+      urgent: URGENT_BLOCKER_KINDS.includes(kind),
+    },
+  ]),
+) as Record<ReadinessBlockerKind, KindMeta>;
 
 const groupAnchor = (kind: ReadinessBlockerKind) =>
   `readiness-${kind.toLowerCase().replace(/_/g, "-")}`;

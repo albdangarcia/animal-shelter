@@ -40,6 +40,11 @@ export interface AnimalReadiness {
 
 export type ReadinessBlockerKind = ReadinessBlocker["kind"];
 
+/** Whether an animal is not ready: the one rule behind the board's
+ *  `blockedCount` and anything that lists the ready animals beside it. */
+export const isBlocked = ({ blockers }: AnimalReadiness): boolean =>
+  blockers.length > 0;
+
 /**
  * Board order: what could hurt an animal or mislead an adopter first, then
  * the checks that stand between an animal and its listing, then routine
@@ -54,6 +59,27 @@ export const BLOCKER_KIND_ORDER: readonly ReadinessBlockerKind[] = [
   "NO_INTAKE_EXAM",
   "NOT_SPAYED_NEUTERED",
   "NO_PHOTO",
+];
+
+/** Each group's title, as the board, the animal's readiness panel and the
+ *  dashboard's Readiness card name it. */
+export const BLOCKER_KIND_TITLES: Record<ReadinessBlockerKind, string> = {
+  ESCALATED_FINDING: "Escalated findings",
+  NEEDS_VET_REVIEW: "Needs vet review",
+  UNDER_CARE: "Under care",
+  UNSUPPORTED_CHARACTERISTIC: "Unsupported characteristics",
+  MISSING_ASSESSMENT: "Missing assessments",
+  NO_INTAKE_EXAM: "No intake exam",
+  NOT_SPAYED_NEUTERED: "Not spayed or neutered",
+  NO_PHOTO: "No photo",
+};
+
+/** The kinds that could hurt an animal or mislead an adopter, marked red on
+ *  the board. The first three of `BLOCKER_KIND_ORDER`. */
+export const URGENT_BLOCKER_KINDS: readonly ReadinessBlockerKind[] = [
+  "ESCALATED_FINDING",
+  "NEEDS_VET_REVIEW",
+  "UNDER_CARE",
 ];
 
 /** Location filter values that aren't a location id. */
@@ -303,7 +329,7 @@ export function buildReadinessBoard(
 ): ReadinessBoard {
   const matching = readiness.filter((r) => matchesFilters(r.animal, filters));
   const animalCount = matching.length;
-  const blockedCount = matching.filter((r) => r.blockers.length > 0).length;
+  const blockedCount = matching.filter(isBlocked).length;
 
   if (filters.kind) {
     const rows = rowsForKind(matching, filters.kind, now, timezone);
