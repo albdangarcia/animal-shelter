@@ -242,6 +242,9 @@ const chartOutcomesOn = async (page: Page, day: string, daysAgo: number) => {
   await page.goto("/dashboard");
   const plot = page.locator(".recharts-cartesian-grid").first();
   await expect(plot).toBeVisible();
+  // The chart sits below the dashboard's first rows, so it may start below
+  // the fold, where a mouse move can't reach it.
+  await plot.scrollIntoViewIfNeeded();
   const box = await plot.boundingBox();
   if (!box) throw new Error("The chart has no plot area.");
 

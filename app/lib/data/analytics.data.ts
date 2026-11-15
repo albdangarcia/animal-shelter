@@ -3,12 +3,12 @@ import {
   getShelterToday,
 } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
-import type { Prisma } from "@/prisma/generated/client";
 import {
   AnimalListingStatus,
   OutcomeType,
+  type CareEpisodeType,
 } from "@/prisma/generated/enums";
-import { AppPermissions } from "@/app/lib/auth/permissions";
+import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
 import {
   RequireAllPermissions,
   RequirePermission,
@@ -19,7 +19,11 @@ import {
   shiftDayKey,
 } from "../utils/shelter-day";
 import { resolveDashboardMonthBoundaries } from "./dashboard-month-boundaries";
-import { findOpenCareEpisodes, type UnderCareRow } from "./care-episodes";
+import {
+  countOpenCareEpisodesByType,
+  findOpenCareEpisodes,
+  type UnderCareRow,
+} from "./care-episodes";
 
 export type PetCardDataType = {
   totalPets: number;
@@ -249,84 +253,32 @@ const _fetchChartData = async (): Promise<ChartData> => {
   }
 };
 
-export type TaskAnalyticsPayload = Prisma.TaskGetPayload<{
-  select: {
-    id: true;
-    title: true;
-    details: true;
-    status: true;
-    priority: true;
-    category: true;
-    dueDate: true;
-    animal: { select: { id: true; name: true } };
-    assignee: { select: { id: true; name: true } };
-    createdBy: { select: { id: true; name: true } };
-    createdAt: true;
-    updatedAt: true;
-  };
-}>;
-
-const _fetchAnalyticsTaskTableData = async (): Promise<
-  TaskAnalyticsPayload[]
-> => {
-  try {
-    const tasks = await prisma.task.findMany({
-      // Filter for tasks that are not yet completed
-      where: {
-        status: {
-          in: ["TODO", "IN_PROGRESS"],
-        },
-      },
-      // Limit the result to 10 records
-      take: 10,
-      orderBy: [
-        {
-          dueDate: "asc",
-        },
-        {
-          createdAt: "desc",
-        },
-      ],
-      select: {
-        id: true,
-        title: true,
-        details: true,
-        status: true,
-        priority: true,
-        category: true,
-        dueDate: true,
-        animal: { select: { id: true, name: true } },
-        assignee: { select: { id: true, name: true } },
-        createdBy: { select: { id: true, name: true } },
-        createdAt: true,
-        updatedAt: true,
-      },
-    });
-    return tasks;
-  } catch (error) {
-    console.error("Error fetching task table data.", error);
-    throw new Error("Error fetching task table data.");
-  }
+export type UnderCareSummary = {
+  /** Open episodes on animals in care, by type, uncapped. */
+  countsByType: Record<CareEpisodeType, number>;
+  /** The latest few, the latest start first. */
+  latest: UnderCareRow[];
 };
 
-export type AnimalUnderCarePayload = UnderCareRow;
+/** How many animals the "Under care" card lists by name. */
+const UNDER_CARE_LATEST = 5;
 
-// The dashboard's "Animal Health" tab: animals in care under an open care
-// episode, the latest start first. Not the attention queue's care signal
-// (`findUnplannedCareForQueue`), which keeps only the animals with nothing
-// planned and clears when someone plans something.
-const _fetchAnimalsUnderCare = async (): Promise<AnimalUnderCarePayload[]> => {
+// The dashboard's "Under care" card: animals in care under an open care
+// episode, counted by type, and the latest few. Not the attention queue's care
+// signal (`findUnplannedCareForQueue`), which keeps only the animals with
+// nothing planned and clears when someone plans something.
+const _fetchUnderCareSummary = async (): Promise<UnderCareSummary> => {
   try {
-    return await findOpenCareEpisodes(prisma, { take: 10 });
+    const [countsByType, latest] = await Promise.all([
+      countOpenCareEpisodesByType(prisma),
+      findOpenCareEpisodes(prisma, { take: UNDER_CARE_LATEST }),
+    ]);
+    return { countsByType, latest };
   } catch (error) {
     console.error("Error fetching animals under care.", error);
     throw new Error("Error fetching animals under care.");
   }
 };
-
-export const fetchAnalyticsTaskTableData = RequirePermission(
-  AppPermissions.ANIMAL_READ_ANALYTICS,
-)(_fetchAnalyticsTaskTableData);
 
 export const fetchPetCardData = RequirePermission(
   AppPermissions.ANIMAL_READ_ANALYTICS,
@@ -336,9 +288,14 @@ export const fetchChartData = RequirePermission(
   AppPermissions.ANIMAL_READ_ANALYTICS,
 )(_fetchChartData);
 
-/** `ANIMAL_READ_ANALYTICS` for the dashboard, and `MEDICAL_READ`: the rows
- *  are read from the medical record. */
-export const fetchAnimalsUnderCare = RequireAllPermissions(
+/** What the dashboard's "Under care" card needs: `ANIMAL_READ_ANALYTICS` for
+ *  the dashboard, and `MEDICAL_READ`, since the rows are read from the
+ *  medical record. The card checks this same list before it fetches. */
+export const UNDER_CARE_PERMISSIONS = [
   AppPermissions.ANIMAL_READ_ANALYTICS,
   AppPermissions.MEDICAL_READ,
-)(_fetchAnimalsUnderCare);
+] as const satisfies readonly AppPermission[];
+
+export const fetchUnderCareSummary = RequireAllPermissions(
+  ...UNDER_CARE_PERMISSIONS,
+)(_fetchUnderCareSummary);
