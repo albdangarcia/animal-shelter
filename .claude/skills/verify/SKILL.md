@@ -95,6 +95,7 @@ API and inject the session cookie directly than to drive the form:
 ```bash
 curl -s -i -c cookies.txt -X POST http://localhost:3000/api/auth/sign-in/email \
   -H "Content-Type: application/json" \
+  -H "Origin: http://localhost:3000" \
   -d '{"email":"<user>@example.com","password":"<password>"}'
 # grabs a Set-Cookie: better-auth.session_token=<token>.<signature>; ...
 # inject the *full* value (token + signature, exactly as sent — better-auth verifies
@@ -102,9 +103,11 @@ curl -s -i -c cookies.txt -X POST http://localhost:3000/api/auth/sign-in/email \
 # context.addCookies([{ name: "better-auth.session_token", value, domain: "localhost", path: "/", httpOnly: true, sameSite: "Lax" }])
 ```
 
-Verified against a running `next dev` (2026-08-25): no CSRF token or prior `GET` is
+Verified against a running `next dev` (2026-11-15): no CSRF token or prior `GET` is
 needed — the endpoint takes a plain JSON `POST` and returns `200` with the cookie on the
-first request. A follow-up `GET /dashboard` with that cookie returns `200`; the same
+first request. **The `Origin` header is required:** without it Better Auth answers
+`403 {"code":"MISSING_OR_NULL_ORIGIN"}` (a script using `fetch` must set it too, since
+Node's `fetch` sends none). A follow-up `GET /dashboard` with that cookie returns `200`; the same
 request without it returns `307` to `/sign-in`.
 
 This exercises the same Better Auth credential backend as the UI, so it's not a bypass of

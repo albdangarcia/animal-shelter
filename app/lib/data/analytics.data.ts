@@ -20,6 +20,12 @@ import {
   countAdoptionApplicationsWaiting,
   countFosterApplicationsWaiting,
 } from "./applications-waiting";
+import { findReadinessForAnimals } from "./animals/readiness";
+import { shelterDay } from "./animals/readiness.data";
+import {
+  summariseReadiness,
+  type ReadinessSummary,
+} from "../readiness/summary";
 import {
   countOpenCareEpisodesByType,
   findOpenCareEpisodes,
@@ -199,3 +205,33 @@ export const FOSTER_APPLICATIONS_WAITING_PERMISSIONS = [
 export const fetchFosterApplicationsWaiting = RequireAllPermissions(
   ...FOSTER_APPLICATIONS_WAITING_PERMISSIONS,
 )(_fetchFosterApplicationsWaiting);
+
+// The dashboard's "Readiness" card: the readiness board summed up. The same
+// read the board makes (every non-archived animal, judged on the shelter's
+// day) and the board's own builder, so the card's numbers are the board's.
+const _fetchReadinessSummary = async (): Promise<ReadinessSummary> => {
+  try {
+    const day = await shelterDay();
+    const readiness = await findReadinessForAnimals(prisma, day);
+    return summariseReadiness(readiness, new Date(), day.timezone);
+  } catch (error) {
+    console.error("Error fetching the readiness summary.", error);
+    throw new Error("Error fetching the readiness summary.");
+  }
+};
+
+/** What the card needs: the dashboard's permission and the four reads
+ *  readiness is judged from (as `fetchReadinessForAnimals` requires). The
+ *  card checks this same list before it fetches, and is left out without
+ *  it. */
+export const READINESS_PERMISSIONS = [
+  AppPermissions.ANIMAL_READ_ANALYTICS,
+  AppPermissions.ANIMAL_INFO_READ,
+  AppPermissions.ANIMAL_ASSESSMENT_READ,
+  AppPermissions.ANIMAL_CHARACTERISTICS_READ,
+  AppPermissions.MEDICAL_READ,
+] as const satisfies readonly AppPermission[];
+
+export const fetchReadinessSummary = RequireAllPermissions(
+  ...READINESS_PERMISSIONS,
+)(_fetchReadinessSummary);
