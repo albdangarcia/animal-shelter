@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 import pg from "pg";
 import { E2E_DATABASE_URL } from "../../../playwright/env";
 import { bootstrapStorageState, SEEDED_USER_PASSWORD, storageStatePathFor } from "../support/applications";
@@ -11,6 +11,20 @@ test.beforeAll(async ({ browser }) => {
   }
 });
 const id = () => `c${randomBytes(12).toString("hex")}`;
+/**
+ * Opens a row's Radix menu and picks an item. The trigger can swallow a click
+ * that lands before hydration settles (as after a full page load), so retry,
+ * re-clicking only while the menu is closed so it is never toggled shut.
+ */
+const pickFromMenu = async (page: Page, trigger: Locator, itemName: RegExp | string) => {
+  const item = page.getByRole("menuitem", { name: itemName, exact: typeof itemName === "string" });
+  await expect(trigger).toBeVisible();
+  await expect(async () => {
+    if (!(await item.isVisible())) await trigger.click();
+    await expect(item).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  await item.click();
+};
 const withDb = async <T>(run: (db: pg.Client) => Promise<T>) => {
   const db = new pg.Client({ connectionString: E2E_DATABASE_URL });
   await db.connect();
@@ -21,15 +35,18 @@ async function fixture() {
     await db.query("BEGIN");
     const animalId = id(), emptyId = id(), itemId = id(), medicationId = id();
     const marker = `PRIVATE-${randomBytes(5).toString("hex")}`;
+    // Item names are unique per kind, so each run's are its own: a retry must
+    // not collide with rows a failed attempt left behind.
+    const suffix = randomBytes(4).toString("hex");
     const name = `History animal ${"long name ".repeat(10)}`;
-    const product = `Recorded vaccine ${"long product ".repeat(11)}`;
+    const product = `Recorded vaccine ${"long product ".repeat(11)}${suffix}`;
     const registry = `Registry${"X".repeat(90)}`;
     const { rows: staff } = await db.query<{ id: string }>(`SELECT id FROM persons WHERE email = 'staff1@example.com'`);
     const actorId = staff[0].id;
     for (const [key, label] of [[animalId, name], [emptyId, "Empty history animal"]]) await db.query(`INSERT INTO animals (id, name, birth_date, sex, species_id, primary_color_id, "listingStatus", updated_at)
       SELECT $1, $2, '2020-01-01', 'UNKNOWN', species_id, primary_color_id, 'DRAFT', now() FROM animals ORDER BY id LIMIT 1`, [key, label]);
     await db.query(`INSERT INTO intakes (id, "animalId", "intakeDate", type, "staffMemberId", "updatedAt") VALUES ($1, $2, '2026-01-01', 'STRAY', $3, now())`, [id(), animalId, actorId]);
-    await db.query(`INSERT INTO medical_items (id, kind, name, is_rabies, updated_at) VALUES ($1, 'VACCINE', $2, true, now()), ($3, 'MEDICATION', 'Recorded medication', false, now())`, [itemId, product, medicationId]);
+    await db.query(`INSERT INTO medical_items (id, kind, name, is_rabies, updated_at) VALUES ($1, 'VACCINE', $2, true, now()), ($3, 'MEDICATION', $4, false, now())`, [itemId, product, medicationId, `Recorded medication ${suffix}`]);
     const entries: string[] = [];
     for (let i = 0; i < 26; i++) {
       const entryId = id(); entries.push(entryId);
@@ -206,7 +223,9 @@ test("medical readers print the full safe handout, with private direct access an
       } finally { await denied.close(); }
     }
     expect(await counts(f.animalId)).toEqual(before);
-  } finally { await context.close(); await cleanup(f); }
+  } finally {
+    try { await context.close(); } finally { await cleanup(f); }
+  }
 });
 
 test("medical readers print a selected rabies certificate only after its missing facts are corrected", async ({ browser }, testInfo) => {
@@ -233,8 +252,8 @@ test("medical readers print a selected rabies certificate only after its missing
     const row = page.locator(`[id="medical-entry-${selected}"]`);
     await expect(row).toContainText("Certificate unavailable:");
     await expect(row).not.toContainText("Certificate: Incomplete");
-    await row.getByRole("button", { name: /^Actions for/ }).click();
-    await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    const actions = row.getByRole("button", { name: /^Actions for/ });
+    await pickFromMenu(page, actions, "Edit");
     const edit = page.getByRole("dialog", { name: "Edit vaccine", exact: true });
     await edit.getByLabel("Veterinarian name", { exact: true }).fill(vet);
     await edit.getByLabel("Veterinarian license number").fill(license);
@@ -314,16 +333,17 @@ test("medical readers print a selected rabies certificate only after its missing
       `/medical-outputs/animals/invalid/rabies/${selected}`,
     ]) expect((await context.request.get(url)).status()).toBe(404);
     // A subsequent audited correction reaches a fresh certificate request.
-    await row.getByRole("button", { name: /^Actions for/ }).click();
-    await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    await pickFromMenu(page, actions, "Edit");
     await edit.getByLabel("Veterinarian license number").fill("CORRECTED-LICENSE");
     await edit.getByRole("button", { name: "Save Changes", exact: true }).click();
     await expect(edit).toBeHidden();
     await row.getByRole("link", { name: "Print rabies certificate", exact: true }).click();
+    await expect(page).toHaveURL(route);
     await expect(page.getByText("CORRECTED-LICENSE", { exact: true })).toBeVisible();
+    // A plain link: the record loads in full, and its menu works only once hydrated.
     await page.getByRole("link", { name: "Return to medical record" }).click();
-    await row.getByRole("button", { name: /^Actions for/ }).click();
-    await page.getByRole("menuitem", { name: /Void/ }).click();
+    await expect(page).toHaveURL(record);
+    await pickFromMenu(page, actions, /Void/);
     const voidDialog = page.getByRole("alertdialog");
     await voidDialog.getByLabel("Reason for voiding").fill("Wrong animal");
     await voidDialog.getByRole("button", { name: "Void Entry", exact: true }).click();
@@ -334,7 +354,9 @@ test("medical readers print a selected rabies certificate only after its missing
     await expect(page.getByRole("link", { name: "Correct this vaccination record" })).toHaveCount(0);
     const refused = await context.request.get(route, { headers: { RSC: "1" } });
     expect(await refused.text()).not.toContain("CORRECTED-LICENSE");
-  } finally { await context.close(); await cleanup(f); }
+  } finally {
+    try { await context.close(); } finally { await cleanup(f); }
+  }
 });
 
 test("seeded output examples retain unknown facts and show printable care and per-chip registration", async ({ browser }, testInfo) => {
