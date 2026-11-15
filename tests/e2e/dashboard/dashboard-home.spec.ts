@@ -1,17 +1,21 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import {
   SEEDED_USER_PASSWORD,
   bootstrapStorageState,
   storageStatePathFor,
 } from "../support/applications";
 
-// The dashboard home's "Needs attention today" panel and "Under care" card,
-// read against the seed. What each count counts, the uncapped counts, the
-// order and the queries are covered by the database tests of the signals
+// The dashboard home's headcount cards, "Needs attention today" panel and
+// "Under care" card, read against the seed. This shows the page is wired to
+// them: each renders from seeded data, and a link lands on the page where the
+// work is done.
+//
+// What each headcount counts is covered by prisma/headcounts.test.ts, which
+// also checks it agrees with the shelter board. For the attention panel and
+// the Under care card, what each count counts, the uncapped counts, the order
+// and the queries are covered by the database tests of the signals
 // (prisma/attention-signals.test.ts, prisma/care-status.test.ts) and the unit
-// tests of the summary (attention-summary.test.ts). This shows the page is
-// wired to them: both render from seeded data, and a group link lands on the
-// page where the work is done.
+// tests of the summary (attention-summary.test.ts).
 //
 // Every role that sees the dashboard (volunteer, staff, admin) holds
 // MEDICAL_READ and the task and animal reads, so there is no "left out"
@@ -34,15 +38,56 @@ test.beforeAll(async ({ browser }) => {
 
 test.use({ storageState: staffState });
 
+const cardIn = (page: Page, title: string) =>
+  page
+    .locator('[data-slot="card"]')
+    .filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+
+test("the headcount cards say where the animals are, and In care opens the shelter board", async ({
+  page,
+}) => {
+  await page.goto("/dashboard");
+
+  const inCare = cardIn(page, "In care");
+  await expect(inCare).toBeVisible();
+  await expect(
+    inCare.getByText(/^\d+ on site · \d+ in foster · \d+ not housed$/),
+  ).toBeVisible();
+  await expect(
+    cardIn(page, "Available").getByRole("link", { name: "List available animals" }),
+  ).toHaveAttribute("href", "/dashboard/animals?listingStatus=PUBLISHED");
+  await expect(
+    cardIn(page, "Pending adoption").getByText(/in a foster-to-adopt placement$/),
+  ).toBeVisible();
+  // Space: animals on site against the units' capacity (the seed has units).
+  const space = cardIn(page, "Space");
+  await expect(space.getByText(/^\d+ \/ \d+$/)).toBeVisible();
+  await expect(
+    space.getByText(/^(\d+ units? full( · \d+ over capacity)?|\d+ over capacity|Every unit has space)$/),
+  ).toBeVisible();
+
+  // The old KPI cards are gone, and the new ones carry no trend.
+  await expect(page.getByText("Total Animals", { exact: true })).toHaveCount(0);
+  for (const title of ["In care", "Available", "Pending adoption", "Space"]) {
+    await expect(
+      cardIn(page, title).getByText(/this month|this period|%/),
+    ).toHaveCount(0);
+  }
+
+  await inCare.getByRole("link", { name: "Open the shelter board" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/locations$/);
+  // A seeded location on the board.
+  await expect(
+    page.getByRole("heading", { name: "Dog block A", exact: true }),
+  ).toBeVisible();
+});
+
 test("the dashboard shows what needs attention and who is under care, and a group link opens its page", async ({
   page,
 }) => {
   await page.goto("/dashboard");
 
-  const card = (title: string) =>
-    page
-      .locator('[data-slot="card"]')
-      .filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+  const card = (title: string) => cardIn(page, title);
 
   // Under care: the count by type, and the latest animals, each linking to
   // its medical record.
