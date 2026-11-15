@@ -63,7 +63,11 @@ test("the sidebar entry leads to the board, which groups the seeded blockers by 
   page,
 }) => {
   await page.goto("/dashboard");
-  await page.getByRole("link", { name: "Readiness Board" }).click();
+  // Exact: the dashboard's Readiness card links "Open the readiness board",
+  // which a substring match also finds once the card has loaded.
+  await page
+    .getByRole("link", { name: "Readiness Board", exact: true })
+    .click();
   await waitForPathname(page, BOARD_PATH);
   await expect(
     page.getByRole("heading", { level: 1, name: "Readiness Board" }),
@@ -189,7 +193,7 @@ test("an account without assessment access neither sees nor opens it", async ({
     page.getByRole("link", { name: "My Adoption Applications" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Readiness Board" }),
+    page.getByRole("link", { name: "Readiness Board", exact: true }),
   ).toHaveCount(0);
 
   await page.goto(BOARD_PATH);

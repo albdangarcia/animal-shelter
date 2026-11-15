@@ -10,6 +10,8 @@ import ApplicationsWaitingCard from "@/components/dashboard/home/applications-wa
 import ApplicationsWaitingCardSkeleton from "@/components/skeletons/applicationsWaitingCardSkeleton";
 import ReadinessCard from "@/components/dashboard/home/readiness-card";
 import ReadinessCardSkeleton from "@/components/skeletons/readinessCardSkeleton";
+import LongestStaysCard from "@/components/dashboard/home/longest-stays-card";
+import LongestStaysCardSkeleton from "@/components/skeletons/longestStaysCardSkeleton";
 
 const Page = async () => {
   return (
@@ -19,15 +21,19 @@ const Page = async () => {
         <HeadcountCards />
       </Suspense>
 
-      {/* "Glance and jump": the attention panel wide, beside a column of
-          small cards (Under care, Applications waiting, then Readiness).
-          Stacked on narrow screens. Each has its own Suspense, so a slow
-          read holds only its own card. */}
-      <div className="grid grid-cols-1 items-start gap-4 @4xl/main:grid-cols-3">
+      {/* "Glance and jump": on wide screens, the attention panel and Longest
+          stays fill two columns, one under the other, beside a column of
+          small cards (Under care, Applications waiting, then Readiness) that
+          spans both rows. The second row is 1fr so that column's extra height
+          goes there, and Longest stays starts right under the panel. In
+          source order, narrow screens stack the panel, the small cards, then
+          Longest stays. Each has its own Suspense, so a slow read holds only
+          its own card. */}
+      <div className="grid grid-cols-1 items-start gap-4 @4xl/main:grid-cols-3 @4xl/main:grid-rows-[auto_1fr]">
         <Suspense fallback={<AttentionPanelSkeleton />}>
           <AttentionPanel />
         </Suspense>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 @4xl/main:col-start-3 @4xl/main:row-span-2 @4xl/main:row-start-1">
           <Suspense fallback={<UnderCareCardSkeleton />}>
             <UnderCareCard />
           </Suspense>
@@ -38,6 +44,9 @@ const Page = async () => {
             <ReadinessCard />
           </Suspense>
         </div>
+        <Suspense fallback={<LongestStaysCardSkeleton />}>
+          <LongestStaysCard />
+        </Suspense>
       </div>
 
       <ChartWrapper />

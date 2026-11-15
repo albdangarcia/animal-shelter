@@ -5,9 +5,9 @@ import {
   storageStatePathFor,
 } from "../support/applications";
 
-// The dashboard home's headcount cards, "Needs attention today" panel and
-// its small cards (Under care, Applications waiting, Readiness), read
-// against the seed. This shows the page is wired to
+// The dashboard home's headcount cards, "Needs attention today" panel, its
+// small cards (Under care, Applications waiting, Readiness) and the Longest
+// stays card, read against the seed. This shows the page is wired to
 // them: each renders from seeded data, and a link lands on the page where the
 // work is done.
 //
@@ -19,8 +19,8 @@ import {
 // tests of the summary (attention-summary.test.ts).
 //
 // Every role that sees the dashboard (volunteer, staff, admin) holds
-// MEDICAL_READ and the task and animal reads, so there is no "left out"
-// case to show.
+// MEDICAL_READ, REPORTS_READ and the task and animal reads, so there is no
+// "left out" case to show.
 //
 // Fixtures: the seed's deterministic overdue tasks (seedTasks'
 // `overdueTaskSeedData`), and its open care episodes (Fido, Daisy, Rocket,
@@ -215,4 +215,65 @@ test("Readiness sums up the readiness board, and a group link opens that group w
       { exact: true },
     ),
   ).toBeVisible();
+});
+
+test("Longest stays shows the length-of-stay report's first animals and counts, and links to the report", async ({
+  page,
+}) => {
+  // The order, what counts as in care and the 90-day line are the report's
+  // own (summarizeLengthOfStay), and the card's cut and wording are covered
+  // by app/lib/utils/longest-stays.test.ts. Here: the card renders from the
+  // seed, and its counts and first animal are the report's.
+  await page.goto("/dashboard");
+
+  const card = cardIn(page, "Longest stays");
+  await expect(card).toBeVisible();
+  const summary = card.getByText(/^\d+ in care · (\d+|none) over 90 days$/);
+  await expect(summary).toBeVisible();
+  const [, inCare, over90] = (await summary.textContent())!.match(
+    /^(\d+) in care · (\d+|none)/,
+  )!;
+  // The over-90 part is amber only when some animal is over, as on the
+  // report's metric card.
+  const over90Part = card.locator('[data-slot="card-description"] span');
+  await expect(over90Part).toHaveText(/over 90 days$/);
+  if (over90 === "none") {
+    await expect(over90Part).not.toHaveClass(/text-amber-600/);
+  } else {
+    await expect(over90Part).toHaveClass(/text-amber-600/);
+  }
+  const rows = card.getByRole("listitem");
+  await expect(rows).toHaveCount(Math.min(Number(inCare), 5));
+  await expect(rows.first()).toContainText(/\d+ days?/);
+  const first = rows.first().getByRole("link");
+  const firstName = (await first.textContent())!;
+  const firstHref = (await first.getAttribute("href"))!;
+  expect(firstHref).toMatch(/^\/dashboard\/animals\/[^/]+$/);
+
+  await card.getByRole("link", { name: "Length of stay report" }).click();
+  await expect(page).toHaveURL(/\/dashboard\/reports\/length-of-stay$/);
+
+  const metric = (label: string) =>
+    page
+      .locator('[data-slot="card"]')
+      .filter({ has: page.getByText(label, { exact: true }) })
+      .locator('[data-slot="card-title"]');
+  await expect(metric("Animals in care now")).toHaveText(inCare);
+  await expect(metric("In care over 90 days")).toHaveText(
+    over90 === "none" ? "0" : over90,
+  );
+
+  // The report's first row is the card's first animal.
+  const worklist = page
+    .locator('[data-slot="card"]')
+    .filter({
+      has: page.getByText("Longest current stays", { exact: true }),
+    });
+  const reportFirst = worklist
+    .locator('[data-slot="table-body"]')
+    .getByRole("row")
+    .first()
+    .getByRole("link");
+  await expect(reportFirst).toHaveText(firstName);
+  await expect(reportFirst).toHaveAttribute("href", firstHref);
 });
