@@ -3,6 +3,7 @@ title: Review and undo the assistant's changes
 summary: See every change the AI assistant made to shelter data, who approved it, and undo one that was a mistake.
 permissions: [AI_ACTIVITY_READ, ANIMAL_TASK_MANAGE]
 aliases: [AI activity, assistant changes, undo assistant, revert AI change, what did the assistant do, AI marked task done, chatbot changed a task, AI log, audit assistant]
+related: [create-assign-and-complete-tasks]
 verified: 2026-11-10
 ---
 

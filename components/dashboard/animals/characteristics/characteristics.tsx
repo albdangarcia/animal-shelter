@@ -55,6 +55,8 @@ import { CATEGORIES } from "@/app/lib/constants/characteristic-categories";
 import { formatDateToLongString } from "@/app/lib/utils/date-utils";
 import { formatShelterDayOrNA } from "@/app/lib/utils/shelter-day";
 import { FindingsAgainst } from "./findings-against";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 import { useConfirmedOpenChange } from "@/hooks/use-confirmed-open-change";
 
 const CATEGORY_KEYS = Object.values(CharacteristicCategory);
@@ -63,12 +65,14 @@ interface Props {
   animalCharacteristics: CharacteristicWithAssignment[];
   animalId: string;
   canManage: boolean;
+  help: HelpLinkGuide | null;
 }
 
 const AnimalCharacteristicsManager = ({
   animalCharacteristics,
   animalId,
   canManage,
+  help,
 }: Props) => {
   const [isPending, startTransition] = useTransition();
 
@@ -177,7 +181,7 @@ const AnimalCharacteristicsManager = ({
           <CardDescription>
             Unique behavioral and medical traits for this animal.
           </CardDescription>
-          <CardAction>
+          <CardAction className="flex items-center gap-2">
             <DialogTrigger asChild>
               <Button
                 variant={canManage ? "default" : "outline"}
@@ -189,6 +193,7 @@ const AnimalCharacteristicsManager = ({
                 Edit
               </Button>
             </DialogTrigger>
+            <HelpLink guide={help} />
           </CardAction>
         </CardHeader>
         <CardContent>

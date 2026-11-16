@@ -15,6 +15,8 @@ import { IDParamType } from "@/app/lib/types";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   params: IDParamType;
@@ -23,13 +25,14 @@ interface Props {
 const Page = async ({ params }: Props) => {
   const { id: animalId } = await params;
 
-  const [animal, partners, colors, speciesList, unitOptions] =
+  const [animal, partners, colors, speciesList, unitOptions, help] =
     await Promise.all([
       fetchAnimalById(animalId),
       fetchPartners(),
       fetchColors(),
       fetchSpecies(),
       fetchUnitPickerOptions(),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.animalEdit),
     ]);
 
   if (!animal) {
@@ -53,6 +56,7 @@ const Page = async ({ params }: Props) => {
         animal={animal}
         unitOptions={unitOptions}
         today={await getShelterToday()}
+        help={help}
       />
     </main>
   );

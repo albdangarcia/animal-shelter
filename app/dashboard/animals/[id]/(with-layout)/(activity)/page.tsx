@@ -5,6 +5,8 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 import ActivityFeed from "@/components/dashboard/animals/activity-feed/activity-feed";
 import { AnimalReadinessPanel } from "@/components/dashboard/animals/readiness/animal-readiness-panel";
 
@@ -40,6 +42,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
     manageAnimalInfo,
     managePhotos,
     manageMedical,
+    help,
   ] = await Promise.all([
     fetchAnimalActivityLogs(currentPage, animalId),
     hasPermission(AppPermissions.ANIMAL_INFO_READ),
@@ -50,6 +53,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
     hasPermission(AppPermissions.ANIMAL_INFO_MANAGE),
     hasPermission(AppPermissions.ANIMAL_PHOTO_MANAGE),
     hasPermission(AppPermissions.MEDICAL_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.animalActivity),
   ]);
 
   const canReadReadiness =
@@ -72,7 +76,11 @@ const PageContent = async ({ params, searchParams }: Props) => {
           }}
         />
       )}
-      <ActivityFeed activityLogs={activityLogs} totalPages={totalPages} />
+      <ActivityFeed
+        activityLogs={activityLogs}
+        totalPages={totalPages}
+        help={help}
+      />
     </div>
   );
 };

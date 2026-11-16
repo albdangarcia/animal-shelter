@@ -5,6 +5,8 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   params: IDParamType;
@@ -23,9 +25,10 @@ const Page = async ({ params }: Props) => {
 
 const PageContent = async ({ params }: Props) => {
   const { id: animalId } = await params;
-  const [canManage, animalCharacteristics] = await Promise.all([
+  const [canManage, animalCharacteristics, help] = await Promise.all([
     hasPermission(AppPermissions.ANIMAL_CHARACTERISTICS_MANAGE),
     fetchAnimalCharacteristics(animalId),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.animalCharacteristics),
   ]);
 
   return (
@@ -33,6 +36,7 @@ const PageContent = async ({ params }: Props) => {
       animalCharacteristics={animalCharacteristics}
       animalId={animalId}
       canManage={canManage}
+      help={help}
     />
   );
 };

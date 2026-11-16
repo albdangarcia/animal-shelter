@@ -3,7 +3,7 @@ title: Find an intake
 summary: Look up when and how an animal came in, who brought it, and who recorded it, on the list of every intake.
 permissions: [INTAKE_READ]
 aliases: [intakes list, intake history, when did it arrive, who surrendered, who brought it in, arrival date, list of strays, list of transfers, intake records, look up an intake]
-related: [correct-an-intake, take-in-a-new-animal, take-back-an-animal-that-left]
+related: [correct-an-intake, take-in-a-new-animal, take-back-an-animal-that-left, find-an-animal]
 verified: 2026-11-14
 ---
 

@@ -3,7 +3,7 @@ title: Correct an intake
 summary: Fix an intake recorded with the wrong day, type, source or notes, and see what the app keeps of the change.
 permissions: [INTAKE_MANAGE]
 aliases: [edit an intake, fix intake date, wrong intake date, wrong intake type, change surrendering person, change source partner, change found address, intake mistake, update intake]
-related: [find-an-intake, take-in-a-new-animal, take-back-an-animal-that-left]
+related: [find-an-intake, take-in-a-new-animal, take-back-an-animal-that-left, read-an-animals-activity-and-journey]
 verified: 2026-11-14
 ---
 

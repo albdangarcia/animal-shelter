@@ -3,6 +3,7 @@ import UppyUploader from "@/components/dashboard/animals/photos/uppy-uploader";
 import { notFound } from "next/navigation";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -14,6 +15,9 @@ import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import AnimalImageGallery from "@/components/dashboard/animals/photos/animal-image-gallery";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   params: IDParamType;
@@ -32,13 +36,15 @@ const Page = async ({ params }: Props) => {
 
 const PageContent = async ({ params }: Props) => {
   const { id: animalId } = await params;
-  const animal = await fetchAnimalForPhotosPage(animalId);
+  const [animal, canManage, help] = await Promise.all([
+    fetchAnimalForPhotosPage(animalId),
+    hasPermission(AppPermissions.ANIMAL_PHOTO_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.animalPhotos),
+  ]);
 
   if (!animal) {
     notFound();
   }
-
-  const canManage = await hasPermission(AppPermissions.ANIMAL_PHOTO_MANAGE);
 
   return (
     <div className="space-y-6">
@@ -51,6 +57,11 @@ const PageContent = async ({ params }: Props) => {
             Manage the existing photos for this animal&apos;s profile. Hover
             over an image to delete it.
           </CardDescription>
+          {help && (
+            <CardAction>
+              <HelpLink guide={help} />
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent>
           <AnimalImageGallery

@@ -46,6 +46,8 @@ import { NoteActions } from "./note-actions";
 import { SimplePagination } from "../../../simple-pagination";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { ServerSideSort } from "@/components/table-common/server-side-sort";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 import {
   DirtyFormHandle,
   useConfirmedOpenChange,
@@ -76,9 +78,16 @@ interface Props {
   totalPages: number;
   animalId: string;
   canManage: boolean;
+  help: HelpLinkGuide | null;
 }
 
-const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
+const AnimalNotes = ({
+  notes,
+  totalPages,
+  animalId,
+  canManage,
+  help,
+}: Props) => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const formRef = useRef<DirtyFormHandle>(null);
 
@@ -100,7 +109,7 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
             Keep track of important notes about this animal.
           </CardDescription>
 
-          <CardAction>
+          <CardAction className="flex items-center gap-2">
             <Dialog open={isAddDialogOpen} onOpenChange={guardedOnOpenChange}>
               <DialogTrigger asChild>
                 <Button
@@ -149,6 +158,7 @@ const AnimalNotes = ({ notes, totalPages, animalId, canManage }: Props) => {
                 </AlertDialogContent>
               </AlertDialog>
             </Dialog>
+            <HelpLink guide={help} />
           </CardAction>
 
           {/* Filter and Sort Controls */}

@@ -9,6 +9,7 @@ import TasksDataTableToolbar from "@/components/dashboard/animals/tasks/table/ta
 import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -16,6 +17,9 @@ import {
 } from "@/components/ui/card";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   params: IDParamType;
@@ -39,7 +43,10 @@ const Page = async ({ params, searchParams }: Props) => {
 
   // Whether the current user can manage tasks (edit assignee/status, delete, edit form).
   // Volunteers have ANIMAL_TASK_READ only; staff/admin have ANIMAL_TASK_MANAGE.
-  const canManage = await hasPermission(AppPermissions.ANIMAL_TASK_MANAGE);
+  const [canManage, help] = await Promise.all([
+    hasPermission(AppPermissions.ANIMAL_TASK_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.animalTasks),
+  ]);
 
   const { tasks, totalPages, totalRows } = await fetchAnimalTasks(
     query,
@@ -67,6 +74,11 @@ const Page = async ({ params, searchParams }: Props) => {
           This page displays all tasks that are associated with this animal,
           which can be filtered and sorted.
         </CardDescription>
+        {help && (
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="grid gap-6">
         <div className="flex flex-1 flex-col">

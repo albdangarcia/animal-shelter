@@ -16,6 +16,9 @@ import Link from "next/link";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -45,14 +48,17 @@ const PageContent = async ({ searchParams }: Props) => {
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
-  const { animals, totalPages, totalRows } = await fetchAnimals(
-    query,
-    currentPage,
-    listingStatus,
-    sex,
-    currentPageSize,
-    sort,
-  );
+  const [{ animals, totalPages, totalRows }, help] = await Promise.all([
+    fetchAnimals(
+      query,
+      currentPage,
+      listingStatus,
+      sex,
+      currentPageSize,
+      sort,
+    ),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.animals),
+  ]);
 
   return (
     <Card className="@container/card">
@@ -64,10 +70,11 @@ const PageContent = async ({ searchParams }: Props) => {
           Manage all animals currently in your care or begin the intake process
           for a new arrival.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-2">
           <Button asChild size="sm">
             <Link href="/dashboard/animals/create">Add Animal</Link>
           </Button>
+          <HelpLink guide={help} />
         </CardAction>
       </CardHeader>
       <CardContent>
