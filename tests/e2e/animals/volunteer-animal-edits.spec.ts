@@ -9,7 +9,8 @@ import {
 
 // A volunteer reads animals but may not change their details or their
 // characteristics. They are offered no way in, and the edit page refuses them
-// with Access Denied, where both once ended on the error page.
+// with Access Denied, where both once ended on the error page. Nor are they
+// offered Add Animal, whose intake form they may not use.
 
 const state = storageStatePathFor("volunteer-animal-edits.json");
 let animalId: string;
@@ -66,6 +67,17 @@ test("a volunteer is offered no Edit on the animals list and is refused on the e
   await page.goto(`/dashboard/animals/${animalId}/edit`);
   await expect(page.getByText("Access Denied", { exact: true })).toBeVisible();
   await expect(page.getByText("Edit Animal Details")).toHaveCount(0);
+});
+
+test("a volunteer is offered no Add Animal on the animals list", async ({
+  page,
+}) => {
+  await page.goto("/dashboard/animals");
+  // The card header, where staff see Add Animal, and the table have rendered.
+  await expect(page.getByText(/Manage all animals currently in your care/)).toBeVisible();
+  await expect(page.locator("tbody tr").first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Add Animal" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add Animal" })).toHaveCount(0);
 });
 
 test("a volunteer cannot open Add Characteristics on an animal with none", async ({

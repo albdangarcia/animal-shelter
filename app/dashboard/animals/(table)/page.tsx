@@ -49,7 +49,7 @@ const PageContent = async ({ searchParams }: Props) => {
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
-  const [{ animals, totalPages, totalRows }, help, canManage] =
+  const [{ animals, totalPages, totalRows }, help, canManage, canIntake] =
     await Promise.all([
       fetchAnimals(
         query,
@@ -61,6 +61,8 @@ const PageContent = async ({ searchParams }: Props) => {
       ),
       getHelpLinkGuide(PAGE_HELP_GUIDES.animals),
       hasPermission(AppPermissions.ANIMAL_INFO_MANAGE),
+      // The intake form behind Add Animal refuses anyone without this.
+      hasPermission(AppPermissions.INTAKE_MANAGE),
     ]);
 
   return (
@@ -74,9 +76,11 @@ const PageContent = async ({ searchParams }: Props) => {
           for a new arrival.
         </CardDescription>
         <CardAction className="flex items-center gap-2">
-          <Button asChild size="sm">
-            <Link href="/dashboard/animals/create">Add Animal</Link>
-          </Button>
+          {canIntake && (
+            <Button asChild size="sm">
+              <Link href="/dashboard/animals/create">Add Animal</Link>
+            </Button>
+          )}
           <HelpLink guide={help} />
         </CardAction>
       </CardHeader>
