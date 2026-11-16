@@ -246,3 +246,24 @@ test("CreateAnimalFormSchema: the medical protocol is applied unless it is left 
     false,
   );
 });
+
+test("animal schemas: Breed repeated among the additional breeds is refused", () => {
+  // The form drops a breed from Additional Breeds when it is picked as Breed;
+  // a submission that names it twice is refused under Additional Breeds.
+  for (const schema of [CreateAnimalFormSchema, AnimalEditFormSchema]) {
+    const result = schema.safeParse({
+      ...baseInput,
+      additionalBreeds: [baseInput.breed, "cmtn2bxpz00gancgsd6hyf79t"],
+    });
+    assert.equal(result.success, false);
+    assert.deepEqual(
+      result.error?.issues.map((issue) => issue.path),
+      [["additionalBreeds"]],
+    );
+  }
+});
+
+test("animal schemas: additional breeds default to none", () => {
+  const result = AnimalEditFormSchema.parse(baseInput);
+  assert.deepEqual(result.additionalBreeds, []);
+});

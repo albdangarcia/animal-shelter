@@ -18,28 +18,16 @@ import {
 } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { can } from "../auth/can";
-import {
-  AnimalActivityType,
-  AnimalListingStatus,
-  ApplicationStatus,
-  IntakeType,
-} from "@/prisma/generated/enums";
-import { buildLocationChangeSummary } from "../utils/location-activity";
+import { IntakeType } from "@/prisma/generated/enums";
 import { ConflictError, NotFoundError } from "../utils/errors";
-import { findLiveUnitForPlacement } from "../services/unit-housing";
 import { createAnimalFromForm } from "../services/animal-creation";
-import {
-  assertLiveTaxonomy,
-  TaxonomyRefusal,
-} from "../services/animal-taxonomy";
+import { recordAnimalUpdate } from "../services/animal-update";
+import { TaxonomyRefusal } from "../services/animal-taxonomy";
 import {
   SKIP_PROTOCOL_REFUSAL,
   withProtocolHeadline,
 } from "../services/medical-protocol-application";
-import {
-  careEpisodeOfferInMove,
-  type CareEpisodeOffer,
-} from "../services/care-episode";
+import type { CareEpisodeOffer } from "../services/care-episode";
 import {
   careEpisodeOfferPrompt,
   type CareEpisodeOfferPrompt,
@@ -48,15 +36,9 @@ import {
   MedicalEntryRefusal,
   nameChipNumberHolder,
 } from "../services/medical-entry";
-import { toAnimalData } from "../utils/animal-data";
 import { del } from "@vercel/blob";
 import { isDemo } from "@/lib/flags";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
-import {
-  DERIVATION_APPLICATION_SELECT,
-  effectiveApplicationStatuses,
-  lockAnimal,
-} from "../data/application-status.data";
 
 /**
  * Where the create form shows a refusal from the medical record. A chip's is
@@ -223,215 +205,17 @@ const _updateAnimal = async (
     };
   }
 
-  const {
-    animalName,
-    estimatedBirthDate,
-    sex,
-    listingStatus,
-    species: speciesId,
-    breed: breedId,
-    primaryColor: primaryColorId,
-    additionalColors: additionalColorIds,
-    heightCm,
-  } = validatedFields.data;
-
-  // The listing status is immutable from this form for ARCHIVED and
-  // PENDING_ADOPTION animals, but the check lives inside the transaction now
-  // (see below) so it can compare the submitted value against the current one.
-  // The edit form disables the status select for those two statuses and
-  // re-submits the unchanged value, so guarding on the submitted value alone
-  // rejected every ordinary save of an archived or pending-adoption record.
-
-  const mapped = toAnimalData(validatedFields.data);
-
-  // Full color set = primary + additionals, de-duped in case the primary
-  // also appears in the additional list.
-  const allColorIds = Array.from(
-    new Set([primaryColorId, ...additionalColorIds]),
-  );
-
   const offersCare = can(user.role, AppPermissions.MEDICAL_MANAGE);
   let offer: CareEpisodeOffer | null = null;
   try {
-    await prisma.$transaction(async (tx) => {
-      // The update below writes the listing status back whether or not it
-      // changed, so everything read here has to still be true when it does.
-      // Recording an outcome archives the animal behind this same lock; read
-      // without it, an outcome committing in between would be overwritten by
-      // the status this form loaded before it, putting an animal that has
-      // left back on the list.
-      await lockAnimal(tx, validatedAnimalId);
-      const currentAnimal = await tx.animal.findUnique({
-        where: { id: validatedAnimalId },
-        select: {
-          listingStatus: true,
-          publishedAt: true,
-          currentUnitId: true,
-          currentUnit: {
-            select: { name: true, location: { select: { name: true } } },
-          },
-        },
-      });
-
-      if (!currentAnimal) {
-        throw new NotFoundError("Animal not found.");
-      }
-
-      // One state check for the listing status. Staff may edit the descriptive
-      // fields of an archived or pending-adoption record; the status itself is
-      // immutable from this form. Because the form re-submits the current
-      // (disabled) value, an unchanged status is the ordinary edit case and
-      // must pass through untouched — only a real transition is rejected.
-      if (listingStatus !== currentAnimal.listingStatus) {
-        if (currentAnimal.listingStatus === AnimalListingStatus.ARCHIVED) {
-          throw new ConflictError(
-            "This animal is archived. To make it available again, please use the re-intake process."
-          );
-        }
-
-        const isChangingToAvailable =
-          listingStatus === AnimalListingStatus.PUBLISHED ||
-          listingStatus === AnimalListingStatus.DRAFT;
-
-        if (
-          currentAnimal.listingStatus === AnimalListingStatus.PENDING_ADOPTION &&
-          isChangingToAvailable
-        ) {
-          // Approved as the application effectively is: one approved during
-          // an earlier stay, and adopted or closed by that stay's outcome,
-          // still stores APPROVED and must not hold this animal. Derived
-          // behind the animal lock taken above.
-          const approvedApplications = await tx.adoptionApplication.findMany({
-            where: {
-              animalId: validatedAnimalId,
-              status: ApplicationStatus.APPROVED,
-            },
-            select: DERIVATION_APPLICATION_SELECT,
-          });
-          const statuses = await effectiveApplicationStatuses(
-            approvedApplications,
-            tx,
-          );
-
-          if ([...statuses.values()].includes(ApplicationStatus.APPROVED)) {
-            throw new ConflictError(
-              "Cannot change status. This animal has an approved adoption application. Please reject or withdraw the application first."
-            );
-          }
-        } else if (
-          listingStatus === AnimalListingStatus.ARCHIVED ||
-          listingStatus === AnimalListingStatus.PENDING_ADOPTION
-        ) {
-          // A real transition into a status this form doesn't own. The message
-          // is accurate now that it only fires on an actual change.
-          throw new ConflictError(
-            "Invalid Action: This status can only be set via the outcome or application approval process."
-          );
-        }
-      }
-
-      const isArchived =
-        currentAnimal.listingStatus === AnimalListingStatus.ARCHIVED;
-
-      // The species, its breed and every color must exist and not be
-      // deleted. An animal whose breed or color was deleted since its last
-      // save has to swap it for a live one: the form no longer offers it.
-      await assertLiveTaxonomy(tx, {
-        speciesId,
-        breedId,
-        primaryColorId,
-        additionalColorIds,
-      });
-
-      // verify the chosen unit still exists and isn't
-      // soft-deleted. Treat a stale/deleted unit as Unplaced rather than
-      // erroring. Capacity is never enforced. Read behind the unit's lock, as
-      // on create.
-      let resolvedUnitId: string | null = null;
-      let resolvedUnitLabel: {
-        name: string;
-        location: { name: string };
-      } | null = null;
-      // An archived animal has left the shelter and cannot occupy a unit. The
-      // form disables the Location/Unit cascade for archived animals; don't
-      // trust the client — coerce to Unplaced here regardless of what was
-      // submitted.
-      if (mapped.currentUnitId && !isArchived) {
-        const unit = await findLiveUnitForPlacement(tx, mapped.currentUnitId);
-        resolvedUnitId = unit?.id ?? null;
-        resolvedUnitLabel = unit
-          ? { name: unit.name, location: unit.location }
-          : null;
-      }
-
-      let publishedAt = currentAnimal.publishedAt;
-      if (
-        listingStatus === AnimalListingStatus.PUBLISHED &&
-        !currentAnimal.publishedAt
-      ) {
-        publishedAt = new Date();
-      }
-
-      await tx.animal.update({
-        where: { id: validatedAnimalId },
-        data: {
-          name: animalName,
-          birthDate: estimatedBirthDate,
-          sex: sex,
-          size: mapped.size,
-          description: mapped.description,
-          // null genuinely clears the column now — a cleared field arrives
-          // as null (never ""), so no more "" ? undefined : heightCm guard
-          // that silently left a stale value in place.
-          heightCm,
-          listingStatus: listingStatus,
-          publishedAt: publishedAt,
-          currentUnit: resolvedUnitId
-            ? { connect: { id: resolvedUnitId } }
-            : { disconnect: true },
-          species: { connect: { id: speciesId } },
-          breeds: { set: [{ id: breedId }] },
-          colors: { set: allColorIds.map((id) => ({ id })) },
-          primaryColor: { connect: { id: primaryColorId } },
-        },
-      });
-
-      if (currentAnimal.listingStatus !== listingStatus && staffMemberId) {
-        await tx.animalActivityLog.create({
-          data: {
-            animalId: validatedAnimalId,
-            activityType: AnimalActivityType.STATUS_CHANGE,
-            changedById: staffMemberId,
-            changeSummary: `Listing status changed from ${currentAnimal.listingStatus} to ${listingStatus}.`,
-          },
-        });
-      }
-
-      // Log a relocation only when the unit actually changed. The edit action
-      // writes no generic FIELD_UPDATE, so LOCATION_CHANGE is purely additive.
-      if (currentAnimal.currentUnitId !== resolvedUnitId && staffMemberId) {
-        await tx.animalActivityLog.create({
-          data: {
-            animalId: validatedAnimalId,
-            activityType: AnimalActivityType.LOCATION_CHANGE,
-            changedById: staffMemberId,
-            changeSummary: buildLocationChangeSummary(
-              currentAnimal.currentUnit,
-              resolvedUnitLabel
-            ),
-          },
-        });
-        // A failed read gives no offer and leaves the save be.
-        if (offersCare) {
-          offer = await careEpisodeOfferInMove(
-            tx,
-            validatedAnimalId,
-            currentAnimal.currentUnitId,
-            resolvedUnitId,
-          );
-        }
-      }
-    });
+    offer = await prisma.$transaction((tx) =>
+      recordAnimalUpdate(tx, {
+        animalId: validatedAnimalId,
+        values: validatedFields.data,
+        staffMemberId,
+        offersCare,
+      }),
+    );
   } catch (error) {
     if (error instanceof TaxonomyRefusal) {
       return {

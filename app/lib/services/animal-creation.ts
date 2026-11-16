@@ -5,7 +5,10 @@ import {
   getShelterToday,
 } from "@/app/lib/data/shelter-settings.data";
 import { findLiveUnitForPlacement } from "@/app/lib/services/unit-housing";
-import { assertLiveTaxonomy } from "@/app/lib/services/animal-taxonomy";
+import {
+  animalBreedIds,
+  assertLiveTaxonomy,
+} from "@/app/lib/services/animal-taxonomy";
 import { recordMedicalEntry } from "@/app/lib/services/medical-entry";
 import {
   applyIntakeProtocol,
@@ -60,6 +63,7 @@ export const recordAnimalCreation = async (
     listingStatus,
     species: speciesId,
     breed: breedId,
+    additionalBreeds: additionalBreedIds,
     primaryColor: primaryColorId,
     additionalColors: additionalColorIds,
     intakeType,
@@ -78,10 +82,11 @@ export const recordAnimalCreation = async (
     new Set([primaryColorId, ...additionalColorIds]),
   );
 
-  // The species, its breed and every color must exist and not be deleted.
+  // The species, its breeds and every color must exist and not be deleted.
   await assertLiveTaxonomy(tx, {
     speciesId,
     breedId,
+    additionalBreedIds,
     primaryColorId,
     additionalColorIds,
   });
@@ -125,7 +130,11 @@ export const recordAnimalCreation = async (
         ? { connect: { id: resolvedUnitId } }
         : undefined,
       species: { connect: { id: speciesId } },
-      breeds: { connect: { id: breedId } },
+      breeds: {
+        connect: animalBreedIds(breedId, additionalBreedIds).map((id) => ({
+          id,
+        })),
+      },
       colors: { connect: allColorIds.map((id) => ({ id })) },
       primaryColor: { connect: { id: primaryColorId } },
     },

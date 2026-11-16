@@ -4,7 +4,7 @@ summary: Record a new animal and the intake that brought it in, such as a stray,
 permissions: [INTAKE_MANAGE]
 aliases: [new animal, add an animal, admit an animal, intake form, new intake, stray intake, owner surrender, surrender an animal, transfer in, born in care, seized animal, impound, create intake, check in an animal, register a new animal]
 related: [take-back-an-animal-that-left, correct-an-intake, find-an-intake, set-up-or-change-a-medical-protocol, record-or-correct-a-microchip, record-a-surgery-spay-neuter-or-exemption, add-edit-or-delete-a-location-or-unit, schedule-care-and-read-the-due-page, edit-an-animals-details, move-an-animal-to-another-unit, reorder-or-delete-an-animals-photos]
-verified: 2026-11-14
+verified: 2026-11-16
 ---
 
 ## When to use this
@@ -30,8 +30,10 @@ an intake already recorded, see
 3. Pick the **Sex**. It starts on **Unknown**.
 4. Under **Estimated Birth Date**, pick the day. A guess is fine. The animal's
    age on its intake day picks its medical protocol.
-5. Fill in what else you know: **Additional Colors**, **Weight**, **Height
-   (cm)** and **Description**.
+5. Fill in what else you know: **Additional Breeds** (for a mix, the breeds
+   besides the one under **Breed**; pick one of them as **Breed** instead and
+   it leaves this list), **Additional Colors**, **Weight**, **Height (cm)**
+   and **Description**.
 6. If the scan found a chip, type it under **Microchip number**. Spaces and
    hyphens are taken out when you leave the field.
 7. If the animal is already spayed or neutered, turn on **Already spayed or

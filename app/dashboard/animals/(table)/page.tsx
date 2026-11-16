@@ -7,7 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import DataTable from "@/components/table-common/data-table";
-import { columns } from "@/components/dashboard/animals/table/animal-table-columns";
+import { getColumns } from "@/components/dashboard/animals/table/animal-table-columns";
 import { fetchAnimals } from "@/app/lib/data/animals/animal.data";
 import { SearchParamsType } from "@/app/lib/types";
 import AnimalsDataTableToolbar from "@/components/dashboard/animals/table/animal-table-toolbar";
@@ -19,6 +19,7 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { HelpLink } from "@/components/dashboard/help/help-link";
 import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
 import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { hasPermission } from "@/app/lib/auth/hasPermission";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -48,17 +49,19 @@ const PageContent = async ({ searchParams }: Props) => {
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
-  const [{ animals, totalPages, totalRows }, help] = await Promise.all([
-    fetchAnimals(
-      query,
-      currentPage,
-      listingStatus,
-      sex,
-      currentPageSize,
-      sort,
-    ),
-    getHelpLinkGuide(PAGE_HELP_GUIDES.animals),
-  ]);
+  const [{ animals, totalPages, totalRows }, help, canManage] =
+    await Promise.all([
+      fetchAnimals(
+        query,
+        currentPage,
+        listingStatus,
+        sex,
+        currentPageSize,
+        sort,
+      ),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.animals),
+      hasPermission(AppPermissions.ANIMAL_INFO_MANAGE),
+    ]);
 
   return (
     <Card className="@container/card">
@@ -83,7 +86,8 @@ const PageContent = async ({ searchParams }: Props) => {
             <div className="flex flex-col gap-4 md:gap-6">
               <DataTable
                 data={animals}
-                columns={columns}
+                getColumns={getColumns}
+                columnProps={{ canManage }}
                 ToolbarComponent={AnimalsDataTableToolbar}
                 totalPages={totalPages}
                 totalRows={totalRows}

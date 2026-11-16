@@ -17,12 +17,28 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
 import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { AppPermissions } from "@/app/lib/auth/permissions";
+import { Authorize } from "@/components/auth/authorize";
+import StatusPage from "@/components/StatusPage";
 
 interface Props {
   params: IDParamType;
 }
 
+// Saving needs ANIMAL_INFO_MANAGE, and so does the unit picker this page
+// reads, so anyone without it is refused here rather than by an error.
 const Page = async ({ params }: Props) => {
+  return (
+    <Authorize
+      permission={AppPermissions.ANIMAL_INFO_MANAGE}
+      fallback={<StatusPage type="accessDenied" />}
+    >
+      <PageContent params={params} />
+    </Authorize>
+  );
+};
+
+const PageContent = async ({ params }: Props) => {
   const { id: animalId } = await params;
 
   const [animal, partners, colors, speciesList, unitOptions, help] =

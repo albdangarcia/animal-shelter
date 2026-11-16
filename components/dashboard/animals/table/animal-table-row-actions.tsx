@@ -15,9 +15,13 @@ import { AnimalsPayload } from "@/app/lib/types";
 
 interface DataTableRowActionsProps {
   row: Row<StockFeatures, AnimalsPayload>;
+  canManage: boolean;
 }
 
-export function AnimalTableRowActions({ row }: DataTableRowActionsProps) {
+export function AnimalTableRowActions({
+  row,
+  canManage,
+}: DataTableRowActionsProps) {
   const animal = row.original;
 
   return (
@@ -35,10 +39,16 @@ export function AnimalTableRowActions({ row }: DataTableRowActionsProps) {
         <Link href={`/dashboard/animals/${animal.id}`}>
           <DropdownMenuItem>Profile</DropdownMenuItem>
         </Link>
-        <DropdownMenuSeparator />
-        <Link href={`/dashboard/animals/${animal.id}/edit`}>
-          <DropdownMenuItem>Edit</DropdownMenuItem>
-        </Link>
+        {/* Only someone who may edit an animal's details gets the way in;
+            the edit page refuses anyone else. */}
+        {canManage && (
+          <>
+            <DropdownMenuSeparator />
+            <Link href={`/dashboard/animals/${animal.id}/edit`}>
+              <DropdownMenuItem>Edit</DropdownMenuItem>
+            </Link>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

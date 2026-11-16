@@ -245,8 +245,10 @@ const AnimalCharacteristicsManager = ({
                   <Button
                     variant="outline"
                     size="sm"
-                    className="mt-4"
+                    className="mt-4 disabled:pointer-events-auto disabled:cursor-not-allowed"
                     onClick={handleOpenDialog}
+                    // Like Edit above: saving needs ANIMAL_INFO_MANAGE.
+                    disabled={!canManage}
                   >
                     <PlusCircle className="size-4 mr-2" />
                     Add Characteristics

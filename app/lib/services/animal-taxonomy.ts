@@ -15,7 +15,12 @@ import { ConflictError } from "@/app/lib/utils/errors";
  */
 
 /** The animal form's field the refusal belongs under. */
-export type TaxonomyField = "species" | "breed" | "primaryColor" | "additionalColors";
+export type TaxonomyField =
+  | "species"
+  | "breed"
+  | "additionalBreeds"
+  | "primaryColor"
+  | "additionalColors";
 
 export class TaxonomyRefusal extends ConflictError {
   constructor(
@@ -31,11 +36,22 @@ export const SPECIES_UNAVAILABLE =
   "The selected species is no longer available. Please refresh and try again.";
 export const BREED_UNAVAILABLE =
   "The selected breed is no longer available for this species. Please refresh and try again.";
+export const BREEDS_UNAVAILABLE =
+  "One or more additional breeds are no longer available for this species. Please refresh and try again.";
 export const COLORS_UNAVAILABLE =
   "One or more selected colors are no longer available. Please refresh and try again.";
 
 /**
- * Throws a `TaxonomyRefusal` unless the species, the breed (of that species)
+ * Every breed the form names for an animal: Breed first, then its additional
+ * breeds, each once.
+ */
+export const animalBreedIds = (
+  breedId: string,
+  additionalBreedIds: string[] = [],
+): string[] => Array.from(new Set([breedId, ...additionalBreedIds]));
+
+/**
+ * Throws a `TaxonomyRefusal` unless the species, every breed (of that species)
  * and every color exist and aren't deleted.
  */
 export const assertLiveTaxonomy = async (
@@ -43,11 +59,13 @@ export const assertLiveTaxonomy = async (
   {
     speciesId,
     breedId,
+    additionalBreedIds = [],
     primaryColorId,
     additionalColorIds,
   }: {
     speciesId: string;
     breedId: string;
+    additionalBreedIds?: string[];
     primaryColorId: string;
     additionalColorIds: string[];
   },
@@ -66,6 +84,18 @@ export const assertLiveTaxonomy = async (
   });
   if (!breed) {
     throw new TaxonomyRefusal("breed", BREED_UNAVAILABLE);
+  }
+
+  const otherBreedIds = Array.from(new Set(additionalBreedIds)).filter(
+    (id) => id !== breedId,
+  );
+  if (otherBreedIds.length > 0) {
+    const liveBreeds = await tx.breed.count({
+      where: { id: { in: otherBreedIds }, speciesId, deletedAt: null },
+    });
+    if (liveBreeds !== otherBreedIds.length) {
+      throw new TaxonomyRefusal("additionalBreeds", BREEDS_UNAVAILABLE);
+    }
   }
 
   const colorIds = Array.from(new Set([primaryColorId, ...additionalColorIds]));

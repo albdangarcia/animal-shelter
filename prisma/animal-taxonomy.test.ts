@@ -1,8 +1,8 @@
 // Deleting a species, breed or color in Settings → Animal Taxonomy takes it
 // out of use: the animal form's pickers leave it out, and adding or editing
-// an animal refuses it, for a form opened before the delete. The edit action
-// calls the same `assertLiveTaxonomy` as the create below, inside its own
-// transaction; it imports the session, so it is driven through the check here.
+// an animal refuses it, for a form opened before the delete. The edit save
+// (`recordAnimalUpdate`) calls the same `assertLiveTaxonomy` as the create
+// below; prisma/animal-update.test.ts drives it for additional breeds.
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import prisma from "@/app/lib/prisma";
@@ -18,6 +18,7 @@ import {
 import {
   assertLiveTaxonomy,
   BREED_UNAVAILABLE,
+  BREEDS_UNAVAILABLE,
   COLORS_UNAVAILABLE,
   SPECIES_UNAVAILABLE,
   TaxonomyRefusal,
@@ -130,6 +131,23 @@ test("a deleted or unknown species is refused under Species", async () => {
 test("a deleted breed, or one of another species, is refused under Breed", async () => {
   await refusedUnder(check({ breedId: deletedBreedId }), "breed", BREED_UNAVAILABLE);
   await refusedUnder(check({ breedId: otherSpeciesBreedId }), "breed", BREED_UNAVAILABLE);
+});
+
+test("an additional breed deleted or of another species is refused under Additional Breeds", async () => {
+  await refusedUnder(
+    check({ additionalBreedIds: [deletedBreedId] }),
+    "additionalBreeds",
+    BREEDS_UNAVAILABLE,
+  );
+  await refusedUnder(
+    check({ additionalBreedIds: [otherSpeciesBreedId] }),
+    "additionalBreeds",
+    BREEDS_UNAVAILABLE,
+  );
+});
+
+test("Breed listed again among the additional breeds still passes", async () => {
+  await check({ additionalBreedIds: [breedId] });
 });
 
 test("a deleted color is refused under the field that holds it", async () => {

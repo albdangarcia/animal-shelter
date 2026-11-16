@@ -112,6 +112,12 @@ const animalFieldsShape = {
   breed: z.cuid2({
     error: "Pick a breed.",
   }),
+  // A mixed animal's other breeds, beside the one in Breed. The animal keeps
+  // every breed in one set; Breed is only the one staff name first.
+  additionalBreeds: z
+    .array(z.cuid2({ error: "A valid breed ID is required." }))
+    .optional()
+    .default([]),
   primaryColor: z.cuid2({
     error: "Pick a primary color.",
   }),
@@ -144,10 +150,22 @@ const animalFieldsShape = {
 
 // Typed against only the fields it reads, so it accepts either derived
 // schema's output — matching intakeSuperRefine / householdSuperRefine.
-const animalColorSuperRefine = (
-  data: { primaryColor: string; additionalColors: string[] },
+const animalTaxonomySuperRefine = (
+  data: {
+    breed: string;
+    additionalBreeds: string[];
+    primaryColor: string;
+    additionalColors: string[];
+  },
   ctx: z.RefinementCtx,
 ) => {
+  if (data.additionalBreeds.includes(data.breed)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "The breed shouldn't be repeated in additional breeds.",
+      path: ["additionalBreeds"],
+    });
+  }
   if (data.additionalColors.includes(data.primaryColor)) {
     ctx.addIssue({
       code: "custom",
@@ -267,7 +285,7 @@ export const CreateAnimalFormSchema = z
     applyProtocol: applyProtocolSchema,
   })
   .superRefine((data, ctx) => {
-    animalColorSuperRefine(data, ctx);
+    animalTaxonomySuperRefine(data, ctx);
     intakeSuperRefine(data, ctx);
     // The service's rule, mirrored so the form shows it before submit. An
     // animal of unknown sex can have either.
@@ -284,11 +302,12 @@ export const CreateAnimalFormSchema = z
 
 export const AnimalEditFormSchema = z
   .object({ ...animalFieldsShape })
-  .superRefine(animalColorSuperRefine);
+  .superRefine(animalTaxonomySuperRefine);
 
 export type CreateAnimalFormInput = z.input<typeof CreateAnimalFormSchema>;
 export type CreateAnimalFormOutput = z.output<typeof CreateAnimalFormSchema>;
 export type AnimalEditFormInput = z.input<typeof AnimalEditFormSchema>;
+export type AnimalEditFormOutput = z.output<typeof AnimalEditFormSchema>;
 
 export const TaskFormSchema = z.object({
   title: z.string().min(1, {

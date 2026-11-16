@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import { parseISO } from "date-fns";
 import { useForm, useWatch, type Resolver } from "react-hook-form";
-import { Check, ChevronsUpDown, Loader2, TriangleAlert, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Loader2, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -29,20 +28,6 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-import { Badge } from "@/components/ui/badge";
 import {
   Form,
   FormControl,
@@ -91,6 +76,7 @@ import {
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { IntakeFormFields } from "./intake-form-fields";
+import { MultiSelectBadges } from "./multi-select-badges";
 import { UnitPickerLocation } from "@/app/lib/data/locations/unit-picker.data";
 import { formatDateToLongString } from "@/app/lib/utils/date-utils";
 import type { WeightUnitSystem } from "@/app/lib/utils/shelter-settings";
@@ -222,6 +208,21 @@ const AnimalForm = ({
       : "",
   );
 
+  // The animal's breeds this species still offers, Breed first. A breed moved
+  // to another species since isn't offered for this one, so it is left out
+  // rather than sit unseen in a field; deleted breeds aren't loaded at all.
+  // With none left, Breed starts empty and must be picked again.
+  const offeredBreedIds = isEditMode
+    ? animal.breeds
+        .map((b) => b.id)
+        .filter((id) =>
+          speciesList
+            .find((s) => s.id === animal.speciesId)
+            ?.breeds.some((b) => b.id === id),
+        )
+    : [];
+  const defaultBreedId = offeredBreedIds[0] ?? "";
+
   const form = useForm<AnimalFormValues>({
     // AnimalEditFormSchema validates a strict subset of AnimalFormValues (no
     // intake fields), so its resolver's ResolverOptions type isn't assignable
@@ -239,15 +240,8 @@ const AnimalForm = ({
       ? {
           animalName: animal.name,
           species: animal.speciesId,
-          // A breed moved to another species since isn't offered for this
-          // one, so it starts empty and must be picked again, rather than
-          // sit unseen in the field. Deleted breeds aren't loaded at all.
-          breed:
-            speciesList
-              .find((s) => s.id === animal.speciesId)
-              ?.breeds.some((b) => b.id === animal.breeds[0]?.id)
-              ? animal.breeds[0].id
-              : "",
+          breed: defaultBreedId,
+          additionalBreeds: offeredBreedIds.slice(1),
           // A deleted primary color isn't offered, so it starts empty and
           // must be picked again, rather than sit unseen in the field.
           primaryColor: colors.some((c) => c.id === animal.primaryColorId)
@@ -275,6 +269,7 @@ const AnimalForm = ({
           sex: Sex.UNKNOWN,
           size: "",
           breed: "",
+          additionalBreeds: [],
           primaryColor: "",
           additionalColors: [],
           weightGrams: null,
@@ -323,22 +318,33 @@ const AnimalForm = ({
   const selectedSpecies = speciesList.find((s) => s.id === currentSpeciesId);
 
   // Prefill size from the selected breed's typicalSize — but only while the
-  // field is empty and untouched. A staff member's explicit choice (including
-  // deliberately clearing it back to "") must never be overwritten by a later
-  // breed change. RHF's dirtyFields compares against defaultValues, so in
-  // create mode (default ""), clearing the field back to "" would read as
-  // NOT dirty — an explicit touched flag is needed to catch that case.
+  // field is empty and untouched, and only for a breed picked here: an
+  // animal opened for editing keeps the size it was saved with, empty
+  // included, until someone picks another breed. A staff member's explicit
+  // choice (including deliberately clearing it back to "") must never be
+  // overwritten by a later breed change. RHF's dirtyFields compares against
+  // defaultValues, so in create mode (default ""), clearing the field back to
+  // "" would read as NOT dirty — an explicit touched flag is needed to catch
+  // that case.
   const selectedBreedId = useWatch({ control: form.control, name: "breed" });
   const [isSizeTouched, setIsSizeTouched] = useState(false);
 
   useEffect(() => {
     if (isSizeTouched) return;
+    if (isEditMode && selectedBreedId === defaultBreedId) return;
     if (form.getValues("size")) return;
     const breed = selectedSpecies?.breeds.find((b) => b.id === selectedBreedId);
     if (breed?.typicalSize) {
       form.setValue("size", breed.typicalSize);
     }
-  }, [selectedBreedId, isSizeTouched, form, selectedSpecies]);
+  }, [
+    selectedBreedId,
+    isSizeTouched,
+    form,
+    selectedSpecies,
+    isEditMode,
+    defaultBreedId,
+  ]);
 
   const selectedLocation = unitOptions.find((l) => l.id === currentLocationId);
 
@@ -441,6 +447,7 @@ const AnimalForm = ({
                           field.onChange(value);
                           setCurrentSpeciesId(value);
                           form.setValue("breed", "");
+                          form.setValue("additionalBreeds", []);
                         }}
                         value={field.value ?? ""}
                       >
@@ -469,7 +476,17 @@ const AnimalForm = ({
                       <FormLabel required>Breed</FormLabel>
                       <Select
                         name={field.name}
-                        onValueChange={field.onChange}
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          // Named once: as Breed, not also as an additional one.
+                          const additional = form.getValues("additionalBreeds") ?? [];
+                          if (additional.includes(value)) {
+                            form.setValue(
+                              "additionalBreeds",
+                              additional.filter((id) => id !== value),
+                            );
+                          }
+                        }}
                         value={field.value}
                         disabled={!currentSpeciesId}
                       >
@@ -486,6 +503,27 @@ const AnimalForm = ({
                           ))}
                         </SelectContent>
                       </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="additionalBreeds"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2 flex flex-col">
+                      <FormLabel>Additional Breeds</FormLabel>
+                      <MultiSelectBadges
+                        options={selectedSpecies?.breeds ?? []}
+                        // Breed is named once, in its own field.
+                        excludeId={selectedBreedId}
+                        selectedIds={field.value ?? []}
+                        onChange={field.onChange}
+                        disabled={!currentSpeciesId}
+                        placeholder="Select breeds"
+                        searchPlaceholder="Search breeds..."
+                        emptyText="No breed found."
+                      />
                       <FormMessage />
                     </FormItem>
                   )}
@@ -521,96 +559,22 @@ const AnimalForm = ({
                 <FormField
                   control={form.control}
                   name="additionalColors"
-                  render={({ field }) => {
-                    const selectedIds: string[] = field.value || [];
-                    // Options exclude the currently-selected primary color.
-                    const available = colors.filter(
-                      (c) => c.id !== primaryColorId,
-                    );
-                    const toggle = (id: string) => {
-                      if (selectedIds.includes(id)) {
-                        field.onChange(selectedIds.filter((x) => x !== id));
-                      } else {
-                        field.onChange([...selectedIds, id]);
-                      }
-                    };
-                    return (
-                      <FormItem className="col-span-2 flex flex-col">
-                        <FormLabel>Additional Colors</FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                role="combobox"
-                                className="w-full justify-between font-normal"
-                              >
-                                {selectedIds.length > 0
-                                  ? `${selectedIds.length} selected`
-                                  : "Select colors"}
-                                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-(--radix-popover-trigger-width) p-0">
-                            <Command>
-                              <CommandInput placeholder="Search colors..." />
-                              <CommandList>
-                                <CommandEmpty>No color found.</CommandEmpty>
-                                <CommandGroup>
-                                  {available.map((c) => {
-                                    const checked = selectedIds.includes(c.id);
-                                    return (
-                                      <CommandItem
-                                        key={c.id}
-                                        value={c.name}
-                                        onSelect={() => toggle(c.id)}
-                                      >
-                                        <Check
-                                          className={cn(
-                                            "mr-2 h-4 w-4",
-                                            checked
-                                              ? "opacity-100"
-                                              : "opacity-0",
-                                          )}
-                                        />
-                                        {c.name}
-                                      </CommandItem>
-                                    );
-                                  })}
-                                </CommandGroup>
-                              </CommandList>
-                            </Command>
-                          </PopoverContent>
-                        </Popover>
-                        {selectedIds.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {selectedIds.map((id) => {
-                              const color = colors.find((c) => c.id === id);
-                              if (!color) return null;
-                              return (
-                                <Badge
-                                  key={id}
-                                  variant="secondary"
-                                  className="gap-1"
-                                >
-                                  {color.name}
-                                  <button
-                                    type="button"
-                                    onClick={() => toggle(id)}
-                                    className="rounded-full hover:bg-black/10 dark:hover:bg-white/10"
-                                  >
-                                    <X className="h-3 w-3" />
-                                  </button>
-                                </Badge>
-                              );
-                            })}
-                          </div>
-                        )}
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
+                  render={({ field }) => (
+                    <FormItem className="col-span-2 flex flex-col">
+                      <FormLabel>Additional Colors</FormLabel>
+                      <MultiSelectBadges
+                        options={colors}
+                        // The primary color is named once, in its own field.
+                        excludeId={primaryColorId}
+                        selectedIds={field.value ?? []}
+                        onChange={field.onChange}
+                        placeholder="Select colors"
+                        searchPlaceholder="Search colors..."
+                        emptyText="No color found."
+                      />
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
                 <FormField
                   control={form.control}
