@@ -2,7 +2,7 @@
 title: Edit an animal's details
 summary: Correct an animal's name, species, breed, colors, sex, birth date, size, height or description, or change its listing between Draft and Published.
 permissions: [ANIMAL_INFO_MANAGE]
-aliases: [edit profile, change animal name, wrong breed, wrong birth date, publish an animal, unpublish, listing status, expected adult size]
+aliases: [edit profile, change animal name, wrong breed, mixed breed, additional breeds, wrong birth date, publish an animal, unpublish, listing status, expected adult size]
 related: [move-an-animal-to-another-unit, find-an-animal, record-weight-and-vitals, record-or-correct-a-microchip, record-a-surgery-spay-neuter-or-exemption, correct-an-intake, add-edit-or-delete-a-species-breed-or-color]
 verified: 2026-11-16
 ---
@@ -28,10 +28,15 @@ Some details are kept elsewhere, where each change keeps its history:
 1. Open the animal, then click **Edit Profile**. The page **Edit Animal
    Details** opens. (On the **Animals** list, the **…** button at the end of
    a row, then **Edit**, opens it too.)
-2. Change what is wrong: **Animal Name**, **Species**, **Breed**, **Primary
-   Color**, **Additional Colors**, **Sex**, **Estimated Birth Date**,
-   **Expected Adult Size**, **Height (cm)** or **Description**. Pick the
-   species first: the breeds listed are that species'.
+2. Change what is wrong: **Animal Name**, **Species**, **Breed**,
+   **Additional Breeds**, **Primary Color**, **Additional Colors**, **Sex**,
+   **Estimated Birth Date**, **Expected Adult Size**, **Height (cm)** or
+   **Description**. Pick the species first: the breeds listed are that
+   species'. A mixed animal shows one breed under **Breed** and the others
+   under **Additional Breeds**; click the **×** on a breed to take it off.
+   Pick one of them as **Breed** instead and it leaves **Additional Breeds**.
+   Picking another breed fills in an empty **Expected Adult Size** with that
+   breed's usual size.
 3. To change the listing, pick **Draft** or **Published** under **Listing
    Status**.
 4. Click **Save Changes**.
@@ -69,6 +74,7 @@ greyed out too.
   leave it empty.
 - **"The selected species is no longer available. Please refresh and try
   again."** (or "The selected breed is no longer available for this
+  species…", "One or more additional breeds are no longer available for this
   species…", or "One or more selected colors are no longer available…") An
   admin deleted it while you had the form open. Reload the page and pick
   another.

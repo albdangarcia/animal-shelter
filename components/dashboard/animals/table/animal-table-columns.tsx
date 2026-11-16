@@ -13,7 +13,12 @@ import { AnimalsPayload } from "@/app/lib/types";
 import { animalListingStatusOptions } from "@/app/lib/utils/enum-formatter";
 import Link from "next/link";
 
-export const columns: ColumnDef<StockFeatures, AnimalsPayload>[] = [
+export const getColumns = ({
+  canManage,
+}: {
+  // May edit an animal's details (ANIMAL_INFO_MANAGE): the row's Edit item.
+  canManage: boolean;
+}): ColumnDef<StockFeatures, AnimalsPayload>[] => [
   {
     id: "select",
     header: ({ table }) => (
@@ -127,6 +132,8 @@ export const columns: ColumnDef<StockFeatures, AnimalsPayload>[] = [
   },
   {
     id: "actions",
-    cell: ({ row }) => <AnimalTableRowActions row={row} />,
+    cell: ({ row }) => (
+      <AnimalTableRowActions row={row} canManage={canManage} />
+    ),
   },
 ];
