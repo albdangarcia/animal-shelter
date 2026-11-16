@@ -3,7 +3,7 @@ title: Add, edit or delete a characteristic
 summary: Add a trait staff can tick on an animal, such as "Good with cats", rename it or move it to another category, or delete it.
 permissions: [MANAGE_CHARACTERISTICS_CATALOG]
 aliases: [add a trait, new tag, animal tags, good with kids, good with cats, behavior tag, rename a trait, remove a trait, restore a trait, characteristics catalog, characteristic categories]
-related: [open-a-care-episode-add-a-condition-or-allergy]
+related: [open-a-care-episode-add-a-condition-or-allergy, set-an-animals-characteristics]
 verified: 2026-11-10
 ---
 

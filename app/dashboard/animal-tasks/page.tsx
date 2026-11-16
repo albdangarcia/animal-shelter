@@ -4,6 +4,7 @@ import TasksDataTableToolbar from "@/components/dashboard/all-animal-tasks/table
 import { SearchParamsType } from "@/app/lib/types";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -14,6 +15,9 @@ import { fetchTaskAssigneeList } from "@/app/lib/data/animals/animal-task.data";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -35,7 +39,7 @@ const Page = async ({ searchParams }: Props) => {
   // Whether the current user can manage tasks (edit assignee/status, delete, edit form).
   // Volunteers have ANIMAL_TASK_READ only; staff/admin have ANIMAL_TASK_MANAGE.
   // fetchAllAnimalsTasks doesn't depend on canManage, so run them in parallel.
-  const [canManage, { tasks, totalPages, totalRows }, today] =
+  const [canManage, { tasks, totalPages, totalRows }, today, help] =
     await Promise.all([
       hasPermission(AppPermissions.ANIMAL_TASK_MANAGE),
       fetchAllAnimalsTasks(
@@ -47,6 +51,7 @@ const Page = async ({ searchParams }: Props) => {
         sort
       ),
       getShelterToday(),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.allAnimalTasks),
     ]);
 
   // Only fetch the assignee list when the user can manage tasks.
@@ -63,6 +68,11 @@ const Page = async ({ searchParams }: Props) => {
         <CardDescription>
           This page displays all tasks that are associated with all the animals.
         </CardDescription>
+        {help && (
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="grid gap-6">
         <div className="flex flex-1 flex-col">

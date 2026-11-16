@@ -21,6 +21,8 @@ import { SIGNAL_ORDER, formatSignal } from "@/app/lib/assessments/signal";
 import type { AnimalAssessmentListItem } from "@/app/lib/data/animals/animal-assessment.data";
 import { AssessmentActions } from "./assessment-actions";
 import { SignalBadge } from "./signal-badge";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 
 const statusOptions = [
   { value: "active", label: "Active" },
@@ -37,6 +39,7 @@ interface Props {
   animalId: string;
   totalPages: number;
   canManage: boolean;
+  help: HelpLinkGuide | null;
 }
 
 const AnimalAssessmentsTab = ({
@@ -44,6 +47,7 @@ const AnimalAssessmentsTab = ({
   animalId,
   totalPages,
   canManage,
+  help,
 }: Props) => {
   return (
     <Card className="@container/card">
@@ -52,7 +56,7 @@ const AnimalAssessmentsTab = ({
         <CardDescription>
           Structured checks recorded against this animal, newest first.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-2">
           <span className={cn("inline-block", !canManage && "cursor-not-allowed")}>
             <Button
               asChild
@@ -72,6 +76,7 @@ const AnimalAssessmentsTab = ({
               </Link>
             </Button>
           </span>
+          <HelpLink guide={help} />
         </CardAction>
 
         <div className="mt-4 flex flex-row flex-wrap items-center gap-3">

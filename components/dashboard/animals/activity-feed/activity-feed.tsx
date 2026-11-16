@@ -2,6 +2,7 @@
 
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -11,13 +12,16 @@ import {
 import { SimplePagination } from "../../../simple-pagination";
 import { AnimalActivityLogPayload } from "@/app/lib/data/animals/animal-activity.data";
 import ActivityFeedItem from "./activity-feed-item";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 
 interface Props {
   activityLogs: AnimalActivityLogPayload[];
   totalPages: number;
+  help: HelpLinkGuide | null;
 }
 
-const ActivityFeed = ({ activityLogs = [], totalPages }: Props) => {
+const ActivityFeed = ({ activityLogs = [], totalPages, help }: Props) => {
   return (
     <Card className="@container/card">
       <CardHeader>
@@ -28,6 +32,11 @@ const ActivityFeed = ({ activityLogs = [], totalPages }: Props) => {
           This page displays the most recent activity logs for this animal,
           including who made the change and a summary of the action.
         </CardDescription>
+        {help && (
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent>
         {activityLogs.length > 0 ? (

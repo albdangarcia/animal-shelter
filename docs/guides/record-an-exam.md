@@ -3,7 +3,7 @@ title: Record an exam
 summary: Record an intake, vet, recheck or pre-adoption exam, body system by body system, with any vitals taken.
 permissions: [MEDICAL_ADMINISTER, MEDICAL_MANAGE]
 aliases: [intake exam, physical exam, vet check, recheck, pre-adoption exam, body systems, exam findings, record weight at exam]
-related: [record-reschedule-or-decline-scheduled-care, open-a-care-episode-add-a-condition-or-allergy, record-a-surgery-spay-neuter-or-exemption, correct-or-void-an-entry, medical-status-glossary]
+related: [record-reschedule-or-decline-scheduled-care, open-a-care-episode-add-a-condition-or-allergy, record-a-surgery-spay-neuter-or-exemption, correct-or-void-an-entry, medical-status-glossary, record-weight-and-vitals]
 verified: 2026-11-10
 ---
 

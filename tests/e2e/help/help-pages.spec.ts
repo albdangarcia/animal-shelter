@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import pg from "pg";
+import { E2E_DATABASE_URL } from "../../../playwright/env";
 import {
   bootstrapStorageState,
   SEEDED_USER_PASSWORD,
@@ -15,12 +17,30 @@ import {
 
 const staffState = storageStatePathFor("help-pages-staff.state.json");
 const fosterState = storageStatePathFor("help-pages-foster.state.json");
+const volunteerState = storageStatePathFor("help-pages-volunteer.state.json");
 
 const VACCINE_GUIDE = "Record a vaccine, test or treatment";
+const VITALS_GUIDE = "Record weight and vitals";
 const DUE_GUIDE = "Schedule care and read the Due page";
 const FOSTER_GUIDE = "Fosters: give care and report an outside vet visit";
 
+let animalId: string;
+
 test.beforeAll(async ({ browser }) => {
+  const db = new pg.Client({ connectionString: E2E_DATABASE_URL });
+  await db.connect();
+  try {
+    animalId = (
+      await db.query<{ id: string }>(`SELECT id FROM animals ORDER BY id LIMIT 1`)
+    ).rows[0].id;
+  } finally {
+    await db.end();
+  }
+  await bootstrapStorageState(browser, {
+    email: "volunteer1@example.com",
+    password: SEEDED_USER_PASSWORD,
+    storageStatePath: volunteerState,
+  });
   await bootstrapStorageState(browser, {
     email: "staff1@example.com",
     password: SEEDED_USER_PASSWORD,
@@ -43,6 +63,14 @@ const searchBox = (page: Page) =>
 
 const guideList = (page: Page) =>
   page.getByRole("list", { name: /^(Matching guides|Guides)$/ });
+
+// The Medical tab's layout holds one "?" for all its sections and picks the
+// guide from the path, so moving between tabs (the layout stays mounted)
+// must switch it.
+const medicalNav = (page: Page) =>
+  page.getByRole("navigation", { name: "Medical sections" });
+const medicalHelp = (page: Page) =>
+  medicalNav(page).getByRole("link", { name: /^Help: / });
 
 test.describe("staff", () => {
   test.use({ storageState: staffState });
@@ -95,6 +123,36 @@ test.describe("staff", () => {
 
     await waitForPathname(page, "/dashboard/help/schedule-care-and-read-the-due-page");
     await expect(guideTitle(page, DUE_GUIDE)).toBeVisible();
+  });
+
+  test("the Medical \"?\" opens the medical guide, and the vitals guide on Vitals", async ({
+    page,
+  }) => {
+    await page.goto(`/dashboard/animals/${animalId}/medical`);
+    await expect(medicalHelp(page)).toHaveAccessibleName(`Help: ${VACCINE_GUIDE}`);
+
+    await medicalNav(page).getByRole("link", { name: "Vitals", exact: true }).click();
+    await waitForPathname(page, `/dashboard/animals/${animalId}/medical/vitals`);
+    await expect(medicalHelp(page)).toHaveAccessibleName(`Help: ${VITALS_GUIDE}`);
+  });
+});
+
+test.describe("a volunteer", () => {
+  test.use({ storageState: volunteerState });
+
+  test("gets the Medical \"?\" on Vitals only, where it opens the vitals guide", async ({
+    page,
+  }) => {
+    // The medical guide is staff's: on the other sections there is no "?".
+    await page.goto(`/dashboard/animals/${animalId}/medical`);
+    await expect(medicalNav(page)).toBeVisible();
+    await expect(medicalHelp(page)).toHaveCount(0);
+
+    await medicalNav(page).getByRole("link", { name: "Vitals", exact: true }).click();
+    await waitForPathname(page, `/dashboard/animals/${animalId}/medical/vitals`);
+    await medicalHelp(page).click();
+    await waitForPathname(page, "/dashboard/help/record-weight-and-vitals");
+    await expect(guideTitle(page, VITALS_GUIDE)).toBeVisible();
   });
 });
 

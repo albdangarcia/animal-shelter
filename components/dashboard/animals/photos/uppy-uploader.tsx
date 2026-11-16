@@ -11,6 +11,11 @@ import "@/node_modules/@uppy/dashboard/dist/style.min.css";
 import "./uppy-uploader-overrides.css";
 import { toast } from "sonner";
 import { useTheme } from "next-themes";
+import {
+  failUnsuccessfulUpload,
+  shouldRetryUpload,
+  uploadErrorMessage,
+} from "./upload-errors";
 
 interface UppyUploaderProps {
   animalId: string;
@@ -113,6 +118,8 @@ const UppyUploader = ({ animalId, canManage }: UppyUploaderProps) => {
       formData: true,
       fieldName: "file",
       allowedMetaFields: ["animalId"],
+      shouldRetry: shouldRetryUpload,
+      onAfterResponse: failUnsuccessfulUpload,
     }),
   );
 
@@ -130,8 +137,7 @@ const UppyUploader = ({ animalId, canManage }: UppyUploaderProps) => {
     };
 
     const handleUploadError = (file: unknown, error: unknown) => {
-      const err = error as Error;
-      toast.error(err?.message || "Failed to upload image. Please try again.");
+      toast.error(uploadErrorMessage(error));
     };
 
     uppy.on("upload-success", handleUploadSuccess);
