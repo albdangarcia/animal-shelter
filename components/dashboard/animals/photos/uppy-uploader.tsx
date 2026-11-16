@@ -16,6 +16,11 @@ import {
   shouldRetryUpload,
   uploadErrorMessage,
 } from "./upload-errors";
+import { shrinkLargePhotos } from "./shrink-photo";
+import {
+  MAX_PHOTO_SIZE_LABEL,
+  PHOTO_TOO_LARGE_MESSAGE,
+} from "@/app/lib/storage/photo-size";
 
 interface UppyUploaderProps {
   animalId: string;
@@ -109,8 +114,8 @@ const UppyUploader = ({ animalId, canManage }: UppyUploaderProps) => {
   const router = useRouter();
   const { resolvedTheme } = useTheme();
 
-  const [uppy] = useState(() =>
-    new Uppy({
+  const [uppy] = useState(() => {
+    const instance = new Uppy({
       debug: true,
       autoProceed: true,
     }).use(XHRUpload, {
@@ -120,8 +125,16 @@ const UppyUploader = ({ animalId, canManage }: UppyUploaderProps) => {
       allowedMetaFields: ["animalId"],
       shouldRetry: shouldRetryUpload,
       onAfterResponse: failUnsuccessfulUpload,
-    }),
-  );
+    });
+    // The route can't take a body over 4.5 MB on Vercel: send a smaller copy
+    // of a bigger photo, or say why it can't be sent and take it out.
+    instance.addPreProcessor((fileIDs) =>
+      shrinkLargePhotos(instance, fileIDs, (file) => {
+        toast.error(PHOTO_TOO_LARGE_MESSAGE, { description: file.name });
+      }),
+    );
+    return instance;
+  });
 
   useEffect(() => {
     uppy.setMeta({ animalId });
@@ -163,7 +176,7 @@ const UppyUploader = ({ animalId, canManage }: UppyUploaderProps) => {
         uppy={uppy}
         theme={resolvedTheme === "dark" ? "dark" : "light"}
         hideProgressAfterFinish={true}
-        note="Images will be saved to the animal's record upon successful upload."
+        note={`Images will be saved to the animal's record upon successful upload. Photos over ${MAX_PHOTO_SIZE_LABEL} are made smaller first.`}
         proudlyDisplayPoweredByUppy={false}
         width={"100%"}
       />
