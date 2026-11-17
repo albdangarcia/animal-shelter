@@ -6,6 +6,7 @@ import {
   E2E_DATABASE_URL,
   E2E_DOCKER_COMPOSE_FILE,
   E2E_DOCKER_PROJECT_NAME,
+  E2E_ANIMAL_PHOTO_DIR,
   E2E_MEDICAL_DOCUMENT_DIR,
   E2E_POSTGRES_DB,
   E2E_POSTGRES_SERVICE_NAME,
@@ -76,6 +77,10 @@ export default async function globalSetup(_config: FullConfig) {
   // files earlier runs uploaded belong to rows the reset just dropped.
   console.log("Emptying the Playwright medical documents folder...");
   await rm(E2E_MEDICAL_DOCUMENT_DIR, { recursive: true, force: true });
+
+  // Photos earlier runs uploaded belong to rows the reset just dropped.
+  console.log("Emptying the Playwright animal photos folder...");
+  await rm(E2E_ANIMAL_PHOTO_DIR, { recursive: true, force: true });
 
   console.log("Seeding Playwright database...");
   await runCommand("npx", ["prisma", "db", "seed"], {

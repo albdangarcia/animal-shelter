@@ -2858,6 +2858,7 @@ enum AnimalActivityType {
   FIELD_UPDATE // A direct field on the animal model was changed (e.g., name, description)
   NOTE_ADDED // A note was created for this animal
   PHOTO_UPLOADED // A new photo was added
+  PHOTO_DELETED // A photo was deleted
   ASSESSMENT_COMPLETED // An assessment was finished
   VITALS_RECORDED // A vitals entry (weight/temperature/body condition) was recorded
   TASK_CREATED // A task was created

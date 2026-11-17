@@ -216,11 +216,7 @@ export default function AnimalImageGallery({
     if (!imageToDelete) return;
 
     startDeleteTransition(async () => {
-      const result = await deleteAnimalImage(
-        imageToDelete.id,
-        imageToDelete.url,
-        animalId,
-      );
+      const result = await deleteAnimalImage(imageToDelete.id, animalId);
       if (result.success) {
         toast.success(result.message);
       } else {
