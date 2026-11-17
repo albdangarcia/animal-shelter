@@ -24,6 +24,10 @@ Each file uploads as soon as you add it. You should see "Image uploaded
 successfully!" and the photo appears last under **Current Images**. Drag it
 to the first place to make it the **Primary photo**.
 
+Photos over 4 MB, such as ones straight from a phone, are made smaller
+before they upload: the box shows "Making the photo smaller…" for a moment,
+and the photo is saved as a JPEG of up to 2560 pixels on its longest side.
+
 ## Change the order
 
 1. Open the animal, then the **Photos** tab.
@@ -63,6 +67,14 @@ A deleted photo can't be restored. To have it back, add the file again (see
   The box shows **Upload failed**: click **Retry** beside it. Adding the same
   file again doesn't work while it is still in the box. If it keeps failing,
   tell an admin.
+- **"This photo is too big to upload. Photos can be up to 4 MB, and this
+  one couldn't be made smaller. Save a smaller copy as a JPEG and add that
+  instead."** The message names the photo. It is over 4 MB and your
+  browser can't open it to make it smaller (an iPhone's HEIC photo outside
+  Safari, say), so it wasn't added and has left the box. Any other photos
+  you added with it still upload. Save a copy of the photo as a JPEG and add
+  that. To have an iPhone take JPEG photos, set **Settings** > **Camera** >
+  **Formats** to **Most Compatible**.
 - **"Couldn't reach the server, so the image wasn't uploaded. Check your
   connection and try again."** Check that you are online, then click
   **Retry** beside **Upload failed**.

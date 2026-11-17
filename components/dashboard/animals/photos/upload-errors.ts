@@ -5,6 +5,8 @@
 // even for a 403 or a 500. The uploader hands these two functions to
 // XHRUpload so a failed answer carries a message that says what happened.
 
+import { PHOTO_TOO_LARGE_MESSAGE } from "@/app/lib/storage/photo-size";
+
 export const UPLOAD_FAILED_MESSAGE = "Failed to upload image. Please try again.";
 export const UPLOAD_UNREACHABLE_MESSAGE =
   "Couldn't reach the server, so the image wasn't uploaded. Check your connection and try again.";
@@ -41,14 +43,17 @@ function refusalMessage(xhr: XMLHttpRequest): string | null {
  * XHRUpload's `onAfterResponse`: fails a non-2xx answer with a message of its
  * own. A refusal (4xx) says why in the route's words; a server failure (5xx)
  * gets the general message, since the route's own ("Upload failed.") says no
- * more than that.
+ * more than that. A 413 says the photo is too big: on Vercel it comes from
+ * the platform, not the route (FUNCTION_PAYLOAD_TOO_LARGE), with no `error`
+ * to read, and trying again can never work.
  */
 export function failUnsuccessfulUpload(xhr: XMLHttpRequest): void {
   if (xhr.status >= 200 && xhr.status < 300) return;
-  const message =
-    xhr.status >= 400 && xhr.status < 500
-      ? (refusalMessage(xhr) ?? UPLOAD_FAILED_MESSAGE)
-      : UPLOAD_FAILED_MESSAGE;
+  let message = UPLOAD_FAILED_MESSAGE;
+  if (xhr.status === 413) message = PHOTO_TOO_LARGE_MESSAGE;
+  else if (xhr.status >= 400 && xhr.status < 500) {
+    message = refusalMessage(xhr) ?? UPLOAD_FAILED_MESSAGE;
+  }
   throw new Error(message);
 }
 

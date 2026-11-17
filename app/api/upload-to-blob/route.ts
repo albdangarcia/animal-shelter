@@ -5,6 +5,7 @@ import { getCachedSession } from "@/app/lib/auth/session";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { AnimalActivityType } from "@/prisma/generated/client";
+import { readUploadedPhoto } from "@/app/lib/storage/photo-size";
 
 export async function POST(request: Request) {
   const session = await getCachedSession();
@@ -35,12 +36,16 @@ export async function POST(request: Request) {
 
   try {
     const formData = await request.formData();
-    const file = formData.get("file") as File;
+    const uploaded = readUploadedPhoto(formData.get("file"));
     const animalId = formData.get("animalId") as string;
 
-    if (!file) {
-      return NextResponse.json({ error: "No file found." }, { status: 400 });
+    if (!("photo" in uploaded)) {
+      return NextResponse.json(
+        { error: uploaded.error },
+        { status: uploaded.status },
+      );
     }
+    const file = uploaded.photo;
 
     // upload to blob
     const blob = await put(`animalShelterUserUploads/${file.name}`, file, {
