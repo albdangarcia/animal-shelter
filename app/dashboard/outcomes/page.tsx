@@ -15,6 +15,9 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -50,9 +53,10 @@ const PageContent = async ({ searchParams }: Props) => {
     currentPageSize,
   );
 
-  const [canManage, canReverse] = await Promise.all([
+  const [canManage, canReverse, help] = await Promise.all([
     hasPermission(AppPermissions.OUTCOMES_MANAGE),
     hasPermission(AppPermissions.OUTCOMES_REVERSE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.outcomes),
   ]);
 
   return (
@@ -65,7 +69,11 @@ const PageContent = async ({ searchParams }: Props) => {
           Track and review the final disposition of all animals that have left
           the shelter.
         </CardDescription>
-        <CardAction></CardAction>
+        {help && (
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent>
         <div className="flex flex-1 flex-col">

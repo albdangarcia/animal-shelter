@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardFooter,
@@ -55,6 +56,8 @@ import {
 import { OutcomeMedicalFields, emptyOutcomeMedical } from "./outcome-medical-fields";
 import type { OutcomeMedicalDetailsInput } from "@/app/lib/zod-schemas/outcome-medical.schemas";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 
 export type OutcomeFormValues = OutcomeFormInput;
 
@@ -89,6 +92,8 @@ interface OutcomeFormProps {
    * render and the browser's could disagree by a day.
    */
   today: CalendarDay;
+  /** The page's "?" link, or null when the reader can't open its guide. */
+  help?: HelpLinkGuide | null;
 }
 
 const buildDefaultValues = (
@@ -118,6 +123,7 @@ export function OutcomeForm({
   suggestedOwnerLabel,
   canCreatePerson,
   today, canManageOutcome, canManageMedical = false, hasMedicalDetails = false, medical, medicalPeople, clinics = [],
+  help = null,
 }: OutcomeFormProps) {
   const isEditMode = !!outcome;
   const router = useRouter();
@@ -186,6 +192,11 @@ export function OutcomeForm({
                 ? `Update the outcome details for ${animal.name}.`
                 : `Finalize the journey for ${animal.name}. This action will archive the animal's record.`}
             </CardDescription>
+            {help && (
+              <CardAction>
+                <HelpLink guide={help} />
+              </CardAction>
+            )}
           </CardHeader>
 
           <CardContent><fieldset disabled={!canManageOutcome || isPending} className="space-y-6 min-w-0">

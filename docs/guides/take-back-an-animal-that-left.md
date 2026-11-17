@@ -3,8 +3,8 @@ title: Take back an animal that left
 summary: Record a re-intake when an adopted, transferred or returned animal comes back, so it is in care again on its old record.
 permissions: [INTAKE_MANAGE]
 aliases: [re-intake, reintake, returned adoption, adoption return, animal came back, bring an animal back, returned animal, re-admit, readmit, adopter brought it back, second intake]
-related: [take-in-a-new-animal, correct-an-intake, find-an-intake, set-up-or-change-a-medical-protocol, schedule-care-and-read-the-due-page]
-verified: 2026-11-14
+related: [take-in-a-new-animal, correct-an-intake, find-an-intake, set-up-or-change-a-medical-protocol, schedule-care-and-read-the-due-page, record-an-outcome, reverse-an-outcome-recorded-by-mistake, find-an-outcome]
+verified: 2026-11-16
 ---
 
 ## When to use this
@@ -121,8 +121,8 @@ choice, and the message after saving still says what it scheduled.
 - **"Cannot process re-intake: This animal is not currently archived or was
   just re-intaked."** Someone else took the animal back a moment ago. Open
   the animal's page to see it.
-- **"No matching person found. Add them to the directory first, then start
-  this intake."** Your account can't add people. Ask someone who manages the
+- **"No matching person found. Add them to the people directory first, then
+  pick them here."** Your account can't add people. Ask someone who manages the
   people directory to add the person.
 - **Access Denied on the re-intake form.** Your account can't take animals
   in. Ask an admin.

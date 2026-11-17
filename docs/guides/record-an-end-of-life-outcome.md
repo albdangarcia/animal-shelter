@@ -3,8 +3,8 @@ title: Record an end-of-life outcome and add missing details later
 summary: Record a euthanasia or a death with its medical details, add the details to an outcome recorded without them, and correct them.
 permissions: [OUTCOMES_MANAGE]
 aliases: [euthanasia, put to sleep, animal died, found dead, death record, cause of death, necropsy, body disposition, late euthanasia paperwork]
-related: [correct-or-void-an-entry, upload-and-manage-medical-documents, medical-status-glossary, correct-an-intake]
-verified: 2026-11-14
+related: [correct-or-void-an-entry, upload-and-manage-medical-documents, medical-status-glossary, correct-an-intake, record-an-outcome, correct-an-outcome, reverse-an-outcome-recorded-by-mistake, find-an-outcome]
+verified: 2026-11-16
 ---
 
 ## When to use this
@@ -137,6 +137,13 @@ reverses it from the **Outcomes** list, and the animal is back in care.
   is required."** Fill in every field marked with *.
 - **"Pick who performed the procedure."** Pick the person under **Performed
   by**.
+- **"No matching person found. Add them to the people directory first, then
+  pick them here."** (under **Authorized by** or **Performed by**) The person
+  isn't in the shelter's directory, and these fields can't add anyone. Ask
+  someone who manages the **People Directory** to add them, or add them
+  there yourself if your account can, then pick them. For an outside vet
+  who isn't in the directory, pick **Outside vet name** under **Performer
+  type** and type the vet's name instead.
 - **"Pick a performer or give the outside vet's name."** For an outside vet,
   pick a person or type the vet's name.
 - **"Pick a performer or give the outside vet's name, not both."** Clear one

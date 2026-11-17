@@ -22,6 +22,8 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -60,12 +62,13 @@ const PageContent = async ({ searchParams }: Props) => {
     return notFound();
   }
 
-  const [partners, canCreatePerson, canReadFosters, canManageFosters] =
+  const [partners, canCreatePerson, canReadFosters, canManageFosters, help] =
     await Promise.all([
       fetchPartners(),
       hasPermission(AppPermissions.PERSONS_MANAGE),
       hasPermission(AppPermissions.FOSTERS_READ),
       hasPermission(AppPermissions.FOSTERS_MANAGE),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.outcomeCreate),
     ]);
   if (!partners) {
     return notFound();
@@ -159,6 +162,7 @@ const PageContent = async ({ searchParams }: Props) => {
             canManageMedical={canManageMedical}
             clinics={clinics}
             today={await getShelterToday()}
+            help={help}
           />
         </>
       )}

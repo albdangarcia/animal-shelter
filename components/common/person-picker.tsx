@@ -245,7 +245,10 @@ export const PersonPicker = ({
                 ) : (
                   <CommandEmpty>
                     {query.trim()
-                      ? "No matching person found. Add them to the directory first, then start this intake."
+                      ? // Shared by every form with a person field (intakes,
+                        // outcomes, fosters, euthanasia details), so it names
+                        // none of them.
+                        "No matching person found. Add them to the people directory first, then pick them here."
                       : "Type a name, email, or phone number to search."}
                   </CommandEmpty>
                 )

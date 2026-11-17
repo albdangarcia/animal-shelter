@@ -153,32 +153,46 @@ const AnimalSectionCards = async ({ params }: Props) => {
   const applicationCount = animal.adoptionApplications?.length || 0;
   const approvedApplications =
     animal.adoptionApplications?.filter((a) => a.status === "APPROVED") ?? [];
-  // Null for an animal that died: it can't come back, so there is no next
-  // step to offer, and the card says why in its place.
-  const outcomeAction = (() => {
-    if (animal.stayEndingDeath) return null;
+  // Empty for an animal that died: it can't come back, so there is no next
+  // step to offer, and the card says why in its place. The first action is
+  // the main one.
+  const createOutcome = {
+    href: `/dashboard/outcomes/create?animalId=${animal.id}`,
+    label: "Create Outcome",
+  };
+  const outcomeActions: { href: string; label: string }[] = (() => {
+    if (animal.stayEndingDeath) return [];
     if (animal.listingStatus === AnimalListingStatus.ARCHIVED) {
-      return {
-        href: `/dashboard/animals/${animal.id}/intake/create`,
-        label: "Create Re-Intake",
-      };
+      return [
+        {
+          href: `/dashboard/animals/${animal.id}/intake/create`,
+          label: "Create Re-Intake",
+        },
+      ];
     }
+    // An approved application makes the adoption the likely next step, but
+    // the animal can still leave another way (a transfer, a return to its
+    // owner, a death), which the adoption form can't record. Create Outcome
+    // stays on offer beside it.
     if (approvedApplications.length === 1) {
-      return {
-        href: `/dashboard/outcomes/create?applicationId=${approvedApplications[0].id}`,
-        label: "Complete Adoption",
-      };
+      return [
+        {
+          href: `/dashboard/outcomes/create?applicationId=${approvedApplications[0].id}`,
+          label: "Complete Adoption",
+        },
+        createOutcome,
+      ];
     }
     if (approvedApplications.length > 1) {
-      return {
-        href: `/dashboard/animals/${animal.id}/adoption-applications?status=APPROVED`,
-        label: "Choose Application",
-      };
+      return [
+        {
+          href: `/dashboard/animals/${animal.id}/adoption-applications?status=APPROVED`,
+          label: "Choose Application",
+        },
+        createOutcome,
+      ];
     }
-    return {
-      href: `/dashboard/outcomes/create?animalId=${animal.id}`,
-      label: "Create Outcome",
-    };
+    return [createOutcome];
   })();
 
   return (
@@ -308,31 +322,34 @@ const AnimalSectionCards = async ({ params }: Props) => {
                 </div>
               </div>
 
-              {/* Action Button */}
-              {outcomeAction ? (
-                <span
-                  className={cn(
-                    "inline-block w-full",
-                    !canManage && "cursor-not-allowed",
-                  )}
-                >
-                  <Button
-                    asChild
-                    variant={canManage ? "default" : "outline"}
+              {/* Action Buttons */}
+              {outcomeActions.length > 0 ? (
+                outcomeActions.map((action, index) => (
+                  <span
+                    key={action.label}
                     className={cn(
-                      "w-full",
-                      !canManage && "pointer-events-none opacity-50",
+                      "inline-block w-full",
+                      !canManage && "cursor-not-allowed",
                     )}
                   >
-                    <Link
-                      href={outcomeAction.href}
-                      aria-disabled={!canManage}
-                      tabIndex={canManage ? undefined : -1}
+                    <Button
+                      asChild
+                      variant={canManage && index === 0 ? "default" : "outline"}
+                      className={cn(
+                        "w-full",
+                        !canManage && "pointer-events-none opacity-50",
+                      )}
                     >
-                      {outcomeAction.label}
-                    </Link>
-                  </Button>
-                </span>
+                      <Link
+                        href={action.href}
+                        aria-disabled={!canManage}
+                        tabIndex={canManage ? undefined : -1}
+                      >
+                        {action.label}
+                      </Link>
+                    </Button>
+                  </span>
+                ))
               ) : (
                 animal.stayEndingDeath && (
                   <Alert>

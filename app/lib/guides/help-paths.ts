@@ -49,4 +49,7 @@ export const PAGE_HELP_GUIDES = {
   animalJourney: "read-an-animals-activity-and-journey",
   animalActivity: "read-an-animals-activity-and-journey",
   allAnimalTasks: "create-assign-and-complete-tasks",
+  outcomes: "find-an-outcome",
+  outcomeCreate: "record-an-outcome",
+  outcomeCorrection: "correct-an-outcome",
 } as const;
