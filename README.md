@@ -123,7 +123,9 @@ Typical values per environment:
 
 | Variable                                  | Required             | Description                                                                                                                                                                                                         |
 | ----------------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BLOB_READ_WRITE_TOKEN`                   | ✅ Required          | Read/write token for Vercel Blob Storage (stores animal images, which are public).                                                                                                                                  |
+| `BLOB_READ_WRITE_TOKEN`                   | Required in production | Read/write token for Vercel Blob Storage (stores animal photos, which are public). Without it, development keeps photos on disk in `.animal-photos/`, served by `/api/animal-photos/<name>`. |
+| `ANIMAL_PHOTO_STORE`                      | Optional             | `blob` or `local`. Left empty: Blob when the token above is set, otherwise local. Never local in production. Set `local` to keep development off the real store. |
+| `ANIMAL_PHOTO_DIR`                        | Optional             | The folder the local photo store uses. Defaults to `.animal-photos/` in the checkout. |
 | `MEDICAL_DOCUMENTS_BLOB_READ_WRITE_TOKEN` | Required in production | Read/write token for a **second, private** Blob store holding medical documents, which are served only through a route that checks who is asking. Without it, development keeps the files on disk in `.medical-documents/`. |
 | `MEDICAL_DOCUMENT_STORE`                  | Optional             | `blob` or `local`. Left empty: Blob when the token above is set, otherwise local (and in production, a missing token makes document uploads and downloads fail). Set `local` to keep development off the real store. |
 | `MEDICAL_DOCUMENT_DIR`                    | Optional             | The folder the local store uses. Defaults to `.medical-documents/` in the checkout.                                                                                                                                 |
@@ -230,7 +232,7 @@ First, clone the repository and set up your environment variables.
     - Set `ADMIN_PASSWORD` to a password of your choice. This will be the seeded admin's password; the other seeded accounts use a fixed one (see Other Seeded Accounts).
     - Generate a `BETTER_AUTH_SECRET` by running `openssl rand -base64 32`.
     - Set `BETTER_AUTH_URL` to `http://localhost:3000` and leave `BETTER_AUTH_ALLOWED_HOSTS` as `localhost:*`.
-    - Log into your Vercel account, create a new Blob store, and get your `BLOB_READ_WRITE_TOKEN`. **This is required for all image upload/delete functionality.**
+    - Log into your Vercel account, create a new Blob store, and get your `BLOB_READ_WRITE_TOKEN`. Without it, development keeps uploaded photos on disk in `.animal-photos/`; production needs it.
     - (Optional) Medical documents work without any setup: development keeps their files on disk in `.medical-documents/`. To use Blob for them, create a second store with **private** access and set its read/write token as `MEDICAL_DOCUMENTS_BLOB_READ_WRITE_TOKEN`.
 
 ## Running the App
@@ -272,7 +274,7 @@ docker compose up -d
 > The database seeding script (`npx prisma db seed`) will populate the database with sample animals whose images are served from the local `/public` folder. This is done to provide a quick visual setup without requiring you to upload dozens of images manually.
 >
 > - **Functionality:** You can view these seeded animals perfectly.
-> - **Limitation:** You **cannot delete** a seeded animal's image through the dashboard, as it only exists locally and not in your Vercel Blob store. Any **new animals and images you create** through the application UI will be uploaded to Vercel Blob correctly and will be fully manageable.
+> - **Deleting:** Deleting a seeded photo in the dashboard removes it from the animal; its file stays in `public/seed-images/`, since the photo store removes only files it wrote. Photos you upload go to the photo store (Vercel Blob, or `.animal-photos/` without a token) and are removed from it when deleted.
 
 ### Option 2: Deploying on Vercel (Fully Serverless)
 

@@ -51,6 +51,8 @@ Press Esc to cancel.
 You should see "Image deleted successfully." The photo leaves the list. If it
 was the **Primary photo**, the next one takes its place.
 
+The animal's activity feed shows that you deleted a photo.
+
 A deleted photo can't be restored. To have it back, add the file again (see
 **Add photos** above).
 
@@ -78,9 +80,23 @@ A deleted photo can't be restored. To have it back, add the file again (see
 - **"Couldn't reach the server, so the image wasn't uploaded. Check your
   connection and try again."** Check that you are online, then click
   **Retry** beside **Upload failed**.
+- **"This file isn't a photo. Add a JPEG, PNG or WebP image."** The file
+  isn't one of the kinds of photo every browser can show (it may be a PDF, a
+  document, or a GIF, whatever its name says), so it wasn't added. Clicking
+  **Retry** won't help. Save the picture as a JPEG and add that.
+- **"HEIC photos can't be shown in most browsers. Save a copy as a JPEG and
+  add that instead. To have an iPhone take JPEG photos, set Settings >
+  Camera > Formats to Most Compatible."** The photo is an iPhone's HEIC
+  photo, so it wasn't added. Save a copy as a JPEG and add that.
+- **"This animal wasn't found, so the photo wasn't added. Reload the page
+  and try again."** Reload the page. If the animal is still there, add the
+  photo again; if it keeps happening, tell an admin.
+- **"This photo wasn't found. It may have been deleted in another tab.
+  Reload the page."** Someone deleted the photo since you opened the page.
+  Reload it: the photo is gone.
+- **"Failed to delete image."** The photo wasn't deleted and is still in the
+  list. Try again; if it keeps happening, tell an admin.
 - **"Unauthorized: You must be logged in."** Your sign-in has run out.
   Reload the page, sign in, and add the photo again.
 - **"Your account is not associated with a person record."** Your account
   isn't set up to record changes. Tell an admin.
-- **"Failed to delete image."** The photo wasn't deleted. Try again; if it
-  keeps happening, tell an admin.

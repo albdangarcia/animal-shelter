@@ -1,12 +1,24 @@
-import { put, del } from "@vercel/blob";
 import prisma from "@/app/lib/prisma";
 import { NextResponse } from "next/server";
 import { getCachedSession } from "@/app/lib/auth/session";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
-import { AnimalActivityType } from "@/prisma/generated/client";
 import { readUploadedPhoto } from "@/app/lib/storage/photo-size";
+import { animalPhotoStore } from "@/app/lib/storage/animal-photo-store";
+import { addAnimalPhoto } from "@/app/lib/services/animal-photos";
+import { cuidSchema } from "@/app/lib/zod-schemas/common.schemas";
 
+/**
+ * Adds one photo to an animal: the form's `file` and `animalId`. Checks who
+ * is asking, then hands the photo to the photo service
+ * (`app/lib/services/animal-photos.ts`), which refuses a file that isn't a
+ * JPEG, PNG or WebP and an unknown animal, stores the file in the photo store
+ * the environment picks, and records it.
+ *
+ * Answers 201 `{ url }`, or `{ error }` with a message staff can read: the
+ * uploader shows a 4xx's `error` as it is. The path keeps its old name until
+ * phase 2 of the photo editing work rewrites its only caller.
+ */
 export async function POST(request: Request) {
   const session = await getCachedSession();
   if (!session?.user) {
@@ -32,57 +44,33 @@ export async function POST(request: Request) {
     );
   }
 
-  let blobUrl: string | null = null;
-
   try {
     const formData = await request.formData();
     const uploaded = readUploadedPhoto(formData.get("file"));
-    const animalId = formData.get("animalId") as string;
-
     if (!("photo" in uploaded)) {
       return NextResponse.json(
         { error: uploaded.error },
         { status: uploaded.status },
       );
     }
-    const file = uploaded.photo;
-
-    // upload to blob
-    const blob = await put(`animalShelterUserUploads/${file.name}`, file, {
-      access: "public",
-      addRandomSuffix: true,
-    });
-    blobUrl = blob.url; // only used for cleanup on failure
-
-    // save to DB
-    await prisma.$transaction(async (tx) => {
-      // New photo lands at the end of this animal's gallery. Not unique, so a
-      // concurrent upload can pick the same value — reads break the tie on
-      // createdAt (see app/lib/utils/animal-image-order.ts).
-      const { _max } = await tx.animalImage.aggregate({
-        where: { animalId },
-        _max: { sortOrder: true },
-      });
-
-      await tx.animalImage.create({
-        data: { url: blob.url, animalId, sortOrder: (_max.sortOrder ?? -1) + 1 },
-      });
-
-      await tx.animalActivityLog.create({
-        data: {
-          animalId,
-          activityType: AnimalActivityType.PHOTO_UPLOADED,
-          changedById: staffMemberId,
-          changeSummary: `A new photo was uploaded. URL: ${blob.url}`,
-        },
-      });
-    });
-
-    return NextResponse.json({ url: blob.url }, { status: 201 });
-  } catch (error) {
-    if (blobUrl) {
-      await del(blobUrl).catch(() => {});
+    const animalId = cuidSchema.safeParse(formData.get("animalId"));
+    if (!animalId.success) {
+      return NextResponse.json(
+        { error: "No animal was named for this photo. Reload the page and try again." },
+        { status: 400 },
+      );
     }
+
+    const result = await addAnimalPhoto(prisma, animalPhotoStore(), {
+      animalId: animalId.data,
+      staffMemberId,
+      bytes: new Uint8Array(await uploaded.photo.arrayBuffer()),
+    });
+    if (!result.ok) {
+      return NextResponse.json({ error: result.message }, { status: result.status });
+    }
+    return NextResponse.json({ url: result.url }, { status: 201 });
+  } catch (error) {
     console.error("Upload failed:", error);
     return NextResponse.json({ error: "Upload failed." }, { status: 500 });
   }

@@ -55,4 +55,8 @@ next-env.d.ts
 /.medical-documents/
 /.medical-documents-e2e/
 
+# animal photos kept on disk (development without a Blob token, e2e)
+/.animal-photos/
+/.animal-photos-e2e/
+
 docs/specs/

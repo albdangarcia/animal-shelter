@@ -5,6 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   FileText,
   Camera,
+  ImageMinus,
   ClipboardList,
   LogIn,
   LogOut,
@@ -57,6 +58,10 @@ const activityConfig: Record<
   [AnimalActivityType.PHOTO_UPLOADED]: {
     icon: Camera,
     text: "uploaded a new photo",
+  },
+  [AnimalActivityType.PHOTO_DELETED]: {
+    icon: ImageMinus,
+    text: "deleted a photo",
   },
   [AnimalActivityType.INTAKE_PROCESSED]: {
     icon: LogIn,

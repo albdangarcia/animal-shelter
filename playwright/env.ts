@@ -73,6 +73,11 @@ export const E2E_MEDICAL_DOCUMENT_DIR = path.join(
   ".medical-documents-e2e",
 );
 
+// Animal photos likewise: the e2e server uses the local photo store whatever
+// .env says, so no test run uploads to or deletes from the public Blob store.
+// Global setup empties it too.
+export const E2E_ANIMAL_PHOTO_DIR = path.join(process.cwd(), ".animal-photos-e2e");
+
 // `npm run test:db` has its own container, so it can run while e2e does and
 // e2e's teardown (`down -v`) never removes its database. Same compose file.
 export const TEST_DB_DOCKER_PROJECT_NAME = coordinates.testDb.projectName;
@@ -145,7 +150,9 @@ export const getPlaywrightEnv = (): NodeJS.ProcessEnv => {
     PLAYWRIGHT_NEXT_DIST_DIR: E2E_NEXT_DIST_DIR,
     // Images skip /_next/image on the e2e server; next.config.ts says why.
     PLAYWRIGHT_UNOPTIMIZED_IMAGES: "1",
-    BLOB_READ_WRITE_TOKEN: process.env.BLOB_READ_WRITE_TOKEN ?? "",
+    ANIMAL_PHOTO_STORE: "local",
+    ANIMAL_PHOTO_DIR: E2E_ANIMAL_PHOTO_DIR,
+    BLOB_READ_WRITE_TOKEN: "",
     MEDICAL_DOCUMENT_STORE: "local",
     MEDICAL_DOCUMENT_DIR: E2E_MEDICAL_DOCUMENT_DIR,
     MEDICAL_DOCUMENTS_BLOB_READ_WRITE_TOKEN: "",

@@ -36,8 +36,8 @@ import {
   MedicalEntryRefusal,
   nameChipNumberHolder,
 } from "../services/medical-entry";
-import { del } from "@vercel/blob";
-import { isDemo } from "@/lib/flags";
+import { deleteAnimalPhoto } from "../services/animal-photos";
+import { animalPhotoStore } from "../storage/animal-photo-store";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 /**
@@ -347,37 +347,51 @@ const _togglePetFavorite = async (
 const _deleteAnimalImage = async (
   user: SessionUser,
   imageId: string,
-  imageUrl: string,
   animalId: string
 ): Promise<{ success: boolean; message: string }> => {
-  // Validate the image ID
   const parsedImageId = cuidSchema.safeParse(imageId);
   if (!parsedImageId.success) {
     return { success: false, message: 'Invalid Image ID.' };
   }
+  const parsedAnimalId = cuidSchema.safeParse(animalId);
+  if (!parsedAnimalId.success) {
+    return { success: false, message: 'Invalid Animal ID.' };
+  }
+  const staffMemberId = user.personId;
+  if (!staffMemberId) {
+    return {
+      success: false,
+      message: 'Your account is not associated with a person record.',
+    };
+  }
+  const validatedAnimalId = parsedAnimalId.data;
 
   try {
-    // Delete the image file from Vercel Blob storage
-    // In demo mode, skip blob deletion to preserve seed images
-    if (!isDemo) {
-      await del(imageUrl);
-    }
-
-    // Delete the image record from the database
-    await prisma.animalImage.delete({
-      where: { id: parsedImageId.data },
+    // The service deletes the row first, then the file on the row (never a
+    // URL from the browser), and only if the photo is this animal's.
+    const result = await deleteAnimalPhoto(prisma, animalPhotoStore(), {
+      animalId: validatedAnimalId,
+      imageId: parsedImageId.data,
+      staffMemberId,
     });
-
-    // Revalidate the photos tab plus the animal page, whose section cards render
-    // whichever image is now [0].
-    revalidatePath(`/dashboard/animals/${animalId}/photos`);
-    revalidatePath(`/dashboard/animals/${animalId}`);
-
-    return { success: true, message: 'Image deleted successfully.' };
+    if (!result.ok) {
+      return { success: false, message: result.message };
+    }
   } catch (error) {
     console.error('Error deleting animal image:', error);
     return { success: false, message: 'Failed to delete image.' };
   }
+
+  // The photos tab plus the animal page (its section cards render image [0]).
+  // Deleting the primary photo also changes the public listing and detail
+  // page, and the homepage hero and browse strip render the primary photo.
+  revalidatePath(`/dashboard/animals/${validatedAnimalId}/photos`);
+  revalidatePath(`/dashboard/animals/${validatedAnimalId}`);
+  revalidatePath(`/pets/${validatedAnimalId}`);
+  revalidatePath("/pets");
+  revalidatePath("/");
+
+  return { success: true, message: 'Image deleted successfully.' };
 };
 
 const _reorderAnimalImages = async (
