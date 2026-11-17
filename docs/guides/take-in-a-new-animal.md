@@ -97,8 +97,8 @@ intake exam, due Nov 14, 2026".
   neuter on the animal's **Medical** tab afterwards.
 - **Add a new person** is offered only to staff who can manage the people
   directory. Anyone else sees "No matching person found. Add them to the
-  directory first, then start this intake." Ask someone who manages people
-  to add the person, then fill in the form.
+  people directory first, then pick them here." Ask someone who manages
+  people to add the person, then fill in the form.
 
 ## If something goes wrong
 

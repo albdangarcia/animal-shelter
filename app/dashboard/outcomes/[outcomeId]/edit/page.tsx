@@ -19,6 +19,8 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   params: Promise<{ outcomeId: string }>;
@@ -40,10 +42,11 @@ const EditOutcomePage = async ({ params }: Props) => {
 };
 
 const PageContent = async ({ outcomeId }: { outcomeId: string }) => {
-  const [outcome, partners, canCreatePerson] = await Promise.all([
+  const [outcome, partners, canCreatePerson, help] = await Promise.all([
     fetchOutcomeById(outcomeId),
     fetchPartners(),
     hasPermission(AppPermissions.PERSONS_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.outcomeCorrection),
   ]);
 
   if (!outcome || !outcome.animal) {
@@ -103,6 +106,7 @@ const PageContent = async ({ outcomeId }: { outcomeId: string }) => {
           medicalPeople={{ authorizer: clinical?.euthanasia?.authorizedBy, performer: clinical?.euthanasia?.performedBy ?? undefined }}
           clinics={clinics}
           today={today}
+          help={help}
         />
       )}
     </main>

@@ -126,6 +126,37 @@ test("the animal profile opens the approved application's adoption form", async 
   await expect(page.getByLabel("Outcome Type")).toContainText("Adoption");
 });
 
+// An approved application doesn't stop the animal leaving another way: a
+// transfer, a return to its owner, a death. The adoption form can record only
+// the adoption, so the profile keeps Create Outcome beside it.
+test("an animal with an approved application can still record another outcome", async ({
+  page,
+}) => {
+  await gotoTable(page, `${APPLICATIONS_PATH}?status=APPROVED`);
+  const animalHref = await page
+    .locator("tbody tr")
+    .first()
+    .getByRole("link")
+    .last()
+    .getAttribute("href");
+  expect(animalHref).toMatch(/^\/dashboard\/animals\/([^/]+)$/);
+  const animalId = animalHref!.split("/").pop();
+
+  await page.goto(animalHref!);
+  await expect(page.getByRole("link", { name: "Complete Adoption" })).toBeVisible();
+  const createOutcome = page.getByRole("link", { name: "Create Outcome", exact: true });
+  await expect(createOutcome).toHaveAttribute(
+    "href",
+    `/dashboard/outcomes/create?animalId=${animalId}`,
+  );
+
+  await createOutcome.click();
+  await expect(page.getByText("Process Animal Outcome", { exact: true })).toBeVisible();
+  await page.getByLabel("Outcome Type").click();
+  await expect(page.getByRole("option", { name: "Transfer Out" })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Adoption" })).toHaveCount(0);
+});
+
 test("only someone who can record outcomes is offered Create Outcome on an approved application", async ({
   page,
   browser,
