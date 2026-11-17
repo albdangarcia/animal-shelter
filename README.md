@@ -74,7 +74,7 @@ A chat assistant in the staff dashboard that answers from **live shelter data**.
 - **Component Library**: [shadcn/ui](https://ui.shadcn.com/) (built on [Radix UI](https://www.radix-ui.com/))
 - **Forms**: [React Hook Form](https://react-hook-form.com/) with [Zod](https://zod.dev/) for validation
 - **Data Visualization**: [Recharts](https://recharts.org/)
-- **File Uploads**: [Uppy](https://uppy.io/) with [Vercel Blob](https://vercel.com/storage/blob)
+- **File Uploads**: an in-app crop editor (canvas) with [Vercel Blob](https://vercel.com/storage/blob)
 - **Containerization**: [Docker](https://www.docker.com/)
 
 ## Environment Variables

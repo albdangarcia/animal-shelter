@@ -1,5 +1,5 @@
 import { IDParamType } from "@/app/lib/types";
-import UppyUploader from "@/components/dashboard/animals/photos/uppy-uploader";
+import PhotoUploader from "@/components/dashboard/animals/photos/photo-uploader";
 import { notFound } from "next/navigation";
 import {
   Card,
@@ -78,12 +78,12 @@ const PageContent = async ({ params }: Props) => {
             Upload New Images
           </CardTitle>
           <CardDescription>
-            Add new photos to this animal&apos;s profile. Drag and drop images
-            below or click to browse.
+            Add new photos to this animal&apos;s profile. You crop each photo
+            to a square before it is saved.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <UppyUploader animalId={animalId} canManage={canManage} />
+          <PhotoUploader animalId={animalId} canManage={canManage} />
         </CardContent>
       </Card>
     </div>

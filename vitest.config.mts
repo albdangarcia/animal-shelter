@@ -17,16 +17,13 @@ export default defineConfig({
   // process. This is a fixed stand-in, replaced at build time: a widget that
   // reads any other process.env value gets undefined here.
   define: { "process.env": JSON.stringify({ NODE_ENV: "test" }) },
-  // Found only when a test imports them (the chat's markdown, the photo
-  // uploader), which on a cold cache made Vite reload the page mid-run.
-  // Listed so they're optimised before the first test starts.
+  // Found only when a test imports them (the chat's markdown), which on a
+  // cold cache made Vite reload the page mid-run. Listed so they're optimised
+  // before the first test starts.
   optimizeDeps: {
     include: [
       "react-markdown",
       "remark-gfm",
-      "@uppy/core",
-      "@uppy/react/dashboard",
-      "@uppy/xhr-upload",
       "next-themes",
       "sonner",
     ],

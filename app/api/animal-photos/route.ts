@@ -16,8 +16,9 @@ import { cuidSchema } from "@/app/lib/zod-schemas/common.schemas";
  * the environment picks, and records it.
  *
  * Answers 201 `{ url }`, or `{ error }` with a message staff can read: the
- * uploader shows a 4xx's `error` as it is. The path keeps its old name until
- * phase 2 of the photo editing work rewrites its only caller.
+ * uploader (`components/dashboard/animals/photos/photo-uploader.tsx`) shows
+ * a 4xx's `error` as it is. Beside it, `[name]/route.ts` serves photos from
+ * the local photo store.
  */
 export async function POST(request: Request) {
   const session = await getCachedSession();
