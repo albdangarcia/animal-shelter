@@ -2859,6 +2859,7 @@ enum AnimalActivityType {
   NOTE_ADDED // A note was created for this animal
   PHOTO_UPLOADED // A new photo was added
   PHOTO_DELETED // A photo was deleted
+  PHOTO_REPLACED // A photo's file was swapped for a new one, in the same place in the order
   ASSESSMENT_COMPLETED // An assessment was finished
   VITALS_RECORDED // A vitals entry (weight/temperature/body condition) was recorded
   TASK_CREATED // A task was created

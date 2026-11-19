@@ -1,37 +1,52 @@
 import type prisma from "@/app/lib/prisma";
 import { AnimalActivityType } from "@/prisma/generated/enums";
-import type { AnimalPhotoStore } from "@/app/lib/storage/animal-photo-store";
+import type { AnimalPhotoStore, PhotoContentType } from "@/app/lib/storage/animal-photo-store";
 import { newPhotoName } from "@/app/lib/storage/animal-photo-store";
 import { PHOTO_TOO_LARGE_MESSAGE, isPhotoTooLarge } from "@/app/lib/storage/photo-size";
 import { checkPhotoType } from "@/app/lib/storage/photo-type";
 
 /**
- * An animal's photos: adding one and deleting one, with their files in a
- * photo store (`app/lib/storage/animal-photo-store.ts`).
+ * An animal's photos: adding one, replacing one and deleting one, with their
+ * files in a photo store (`app/lib/storage/animal-photo-store.ts`).
  *
  * Like the other services, this module has **no `next/*` and no auth
  * imports**, so the database tests can drive it; whoever calls it (the upload
- * route, the delete action) has checked who may. A refusal comes back as a
- * result with a message staff can read and the status the route answers with;
- * anything else that goes wrong is thrown.
+ * and replace routes, the delete action) has checked who may. A refusal comes
+ * back as a result with a message staff can read and the status the route
+ * answers with; anything else that goes wrong is thrown.
  *
  * A store can't take part in a transaction, so the order of file and row is
- * chosen so that a failure never leaves a row without its file: adding puts
- * the file first and removes it again only once it is sure no row holds it;
- * deleting
- * removes the row first and the file after, so a failed removal leaves only a
- * stray file.
+ * chosen so that a failure never leaves a row without its file: adding and
+ * replacing put the new file first and remove it again only once they are
+ * sure no row holds it; deleting and replacing remove the old file only after
+ * the row stops holding it, so a failed removal leaves only a stray file.
  */
 
 type Db = typeof prisma;
 
-export type PhotoRefusal = { ok: false; status: 400 | 404 | 413; message: string };
+export type PhotoRefusal = { ok: false; status: 400 | 404 | 409 | 413; message: string };
 
 export const ANIMAL_NOT_FOUND_MESSAGE =
   "This animal wasn't found, so the photo wasn't added. Reload the page and try again.";
 
 export const PHOTO_NOT_FOUND_MESSAGE =
   "This photo wasn't found. It may have been deleted in another tab. Reload the page.";
+
+export const PHOTO_CHANGED_MESSAGE =
+  "This photo has changed since you opened the page. It may have been replaced in another tab. Reload the page and try again.";
+
+/** The photo's content type, or why the bytes can't be a photo: over the size
+ * limit, or not a JPEG, PNG or WebP (read from their first bytes). */
+function checkPhotoBytes(bytes: Uint8Array): { contentType: PhotoContentType } | PhotoRefusal {
+  if (isPhotoTooLarge(bytes.byteLength)) {
+    return { ok: false, status: 413, message: PHOTO_TOO_LARGE_MESSAGE };
+  }
+  const type = checkPhotoType(bytes);
+  if ("error" in type) {
+    return { ok: false, status: 400, message: type.error };
+  }
+  return { contentType: type.contentType };
+}
 
 /**
  * Adds a photo at the end of the animal's photos and logs `PHOTO_UPLOADED`.
@@ -44,12 +59,9 @@ export async function addAnimalPhoto(
   input: { animalId: string; staffMemberId: string; bytes: Uint8Array },
 ): Promise<{ ok: true; imageId: string; url: string } | PhotoRefusal> {
   const { animalId, staffMemberId, bytes } = input;
-  if (isPhotoTooLarge(bytes.byteLength)) {
-    return { ok: false, status: 413, message: PHOTO_TOO_LARGE_MESSAGE };
-  }
-  const type = checkPhotoType(bytes);
-  if ("error" in type) {
-    return { ok: false, status: 400, message: type.error };
+  const type = checkPhotoBytes(bytes);
+  if ("ok" in type) {
+    return type;
   }
   const animal = await db.animal.findUnique({ where: { id: animalId }, select: { id: true } });
   if (!animal) {
@@ -106,10 +118,140 @@ export async function addAnimalPhoto(
 }
 
 /**
+ * Why the photo can't be replaced as it is now, or null when it is still this
+ * animal's and still holds `expectedUrl`.
+ */
+async function staleRefusal(
+  db: Pick<Db, "animalImage">,
+  input: { animalId: string; imageId: string; expectedUrl: string },
+): Promise<PhotoRefusal | null> {
+  const image = await db.animalImage.findFirst({
+    where: { id: input.imageId, animalId: input.animalId },
+    select: { url: true },
+  });
+  if (!image) {
+    return { ok: false, status: 404, message: PHOTO_NOT_FOUND_MESSAGE };
+  }
+  if (image.url !== input.expectedUrl) {
+    return { ok: false, status: 409, message: PHOTO_CHANGED_MESSAGE };
+  }
+  return null;
+}
+
+/**
+ * Why a change scoped to the photo's `expectedUrl` changed nothing: it is gone
+ * (404), or holds another file now (409).
+ */
+async function missedRefusal(
+  db: Pick<Db, "animalImage">,
+  input: { animalId: string; imageId: string; expectedUrl: string },
+): Promise<PhotoRefusal> {
+  return (await staleRefusal(db, input)) ?? { ok: false, status: 409, message: PHOTO_CHANGED_MESSAGE };
+}
+
+/**
+ * Swaps one of the animal's photos for a new one in the same place: the same
+ * row, so its id and its place in the order stay and a primary photo stays
+ * primary. Logs `PHOTO_REPLACED`, then removes the old file (the store leaves
+ * a seed photo's alone).
+ *
+ * `expectedUrl` is the URL the caller showed staff. The row is changed only
+ * while it still holds it, so a photo replaced in another tab meanwhile is
+ * refused (409) rather than overwritten, and one deleted meanwhile is refused
+ * as delete refuses it (404). It is only compared: the file removed is the
+ * one the row held. Refuses bytes that can't be a photo, as adding does; every
+ * refusal found before the upload stores nothing.
+ */
+export async function replaceAnimalPhoto(
+  db: Db,
+  store: AnimalPhotoStore,
+  input: {
+    animalId: string;
+    imageId: string;
+    expectedUrl: string;
+    staffMemberId: string;
+    bytes: Uint8Array;
+  },
+): Promise<{ ok: true; imageId: string; url: string; replacedUrl: string } | PhotoRefusal> {
+  const { animalId, imageId, expectedUrl, staffMemberId, bytes } = input;
+  const type = checkPhotoBytes(bytes);
+  if ("ok" in type) {
+    return type;
+  }
+  const before = await staleRefusal(db, input);
+  if (before) {
+    return before;
+  }
+
+  const url = await store.put(newPhotoName(type.contentType), bytes, type.contentType);
+  const removeNewFile = async () => {
+    try {
+      await store.remove(url);
+    } catch (removeError) {
+      console.error(`Failed to remove a new photo's file after it wasn't swapped in (${url}):`, removeError);
+    }
+  };
+
+  let refusal: PhotoRefusal | null;
+  try {
+    refusal = await db.$transaction(async (tx) => {
+      // Only while the row still holds the URL staff saw: a replace or delete
+      // in another tab since the read above changes nothing here, and a
+      // second replace waiting on this row's lock finds the URL changed.
+      const { count } = await tx.animalImage.updateMany({
+        where: { id: imageId, animalId, url: expectedUrl },
+        data: { url },
+      });
+      if (count === 0) {
+        return missedRefusal(tx, input);
+      }
+      await tx.animalActivityLog.create({
+        data: {
+          animalId,
+          activityType: AnimalActivityType.PHOTO_REPLACED,
+          changedById: staffMemberId,
+          changeSummary: `A photo was replaced. Old URL: ${expectedUrl} New URL: ${url}`,
+        },
+      });
+      return null;
+    });
+  } catch (error) {
+    // As in addAnimalPhoto: the commit may have landed with only its answer
+    // lost, so look before removing the new file, and keep it if even the
+    // look fails.
+    let row: { id: string } | null;
+    try {
+      row = await db.animalImage.findFirst({ where: { id: imageId, animalId, url }, select: { id: true } });
+    } catch (lookError) {
+      console.error(`Couldn't tell whether a photo was swapped in, so its file is kept (${url}):`, lookError);
+      throw error;
+    }
+    if (!row) {
+      await removeNewFile();
+      throw error;
+    }
+    refusal = null;
+  }
+  if (refusal) {
+    await removeNewFile();
+    return refusal;
+  }
+
+  try {
+    await store.remove(expectedUrl);
+  } catch (error) {
+    // The new photo is in place either way; the old file is left behind.
+    console.error(`Failed to remove a replaced photo's file (${expectedUrl}):`, error);
+  }
+  return { ok: true, imageId, url, replacedUrl: expectedUrl };
+}
+
+/**
  * Deletes one of the animal's photos and logs `PHOTO_DELETED`, then removes
  * the photo's file: the one on its row, never a URL the caller gives. A file
  * the store didn't write (a seed photo's) is left alone. Refuses a photo that
- * isn't this animal's, or is gone already.
+ * isn't this animal's, or is gone already (404), and one replaced between the
+ * read and the delete (409).
  */
 export async function deleteAnimalPhoto(
   db: Db,
@@ -117,16 +259,18 @@ export async function deleteAnimalPhoto(
   input: { animalId: string; imageId: string; staffMemberId: string },
 ): Promise<{ ok: true; url: string } | PhotoRefusal> {
   const { animalId, imageId, staffMemberId } = input;
-  const url = await db.$transaction(async (tx) => {
+  const url = await db.$transaction(async (tx): Promise<string | PhotoRefusal> => {
     const image = await tx.animalImage.findFirst({
       where: { id: imageId, animalId },
       select: { url: true },
     });
-    if (!image) return null;
+    if (!image) return { ok: false, status: 404, message: PHOTO_NOT_FOUND_MESSAGE };
     // Scoped by animal too, and by count: a delete in another tab since the
-    // read deletes nothing here, and nothing is logged twice.
-    const { count } = await tx.animalImage.deleteMany({ where: { id: imageId, animalId } });
-    if (count === 0) return null;
+    // read deletes nothing here, and nothing is logged twice. And by the URL
+    // read: a replace in another tab since then put a new file on the row,
+    // which deleting it would leave behind, removing and logging the old one.
+    const { count } = await tx.animalImage.deleteMany({ where: { id: imageId, animalId, url: image.url } });
+    if (count === 0) return missedRefusal(tx, { animalId, imageId, expectedUrl: image.url });
     await tx.animalActivityLog.create({
       data: {
         animalId,
@@ -137,8 +281,8 @@ export async function deleteAnimalPhoto(
     });
     return image.url;
   });
-  if (url === null) {
-    return { ok: false, status: 404, message: PHOTO_NOT_FOUND_MESSAGE };
+  if (typeof url !== "string") {
+    return url;
   }
 
   try {

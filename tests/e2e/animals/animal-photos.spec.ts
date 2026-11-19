@@ -1,10 +1,10 @@
-// Adding and deleting an animal's photo on its Photos tab, through the crop
-// editor and the local photo store (playwright/env.ts forces it, so nothing
-// reaches Vercel Blob). The rules (what counts as a photo, whose photo may be
-// deleted, which file is removed) are in prisma/animal-photos.test.ts, and
-// what the editor and the uploader do with each key, drag and answer is in
-// their component tests (components/dashboard/animals/photos/); this shows
-// the page is wired to them.
+// Adding, replacing and deleting an animal's photo on its Photos tab, through
+// the crop editor and the local photo store (playwright/env.ts forces it, so
+// nothing reaches Vercel Blob). The rules (what counts as a photo, whose photo
+// may be replaced or deleted, stale photos, which file is removed) are in
+// prisma/animal-photos.test.ts, and what the editor, the uploader and the
+// replace dialog do with each key, drag and answer is in their component tests
+// (components/dashboard/animals/photos/); this shows the page is wired to them.
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 import { expect, test, type Page } from "@playwright/test";
@@ -84,6 +84,72 @@ test("staff crop a photo, see it last under Current Images, and delete it", asyn
   await page.getByRole("button", { name: "Delete Image", exact: true }).click();
   await expect(page.getByText("Image deleted successfully.")).toBeVisible();
   await expect(photo).toHaveCount(0);
+  await expect(galleryPhotos(page)).toHaveCount(before);
+});
+
+test("staff replace a photo with a new crop, in the same place, and the feed says so", async ({ page }) => {
+  const before = await openFidosPhotos(page);
+  const fixture = path.join(process.cwd(), "tests/e2e/fixtures/photo.jpg");
+
+  // A photo to replace, saved with the crop it starts with: last in the order.
+  await fileInput(page).setInputFiles(fixture);
+  await page.getByRole("dialog", { name: "Crop photos" }).getByRole("button", { name: "Save photo" }).click();
+  await expect(page.getByText("Photo saved.")).toBeVisible();
+  const photo = uploadedPhotos(page);
+  await expect(photo).toHaveCount(1);
+  const oldSrc = await photo.getAttribute("src");
+  expect(oldSrc).toMatch(/^\/api\/animal-photos\/[0-9a-f-]{36}\.webp$/);
+
+  // Replace it from its tile: the file chooser opens, and the same photo is
+  // cropped again, this time at its left edge.
+  const tile = page
+    .locator("div", { has: photo })
+    .filter({ has: page.getByRole("button", { name: "Replace photo" }) })
+    .last();
+  await tile.hover();
+  const chooser = page.waitForEvent("filechooser");
+  await tile.getByRole("button", { name: "Replace photo" }).click();
+  await (await chooser).setFiles(fixture);
+  const editor = page.getByRole("dialog", { name: "Replace photo" });
+  await expect(editor.getByRole("img", { name: "The photo being replaced" })).toBeVisible();
+  const box = editor.getByTestId("crop-box");
+  await expect(box).toHaveAttribute("data-crop", "120,20,360");
+  await box.focus();
+  for (let press = 0; press < 3; press++) await page.keyboard.press("Shift+ArrowLeft");
+  await expect(box).toHaveAttribute("data-crop", "0,20,360");
+  await editor.getByRole("button", { name: "Replace photo" }).click();
+
+  await expect(page.getByText("Photo replaced.")).toBeVisible();
+  await expect(editor).toBeHidden();
+  // Same place (still last), a new file, and the old one gone from the store.
+  await expect(photo).not.toHaveAttribute("src", oldSrc!);
+  await expect(galleryPhotos(page)).toHaveCount(before + 1);
+  await expect(galleryPhotos(page).last()).toHaveAttribute(
+    "src",
+    /^\/api\/animal-photos\/[0-9a-f-]{36}\.webp$/,
+  );
+  const newSrc = await photo.getAttribute("src");
+  expect((await page.request.get(oldSrc!)).status()).toBe(404);
+  expect((await page.request.get(newSrc!)).status()).toBe(200);
+
+  // The animal's activity feed: the entry's text shows once expanded.
+  const photosUrl = page.url();
+  await page.goto(photosUrl.replace(/\/photos$/, ""));
+  await expect(page.getByText("replaced a photo").first()).toBeVisible();
+  await expect(async () => {
+    const details = page.getByRole("button", { name: "Show details" });
+    const toExpand = await details.count();
+    for (let i = 0; i < toExpand; i++) await details.first().click();
+    await expect(page.getByText(`New URL: ${newSrc}`, { exact: false })).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+
+  // Leave Fido as he was.
+  await page.goto(photosUrl);
+  await expect(photo).toHaveCount(1);
+  await tile.hover();
+  await tile.getByRole("button", { name: "Delete image" }).click();
+  await page.getByRole("button", { name: "Delete Image", exact: true }).click();
+  await expect(page.getByText("Image deleted successfully.")).toBeVisible();
   await expect(galleryPhotos(page)).toHaveCount(before);
 });
 

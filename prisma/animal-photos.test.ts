@@ -1,7 +1,9 @@
 // Animal photos, against a real Postgres: added (the file put first, then the
-// row and its activity line) and deleted (the row and its activity line, then
-// the file on the row) through the photo service, as the upload route and the
-// delete action drive it, with the in-memory store standing in for Blob.
+// row and its activity line), replaced (the new file put first, then the row's
+// URL swapped and logged, then the old file removed) and deleted (the row and
+// its activity line, then the file on the row) through the photo service, as
+// the upload and replace routes and the delete action drive it, with the
+// in-memory store standing in for Blob.
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
@@ -9,11 +11,13 @@ import prisma from "@/app/lib/prisma";
 import { AnimalActivityType, IntakeType, Sex } from "@/prisma/generated/enums";
 import {
   ANIMAL_NOT_FOUND_MESSAGE,
+  PHOTO_CHANGED_MESSAGE,
   PHOTO_NOT_FOUND_MESSAGE,
   addAnimalPhoto,
   deleteAnimalPhoto,
+  replaceAnimalPhoto,
 } from "@/app/lib/services/animal-photos";
-import { memoryPhotoStore } from "@/app/lib/storage/animal-photo-store";
+import { memoryPhotoStore, type MemoryPhotoStore } from "@/app/lib/storage/animal-photo-store";
 import { MAX_PHOTO_BYTES, PHOTO_TOO_LARGE_MESSAGE } from "@/app/lib/storage/photo-size";
 import { HEIC_PHOTO_MESSAGE, NOT_A_PHOTO_MESSAGE } from "@/app/lib/storage/photo-type";
 
@@ -81,7 +85,13 @@ const feedOf = (animalId: string) =>
   prisma.animalActivityLog.findMany({
     where: {
       animalId,
-      activityType: { in: [AnimalActivityType.PHOTO_UPLOADED, AnimalActivityType.PHOTO_DELETED] },
+      activityType: {
+        in: [
+          AnimalActivityType.PHOTO_UPLOADED,
+          AnimalActivityType.PHOTO_DELETED,
+          AnimalActivityType.PHOTO_REPLACED,
+        ],
+      },
     },
     orderBy: { changedAt: "asc" },
     select: { activityType: true, changedById: true, changeSummary: true },
@@ -378,4 +388,359 @@ test("a file that can't be removed leaves the photo deleted", async () => {
   assert.deepEqual(await photosOf(animalId), []);
   // A stray file, never a photo on the page without its file.
   assert.deepEqual(store.urls(), [added.url]);
+});
+
+// ---------------------------------------------------------------------------
+// Replacing
+// ---------------------------------------------------------------------------
+
+const WEBP = Uint8Array.from([
+  ...new TextEncoder().encode("RIFF"),
+  0x24, 0, 0, 0,
+  ...new TextEncoder().encode("WEBPVP8 "),
+]);
+
+/** An animal with two photos added through the service: the primary, then a
+ * second one. */
+const animalWithTwoPhotos = async (label: string, store: MemoryPhotoStore) => {
+  const animalId = await makeAnimal(label);
+  const primary = await addAnimalPhoto(prisma, store, { animalId, staffMemberId: staffId, bytes: JPEG });
+  const second = await addAnimalPhoto(prisma, store, { animalId, staffMemberId: staffId, bytes: PNG });
+  assert.ok(primary.ok && second.ok);
+  return { animalId, primary, second };
+};
+
+/** `store`, but once it has put a file, `meanwhile` runs: what another tab
+ * does between the service's first read and its update. */
+const storeWhere = (store: MemoryPhotoStore, meanwhile: () => Promise<unknown>): MemoryPhotoStore => ({
+  ...store,
+  async put(name, bytes, contentType) {
+    const url = await store.put(name, bytes, contentType);
+    await meanwhile();
+    return url;
+  },
+});
+
+const replacedLines = async (animalId: string) =>
+  (await feedOf(animalId)).filter(({ activityType }) => activityType === AnimalActivityType.PHOTO_REPLACED);
+
+test("replacing a photo swaps its file in the same row and place, logs it, then removes the old file", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary, second } = await animalWithTwoPhotos("Benji", store);
+  const before = await photosOf(animalId);
+
+  const result = await replaceAnimalPhoto(prisma, store, {
+    animalId,
+    imageId: primary.imageId,
+    expectedUrl: primary.url,
+    staffMemberId: staffId,
+    bytes: WEBP,
+  });
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.match(result.url, /^memory:\/\/animal-photos\/[0-9a-f-]{36}\.webp$/);
+  assert.deepEqual(result, { ok: true, imageId: primary.imageId, url: result.url, replacedUrl: primary.url });
+  // Same rows, same order: the replaced photo is still the primary one.
+  assert.deepEqual(await photosOf(animalId), [{ ...before[0], url: result.url }, before[1]]);
+  assert.deepEqual(store.read(result.url), { bytes: WEBP, contentType: "image/webp" });
+  assert.deepEqual(store.urls().sort(), [second.url, result.url].sort());
+  assert.deepEqual(store.removeCalls(), [primary.url]);
+  assert.deepEqual(await replacedLines(animalId), [
+    {
+      activityType: AnimalActivityType.PHOTO_REPLACED,
+      changedById: staffId,
+      changeSummary: `A photo was replaced. Old URL: ${primary.url} New URL: ${result.url}`,
+    },
+  ]);
+});
+
+test("replacing another animal's photo is refused, and nothing is put or changed", async () => {
+  const store = memoryPhotoStore();
+  const animalId = await makeAnimal("Archie");
+  const { animalId: otherId, primary } = await animalWithTwoPhotos("Nala", store);
+  const otherBefore = await photosOf(otherId);
+  const urlsBefore = store.urls();
+
+  assert.deepEqual(
+    await replaceAnimalPhoto(prisma, store, {
+      animalId,
+      imageId: primary.imageId,
+      expectedUrl: primary.url,
+      staffMemberId: staffId,
+      bytes: WEBP,
+    }),
+    { ok: false, status: 404, message: PHOTO_NOT_FOUND_MESSAGE },
+  );
+  assert.deepEqual(await photosOf(otherId), otherBefore);
+  assert.deepEqual(store.urls(), urlsBefore);
+  assert.deepEqual(store.removeCalls(), []);
+  assert.deepEqual(await feedOf(animalId), []);
+  assert.equal((await feedOf(otherId)).length, 2);
+});
+
+test("a photo deleted or replaced since the page was opened is refused before anything is put", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary, second } = await animalWithTwoPhotos("Zeus", store);
+  // Another tab replaced the primary photo and deleted the second one.
+  const elsewhere = await replaceAnimalPhoto(prisma, store, {
+    animalId,
+    imageId: primary.imageId,
+    expectedUrl: primary.url,
+    staffMemberId: staffId,
+    bytes: PNG,
+  });
+  assert.ok(elsewhere.ok);
+  assert.ok(
+    (await deleteAnimalPhoto(prisma, store, { animalId, imageId: second.imageId, staffMemberId: staffId })).ok,
+  );
+  const photosBefore = await photosOf(animalId);
+  const urlsBefore = store.urls();
+  const feedBefore = await feedOf(animalId);
+
+  assert.deepEqual(
+    await replaceAnimalPhoto(prisma, store, {
+      animalId,
+      imageId: primary.imageId,
+      expectedUrl: primary.url,
+      staffMemberId: staffId,
+      bytes: WEBP,
+    }),
+    { ok: false, status: 409, message: PHOTO_CHANGED_MESSAGE },
+  );
+  assert.deepEqual(
+    await replaceAnimalPhoto(prisma, store, {
+      animalId,
+      imageId: second.imageId,
+      expectedUrl: second.url,
+      staffMemberId: staffId,
+      bytes: WEBP,
+    }),
+    { ok: false, status: 404, message: PHOTO_NOT_FOUND_MESSAGE },
+  );
+  assert.deepEqual(await photosOf(animalId), photosBefore);
+  assert.deepEqual(store.urls(), urlsBefore);
+  assert.deepEqual(await feedOf(animalId), feedBefore);
+});
+
+test("a photo replaced while the new one uploads is refused, and the new file is removed again", async () => {
+  const base = memoryPhotoStore();
+  const { animalId, primary } = await animalWithTwoPhotos("Coco", base);
+  const otherTabUrl = "memory://animal-photos/00000000-0000-4000-8000-000000000000.jpg";
+  const store = storeWhere(base, () =>
+    prisma.animalImage.update({ where: { id: primary.imageId }, data: { url: otherTabUrl } }),
+  );
+  const feedBefore = await feedOf(animalId);
+
+  assert.deepEqual(
+    await replaceAnimalPhoto(prisma, store, {
+      animalId,
+      imageId: primary.imageId,
+      expectedUrl: primary.url,
+      staffMemberId: staffId,
+      bytes: WEBP,
+    }),
+    { ok: false, status: 409, message: PHOTO_CHANGED_MESSAGE },
+  );
+  // The other tab's photo stays; this one's file was put and removed again.
+  assert.equal((await photosOf(animalId))[0].url, otherTabUrl);
+  const removed = base.removeCalls();
+  assert.equal(removed.length, 1);
+  assert.match(removed[0], /\.webp$/);
+  assert.equal(base.read(removed[0]), undefined);
+  assert.ok(base.read(primary.url), "the old file is the other tab's to remove");
+  assert.deepEqual(await feedOf(animalId), feedBefore);
+});
+
+test("a photo deleted while the new one uploads is refused, and the new file is removed again", async () => {
+  const base = memoryPhotoStore();
+  const { animalId, primary, second } = await animalWithTwoPhotos("Pepper", base);
+  const store = storeWhere(base, () => prisma.animalImage.delete({ where: { id: primary.imageId } }));
+
+  assert.deepEqual(
+    await replaceAnimalPhoto(prisma, store, {
+      animalId,
+      imageId: primary.imageId,
+      expectedUrl: primary.url,
+      staffMemberId: staffId,
+      bytes: WEBP,
+    }),
+    { ok: false, status: 404, message: PHOTO_NOT_FOUND_MESSAGE },
+  );
+  assert.deepEqual(
+    (await photosOf(animalId)).map(({ id }) => id),
+    [second.imageId],
+  );
+  assert.deepEqual(base.urls().sort(), [primary.url, second.url].sort());
+  assert.equal(base.removeCalls().length, 1);
+  assert.deepEqual(await replacedLines(animalId), []);
+});
+
+test("replacing a seed photo leaves its file alone", async () => {
+  const animalId = await makeAnimal("Rosie");
+  const store = memoryPhotoStore();
+  const seedUrl = "/seed-images/dogs/rosie.webp";
+  const { id: imageId } = await prisma.animalImage.create({
+    data: { animalId, url: seedUrl, sortOrder: 0 },
+    select: { id: true },
+  });
+
+  const result = await replaceAnimalPhoto(prisma, store, {
+    animalId,
+    imageId,
+    expectedUrl: seedUrl,
+    staffMemberId: staffId,
+    bytes: JPEG,
+  });
+
+  assert.ok(result.ok);
+  assert.deepEqual(await photosOf(animalId), [{ id: imageId, url: result.url, sortOrder: 0 }]);
+  // Handed to the store, which ignores a URL it didn't write.
+  assert.deepEqual(store.removeCalls(), [seedUrl]);
+  assert.deepEqual(store.urls(), [result.url]);
+});
+
+test("when the swap can't be written, the new file is removed and the photo is unchanged", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary } = await animalWithTwoPhotos("Teddy", store);
+  const photosBefore = await photosOf(animalId);
+  const urlsBefore = store.urls();
+  const feedBefore = await feedOf(animalId);
+
+  // No such person: the activity line's foreign key fails the transaction.
+  await assert.rejects(
+    replaceAnimalPhoto(prisma, store, {
+      animalId,
+      imageId: primary.imageId,
+      expectedUrl: primary.url,
+      staffMemberId: "cl0000000000000000000none",
+      bytes: WEBP,
+    }),
+  );
+  assert.deepEqual(await photosOf(animalId), photosBefore);
+  assert.deepEqual(store.urls(), urlsBefore);
+  assert.equal(store.removeCalls().length, 1);
+  assert.match(store.removeCalls()[0], /\.webp$/);
+  assert.deepEqual(await feedOf(animalId), feedBefore);
+});
+
+test("when the swap commits but its answer is lost, the photo is reported replaced", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary } = await animalWithTwoPhotos("Hazel", store);
+
+  const result = await replaceAnimalPhoto(commitAnswerLost, store, {
+    animalId,
+    imageId: primary.imageId,
+    expectedUrl: primary.url,
+    staffMemberId: staffId,
+    bytes: WEBP,
+  });
+
+  const photos = await photosOf(animalId);
+  assert.deepEqual(result, { ok: true, imageId: primary.imageId, url: photos[0].url, replacedUrl: primary.url });
+  assert.ok(store.read(photos[0].url));
+  assert.deepEqual(store.removeCalls(), [primary.url]);
+  assert.equal((await replacedLines(animalId)).length, 1);
+});
+
+test("an old file that can't be removed leaves the photo replaced", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary } = await animalWithTwoPhotos("Loki", store);
+  store.failNextRemove();
+
+  const result = await replaceAnimalPhoto(prisma, store, {
+    animalId,
+    imageId: primary.imageId,
+    expectedUrl: primary.url,
+    staffMemberId: staffId,
+    bytes: WEBP,
+  });
+
+  assert.ok(result.ok);
+  assert.equal((await photosOf(animalId))[0].url, result.url);
+  // A stray file, never a photo on the page without its file.
+  assert.ok(store.read(primary.url));
+  assert.ok(store.read(result.url));
+});
+
+test("a replacement that isn't a photo, or is too big, is refused before anything is put", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary } = await animalWithTwoPhotos("Juno", store);
+  const big = new Uint8Array(MAX_PHOTO_BYTES + 1);
+  big.set(JPEG);
+  const urlsBefore = store.urls();
+  const photosBefore = await photosOf(animalId);
+
+  for (const [bytes, refusal] of [
+    [PDF, { ok: false, status: 400, message: NOT_A_PHOTO_MESSAGE }],
+    [HEIC, { ok: false, status: 400, message: HEIC_PHOTO_MESSAGE }],
+    [big, { ok: false, status: 413, message: PHOTO_TOO_LARGE_MESSAGE }],
+  ] as const) {
+    assert.deepEqual(
+      await replaceAnimalPhoto(prisma, store, {
+        animalId,
+        imageId: primary.imageId,
+        expectedUrl: primary.url,
+        staffMemberId: staffId,
+        bytes,
+      }),
+      refusal,
+    );
+  }
+  assert.deepEqual(store.urls(), urlsBefore);
+  assert.deepEqual(await photosOf(animalId), photosBefore);
+  assert.deepEqual(await replacedLines(animalId), []);
+});
+
+test("a photo replaced while it is being deleted is refused, and the new photo keeps its file", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary } = await animalWithTwoPhotos("Mochi", store);
+  // Another tab replaces the photo between the delete's read of the row and
+  // its delete: the delete's first read runs it, on another connection.
+  let otherTab: Awaited<ReturnType<typeof replaceAnimalPhoto>> | null = null;
+  const replacedMidway = new Proxy(prisma, {
+    get(target, property, receiver) {
+      if (property !== "$transaction") return Reflect.get(target, property, receiver);
+      return (run: (tx: typeof prisma) => Promise<unknown>) =>
+        target.$transaction((tx) => {
+          const images = new Proxy(tx.animalImage, {
+            get(delegate, name, delegateReceiver) {
+              if (name !== "findFirst") return Reflect.get(delegate, name, delegateReceiver);
+              return async (args: Parameters<typeof tx.animalImage.findFirst>[0]) => {
+                const found = await delegate.findFirst(args);
+                otherTab ??= await replaceAnimalPhoto(prisma, store, {
+                  animalId,
+                  imageId: primary.imageId,
+                  expectedUrl: primary.url,
+                  staffMemberId: staffId,
+                  bytes: WEBP,
+                });
+                return found;
+              };
+            },
+          });
+          const txWithReplace = new Proxy(tx, {
+            get: (client, name, clientReceiver) =>
+              name === "animalImage" ? images : Reflect.get(client, name, clientReceiver),
+          });
+          return run(txWithReplace as unknown as typeof prisma);
+        });
+    },
+  }) as typeof prisma;
+
+  assert.deepEqual(
+    await deleteAnimalPhoto(replacedMidway, store, { animalId, imageId: primary.imageId, staffMemberId: staffId }),
+    { ok: false, status: 409, message: PHOTO_CHANGED_MESSAGE },
+  );
+  const replaced = otherTab as Awaited<ReturnType<typeof replaceAnimalPhoto>> | null;
+  assert.ok(replaced?.ok);
+  // The other tab's photo is still there with its file; only the file it
+  // replaced was removed, and no delete was logged.
+  assert.equal((await photosOf(animalId))[0].url, replaced.url);
+  assert.ok(store.read(replaced.url));
+  assert.deepEqual(store.removeCalls(), [primary.url]);
+  assert.deepEqual(
+    (await feedOf(animalId)).map(({ activityType }) => activityType),
+    [AnimalActivityType.PHOTO_UPLOADED, AnimalActivityType.PHOTO_UPLOADED, AnimalActivityType.PHOTO_REPLACED],
+  );
 });

@@ -55,7 +55,7 @@ const PageContent = async ({ params }: Props) => {
           </CardTitle>
           <CardDescription>
             Manage the existing photos for this animal&apos;s profile. Hover
-            over an image to delete it.
+            over an image to replace or delete it.
           </CardDescription>
           {help && (
             <CardAction>

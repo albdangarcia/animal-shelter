@@ -38,17 +38,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { initialCrop, type Crop } from "@/app/lib/utils/photo-crop";
 import PhotoCropEditor from "./photo-crop-editor";
-import {
-  croppedFileName,
-  exportCrop,
-  makeThumbnail,
-  openPhoto,
-} from "./crop-photo";
-import {
-  CROP_FAILED_MESSAGE,
-  UNREADABLE_PHOTO_MESSAGE,
-  uploadFailureMessage,
-} from "./upload-errors";
+import { makeThumbnail, openPhoto } from "./crop-photo";
+import { UNREADABLE_PHOTO_MESSAGE } from "./upload-errors";
+import { saveCrop } from "./save-crop";
 
 export const PHOTO_UPLOAD_ENDPOINT = "/api/animal-photos";
 export const PHOTO_SAVED_MESSAGE = "Photo saved.";
@@ -312,42 +304,11 @@ const PhotoUploader = ({ animalId, canManage }: PhotoUploaderProps) => {
     if (!photo || photo.saved || saving) return;
     setSaving(true);
     try {
-      let cropped: Blob;
-      try {
-        const opened = await openPhoto(photo.file);
-        if (!opened) throw new Error("The photo can't be opened again");
-        try {
-          cropped = await exportCrop(opened.image, photo.crop);
-        } finally {
-          opened.release();
-        }
-      } catch {
-        toast.error(CROP_FAILED_MESSAGE, {
-          description: photo.file.name,
-          position: TOAST_POSITION,
-        });
-        return;
-      }
-
-      const form = new FormData();
-      form.append(
-        "file",
-        new File([cropped], croppedFileName(photo.file.name, cropped.type), {
-          type: cropped.type,
-        }),
-      );
-      form.append("animalId", animalId);
-      let response: Response | null = null;
-      try {
-        response = await fetch(PHOTO_UPLOAD_ENDPOINT, {
-          method: "POST",
-          body: form,
-        });
-      } catch {
-        // No answer: offline, or the connection dropped.
-      }
-      if (!response?.ok) {
-        toast.error(await uploadFailureMessage(response), {
+      const saved = await saveCrop(photo.file, photo.crop, PHOTO_UPLOAD_ENDPOINT, {
+        animalId,
+      });
+      if (!saved.ok) {
+        toast.error(saved.message, {
           description: photo.file.name,
           position: TOAST_POSITION,
         });
