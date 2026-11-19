@@ -7,9 +7,11 @@ import { readUploadedPhoto } from "@/app/lib/storage/photo-size";
 import { animalPhotoStore } from "@/app/lib/storage/animal-photo-store";
 import { addAnimalPhoto } from "@/app/lib/services/animal-photos";
 import { cuidSchema } from "@/app/lib/zod-schemas/common.schemas";
+import { parseFocusY } from "@/app/lib/utils/photo-focus";
 
 /**
- * Adds one photo to an animal: the form's `file` and `animalId`. Checks who
+ * Adds one photo to an animal: the form's `file` and `animalId`, and an
+ * optional `focusY` (where it sits in a wide frame; empty is centred). Checks who
  * is asking, then hands the photo to the photo service
  * (`app/lib/services/animal-photos.ts`), which refuses a file that isn't a
  * JPEG, PNG or WebP and an unknown animal, stores the file in the photo store
@@ -61,11 +63,16 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    const focus = parseFocusY(formData.get("focusY"));
+    if ("error" in focus) {
+      return NextResponse.json({ error: focus.error }, { status: 400 });
+    }
 
     const result = await addAnimalPhoto(prisma, animalPhotoStore(), {
       animalId: animalId.data,
       staffMemberId,
       bytes: new Uint8Array(await uploaded.photo.arrayBuffer()),
+      focusY: focus.focusY,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.message }, { status: result.status });

@@ -321,3 +321,138 @@ test("a mouse move with no button held ends a drag whose button-up was missed", 
   await new Promise((resolve) => requestAnimationFrame(resolve));
   expect(await shownCrop()).toEqual({ x: 110, y: 50, size: 200 });
 });
+
+// Framing: given `onFocusChange`, the two wide previews can be dragged up or
+// down, or moved with keys, to choose which part of the square they keep. The
+// maths is unit-tested in app/lib/utils/photo-focus.test.ts.
+
+function FramingHarness({ start = null }: { start?: number | null }) {
+  const [crop, setCrop] = useState<Crop>({ x: 100, y: 50, size: 200 });
+  const [focusY, setFocusY] = useState<number | null>(start);
+  return (
+    <>
+      <PhotoCropEditor
+        photo={photo}
+        crop={crop}
+        onCropChange={setCrop}
+        focusY={focusY}
+        onFocusChange={setFocusY}
+      />
+      <output data-testid="focus">{String(focusY)}</output>
+    </>
+  );
+}
+
+const pagePreview = () => page.getByRole("slider", { name: "Framing: Animal's page" });
+const listingPreview = () => page.getByRole("slider", { name: "Framing: Listing" });
+const shownFocus = () => page.getByTestId("focus").element().textContent;
+const position = (testId: string) =>
+  (page.getByTestId(testId).element() as HTMLElement).style.backgroundPosition;
+
+/** Drags a preview `dy` pixels down (up when negative), as a mouse does. */
+function dragPreview(preview: HTMLElement, dy: number) {
+  const { left, top, width, height } = preview.getBoundingClientRect();
+  const x = left + width / 2;
+  const y = top + height / 2;
+  const send = (type: string, clientY: number, buttons = 1) =>
+    preview.dispatchEvent(
+      new PointerEvent(type, {
+        pointerId: 7,
+        pointerType: "mouse",
+        buttons,
+        button: type === "pointerdown" ? 0 : -1,
+        clientX: x,
+        clientY,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  send("pointerdown", y);
+  send("pointermove", y + dy / 2);
+  send("pointermove", y + dy);
+  send("pointerup", y + dy, 0);
+}
+
+test("the wide previews start centred, and the circle and square can't be framed", async () => {
+  await render(<FramingHarness />);
+
+  await expect.element(pagePreview()).toHaveAttribute("aria-valuetext", "Centred");
+  await expect.element(listingPreview()).toHaveAttribute("aria-valuenow", "50");
+  await expect.element(page.getByRole("img", { name: "Preview: Home page" })).toBeVisible();
+  await expect.element(page.getByRole("img", { name: "Preview: Square" })).toBeVisible();
+  await expect.element(page.getByRole("button", { name: "Centre" })).toBeDisabled();
+});
+
+test("dragging the Animal's page preview down shows more of the top, in both wide previews", async () => {
+  await render(<FramingHarness />);
+  const circleBefore = position("crop-preview-Home page");
+  const squareBefore = position("crop-preview-Square");
+  const listingBefore = position("crop-preview-Listing");
+
+  // The preview is 176 × 75 and the square is drawn 176 high: 101px to move
+  // through, so 20px down is about a fifth of the way up from the middle.
+  dragPreview(pagePreview().element() as HTMLElement, 20);
+
+  await expect.poll(shownFocus).toBe("0.302");
+  await expect.element(pagePreview()).toHaveAttribute("aria-valuetext", "30% from the top");
+  await expect.element(listingPreview()).toHaveAttribute("aria-valuenow", "30");
+  expect(position("crop-preview-Listing")).not.toBe(listingBefore);
+  // The circle and the square show the whole square either way.
+  expect(position("crop-preview-Home page")).toBe(circleBefore);
+  expect(position("crop-preview-Square")).toBe(squareBefore);
+});
+
+test("dragging the Listing preview up shows more of the bottom, and stops at it", async () => {
+  await render(<FramingHarness />);
+
+  dragPreview(listingPreview().element() as HTMLElement, -400);
+
+  await expect.poll(shownFocus).toBe("1");
+  await expect.element(pagePreview()).toHaveAttribute("aria-valuetext", "Bottom");
+});
+
+test("on a focused wide preview, the keys move the framing", async () => {
+  await render(<FramingHarness />);
+  await pagePreview().click();
+  // A click that doesn't move leaves it where it was.
+  expect(shownFocus()).toBe("null");
+
+  await userEvent.keyboard("{ArrowUp}");
+  expect(shownFocus()).toBe("0.55");
+  await userEvent.keyboard("{ArrowDown}{ArrowDown}");
+  expect(shownFocus()).toBe("0.45");
+  await userEvent.keyboard("{Home}");
+  expect(shownFocus()).toBe("0");
+  await userEvent.keyboard("{ArrowDown}");
+  expect(shownFocus()).toBe("0");
+  await userEvent.keyboard("{End}");
+  expect(shownFocus()).toBe("1");
+});
+
+test("Centre puts the framing back in the middle", async () => {
+  await render(<FramingHarness start={0.2} />);
+  await expect.element(pagePreview()).toHaveAttribute("aria-valuetext", "20% from the top");
+
+  await page.getByRole("button", { name: "Centre" }).click();
+
+  expect(shownFocus()).toBe("null");
+  await expect.element(pagePreview()).toHaveAttribute("aria-valuetext", "Centred");
+  await expect.element(page.getByRole("button", { name: "Centre" })).toBeDisabled();
+});
+
+test("moving and resizing the crop keeps the framing", async () => {
+  await render(<FramingHarness start={0.1} />);
+  await box().click();
+  await userEvent.keyboard("{ArrowRight}{ArrowDown}+");
+
+  expect(shownFocus()).toBe("0.1");
+  await expect.element(pagePreview()).toHaveAttribute("aria-valuenow", "10");
+});
+
+test("without onFocusChange the previews are only pictures", async () => {
+  await renderEditor();
+
+  await expect.element(page.getByRole("img", { name: "Preview: Animal's page" })).toBeVisible();
+  expect(page.getByRole("slider", { name: /^Framing/ }).elements()).toHaveLength(0);
+  expect(page.getByRole("button", { name: "Centre" }).elements()).toHaveLength(0);
+});

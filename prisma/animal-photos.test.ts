@@ -1,9 +1,10 @@
 // Animal photos, against a real Postgres: added (the file put first, then the
 // row and its activity line), replaced (the new file put first, then the row's
-// URL swapped and logged, then the old file removed) and deleted (the row and
-// its activity line, then the file on the row) through the photo service, as
-// the upload and replace routes and the delete action drive it, with the
-// in-memory store standing in for Blob.
+// URL swapped and logged, then the old file removed), framed (where it sits in
+// a wide frame, `focusY`) and deleted (the row and its activity line, then the
+// file on the row) through the photo service, as the upload and replace routes
+// and the photo actions drive it, with the in-memory store standing in for
+// Blob.
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
@@ -16,6 +17,7 @@ import {
   addAnimalPhoto,
   deleteAnimalPhoto,
   replaceAnimalPhoto,
+  setAnimalPhotoFocus,
 } from "@/app/lib/services/animal-photos";
 import { memoryPhotoStore, type MemoryPhotoStore } from "@/app/lib/storage/animal-photo-store";
 import { MAX_PHOTO_BYTES, PHOTO_TOO_LARGE_MESSAGE } from "@/app/lib/storage/photo-size";
@@ -743,4 +745,178 @@ test("a photo replaced while it is being deleted is refused, and the new photo k
     (await feedOf(animalId)).map(({ activityType }) => activityType),
     [AnimalActivityType.PHOTO_UPLOADED, AnimalActivityType.PHOTO_UPLOADED, AnimalActivityType.PHOTO_REPLACED],
   );
+});
+
+// Framing: where a photo sits in a wide frame (`focusY`, null is centred).
+
+const focusOf = async (imageId: string) =>
+  (await prisma.animalImage.findUniqueOrThrow({ where: { id: imageId }, select: { focusY: true } })).focusY;
+
+test("a photo is added centred, or with the framing it was given", async () => {
+  const store = memoryPhotoStore();
+  const animalId = await makeAnimal("Pip");
+
+  const centred = await addAnimalPhoto(prisma, store, { animalId, staffMemberId: staffId, bytes: JPEG });
+  const framed = await addAnimalPhoto(prisma, store, { animalId, staffMemberId: staffId, bytes: PNG, focusY: 0.2 });
+
+  assert.ok(centred.ok && framed.ok);
+  assert.equal(await focusOf(centred.imageId), null);
+  assert.equal(await focusOf(framed.imageId), 0.2);
+});
+
+test("a replaced photo takes the new framing, and is centred when given none", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary } = await animalWithTwoPhotos("Juno", store);
+  await prisma.animalImage.update({ where: { id: primary.imageId }, data: { focusY: 0.1 } });
+
+  const first = await replaceAnimalPhoto(prisma, store, {
+    animalId,
+    imageId: primary.imageId,
+    expectedUrl: primary.url,
+    staffMemberId: staffId,
+    bytes: WEBP,
+    focusY: 0.85,
+  });
+  assert.ok(first.ok);
+  assert.equal(await focusOf(primary.imageId), 0.85);
+
+  // The old framing was for another picture: none given is centred.
+  const second = await replaceAnimalPhoto(prisma, store, {
+    animalId,
+    imageId: primary.imageId,
+    expectedUrl: first.url,
+    staffMemberId: staffId,
+    bytes: JPEG,
+  });
+  assert.ok(second.ok);
+  assert.equal(await focusOf(primary.imageId), null);
+});
+
+test("a refused replace leaves the framing as it was", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary } = await animalWithTwoPhotos("Moss", store);
+  await prisma.animalImage.update({ where: { id: primary.imageId }, data: { focusY: 0.3 } });
+
+  const result = await replaceAnimalPhoto(prisma, store, {
+    animalId,
+    imageId: primary.imageId,
+    expectedUrl: "memory://animal-photos/not-this-one.jpg",
+    staffMemberId: staffId,
+    bytes: WEBP,
+    focusY: 0.9,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(await focusOf(primary.imageId), 0.3);
+});
+
+test("framing a saved photo changes only its framing, and logs nothing", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary, second } = await animalWithTwoPhotos("Tilly", store);
+  const before = await photosOf(animalId);
+  const feedBefore = await feedOf(animalId);
+  const updatedBefore = (await prisma.animalImage.findUniqueOrThrow({ where: { id: second.imageId } })).updatedAt;
+
+  assert.deepEqual(
+    await setAnimalPhotoFocus(prisma, {
+      animalId,
+      imageId: second.imageId,
+      expectedUrl: second.url,
+      focusY: 0.15,
+    }),
+    { ok: true, focusY: 0.15 },
+  );
+  assert.equal(await focusOf(second.imageId), 0.15);
+  assert.equal(await focusOf(primary.imageId), null);
+  // Same rows, same files, same order; the store untouched.
+  assert.deepEqual(await photosOf(animalId), before);
+  assert.deepEqual(store.removeCalls(), []);
+  assert.deepEqual(await feedOf(animalId), feedBefore);
+  assert.ok(
+    (await prisma.animalImage.findUniqueOrThrow({ where: { id: second.imageId } })).updatedAt > updatedBefore,
+  );
+
+  // And back to centred.
+  assert.deepEqual(
+    await setAnimalPhotoFocus(prisma, { animalId, imageId: second.imageId, expectedUrl: second.url, focusY: null }),
+    { ok: true, focusY: null },
+  );
+  assert.equal(await focusOf(second.imageId), null);
+});
+
+test("framing another animal's photo is refused, and its framing is unchanged", async () => {
+  const store = memoryPhotoStore();
+  const animalId = await makeAnimal("Ollie");
+  const { primary } = await animalWithTwoPhotos("Wren", store);
+
+  assert.deepEqual(
+    await setAnimalPhotoFocus(prisma, { animalId, imageId: primary.imageId, expectedUrl: primary.url, focusY: 0 }),
+    { ok: false, status: 404, message: PHOTO_NOT_FOUND_MESSAGE },
+  );
+  assert.equal(await focusOf(primary.imageId), null);
+});
+
+test("framing a photo deleted since the page was opened is refused", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary } = await animalWithTwoPhotos("Bramble", store);
+  const deleted = await deleteAnimalPhoto(prisma, store, { animalId, imageId: primary.imageId, staffMemberId: staffId });
+  assert.ok(deleted.ok);
+
+  assert.deepEqual(
+    await setAnimalPhotoFocus(prisma, { animalId, imageId: primary.imageId, expectedUrl: primary.url, focusY: 0.5 }),
+    { ok: false, status: 404, message: PHOTO_NOT_FOUND_MESSAGE },
+  );
+});
+
+test("framing a photo replaced since the page was opened is refused, and the new photo keeps its framing", async () => {
+  const store = memoryPhotoStore();
+  const { animalId, primary } = await animalWithTwoPhotos("Hazel", store);
+  const replaced = await replaceAnimalPhoto(prisma, store, {
+    animalId,
+    imageId: primary.imageId,
+    expectedUrl: primary.url,
+    staffMemberId: staffId,
+    bytes: WEBP,
+    focusY: 0.7,
+  });
+  assert.ok(replaced.ok);
+
+  assert.deepEqual(
+    await setAnimalPhotoFocus(prisma, { animalId, imageId: primary.imageId, expectedUrl: primary.url, focusY: 0.1 }),
+    { ok: false, status: 409, message: PHOTO_CHANGED_MESSAGE },
+  );
+  assert.equal(await focusOf(primary.imageId), 0.7);
+});
+
+test("a framing outside 0..1 is refused before anything is put or changed", async () => {
+  // The routes and actions parse what staff send (parseFocusY), so this is a
+  // caller's mistake: thrown, not a refusal for staff.
+  const store = memoryPhotoStore();
+  const { animalId, primary } = await animalWithTwoPhotos("Pebble", store);
+  const urlsBefore = store.urls();
+
+  for (const focusY of [-0.1, 1.5, Number.NaN]) {
+    await assert.rejects(
+      setAnimalPhotoFocus(prisma, { animalId, imageId: primary.imageId, expectedUrl: primary.url, focusY }),
+      RangeError,
+    );
+    await assert.rejects(
+      addAnimalPhoto(prisma, store, { animalId, staffMemberId: staffId, bytes: JPEG, focusY }),
+      RangeError,
+    );
+    await assert.rejects(
+      replaceAnimalPhoto(prisma, store, {
+        animalId,
+        imageId: primary.imageId,
+        expectedUrl: primary.url,
+        staffMemberId: staffId,
+        bytes: WEBP,
+        focusY,
+      }),
+      RangeError,
+    );
+  }
+  assert.equal(await focusOf(primary.imageId), null);
+  assert.deepEqual(store.urls(), urlsBefore);
+  assert.equal((await photosOf(animalId)).length, 2);
 });

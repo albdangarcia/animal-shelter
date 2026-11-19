@@ -1,9 +1,10 @@
-// Adding, replacing and deleting an animal's photo on its Photos tab, through
+// Adding, replacing, framing and deleting an animal's photo on its Photos tab, through
 // the crop editor and the local photo store (playwright/env.ts forces it, so
 // nothing reaches Vercel Blob). The rules (what counts as a photo, whose photo
 // may be replaced or deleted, stale photos, which file is removed) are in
 // prisma/animal-photos.test.ts, and what the editor, the uploader and the
-// replace dialog do with each key, drag and answer is in their component tests
+// replace and framing dialogs do with each key, drag and answer is in their
+// component tests
 // (components/dashboard/animals/photos/); this shows the page is wired to them.
 import path from "node:path";
 import { readFile } from "node:fs/promises";
@@ -151,6 +152,96 @@ test("staff replace a photo with a new crop, in the same place, and the feed say
   await page.getByRole("button", { name: "Delete Image", exact: true }).click();
   await expect(page.getByText("Image deleted successfully.")).toBeVisible();
   await expect(galleryPhotos(page)).toHaveCount(before);
+});
+
+test("a photo's framing reaches the listing and the animal's page, set when added and adjusted later", async ({ page }) => {
+  const before = await openFidosPhotos(page);
+  const photosUrl = page.url();
+  const animalId = photosUrl.match(/animals\/([^/]+)\/photos$/)![1];
+
+  // Added framed at the top: the Animal's page preview, Home.
+  await fileInput(page).setInputFiles(path.join(process.cwd(), "tests/e2e/fixtures/photo.jpg"));
+  const editor = page.getByRole("dialog", { name: "Crop photos" });
+  const pagePreview = editor.getByRole("slider", { name: "Framing: Animal's page" });
+  await pagePreview.focus();
+  await page.keyboard.press("Home");
+  await expect(pagePreview).toHaveAttribute("aria-valuetext", "Top");
+  await editor.getByRole("button", { name: "Save photo" }).click();
+  await expect(page.getByText("Photo saved.")).toBeVisible();
+  const photo = uploadedPhotos(page);
+  await expect(photo).toHaveCount(1);
+  // The file's own name: the public page may serve it through the image
+  // optimiser, whose src holds it encoded.
+  const fileName = (await photo.getAttribute("src"))!.split("/").pop()!;
+
+  /** The large photo on Fido's public page, with the new photo selected. */
+  const publicLargePhoto = async () => {
+    await page.goto(`/pets/${animalId}`);
+    // Last in the order, so last among the thumbnails.
+    await page.getByRole("button", { name: `Select pet image ${before + 1}` }).click();
+    const large = page.getByRole("img", { name: "Selected pet image, click to enlarge" });
+    await expect(large).toHaveAttribute("src", new RegExp(fileName.replace(".", "\\.")));
+    return large;
+  };
+  const objectPosition = (large: Awaited<ReturnType<typeof publicLargePhoto>>) =>
+    large.evaluate((img: HTMLImageElement) => getComputedStyle(img).objectPosition);
+
+  expect(await objectPosition(await publicLargePhoto())).toBe("50% 0%");
+  // The seed photos were never framed: centred, as before.
+  await page.getByRole("button", { name: "Select pet image 1" }).click();
+  const large = page.getByRole("img", { name: "Selected pet image, click to enlarge" });
+  await expect(large).toHaveAttribute("src", /seed-images/);
+  expect(await objectPosition(large)).toBe("50% 50%");
+
+  // The new photo isn't needed any more.
+  await page.goto(photosUrl);
+  const tile = page
+    .locator("div", { has: photo })
+    .filter({ has: page.getByRole("button", { name: "Delete image" }) })
+    .last();
+  await tile.hover();
+  await tile.getByRole("button", { name: "Delete image" }).click();
+  await page.getByRole("button", { name: "Delete Image", exact: true }).click();
+  await expect(page.getByText("Image deleted successfully.")).toBeVisible();
+  await expect(galleryPhotos(page)).toHaveCount(before);
+
+  // Adjusted on a saved photo, the primary (a seed photo, which has no
+  // original): framed at the bottom, then back to centred.
+  const primaryTile = page
+    .locator("div", { has: page.getByText("Primary photo", { exact: true }) })
+    .filter({ has: page.getByRole("button", { name: "Adjust framing" }) })
+    .last();
+  const framing = page.getByRole("dialog", { name: "Adjust framing" });
+  const framingPreview = framing.getByRole("slider", { name: "Framing: Animal's page" });
+  const adjustPrimary = async (keyOrCentre: "End" | "Centre") => {
+    await primaryTile.hover();
+    await primaryTile.getByRole("button", { name: "Adjust framing" }).click();
+    if (keyOrCentre === "Centre") {
+      await framing.getByRole("button", { name: "Centre" }).click();
+    } else {
+      await expect(framingPreview).toHaveAttribute("aria-valuetext", "Centred");
+      await framingPreview.focus();
+      await page.keyboard.press(keyOrCentre);
+    }
+    await framing.getByRole("button", { name: "Save framing" }).click();
+    await expect(page.getByText("Framing saved.")).toBeVisible();
+    await expect(framing).toBeHidden();
+  };
+  /** Fido's card on the public listing, which shows his primary photo. */
+  const listingPhoto = async () => {
+    await page.goto("/pets?query=Fido");
+    return page.getByRole("img", { name: "Photo of Fido", exact: true });
+  };
+
+  await adjustPrimary("End");
+  await page.goto(`/pets/${animalId}`);
+  expect(await objectPosition(large)).toBe("50% 100%");
+  expect(await objectPosition(await listingPhoto())).toBe("50% 100%");
+
+  // Leave Fido as he was.
+  await page.goto(photosUrl);
+  await adjustPrimary("Centre");
+  expect(await objectPosition(await listingPhoto())).toBe("50% 50%");
 });
 
 test("a file the browser can't open as a photo is refused with a message", async ({ page }) => {

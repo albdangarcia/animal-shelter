@@ -34,7 +34,7 @@ type Reply = { status: number; body?: unknown; text?: string } | "no answer";
 
 let replies: Reply[] = [];
 // The file and animal each request carried.
-let sent: { file: File; animalId: string }[] = [];
+let sent: { file: File; animalId: string; focusY: FormDataEntryValue | null }[] = [];
 // A request no reply was set up for: the test fails on it after the run.
 let unexpected: string[] = [];
 // While set, every request waits for it before it is answered.
@@ -64,6 +64,7 @@ beforeEach(async () => {
     sent.push({
       file: form.get("file") as File,
       animalId: String(form.get("animalId")),
+      focusY: form.get("focusY"),
     });
     if (holdReplies) await holdReplies;
     const reply = replies.shift();
@@ -414,6 +415,20 @@ test("J and K move through the batch and Enter saves, as soon as it opens", asyn
   await expect.element(listed("a.png")).toHaveAttribute("aria-current", "true");
 });
 
+test("J, K and Enter on a focused wide preview leave the batch alone", async () => {
+  await addPhotos(await photoFile("a.png"), await photoFile("b.png"));
+  const pagePreview = page.getByRole("slider", { name: "Framing: Animal's page" });
+  await pagePreview.click();
+  await expect.element(pagePreview).toHaveFocus();
+
+  await userEvent.keyboard("jk{Enter}");
+  await new Promise((resolve) => setTimeout(resolve, 50));
+
+  await expect.element(listed("a.png")).toHaveAttribute("aria-current", "true");
+  await expect.element(pagePreview).toHaveFocus();
+  expect(sent).toEqual([]);
+});
+
 test("a photo removed from the batch isn't sent", async () => {
   replies = [{ status: 201, body: { url: "https://example.test/b.webp" } }];
   await addPhotos(await photoFile("a.png"), await photoFile("b.png"));
@@ -672,4 +687,32 @@ test("staff without permission see that uploading is disabled", async () => {
   await expect
     .element(page.getByRole("button", { name: "Choose photos" }))
     .not.toBeInTheDocument();
+});
+
+test("each photo keeps its own framing, and only a framed one sends it", async () => {
+  replies = [
+    { status: 201, body: { url: "https://example.test/a.webp" } },
+    { status: 201, body: { url: "https://example.test/b.webp" } },
+  ];
+  await addPhotos(await photoFile("a.png"), await photoFile("b.png"));
+  const pagePreview = page.getByRole("slider", { name: "Framing: Animal's page" });
+
+  // The first framed to the top; the second left centred.
+  await pagePreview.click();
+  await userEvent.keyboard("{Home}");
+  await expect.element(pagePreview).toHaveAttribute("aria-valuetext", "Top");
+  await listed("b.png").click();
+  await expect.element(pagePreview).toHaveAttribute("aria-valuetext", "Centred");
+  await listed("a.png").click();
+  await expect.element(pagePreview).toHaveAttribute("aria-valuetext", "Top");
+
+  await saveButton().click();
+  await expect.element(listed("b.png")).toHaveAttribute("aria-current", "true");
+  await saveButton().click();
+
+  await expect.element(dialog()).not.toBeInTheDocument();
+  expect(sent.map(({ file, focusY }) => [file.name, focusY])).toEqual([
+    ["a.webp", "0"],
+    ["b.webp", null],
+  ]);
 });

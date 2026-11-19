@@ -4,6 +4,7 @@ import Link from "next/link";
 import clsx from "clsx";
 import type { AnimalSize } from "@/prisma/generated/enums";
 import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
+import { focusPosition } from "@/app/lib/utils/photo-focus";
 import { PET_PHOTO_COMING_SOON_IMAGE } from "@/app/lib/constants/constants";
 import FavoriteButton from "../favorite-button";
 import { calculateAgeString } from "@/app/lib/utils/date-utils";
@@ -17,7 +18,8 @@ export interface PetCardData {
   species: { name: string };
   breeds: { name: string }[];
   characteristics: { name: string }[];
-  animalImages: { url: string }[];
+  /** The primary photo, and where it sits in this wide frame. */
+  animalImages: { url: string; focusY: number | null }[];
   favorites?: { userId: string }[];
 }
 
@@ -90,6 +92,9 @@ const PetCard = ({
             placeholder={`data:image/svg+xml;base64,${toBase64(
               shimmer(280, 210),
             )}`}
+            // A square photo in a wide frame: staff choose which part stays
+            // in it (AnimalImage.focusY); none is centred.
+            style={{ objectPosition: focusPosition(pet.animalImages[0].focusY) }}
             className={clsx(
               "object-cover transition-transform duration-300 ease-in-out",
               isAvailable && "group-hover:scale-110",

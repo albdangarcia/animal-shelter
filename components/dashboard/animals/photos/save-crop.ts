@@ -9,6 +9,14 @@ import type { Crop } from "@/app/lib/utils/photo-crop";
 import { croppedFileName, exportCrop, openPhoto } from "./crop-photo";
 import { CROP_FAILED_MESSAGE, uploadFailureMessage } from "./upload-errors";
 
+/**
+ * The form field for a photo's framing in the wide frames: none when centred,
+ * so a photo staff didn't frame is sent as before.
+ */
+export function focusField(focusY: number | null): Record<string, string> {
+  return focusY === null ? {} : { focusY: String(focusY) };
+}
+
 export type SaveCropResult = { ok: true } | { ok: false; message: string };
 
 /**

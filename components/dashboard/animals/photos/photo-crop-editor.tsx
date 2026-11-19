@@ -10,17 +10,20 @@
 // stays put), or use the zoom slider or the scroll wheel (both keep the
 // centre). With the square focused: arrow keys move it (Shift for bigger
 // steps), + and - resize it. The previews beside it show the saved photo in
-// each shape the site shows photos in, cut as `object-cover` cuts it.
+// each shape the site shows photos in, cut as `object-cover` cuts it. Given
+// `onFocusChange`, the two wide previews can be dragged up or down to choose
+// which part of the square they keep (the photo's `focusY`), and **Centre**
+// puts it back in the middle.
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
+import PhotoPreview, { PREVIEW_SHAPES } from "./photo-preview";
 import {
   maxCropSize,
   minCropSize,
   moveCrop,
   nudgeStep,
-  previewLayout,
   resizeCrop,
   resizeFromCorner,
   resizeStep,
@@ -42,26 +45,24 @@ interface PhotoCropEditorProps {
   crop: Crop;
   onCropChange: (crop: Crop) => void;
   /**
+   * Where the square sits in the wide frames: 0 top, 1 bottom, null centred.
+   */
+  focusY?: number | null;
+  /** Makes the wide previews adjustable, and shows **Centre**. */
+  onFocusChange?: (focusY: number | null) => void;
+  /**
    * Puts the keyboard on the crop box as soon as it is drawn, so the arrow
    * keys work without clicking it first.
    */
   autoFocus?: boolean;
 }
 
-/**
- * The shapes a photo is shown in, at a small size: the frame's own shape
- * matters, not its size. Each is what `object-cover` does to the square.
- */
 const PREVIEWS = [
-  // components/public-pages/home/spotlight-hero.tsx
-  { label: "Home page", width: 88, height: 88, className: "rounded-full" },
-  // components/public-pages/pets/pet-card.tsx: 280 × 210
-  { label: "Listing", width: 112, height: 84, className: "rounded-lg" },
-  // components/public-pages/pets/pet-gallery.tsx: full width × 300 (h-75)
-  { label: "Animal's page", width: 154, height: 88, className: "rounded-lg" },
-  // Thumbnails, the Photos tab, the dashboard card
-  { label: "Square", width: 72, height: 72, className: "rounded-md" },
-] as const;
+  PREVIEW_SHAPES.home,
+  PREVIEW_SHAPES.listing,
+  PREVIEW_SHAPES.page,
+  PREVIEW_SHAPES.square,
+];
 
 type Drag = {
   pointerId: number;
@@ -75,6 +76,8 @@ export default function PhotoCropEditor({
   photo,
   crop,
   onCropChange,
+  focusY = null,
+  onFocusChange,
   autoFocus = false,
 }: PhotoCropEditorProps) {
   const imageRef = useRef<HTMLImageElement>(null);
@@ -302,35 +305,33 @@ export default function PhotoCropEditor({
 
       <div className="flex flex-wrap content-start items-end gap-3 md:w-44 md:flex-col md:items-start">
         <p className="w-full text-sm font-medium">How it will look</p>
-        {PREVIEWS.map((preview) => {
-          const layout = previewLayout(
-            crop,
-            width,
-            height,
-            preview.width,
-            preview.height,
-          );
-          return (
-            <figure key={preview.label} className="flex flex-col gap-1">
-              <div
-                role="img"
-                aria-label={`Preview: ${preview.label}`}
-                data-testid={`crop-preview-${preview.label}`}
-                className={cn("bg-muted bg-no-repeat", preview.className)}
-                style={{
-                  width: preview.width,
-                  height: preview.height,
-                  backgroundImage: `url("${photo.src}")`,
-                  backgroundSize: `${layout.width}px ${layout.height}px`,
-                  backgroundPosition: `${layout.left}px ${layout.top}px`,
-                }}
-              />
-              <figcaption className="text-xs text-muted-foreground">
-                {preview.label}
-              </figcaption>
-            </figure>
-          );
-        })}
+        {PREVIEWS.map((shape) => (
+          <PhotoPreview
+            key={shape.label}
+            shape={shape}
+            photo={photo}
+            crop={crop}
+            focusY={focusY}
+            onFocusChange={onFocusChange}
+          />
+        ))}
+        {onFocusChange && (
+          <div className="flex w-full flex-col items-start gap-1">
+            <p className="text-xs text-muted-foreground">
+              Drag the Listing or Animal&apos;s page preview up or down to keep
+              the animal in frame.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={focusY === null}
+              onClick={() => onFocusChange(null)}
+            >
+              Centre
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

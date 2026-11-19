@@ -24,12 +24,14 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, ImageUp, Trash2 } from "lucide-react";
+import { GripVertical, ImageUp, MoveVertical, Trash2 } from "lucide-react";
 import { usePhotoReplacer, type ReplaceablePhoto } from "./photo-replace-dialog";
+import { usePhotoFramer, type FramedPhoto } from "./photo-framing-dialog";
 import { AnimalImageModel } from "@/prisma/generated/models/AnimalImage";
 import {
   deleteAnimalImage,
   reorderAnimalImages,
+  setAnimalImageFocus,
 } from "@/app/lib/actions/animal.actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -75,6 +77,7 @@ interface TileContentProps {
   isDeleting: boolean;
   onDelete: (target: DeleteTarget) => void;
   onReplace: (target: ReplaceablePhoto) => void;
+  onAdjustFraming: (target: FramedPhoto) => void;
 }
 
 interface TileActionProps {
@@ -123,7 +126,7 @@ function TileAction({
   );
 }
 
-// The image, the primary label, and the replace and delete controls — shared
+// The image, the primary label, and the framing, replace and delete controls — shared
 // by the static grid and the sortable tile. Position 0 is the primary; the
 // label is purely positional, so it follows index 0 through optimistic
 // reorders.
@@ -134,6 +137,7 @@ function TileContent({
   isDeleting,
   onDelete,
   onReplace,
+  onAdjustFraming,
 }: TileContentProps) {
   return (
     <>
@@ -154,8 +158,21 @@ function TileContent({
         </div>
       )}
 
-      {/* Shown on hover, and while one of them has the keyboard. */}
-      <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+      {/* Shown on hover, and while one of them has the keyboard. Stacked
+          down the right edge, so the three of them clear the Primary photo
+          badge on a narrow tile. */}
+      <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <TileAction
+          label="Adjust framing"
+          deniedText="You don't have permission to adjust images"
+          icon={MoveVertical}
+          variant="secondary"
+          disabled={isDeleting}
+          canManage={canManage}
+          onClick={() =>
+            onAdjustFraming({ id: image.id, url: image.url, focusY: image.focusY })
+          }
+        />
         <TileAction
           label="Replace photo"
           deniedText="You don't have permission to replace images"
@@ -227,6 +244,7 @@ export default function AnimalImageGallery({
   const [imageToDelete, setImageToDelete] = useState<DeleteTarget | null>(null);
   // Its dialog is rendered beside the grid, never inside a sortable tile.
   const replacer = usePhotoReplacer(animalId);
+  const framer = usePhotoFramer(animalId, setAnimalImageFocus);
 
   // Local copy of the server-ordered images. `arrayMove` commits here on a
   // successful reorder; when the fetched prop changes (a revalidate, or a
@@ -401,6 +419,7 @@ export default function AnimalImageGallery({
                 isDeleting={isDeleting}
                 onDelete={setImageToDelete}
                 onReplace={replacer.choose}
+                onAdjustFraming={framer.adjust}
               />
             </div>
           ))}
@@ -435,6 +454,7 @@ export default function AnimalImageGallery({
                 isDeleting={isDeleting}
                 onDelete={setImageToDelete}
                 onReplace={replacer.choose}
+                onAdjustFraming={framer.adjust}
               />
             ))}
           </div>
@@ -458,6 +478,7 @@ export default function AnimalImageGallery({
       </DndContext>
       {deleteDialog}
       {replacer.element}
+      {framer.element}
     </>
   );
 }
