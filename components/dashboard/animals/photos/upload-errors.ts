@@ -14,6 +14,11 @@ export const UNREADABLE_PHOTO_MESSAGE =
   "This file can't be opened as a photo in this browser, so it wasn't added. " +
   "Add a JPEG, PNG or WebP photo. To have an iPhone take JPEG photos, set " +
   "Settings > Camera > Formats to Most Compatible.";
+/** The same, for a photo chosen to replace a saved one. */
+export const UNREADABLE_REPLACEMENT_MESSAGE =
+  "This file can't be opened as a photo in this browser, so the photo wasn't replaced. " +
+  "Choose a JPEG, PNG or WebP photo. To have an iPhone take JPEG photos, set " +
+  "Settings > Camera > Formats to Most Compatible.";
 /** The crop couldn't be turned into a file: out of memory, say. */
 export const CROP_FAILED_MESSAGE =
   "The cropped photo couldn't be made, so it wasn't uploaded. Try again, or close other tabs first.";

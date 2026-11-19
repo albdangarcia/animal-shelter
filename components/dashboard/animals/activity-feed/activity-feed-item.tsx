@@ -6,6 +6,7 @@ import {
   FileText,
   Camera,
   ImageMinus,
+  ImageUp,
   ClipboardList,
   LogIn,
   LogOut,
@@ -62,6 +63,10 @@ const activityConfig: Record<
   [AnimalActivityType.PHOTO_DELETED]: {
     icon: ImageMinus,
     text: "deleted a photo",
+  },
+  [AnimalActivityType.PHOTO_REPLACED]: {
+    icon: ImageUp,
+    text: "replaced a photo",
   },
   [AnimalActivityType.INTAKE_PROCESSED]: {
     icon: LogIn,

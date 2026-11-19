@@ -1,8 +1,8 @@
 ---
-title: Add, reorder or delete an animal's photos
-summary: Add and crop photos of an animal, pick which one shows first on its record and listing by dragging the photos into order, and delete a photo.
+title: Add, replace, reorder or delete an animal's photos
+summary: Add and crop an animal's photos, replace a badly framed one with a new crop, drag them into order to pick the one shown first, and delete a photo.
 permissions: [ANIMAL_PHOTO_MANAGE]
-aliases: [crop a photo, frame a photo, primary photo, main photo, cover photo, reorder photos, delete a photo, remove a picture, upload a photo, add a picture]
+aliases: [crop a photo, frame a photo, replace a photo, fix a photo, re-crop a photo, photo cut off, change a photo, primary photo, main photo, cover photo, reorder photos, delete a photo, remove a picture, upload a photo, add a picture]
 related: [edit-an-animals-details, find-an-animal]
 verified: 2026-11-17
 ---
@@ -11,8 +11,8 @@ verified: 2026-11-17
 
 An animal's photos are on its **Photos** tab, under **Current Images**. The
 first one is marked **Primary photo**: it is the one shown on the animal's
-record and first on its listing. Use this guide to add photos, change which
-one comes first, or delete one.
+record and first on its listing. Use this guide to add photos, replace one
+that is badly framed, change which one comes first, or delete one.
 
 ## Add photos
 
@@ -55,6 +55,34 @@ Closing the box with **×** or Esc while some photos aren't saved asks
 "Discard the photos you haven't saved?". Click **Keep cropping** to go back,
 or **Discard** to close without them. Photos already saved stay.
 
+## Replace a photo
+
+Use this when a saved photo cuts the animal off, or when you have a better
+one. Only the square is ever saved, so to fix the framing you crop the
+original photo again, from your phone or computer. The new photo takes the
+old one's place: a **Primary photo** stays the primary photo.
+
+1. Open the animal, then the **Photos** tab.
+2. Under **Current Images**, point at the photo. A **Replace photo** button
+   (a picture with an arrow) appears beside the red bin.
+3. Click **Replace photo** and pick the new photo. Photos can be JPEG, PNG
+   or WebP.
+4. A **Replace photo** box opens, with the photo you are replacing beside it
+   under **Now**. Move and resize the square over the animal, as when adding
+   a photo, and check the previews.
+5. Click **Replace photo**.
+
+You should see "Photo replaced." with the file's name at the top of the
+screen. The new photo is in the old one's place under **Current Images**.
+The old photo is deleted and can't be restored.
+
+To stop without replacing anything, click **Cancel**, **×** or press Esc.
+
+With a keyboard, the square is ready for the keys when the box opens, as
+when adding a photo, and Enter replaces the photo.
+
+The animal's activity feed shows that you replaced a photo.
+
 ## Change the order
 
 1. Open the animal, then the **Photos** tab.
@@ -93,8 +121,8 @@ A deleted photo can't be restored. To have it back, add the file again (see
   saved, and the photos go back to their saved order. Drag again; if it
   keeps happening, tell an admin.
 - **"Failed to upload image. Please try again."** The photo wasn't added
-  and is still open in the **Crop photos** box: click **Save photo** again.
-  If it keeps failing, tell an admin.
+  (or replaced) and is still open in the box: click **Save photo** (or
+  **Replace photo**) again. If it keeps failing, tell an admin.
 - **"This file can't be opened as a photo in this browser, so it wasn't
   added. Add a JPEG, PNG or WebP photo. To have an iPhone take JPEG photos,
   set Settings > Camera > Formats to Most Compatible."** The message names
@@ -104,10 +132,11 @@ A deleted photo can't be restored. To have it back, add the file again (see
   JPEG and add that.
 - **"Couldn't reach the server, so the image wasn't uploaded. Check your
   connection and try again."** Check that you are online, then click **Save
-  photo** again. The photo is still open in the box.
+  photo** (or **Replace photo**) again. The photo is still open in the box.
 - **"The cropped photo couldn't be made, so it wasn't uploaded. Try again,
   or close other tabs first."** Your browser ran out of memory making the
-  square. Close other tabs and click **Save photo** again.
+  square. Close other tabs and click **Save photo** (or **Replace photo**)
+  again.
 - **"This photo is too big to upload. Photos can be up to 4 MB. Save a
   smaller copy as a JPEG and add that instead."** A cropped photo is far
   smaller than this, so you should not see it. If you do, tell an admin.
@@ -124,8 +153,19 @@ A deleted photo can't be restored. To have it back, add the file again (see
   and try again."** Reload the page. If the animal is still there, add the
   photo again; if it keeps happening, tell an admin.
 - **"This photo wasn't found. It may have been deleted in another tab.
-  Reload the page."** Someone deleted the photo since you opened the page.
-  Reload it: the photo is gone.
+  Reload the page."** Someone deleted the photo since you opened the page,
+  so it wasn't deleted or replaced again. Reload it: the photo is gone.
+- **"This photo has changed since you opened the page. It may have been
+  replaced in another tab. Reload the page and try again."** Someone
+  replaced the photo since you opened the page, so yours wasn't saved over
+  theirs, or the photo wasn't deleted. Click **Cancel** if the **Replace
+  photo** box is open, reload the page, look at the photo now there, and
+  replace or delete it again if it still needs it.
+- **"This file can't be opened as a photo in this browser, so the photo
+  wasn't replaced. Choose a JPEG, PNG or WebP photo. To have an iPhone take
+  JPEG photos, set Settings > Camera > Formats to Most Compatible."** The
+  message names the file. As when adding a photo: save a copy as a JPEG and
+  replace the photo with that.
 - **"Failed to delete image."** The photo wasn't deleted and is still in the
   list. Try again; if it keeps happening, tell an admin.
 - **"Unauthorized: You must be logged in."** Your sign-in has run out.

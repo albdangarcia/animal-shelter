@@ -24,7 +24,8 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Trash2 } from "lucide-react";
+import { GripVertical, ImageUp, Trash2 } from "lucide-react";
+import { usePhotoReplacer, type ReplaceablePhoto } from "./photo-replace-dialog";
 import { AnimalImageModel } from "@/prisma/generated/models/AnimalImage";
 import {
   deleteAnimalImage,
@@ -73,17 +74,66 @@ interface TileContentProps {
   canManage: boolean;
   isDeleting: boolean;
   onDelete: (target: DeleteTarget) => void;
+  onReplace: (target: ReplaceablePhoto) => void;
 }
 
-// The image, the primary label, and the delete control — shared by the static
-// grid and the sortable tile. Position 0 is the primary; the label is purely
-// positional, so it follows index 0 through optimistic reorders.
+interface TileActionProps {
+  label: string;
+  /** The tooltip for staff who may not use it. */
+  deniedText: string;
+  icon: React.ComponentType<{ className?: string }>;
+  variant: "secondary" | "destructive";
+  disabled: boolean;
+  canManage: boolean;
+  onClick: () => void;
+}
+
+// One of a tile's buttons. Without permission it is disabled, with a tooltip
+// saying why.
+function TileAction({
+  label,
+  deniedText,
+  icon: Icon,
+  variant,
+  disabled,
+  canManage,
+  onClick,
+}: TileActionProps) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {/* Wrapper span lets the tooltip fire even while the button itself
+            is disabled, since disabled elements don't receive pointer/focus
+            events. */}
+        <span className="inline-flex" tabIndex={canManage ? undefined : 0}>
+          <Button
+            size="icon"
+            variant={variant}
+            onClick={onClick}
+            disabled={disabled || !canManage}
+            className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label={label}
+          >
+            <Icon className="h-4 w-4" />
+          </Button>
+        </span>
+      </TooltipTrigger>
+      {!canManage && <TooltipContent>{deniedText}</TooltipContent>}
+    </Tooltip>
+  );
+}
+
+// The image, the primary label, and the replace and delete controls — shared
+// by the static grid and the sortable tile. Position 0 is the primary; the
+// label is purely positional, so it follows index 0 through optimistic
+// reorders.
 function TileContent({
   image,
   index,
   canManage,
   isDeleting,
   onDelete,
+  onReplace,
 }: TileContentProps) {
   return (
     <>
@@ -104,34 +154,26 @@ function TileContent({
         </div>
       )}
 
-      <div className="absolute top-2 right-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* Wrapper span lets the tooltip fire even while the button itself
-                is disabled, since disabled elements don't receive pointer/focus
-                events. */}
-            <span
-              className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex"
-              tabIndex={canManage ? undefined : 0}
-            >
-              <Button
-                size="icon"
-                variant="destructive"
-                onClick={() => onDelete({ id: image.id, url: image.url })}
-                disabled={isDeleting || !canManage}
-                className="cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
-                aria-label="Delete image"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </span>
-          </TooltipTrigger>
-          {!canManage && (
-            <TooltipContent>
-              You don&apos;t have permission to delete images
-            </TooltipContent>
-          )}
-        </Tooltip>
+      {/* Shown on hover, and while one of them has the keyboard. */}
+      <div className="absolute top-2 right-2 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+        <TileAction
+          label="Replace photo"
+          deniedText="You don't have permission to replace images"
+          icon={ImageUp}
+          variant="secondary"
+          disabled={isDeleting}
+          canManage={canManage}
+          onClick={() => onReplace({ id: image.id, url: image.url })}
+        />
+        <TileAction
+          label="Delete image"
+          deniedText="You don't have permission to delete images"
+          icon={Trash2}
+          variant="destructive"
+          disabled={isDeleting}
+          canManage={canManage}
+          onClick={() => onDelete({ id: image.id, url: image.url })}
+        />
       </div>
     </>
   );
@@ -183,6 +225,8 @@ export default function AnimalImageGallery({
   const [, startReorderTransition] = useTransition();
 
   const [imageToDelete, setImageToDelete] = useState<DeleteTarget | null>(null);
+  // Its dialog is rendered beside the grid, never inside a sortable tile.
+  const replacer = usePhotoReplacer(animalId);
 
   // Local copy of the server-ordered images. `arrayMove` commits here on a
   // successful reorder; when the fetched prop changes (a revalidate, or a
@@ -356,6 +400,7 @@ export default function AnimalImageGallery({
                 canManage={canManage}
                 isDeleting={isDeleting}
                 onDelete={setImageToDelete}
+                onReplace={replacer.choose}
               />
             </div>
           ))}
@@ -389,6 +434,7 @@ export default function AnimalImageGallery({
                 canManage={canManage}
                 isDeleting={isDeleting}
                 onDelete={setImageToDelete}
+                onReplace={replacer.choose}
               />
             ))}
           </div>
@@ -411,6 +457,7 @@ export default function AnimalImageGallery({
         </DragOverlay>
       </DndContext>
       {deleteDialog}
+      {replacer.element}
     </>
   );
 }
