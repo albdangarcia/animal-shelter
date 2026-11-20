@@ -61,7 +61,7 @@ A deleted photo can't be restored. To have it back, add the file again.
   Reload it: the photo is gone.
 - **"This photo has changed since you opened the page. It may have been
   replaced in another tab. Reload the page and try again."** Someone
-  replaced the photo just as you deleted it, so it wasn't deleted. Reload
+  replaced the photo since you opened the page, so it wasn't deleted. Reload
   the page, look at the photo now there, and delete it again if you still
   want to.
 - **"Failed to delete image."** The photo wasn't deleted and is still in the

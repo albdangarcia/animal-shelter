@@ -348,7 +348,8 @@ const _togglePetFavorite = async (
 const _deleteAnimalImage = async (
   user: SessionUser,
   imageId: string,
-  animalId: string
+  animalId: string,
+  expectedUrl: string
 ): Promise<{ success: boolean; message: string }> => {
   const parsedImageId = cuidSchema.safeParse(imageId);
   if (!parsedImageId.success) {
@@ -357,6 +358,14 @@ const _deleteAnimalImage = async (
   const parsedAnimalId = cuidSchema.safeParse(animalId);
   if (!parsedAnimalId.success) {
     return { success: false, message: 'Invalid Animal ID.' };
+  }
+  const parsedExpectedUrl = z.string().min(1).safeParse(expectedUrl);
+  if (!parsedExpectedUrl.success) {
+    // A page loaded before the delete sent the photo's URL: reloading fixes it.
+    return {
+      success: false,
+      message: 'No photo was named to delete. Reload the page and try again.',
+    };
   }
   const staffMemberId = user.personId;
   if (!staffMemberId) {
@@ -368,11 +377,13 @@ const _deleteAnimalImage = async (
   const validatedAnimalId = parsedAnimalId.data;
 
   try {
-    // The service deletes the row first, then the file on the row (never a
-    // URL from the browser), and only if the photo is this animal's.
+    // The service deletes the row first, then its file, and only while the
+    // photo is this animal's and still holds the URL staff saw: one replaced
+    // or deleted in another tab meanwhile is refused.
     const result = await deleteAnimalPhoto(prisma, animalPhotoStore(), {
       animalId: validatedAnimalId,
       imageId: parsedImageId.data,
+      expectedUrl: parsedExpectedUrl.data,
       staffMemberId,
     });
     if (!result.ok) {

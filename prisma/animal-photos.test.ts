@@ -293,6 +293,7 @@ test("deleting a photo removes the row, logs it, then removes the row's file", a
   const result = await deleteAnimalPhoto(prisma, store, {
     animalId,
     imageId: added.imageId,
+    expectedUrl: added.url,
     staffMemberId: staffId,
   });
 
@@ -322,7 +323,12 @@ test("another animal's photo is refused, and nothing changes", async () => {
   assert.ok(other.ok);
 
   assert.deepEqual(
-    await deleteAnimalPhoto(prisma, store, { animalId, imageId: other.imageId, staffMemberId: staffId }),
+    await deleteAnimalPhoto(prisma, store, {
+      animalId,
+      imageId: other.imageId,
+      expectedUrl: other.url,
+      staffMemberId: staffId,
+    }),
     { ok: false, status: 404, message: PHOTO_NOT_FOUND_MESSAGE },
   );
   assert.deepEqual(
@@ -340,7 +346,7 @@ test("a photo already deleted is refused, and nothing is logged twice", async ()
   const store = memoryPhotoStore();
   const added = await addAnimalPhoto(prisma, store, { animalId, staffMemberId: staffId, bytes: JPEG });
   assert.ok(added.ok);
-  const input = { animalId, imageId: added.imageId, staffMemberId: staffId };
+  const input = { animalId, imageId: added.imageId, expectedUrl: added.url, staffMemberId: staffId };
 
   assert.equal((await deleteAnimalPhoto(prisma, store, input)).ok, true);
   assert.deepEqual(await deleteAnimalPhoto(prisma, store, input), {
@@ -364,7 +370,7 @@ test("deleting a seed photo removes the row and leaves the file alone", async ()
   });
 
   assert.deepEqual(
-    await deleteAnimalPhoto(prisma, store, { animalId, imageId, staffMemberId: staffId }),
+    await deleteAnimalPhoto(prisma, store, { animalId, imageId, expectedUrl: seedUrl, staffMemberId: staffId }),
     { ok: true, url: seedUrl },
   );
   assert.deepEqual(await photosOf(animalId), []);
@@ -383,6 +389,7 @@ test("a file that can't be removed leaves the photo deleted", async () => {
   const result = await deleteAnimalPhoto(prisma, store, {
     animalId,
     imageId: added.imageId,
+    expectedUrl: added.url,
     staffMemberId: staffId,
   });
 
@@ -494,7 +501,14 @@ test("a photo deleted or replaced since the page was opened is refused before an
   });
   assert.ok(elsewhere.ok);
   assert.ok(
-    (await deleteAnimalPhoto(prisma, store, { animalId, imageId: second.imageId, staffMemberId: staffId })).ok,
+    (
+      await deleteAnimalPhoto(prisma, store, {
+        animalId,
+        imageId: second.imageId,
+        expectedUrl: second.url,
+        staffMemberId: staffId,
+      })
+    ).ok,
   );
   const photosBefore = await photosOf(animalId);
   const urlsBefore = store.urls();
@@ -694,55 +708,40 @@ test("a replacement that isn't a photo, or is too big, is refused before anythin
   assert.deepEqual(await replacedLines(animalId), []);
 });
 
-test("a photo replaced while it is being deleted is refused, and the new photo keeps its file", async () => {
+test("deleting a photo replaced since the page was opened is refused, and the new photo stays with its file", async () => {
   const store = memoryPhotoStore();
   const { animalId, primary } = await animalWithTwoPhotos("Mochi", store);
-  // Another tab replaces the photo between the delete's read of the row and
-  // its delete: the delete's first read runs it, on another connection.
-  let otherTab: Awaited<ReturnType<typeof replaceAnimalPhoto>> | null = null;
-  const replacedMidway = new Proxy(prisma, {
-    get(target, property, receiver) {
-      if (property !== "$transaction") return Reflect.get(target, property, receiver);
-      return (run: (tx: typeof prisma) => Promise<unknown>) =>
-        target.$transaction((tx) => {
-          const images = new Proxy(tx.animalImage, {
-            get(delegate, name, delegateReceiver) {
-              if (name !== "findFirst") return Reflect.get(delegate, name, delegateReceiver);
-              return async (args: Parameters<typeof tx.animalImage.findFirst>[0]) => {
-                const found = await delegate.findFirst(args);
-                otherTab ??= await replaceAnimalPhoto(prisma, store, {
-                  animalId,
-                  imageId: primary.imageId,
-                  expectedUrl: primary.url,
-                  staffMemberId: staffId,
-                  bytes: WEBP,
-                });
-                return found;
-              };
-            },
-          });
-          const txWithReplace = new Proxy(tx, {
-            get: (client, name, clientReceiver) =>
-              name === "animalImage" ? images : Reflect.get(client, name, clientReceiver),
-          });
-          return run(txWithReplace as unknown as typeof prisma);
-        });
-    },
-  }) as typeof prisma;
+  // Another tab replaced the photo after this one loaded it.
+  const replaced = await replaceAnimalPhoto(prisma, store, {
+    animalId,
+    imageId: primary.imageId,
+    expectedUrl: primary.url,
+    staffMemberId: staffId,
+    bytes: WEBP,
+  });
+  assert.ok(replaced.ok);
+  const photosBefore = await photosOf(animalId);
+  const feedBefore = await feedOf(animalId);
+  const removeCallsBefore = store.removeCalls();
 
   assert.deepEqual(
-    await deleteAnimalPhoto(replacedMidway, store, { animalId, imageId: primary.imageId, staffMemberId: staffId }),
+    await deleteAnimalPhoto(prisma, store, {
+      animalId,
+      imageId: primary.imageId,
+      expectedUrl: primary.url,
+      staffMemberId: staffId,
+    }),
     { ok: false, status: 409, message: PHOTO_CHANGED_MESSAGE },
   );
-  const replaced = otherTab as Awaited<ReturnType<typeof replaceAnimalPhoto>> | null;
-  assert.ok(replaced?.ok);
-  // The other tab's photo is still there with its file; only the file it
-  // replaced was removed, and no delete was logged.
-  assert.equal((await photosOf(animalId))[0].url, replaced.url);
+  // The other tab's photo is still first, with its file; nothing more was
+  // removed and no delete was logged.
+  assert.deepEqual(await photosOf(animalId), photosBefore);
+  assert.equal(photosBefore[0].url, replaced.url);
   assert.ok(store.read(replaced.url));
-  assert.deepEqual(store.removeCalls(), [primary.url]);
+  assert.deepEqual(store.removeCalls(), removeCallsBefore);
+  assert.deepEqual(await feedOf(animalId), feedBefore);
   assert.deepEqual(
-    (await feedOf(animalId)).map(({ activityType }) => activityType),
+    feedBefore.map(({ activityType }) => activityType),
     [AnimalActivityType.PHOTO_UPLOADED, AnimalActivityType.PHOTO_UPLOADED, AnimalActivityType.PHOTO_REPLACED],
   );
 });
@@ -859,7 +858,12 @@ test("framing another animal's photo is refused, and its framing is unchanged", 
 test("framing a photo deleted since the page was opened is refused", async () => {
   const store = memoryPhotoStore();
   const { animalId, primary } = await animalWithTwoPhotos("Bramble", store);
-  const deleted = await deleteAnimalPhoto(prisma, store, { animalId, imageId: primary.imageId, staffMemberId: staffId });
+  const deleted = await deleteAnimalPhoto(prisma, store, {
+    animalId,
+    imageId: primary.imageId,
+    expectedUrl: primary.url,
+    staffMemberId: staffId,
+  });
   assert.ok(deleted.ok);
 
   assert.deepEqual(

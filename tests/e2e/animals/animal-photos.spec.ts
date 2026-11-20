@@ -154,6 +154,65 @@ test("staff replace a photo with a new crop, in the same place, and the feed say
   await expect(galleryPhotos(page)).toHaveCount(before);
 });
 
+test("deleting a photo replaced in another tab is refused, and the new photo stays", async ({ page }) => {
+  const before = await openFidosPhotos(page);
+  const fixture = path.join(process.cwd(), "tests/e2e/fixtures/photo.jpg");
+
+  // A photo to delete, saved with the crop it starts with: last in the order.
+  await fileInput(page).setInputFiles(fixture);
+  await page.getByRole("dialog", { name: "Crop photos" }).getByRole("button", { name: "Save photo" }).click();
+  await expect(page.getByText("Photo saved.")).toBeVisible();
+  const photo = uploadedPhotos(page);
+  await expect(photo).toHaveCount(1);
+  const oldSrc = (await photo.getAttribute("src"))!;
+
+  // Another tab replaces it, after this one loaded it.
+  const otherTab = await page.context().newPage();
+  await otherTab.goto(page.url());
+  const otherPhoto = uploadedPhotos(otherTab);
+  const otherTile = otherTab
+    .locator("div", { has: otherPhoto })
+    .filter({ has: otherTab.getByRole("button", { name: "Replace photo" }) })
+    .last();
+  await otherTile.hover();
+  const chooser = otherTab.waitForEvent("filechooser");
+  await otherTile.getByRole("button", { name: "Replace photo" }).click();
+  await (await chooser).setFiles(fixture);
+  const replacer = otherTab.getByRole("dialog", { name: "Replace photo" });
+  await expect(replacer.getByTestId("crop-box")).toHaveAttribute("data-crop", "120,20,360");
+  await replacer.getByRole("button", { name: "Replace photo" }).click();
+  await expect(otherTab.getByText("Photo replaced.")).toBeVisible();
+  await expect(otherPhoto).not.toHaveAttribute("src", oldSrc);
+  const newSrc = (await otherPhoto.getAttribute("src"))!;
+  await otherTab.close();
+
+  // This tab still shows the old photo: deleting it is refused.
+  await expect(photo).toHaveAttribute("src", oldSrc);
+  const tile = page
+    .locator("div", { has: photo })
+    .filter({ has: page.getByRole("button", { name: "Delete image" }) })
+    .last();
+  await tile.hover();
+  await tile.getByRole("button", { name: "Delete image" }).click();
+  await page.getByRole("button", { name: "Delete Image", exact: true }).click();
+  await expect(
+    page.getByText("This photo has changed since you opened the page.", { exact: false }),
+  ).toBeVisible();
+
+  // The other tab's photo is still there, with its file.
+  await page.reload();
+  await expect(photo).toHaveAttribute("src", newSrc);
+  await expect(galleryPhotos(page)).toHaveCount(before + 1);
+  expect((await page.request.get(newSrc)).status()).toBe(200);
+
+  // Leave Fido as he was.
+  await tile.hover();
+  await tile.getByRole("button", { name: "Delete image" }).click();
+  await page.getByRole("button", { name: "Delete Image", exact: true }).click();
+  await expect(page.getByText("Image deleted successfully.")).toBeVisible();
+  await expect(galleryPhotos(page)).toHaveCount(before);
+});
+
 test("a photo's framing reaches the listing and the animal's page, set when added and adjusted later", async ({ page }) => {
   const before = await openFidosPhotos(page);
   const photosUrl = page.url();
