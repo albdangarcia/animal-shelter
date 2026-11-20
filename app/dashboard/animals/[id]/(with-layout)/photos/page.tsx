@@ -36,10 +36,11 @@ const Page = async ({ params }: Props) => {
 
 const PageContent = async ({ params }: Props) => {
   const { id: animalId } = await params;
-  const [animal, canManage, help] = await Promise.all([
+  const [animal, canManage, help, uploadHelp] = await Promise.all([
     fetchAnimalForPhotosPage(animalId),
     hasPermission(AppPermissions.ANIMAL_PHOTO_MANAGE),
     getHelpLinkGuide(PAGE_HELP_GUIDES.animalPhotos),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.animalPhotoUpload),
   ]);
 
   if (!animal) {
@@ -81,6 +82,11 @@ const PageContent = async ({ params }: Props) => {
             Add new photos to this animal&apos;s profile. You crop each photo
             to a square before it is saved.
           </CardDescription>
+          {uploadHelp && (
+            <CardAction>
+              <HelpLink guide={uploadHelp} />
+            </CardAction>
+          )}
         </CardHeader>
         <CardContent>
           <PhotoUploader animalId={animalId} canManage={canManage} />
