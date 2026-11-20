@@ -278,7 +278,12 @@ export default function AnimalImageGallery({
     if (!imageToDelete) return;
 
     startDeleteTransition(async () => {
-      const result = await deleteAnimalImage(imageToDelete.id, animalId);
+      const result = await deleteAnimalImage(
+        imageToDelete.id,
+        animalId,
+        // The photo staff saw: one replaced in another tab since is refused.
+        imageToDelete.url,
+      );
       if (result.success) {
         toast.success(result.message);
       } else {

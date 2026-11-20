@@ -133,8 +133,8 @@ export async function addAnimalPhoto(
 }
 
 /**
- * Why the photo can't be replaced as it is now, or null when it is still this
- * animal's and still holds `expectedUrl`.
+ * Why the photo can't be changed (replaced, framed or deleted) as it is now,
+ * or null when it is still this animal's and still holds `expectedUrl`.
  */
 async function staleRefusal(
   db: Pick<Db, "animalImage">,
@@ -291,38 +291,37 @@ export async function setAnimalPhotoFocus(
 
 /**
  * Deletes one of the animal's photos and logs `PHOTO_DELETED`, then removes
- * the photo's file: the one on its row, never a URL the caller gives. A file
- * the store didn't write (a seed photo's) is left alone. Refuses a photo that
- * isn't this animal's, or is gone already (404), and one replaced between the
- * read and the delete (409).
+ * the photo's file. A file the store didn't write (a seed photo's) is left
+ * alone.
+ *
+ * `expectedUrl` is the URL the caller showed staff. The row is deleted only
+ * while it still holds it, so a photo replaced in another tab since the page
+ * was opened is refused (409) rather than deleted with the new file nobody
+ * here has seen, and one that isn't this animal's, or is gone already, is
+ * refused too (404). The file removed is therefore always the one the row
+ * held.
  */
 export async function deleteAnimalPhoto(
   db: Db,
   store: AnimalPhotoStore,
-  input: { animalId: string; imageId: string; staffMemberId: string },
+  input: { animalId: string; imageId: string; expectedUrl: string; staffMemberId: string },
 ): Promise<{ ok: true; url: string } | PhotoRefusal> {
-  const { animalId, imageId, staffMemberId } = input;
+  const { animalId, imageId, expectedUrl, staffMemberId } = input;
   const url = await db.$transaction(async (tx): Promise<string | PhotoRefusal> => {
-    const image = await tx.animalImage.findFirst({
-      where: { id: imageId, animalId },
-      select: { url: true },
-    });
-    if (!image) return { ok: false, status: 404, message: PHOTO_NOT_FOUND_MESSAGE };
-    // Scoped by animal too, and by count: a delete in another tab since the
-    // read deletes nothing here, and nothing is logged twice. And by the URL
-    // read: a replace in another tab since then put a new file on the row,
-    // which deleting it would leave behind, removing and logging the old one.
-    const { count } = await tx.animalImage.deleteMany({ where: { id: imageId, animalId, url: image.url } });
-    if (count === 0) return missedRefusal(tx, { animalId, imageId, expectedUrl: image.url });
+    // Scoped by animal, by the URL staff saw, and by count: a replace in
+    // another tab since then put a new file on the row and deletes nothing
+    // here, and a delete in another tab means nothing is logged twice.
+    const { count } = await tx.animalImage.deleteMany({ where: { id: imageId, animalId, url: expectedUrl } });
+    if (count === 0) return missedRefusal(tx, input);
     await tx.animalActivityLog.create({
       data: {
         animalId,
         activityType: AnimalActivityType.PHOTO_DELETED,
         changedById: staffMemberId,
-        changeSummary: `A photo was deleted. URL: ${image.url}`,
+        changeSummary: `A photo was deleted. URL: ${expectedUrl}`,
       },
     });
-    return image.url;
+    return expectedUrl;
   });
   if (typeof url !== "string") {
     return url;
