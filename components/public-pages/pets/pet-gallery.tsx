@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { X as XMarkIcon } from "lucide-react";
 import type { AnimalImageModel } from "@/prisma/generated/models/AnimalImage";
+import { focusPosition } from "@/app/lib/utils/photo-focus";
 import { shimmer, toBase64 } from "@/app/lib/utils/image-loading-placeholder";
 import { PET_PHOTO_COMING_SOON_IMAGE } from "@/app/lib/constants/constants";
 import FavoriteButton from "../favorite-button";
@@ -32,6 +33,9 @@ const PetGallery = ({
     images.length > 0 ? images[0].url : "",
   );
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  // Where the selected square sits in the wide frame below (AnimalImage.focusY).
+  const selectedFocus =
+    images.find((image) => image.url === selectedImage)?.focusY ?? null;
   const [lightboxImageUrl, setLightboxImageUrl] = useState("");
 
   const openLightbox = (imageUrl: string) => {
@@ -56,6 +60,10 @@ const PetGallery = ({
               // reasoning as the spotlight hero's portrait.
               key={selectedImage}
               className="object-cover group-hover:opacity-90 transition-opacity"
+              // A square photo in a wide frame: staff choose which part stays
+              // in it; none is centred. The thumbnails are square and show it
+              // whole.
+              style={{ objectPosition: focusPosition(selectedFocus) }}
               src={selectedImage}
               fill
               sizes="(max-width: 1024px) 100vw, 50vw"

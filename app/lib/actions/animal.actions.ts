@@ -36,7 +36,8 @@ import {
   MedicalEntryRefusal,
   nameChipNumberHolder,
 } from "../services/medical-entry";
-import { deleteAnimalPhoto } from "../services/animal-photos";
+import { deleteAnimalPhoto, setAnimalPhotoFocus } from "../services/animal-photos";
+import { FOCUS_INVALID_MESSAGE, clampFocus } from "../utils/photo-focus";
 import { animalPhotoStore } from "../storage/animal-photo-store";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
@@ -472,12 +473,64 @@ const _reorderAnimalImages = async (
   return { success: true, message: "Photo order updated." };
 };
 
+const _setAnimalImageFocus = async (
+  _user: SessionUser,
+  animalId: string,
+  imageId: string,
+  expectedUrl: string,
+  focusY: number | null
+): Promise<{ success: boolean; message: string }> => {
+  const parsed = z
+    .object({
+      animalId: cuidSchema,
+      imageId: cuidSchema,
+      expectedUrl: z.string().min(1),
+      focusY: z.number().min(0).max(1).nullable(),
+    })
+    .safeParse({ animalId, imageId, expectedUrl, focusY });
+  if (!parsed.success) {
+    return { success: false, message: FOCUS_INVALID_MESSAGE };
+  }
+  const validatedAnimalId = parsed.data.animalId;
+
+  try {
+    // Only while the photo still holds the URL staff framed: one replaced or
+    // deleted in another tab meanwhile is refused.
+    const result = await setAnimalPhotoFocus(prisma, {
+      animalId: validatedAnimalId,
+      imageId: parsed.data.imageId,
+      expectedUrl: parsed.data.expectedUrl,
+      focusY: parsed.data.focusY === null ? null : clampFocus(parsed.data.focusY),
+    });
+    if (!result.ok) {
+      return { success: false, message: result.message };
+    }
+  } catch (error) {
+    console.error("Database Error: Failed to save a photo's framing.", error);
+    return { success: false, message: "The framing wasn't saved. Try again." };
+  }
+
+  // Only the wide frames use it: the public listing (and the home page's
+  // browse strip, which shows listing cards) and the animal's public page.
+  // The Photos tab shows it in the framing dialog.
+  revalidatePath(`/dashboard/animals/${validatedAnimalId}/photos`);
+  revalidatePath(`/pets/${validatedAnimalId}`);
+  revalidatePath("/pets");
+  revalidatePath("/");
+
+  return { success: true, message: "Framing saved." };
+};
+
 export const deleteAnimalImage = withAuthenticatedUser(
   RequirePermission(AppPermissions.ANIMAL_PHOTO_MANAGE)(_deleteAnimalImage)
 );
 
 export const reorderAnimalImages = withAuthenticatedUser(
   RequirePermission(AppPermissions.ANIMAL_PHOTO_MANAGE)(_reorderAnimalImages)
+);
+
+export const setAnimalImageFocus = withAuthenticatedUser(
+  RequirePermission(AppPermissions.ANIMAL_PHOTO_MANAGE)(_setAnimalImageFocus)
 );
 
 export const createAnimal = withAuthenticatedUser(

@@ -145,3 +145,24 @@ test("a wide preview fills its width and cuts the top and bottom of the crop", (
     top: -50,
   });
 });
+
+test("a wide preview with a focus shows that part of the crop", () => {
+  // The same 200 × 100 frame: 100 of the drawn square is cut off in all.
+  const crop = { x: 0, y: 0, size: 400 };
+  // `=== 0`: the top edge comes out as -0, which draws the same.
+  assert.ok(previewLayout(crop, 1000, 800, 200, 100, 0).top === 0);
+  assert.equal(previewLayout(crop, 1000, 800, 200, 100, 1).top, -100);
+  assert.equal(previewLayout(crop, 1000, 800, 200, 100, 0.25).top, -25);
+  // Null is centred, as before there was a focus.
+  assert.equal(previewLayout(crop, 1000, 800, 200, 100, null).top, -50);
+  // The crop's own place in the photo still counts: y 40 is 20 in the frame.
+  assert.equal(previewLayout({ x: 0, y: 40, size: 400 }, 1000, 800, 200, 100, 0).top, -20);
+});
+
+test("a square preview ignores the focus", () => {
+  const crop = { x: 200, y: 100, size: 400 };
+  assert.deepEqual(
+    previewLayout(crop, 1000, 800, 100, 100, 0),
+    previewLayout(crop, 1000, 800, 100, 100),
+  );
+});

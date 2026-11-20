@@ -9,6 +9,7 @@ import { readUploadedPhoto } from "@/app/lib/storage/photo-size";
 import { animalPhotoStore } from "@/app/lib/storage/animal-photo-store";
 import { replaceAnimalPhoto } from "@/app/lib/services/animal-photos";
 import { cuidSchema } from "@/app/lib/zod-schemas/common.schemas";
+import { parseFocusY } from "@/app/lib/utils/photo-focus";
 
 const replaceFormSchema = z.object({
   animalId: cuidSchema,
@@ -19,7 +20,8 @@ const replaceFormSchema = z.object({
 /**
  * Replaces one of an animal's photos with a new one, in the same place: the
  * form's `file`, `animalId`, `imageId` and `expectedUrl` (the URL the gallery
- * showed). Checks who is asking, as the upload route beside it does, then
+ * showed), and an optional `focusY` (where the new photo sits in a wide frame;
+ * empty is centred). Checks who is asking, as the upload route beside it does, then
  * hands the photo to the photo service (`app/lib/services/animal-photos.ts`),
  * which refuses a photo that isn't the animal's, or was deleted or replaced
  * since the page was loaded, swaps the file on the photo's row and removes the
@@ -75,6 +77,10 @@ export async function POST(request: Request) {
       );
     }
     const { animalId, imageId, expectedUrl } = fields.data;
+    const focus = parseFocusY(formData.get("focusY"));
+    if ("error" in focus) {
+      return NextResponse.json({ error: focus.error }, { status: 400 });
+    }
 
     const result = await replaceAnimalPhoto(prisma, animalPhotoStore(), {
       animalId,
@@ -82,6 +88,7 @@ export async function POST(request: Request) {
       expectedUrl,
       staffMemberId,
       bytes: new Uint8Array(await uploaded.photo.arrayBuffer()),
+      focusY: focus.focusY,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.message }, { status: result.status });

@@ -6,8 +6,8 @@ import { PHOTO_TOO_LARGE_MESSAGE, isPhotoTooLarge } from "@/app/lib/storage/phot
 import { checkPhotoType } from "@/app/lib/storage/photo-type";
 
 /**
- * An animal's photos: adding one, replacing one and deleting one, with their
- * files in a photo store (`app/lib/storage/animal-photo-store.ts`).
+ * An animal's photos: adding one, replacing one, framing one and deleting
+ * one, with their files in a photo store (`app/lib/storage/animal-photo-store.ts`).
  *
  * Like the other services, this module has **no `next/*` and no auth
  * imports**, so the database tests can drive it; whoever calls it (the upload
@@ -49,16 +49,31 @@ function checkPhotoBytes(bytes: Uint8Array): { contentType: PhotoContentType } |
 }
 
 /**
+ * A framing from 0 to 1, or null. The routes and actions parse what staff
+ * send (`parseFocusY`), so anything else is a caller's mistake; the column's
+ * check refuses it too, but only where migrations ran (test databases are
+ * pushed).
+ */
+function assertFocusY(focusY: number | null): void {
+  if (focusY !== null && !(focusY >= 0 && focusY <= 1)) {
+    throw new RangeError(`A photo's focusY must be from 0 to 1, or null; got ${focusY}`);
+  }
+}
+
+/**
  * Adds a photo at the end of the animal's photos and logs `PHOTO_UPLOADED`.
  * Refuses a file over the size limit, one that isn't a JPEG, PNG or WebP (read
  * from its first bytes) and an unknown animal, before anything is stored.
+ * `focusY` is where the photo sits in a wide frame (`AnimalImage.focusY`);
+ * left out, it is centred.
  */
 export async function addAnimalPhoto(
   db: Db,
   store: AnimalPhotoStore,
-  input: { animalId: string; staffMemberId: string; bytes: Uint8Array },
+  input: { animalId: string; staffMemberId: string; bytes: Uint8Array; focusY?: number | null },
 ): Promise<{ ok: true; imageId: string; url: string } | PhotoRefusal> {
-  const { animalId, staffMemberId, bytes } = input;
+  const { animalId, staffMemberId, bytes, focusY = null } = input;
+  assertFocusY(focusY);
   const type = checkPhotoBytes(bytes);
   if ("ok" in type) {
     return type;
@@ -79,7 +94,7 @@ export async function addAnimalPhoto(
         _max: { sortOrder: true },
       });
       const { id } = await tx.animalImage.create({
-        data: { url, animalId, sortOrder: (_max.sortOrder ?? -1) + 1 },
+        data: { url, animalId, sortOrder: (_max.sortOrder ?? -1) + 1, focusY },
         select: { id: true },
       });
       await tx.animalActivityLog.create({
@@ -161,6 +176,9 @@ async function missedRefusal(
  * as delete refuses it (404). It is only compared: the file removed is the
  * one the row held. Refuses bytes that can't be a photo, as adding does; every
  * refusal found before the upload stores nothing.
+ *
+ * The new photo takes `focusY` (left out, centred): the old one's framing was
+ * chosen for another picture.
  */
 export async function replaceAnimalPhoto(
   db: Db,
@@ -171,9 +189,11 @@ export async function replaceAnimalPhoto(
     expectedUrl: string;
     staffMemberId: string;
     bytes: Uint8Array;
+    focusY?: number | null;
   },
 ): Promise<{ ok: true; imageId: string; url: string; replacedUrl: string } | PhotoRefusal> {
-  const { animalId, imageId, expectedUrl, staffMemberId, bytes } = input;
+  const { animalId, imageId, expectedUrl, staffMemberId, bytes, focusY = null } = input;
+  assertFocusY(focusY);
   const type = checkPhotoBytes(bytes);
   if ("ok" in type) {
     return type;
@@ -200,7 +220,7 @@ export async function replaceAnimalPhoto(
       // second replace waiting on this row's lock finds the URL changed.
       const { count } = await tx.animalImage.updateMany({
         where: { id: imageId, animalId, url: expectedUrl },
-        data: { url },
+        data: { url, focusY },
       });
       if (count === 0) {
         return missedRefusal(tx, input);
@@ -244,6 +264,29 @@ export async function replaceAnimalPhoto(
     console.error(`Failed to remove a replaced photo's file (${expectedUrl}):`, error);
   }
   return { ok: true, imageId, url, replacedUrl: expectedUrl };
+}
+
+/**
+ * Sets where one of the animal's photos sits in a wide frame (`focusY`, null
+ * to centre it), without touching its file. Only while the row still holds
+ * `expectedUrl`, the photo staff framed: one replaced in another tab meanwhile
+ * is refused (409), since the framing was chosen for the old picture, and one
+ * deleted meanwhile too (404). Logs nothing, as reordering logs nothing.
+ */
+export async function setAnimalPhotoFocus(
+  db: Pick<Db, "animalImage">,
+  input: { animalId: string; imageId: string; expectedUrl: string; focusY: number | null },
+): Promise<{ ok: true; focusY: number | null } | PhotoRefusal> {
+  const { animalId, imageId, expectedUrl, focusY } = input;
+  assertFocusY(focusY);
+  const { count } = await db.animalImage.updateMany({
+    where: { id: imageId, animalId, url: expectedUrl },
+    data: { focusY },
+  });
+  if (count === 0) {
+    return missedRefusal(db, input);
+  }
+  return { ok: true, focusY };
 }
 
 /**

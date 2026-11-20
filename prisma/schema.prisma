@@ -683,6 +683,12 @@ model AnimalImage {
   /// createdAt (see app/lib/utils/animal-image-order.ts).
   sortOrder Int @default(0) @map(name: "sort_order")
 
+  /// Where the photo sits in a frame wider than it: the vertical CSS
+  /// `object-position`, 0 the top and 1 the bottom. Null is centred. Photos
+  /// are square, so only the listing card and the animal's page large photo
+  /// use it (see app/lib/utils/photo-focus.ts).
+  focusY Float? @map(name: "focus_y")
+
   animalId String @map(name: "animal_id")
   animal   Animal @relation(fields: [animalId], references: [id], onDelete: Cascade)
 

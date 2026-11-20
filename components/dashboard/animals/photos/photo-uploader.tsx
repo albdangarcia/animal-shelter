@@ -40,7 +40,7 @@ import { initialCrop, type Crop } from "@/app/lib/utils/photo-crop";
 import PhotoCropEditor from "./photo-crop-editor";
 import { makeThumbnail, openPhoto } from "./crop-photo";
 import { UNREADABLE_PHOTO_MESSAGE } from "./upload-errors";
-import { saveCrop } from "./save-crop";
+import { focusField, saveCrop } from "./save-crop";
 
 export const PHOTO_UPLOAD_ENDPOINT = "/api/animal-photos";
 export const PHOTO_SAVED_MESSAGE = "Photo saved.";
@@ -75,6 +75,8 @@ interface BatchPhoto {
   width: number;
   height: number;
   crop: Crop;
+  /** Where the square sits in the wide frames; null is centred. */
+  focusY: number | null;
   saved: boolean;
 }
 
@@ -245,6 +247,7 @@ const PhotoUploader = ({ animalId, canManage }: PhotoUploaderProps) => {
         width,
         height,
         crop: initialCrop(width, height),
+        focusY: null,
         saved: false,
       });
     }
@@ -262,6 +265,12 @@ const PhotoUploader = ({ animalId, canManage }: PhotoUploaderProps) => {
   const setCrop = (crop: Crop) => {
     setPhotos((before) =>
       before.map((photo) => (photo.id === currentId ? { ...photo, crop } : photo)),
+    );
+  };
+
+  const setFocus = (focusY: number | null) => {
+    setPhotos((before) =>
+      before.map((photo) => (photo.id === currentId ? { ...photo, focusY } : photo)),
     );
   };
 
@@ -306,6 +315,7 @@ const PhotoUploader = ({ animalId, canManage }: PhotoUploaderProps) => {
     try {
       const saved = await saveCrop(photo.file, photo.crop, PHOTO_UPLOAD_ENDPOINT, {
         animalId,
+        ...focusField(photo.focusY),
       });
       if (!saved.ok) {
         toast.error(saved.message, {
@@ -514,6 +524,8 @@ const PhotoUploader = ({ animalId, canManage }: PhotoUploaderProps) => {
                 }}
                 crop={current.crop}
                 onCropChange={setCrop}
+                focusY={current.focusY}
+                onFocusChange={setFocus}
                 autoFocus
               />
             )}

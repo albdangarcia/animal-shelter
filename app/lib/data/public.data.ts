@@ -39,6 +39,7 @@ export type PetsPayload = Prisma.AnimalGetPayload<{
     animalImages: {
       select: {
         url: true;
+        focusY: true;
       };
       take: 1;
     };
@@ -244,6 +245,7 @@ export const fetchPublishedPets = async ({
           animalImages: {
             select: {
               url: true,
+              focusY: true,
             },
             orderBy: ANIMAL_IMAGE_ORDER,
             take: 1,
@@ -310,7 +312,7 @@ export type FavoritePet = {
   species: { name: string };
   breeds: { name: string }[];
   characteristics: { name: string }[];
-  animalImages: { url: string }[];
+  animalImages: { url: string; focusY: number | null }[];
   // Always present (these are the user's own favorites), kept for PetCard's heart state.
   favorites: { userId: string }[];
   isAvailable: boolean;
@@ -354,7 +356,7 @@ export const fetchFavoritePets = async (): Promise<{
             listingStatus: true,
             ...PET_CARD_TAG_SELECT,
             animalImages: {
-              select: { url: true },
+              select: { url: true, focusY: true },
               orderBy: ANIMAL_IMAGE_ORDER,
               take: 1,
             },
@@ -517,6 +519,7 @@ export const fetchLatestPublicAnimals = async (take: number = 4) => {
         animalImages: {
           select: {
             url: true,
+            focusY: true,
           },
           orderBy: ANIMAL_IMAGE_ORDER,
           take: 1,

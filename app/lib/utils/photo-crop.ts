@@ -158,10 +158,13 @@ export function cropOutputSize(crop: Crop): number {
 /**
  * How to draw a preview of the saved photo in a `frameWidth` ×
  * `frameHeight` frame, as the site shows it there (`object-cover`: the
- * square scaled to fill the frame, centred, the overflow cut off), from the
- * whole photo: the size to draw the photo at and where its top-left corner
- * goes, relative to the frame. Used as a CSS background, so a preview
- * follows the crop without drawing anything.
+ * square scaled to fill the frame, the overflow cut off), from the whole
+ * photo: the size to draw the photo at and where its top-left corner goes,
+ * relative to the frame. Used as a CSS background, so a preview follows the
+ * crop without drawing anything.
+ *
+ * Side to side the square is centred; top to bottom it sits at `focusY`, as
+ * `object-position` puts it (null is centred: see `photo-focus.ts`).
  */
 export function previewLayout(
   crop: Crop,
@@ -169,6 +172,7 @@ export function previewLayout(
   photoHeight: number,
   frameWidth: number,
   frameHeight: number,
+  focusY: number | null = null,
 ): { width: number; height: number; left: number; top: number } {
   const side = Math.max(frameWidth, frameHeight);
   const scale = side / crop.size;
@@ -176,6 +180,6 @@ export function previewLayout(
     width: photoWidth * scale,
     height: photoHeight * scale,
     left: (frameWidth - side) / 2 - crop.x * scale,
-    top: (frameHeight - side) / 2 - crop.y * scale,
+    top: (frameHeight - side) * (focusY ?? 0.5) - crop.y * scale,
   };
 }

@@ -56,7 +56,13 @@ const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
 type Reply = { status: number; body?: unknown; after?: Promise<void> } | "no answer";
 
 let replies: Reply[] = [];
-let sent: { file: File; animalId: string; imageId: string; expectedUrl: string }[] = [];
+let sent: {
+  file: File;
+  animalId: string;
+  imageId: string;
+  expectedUrl: string;
+  focusY: FormDataEntryValue | null;
+}[] = [];
 let unexpected: string[] = [];
 
 const SAVED: ReplaceablePhoto = { id: "image-1", url: "/old-photo.webp" };
@@ -80,6 +86,7 @@ beforeEach(async () => {
       animalId: String(form.get("animalId")),
       imageId: String(form.get("imageId")),
       expectedUrl: String(form.get("expectedUrl")),
+      focusY: form.get("focusY"),
     });
     const reply = replies.shift();
     if (!reply) {
@@ -355,4 +362,41 @@ test("a photo still opening when the page is left is let go of", async () => {
   await settle();
 
   expect(live()).toEqual([]);
+});
+
+test("the new photo is sent with its framing, or none when left centred", async () => {
+  replies = [
+    { status: 200, body: { url: "https://example.test/one.webp" } },
+    { status: 200, body: { url: "https://example.test/two.webp" } },
+    { status: 200, body: { url: "https://example.test/three.webp" } },
+  ];
+  const pagePreview = page.getByRole("slider", { name: "Framing: Animal's page" });
+  const replaceAgain = async (name: string) => {
+    await page.getByRole("button", { name: "Replace this photo" }).click();
+    await userEvent.upload(page.getByTestId("replace-photo-file-input"), await photoFile(name));
+    await expect.element(cropBox()).toBeVisible();
+  };
+
+  // Left centred.
+  await replaceWith(await photoFile());
+  await expect.element(cropBox()).toBeVisible();
+  await replaceButton().click();
+  await expect.element(dialog()).not.toBeInTheDocument();
+
+  // Framed at the top.
+  await replaceAgain("rex.png");
+  await pagePreview.click();
+  await userEvent.keyboard("{Home}");
+  await replaceButton().click();
+  await expect.element(dialog()).not.toBeInTheDocument();
+
+  // A new photo starts centred, whatever the last one was framed at.
+  await replaceAgain("nala.png");
+  await expect.element(pagePreview).toHaveAttribute("aria-valuetext", "Centred");
+  await pagePreview.click();
+  await userEvent.keyboard("{End}{ArrowDown}");
+  await replaceButton().click();
+  await expect.element(dialog()).not.toBeInTheDocument();
+
+  expect(sent.map(({ focusY }) => focusY)).toEqual([null, "0", "0.95"]);
 });

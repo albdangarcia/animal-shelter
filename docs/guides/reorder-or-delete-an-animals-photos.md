@@ -1,18 +1,19 @@
 ---
-title: Add, replace, reorder or delete an animal's photos
-summary: Add and crop an animal's photos, replace a badly framed one with a new crop, drag them into order to pick the one shown first, and delete a photo.
+title: Add, frame, replace, reorder or delete an animal's photos
+summary: Add and crop an animal's photos, keep the animal in frame on the website, replace a photo, pick the one shown first, and delete a photo.
 permissions: [ANIMAL_PHOTO_MANAGE]
-aliases: [crop a photo, frame a photo, replace a photo, fix a photo, re-crop a photo, photo cut off, change a photo, primary photo, main photo, cover photo, reorder photos, delete a photo, remove a picture, upload a photo, add a picture]
+aliases: [crop a photo, frame a photo, adjust framing, head cut off, replace a photo, fix a photo, re-crop a photo, photo cut off, change a photo, primary photo, main photo, cover photo, reorder photos, delete a photo, remove a picture, upload a photo, add a picture]
 related: [edit-an-animals-details, find-an-animal]
-verified: 2026-11-17
+verified: 2026-11-19
 ---
 
 ## When to use this
 
 An animal's photos are on its **Photos** tab, under **Current Images**. The
 first one is marked **Primary photo**: it is the one shown on the animal's
-record and first on its listing. Use this guide to add photos, replace one
-that is badly framed, change which one comes first, or delete one.
+record and first on its listing. Use this guide to add photos, keep the
+animal in frame on the website, replace a photo, change which one comes
+first, or delete one.
 
 ## Add photos
 
@@ -33,8 +34,12 @@ not the whole photo: keep the original on your phone or computer.
    - on a phone, drag the square, and use the **Zoom** slider to resize it.
 4. Check the previews under **How it will look**: **Home page**, **Listing**,
    **Animal's page** and **Square**. If the animal's head or feet are cut off
-   in one of them, move the square or zoom out.
-5. Click **Save photo**.
+   in the **Home page** or **Square** preview, move the square or zoom out.
+5. The **Listing** and **Animal's page** previews are wider than the photo,
+   so its top or bottom is cut off there. If the animal's head (or feet) is
+   cut off, drag either of them down (or up) until the animal is in frame;
+   both move together. **Centre** puts the photo back in the middle.
+6. Click **Save photo**.
 
 You should see "Photo saved." with the photo's file name at the top of the
 screen, and the photo appears last under **Current Images**. Drag it to the
@@ -49,27 +54,58 @@ With a keyboard: the square is ready for the keys when a photo opens (its
 outline turns dashed; if it isn't, click the square or press Tab until it
 is). Use the arrow keys to move it (hold Shift to move further) and **+** or
 **-** to resize it. **J** and **K** open the next and previous photo, and
-Enter saves.
+Enter saves. To frame the wide previews, press Tab until the **Listing** or
+**Animal's page** preview has an outline, then use the up and down arrow keys
+(Home and End go to the top and the bottom).
 
 Closing the box with **×** or Esc while some photos aren't saved asks
 "Discard the photos you haven't saved?". Click **Keep cropping** to go back,
 or **Discard** to close without them. Photos already saved stay.
 
+## Keep the animal in frame on the website
+
+The website's listing and the animal's page show each photo wider than it
+is, so the top or bottom of the photo is cut off there. If the animal's head
+is cut off on the website, move the photo up or down in those frames. The
+photo itself isn't changed, so this works for every saved photo.
+
+1. Open the animal, then the **Photos** tab.
+2. Under **Current Images**, point at the photo. Three buttons appear down
+   its right edge: **Adjust framing** (an up-and-down arrow) is the top one.
+3. Click **Adjust framing**. An **Adjust framing** box opens with the photo
+   as the **Listing** and the **Animal's page** show it.
+4. Drag either preview down to show more of the top of the photo, or up to
+   show more of the bottom, until the animal is in frame. **Centre** puts it
+   back in the middle.
+5. Click **Save framing**.
+
+You should see "Framing saved." at the top of the screen. The listing and
+the animal's page show the photo that way from now on. Nothing is added to
+the activity feed.
+
+To stop without saving, click **Cancel**, **×** or press Esc.
+
+With a keyboard, press Tab until a preview has an outline, then use the up
+and down arrow keys (Home and End go to the top and the bottom).
+
 ## Replace a photo
 
-Use this when a saved photo cuts the animal off, or when you have a better
-one. Only the square is ever saved, so to fix the framing you crop the
-original photo again, from your phone or computer. The new photo takes the
-old one's place: a **Primary photo** stays the primary photo.
+Use this when a saved photo is badly cropped (the animal is cut off even in
+the square), or when you have a better one. Only the square is ever saved, so
+to fix the crop you crop the original photo again, from your phone or
+computer. (If the animal is cut off only on the listing or the animal's page,
+use **Adjust framing** instead: see above.) The new photo takes the old one's
+place: a **Primary photo** stays the primary photo.
 
 1. Open the animal, then the **Photos** tab.
 2. Under **Current Images**, point at the photo. A **Replace photo** button
-   (a picture with an arrow) appears beside the red bin.
+   (a picture with an arrow) appears above the red bin.
 3. Click **Replace photo** and pick the new photo. Photos can be JPEG, PNG
    or WebP.
 4. A **Replace photo** box opens, with the photo you are replacing beside it
-   under **Now**. Move and resize the square over the animal, as when adding
-   a photo, and check the previews.
+   under **Now**. Move and resize the square over the animal, and frame the
+   wide previews, as when adding a photo. The new photo starts centred,
+   whatever the old one's framing was.
 5. Click **Replace photo**.
 
 You should see "Photo replaced." with the file's name at the top of the
@@ -154,13 +190,25 @@ A deleted photo can't be restored. To have it back, add the file again (see
   photo again; if it keeps happening, tell an admin.
 - **"This photo wasn't found. It may have been deleted in another tab.
   Reload the page."** Someone deleted the photo since you opened the page,
-  so it wasn't deleted or replaced again. Reload it: the photo is gone.
+  so it wasn't deleted, replaced or framed again. Reload it: the photo is
+  gone.
 - **"This photo has changed since you opened the page. It may have been
   replaced in another tab. Reload the page and try again."** Someone
   replaced the photo since you opened the page, so yours wasn't saved over
-  theirs, or the photo wasn't deleted. Click **Cancel** if the **Replace
-  photo** box is open, reload the page, look at the photo now there, and
-  replace or delete it again if it still needs it.
+  theirs, the photo wasn't deleted, or your framing (made for the old
+  photo) wasn't saved. Click **Cancel** if the **Replace photo** or **Adjust
+  framing** box is open, reload the page, look at the photo now there, and
+  replace, frame or delete it again if it still needs it.
+- **"The framing wasn't saved. Try again."** The **Adjust framing** box
+  stays open: click **Save framing** again. If it keeps happening, tell an
+  admin.
+- **"Couldn't reach the server, so the framing wasn't saved. Check your
+  connection and try again."** Check that you are online, then click **Save
+  framing** again. If it keeps happening, reload the page: your sign-in may
+  have run out.
+- **"The photo's framing wasn't understood. Reload the page and try
+  again."** Reload the page and frame the photo again. If it keeps
+  happening, tell an admin.
 - **"This file can't be opened as a photo in this browser, so the photo
   wasn't replaced. Choose a JPEG, PNG or WebP photo. To have an iPhone take
   JPEG photos, set Settings > Camera > Formats to Most Compatible."** The

@@ -29,7 +29,7 @@ import { initialCrop, type Crop } from "@/app/lib/utils/photo-crop";
 import PhotoCropEditor from "./photo-crop-editor";
 import { openPhoto } from "./crop-photo";
 import { UNREADABLE_REPLACEMENT_MESSAGE } from "./upload-errors";
-import { saveCrop } from "./save-crop";
+import { focusField, saveCrop } from "./save-crop";
 
 export const PHOTO_REPLACE_ENDPOINT = "/api/animal-photos/replace";
 export const PHOTO_REPLACED_MESSAGE = "Photo replaced.";
@@ -56,6 +56,8 @@ interface Replacement {
   width: number;
   height: number;
   crop: Crop;
+  /** Where the new square sits in the wide frames; null is centred. */
+  focusY: number | null;
 }
 
 /** Keys that belong to a focused control, not to the dialog's Enter. */
@@ -126,6 +128,7 @@ export function usePhotoReplacer(animalId: string) {
       width,
       height,
       crop: initialCrop(width, height),
+      focusY: null,
     });
   };
 
@@ -138,6 +141,7 @@ export function usePhotoReplacer(animalId: string) {
         animalId,
         imageId: current.image.id,
         expectedUrl: current.image.url,
+        ...focusField(current.focusY),
       });
       if (!saved.ok) {
         toast.error(saved.message, {
@@ -242,6 +246,10 @@ export function usePhotoReplacer(animalId: string) {
                 crop={replacement.crop}
                 onCropChange={(crop) =>
                   setReplacement((before) => (before ? { ...before, crop } : before))
+                }
+                focusY={replacement.focusY}
+                onFocusChange={(focusY) =>
+                  setReplacement((before) => (before ? { ...before, focusY } : before))
                 }
                 autoFocus
               />
