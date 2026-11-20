@@ -3,7 +3,7 @@ title: Edit an animal's details
 summary: Correct an animal's name, species, breed, colors, sex, birth date, size, height or description, or change its listing between Draft and Published.
 permissions: [ANIMAL_INFO_MANAGE]
 aliases: [edit profile, change animal name, wrong breed, mixed breed, additional breeds, wrong birth date, publish an animal, unpublish, listing status, expected adult size]
-related: [move-an-animal-to-another-unit, find-an-animal, record-weight-and-vitals, record-or-correct-a-microchip, record-a-surgery-spay-neuter-or-exemption, correct-an-intake, add-edit-or-delete-a-species-breed-or-color]
+related: [move-an-animal-to-another-unit, find-an-animal, record-weight-and-vitals, record-or-correct-a-microchip, record-a-surgery-spay-neuter-or-exemption, correct-an-intake, add-edit-or-delete-a-species-breed-or-color, add-and-crop-an-animals-photos]
 verified: 2026-11-16
 ---
 

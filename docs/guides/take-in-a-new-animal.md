@@ -3,7 +3,7 @@ title: Take in a new animal
 summary: Record a new animal and the intake that brought it in, such as a stray, a surrender or a transfer, and see the care its protocol schedules.
 permissions: [INTAKE_MANAGE]
 aliases: [new animal, add an animal, admit an animal, intake form, new intake, stray intake, owner surrender, surrender an animal, transfer in, born in care, seized animal, impound, create intake, check in an animal, register a new animal]
-related: [take-back-an-animal-that-left, correct-an-intake, find-an-intake, set-up-or-change-a-medical-protocol, record-or-correct-a-microchip, record-a-surgery-spay-neuter-or-exemption, add-edit-or-delete-a-location-or-unit, schedule-care-and-read-the-due-page, edit-an-animals-details, move-an-animal-to-another-unit, reorder-or-delete-an-animals-photos]
+related: [take-back-an-animal-that-left, correct-an-intake, find-an-intake, set-up-or-change-a-medical-protocol, record-or-correct-a-microchip, record-a-surgery-spay-neuter-or-exemption, add-edit-or-delete-a-location-or-unit, schedule-care-and-read-the-due-page, edit-an-animals-details, move-an-animal-to-another-unit, add-and-crop-an-animals-photos]
 verified: 2026-11-16
 ---
 

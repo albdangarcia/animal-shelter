@@ -41,6 +41,7 @@ export const PAGE_HELP_GUIDES = {
   animals: "find-an-animal",
   animalEdit: "edit-an-animals-details",
   animalPhotos: "reorder-or-delete-an-animals-photos",
+  animalPhotoUpload: "add-and-crop-an-animals-photos",
   animalVitals: "record-weight-and-vitals",
   animalCharacteristics: "set-an-animals-characteristics",
   animalAssessments: "record-a-behavior-assessment",
