@@ -60,7 +60,7 @@ const _unlinkPersonAccount = async (
   return {
     ok: true,
     message:
-      "Login account unlinked. It now has its own person record, and this one is staff-editable again.",
+      "Login account unlinked. It now lives on this new person record, and the original record is staff-editable again.",
     data: { replacementPersonId },
   };
 };
