@@ -3,7 +3,7 @@ title: Review an application and change its status
 summary: Read an application, move it to Reviewing, Waitlisted, Approved or Rejected with a reason, and know what to do next to finish the adoption.
 permissions: [APPLICATIONS_MANAGE_STATUS]
 aliases: [approve an application, reject an application, waitlist an applicant, application review, accept an applicant, deny an adoption application, process adoption application, change application status, internal notes on an application, who changed the application]
-related: [adoption-application-status-glossary, find-an-adoption-application, edit-an-adoption-application-for-an-applicant, record-an-outcome, reverse-an-outcome-recorded-by-mistake]
+related: [adoption-application-status-glossary, find-an-adoption-application, edit-an-adoption-application-for-an-applicant, record-an-outcome, reverse-an-outcome-recorded-by-mistake, turn-a-foster-into-an-adoption]
 verified: 2026-11-20
 ---
 

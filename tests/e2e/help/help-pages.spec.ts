@@ -24,10 +24,13 @@ const VITALS_GUIDE = "Record weight and vitals";
 const DUE_GUIDE = "Schedule care and read the Due page";
 const FOSTER_GUIDE = "Fosters: give care and report an outside vet visit";
 // Every signed-in account holds the applicant permissions, so a foster sees
-// the two applicant guides beside the foster one.
+// the applicant guides (adopting and fostering) beside the foster care one.
 const APPLY_GUIDE = "Apply to adopt an animal";
 const MY_APPLICATION_GUIDE =
   "Check, change, withdraw or reactivate your adoption application";
+const APPLY_TO_FOSTER_GUIDE =
+  "Apply to foster, check your application and withdraw it";
+const MY_FOSTER_ANIMALS_GUIDE = "See the animals in your care";
 
 let animalId: string;
 
@@ -169,10 +172,12 @@ test.describe("a foster", () => {
     await expect(searchBox(page)).toBeVisible();
 
     const results = guideList(page).getByRole("listitem");
-    await expect(results).toHaveCount(3);
+    await expect(results).toHaveCount(5);
     await expect(results.filter({ hasText: FOSTER_GUIDE })).toHaveCount(1);
     await expect(results.filter({ hasText: APPLY_GUIDE })).toHaveCount(1);
     await expect(results.filter({ hasText: MY_APPLICATION_GUIDE })).toHaveCount(1);
+    await expect(results.filter({ hasText: APPLY_TO_FOSTER_GUIDE })).toHaveCount(1);
+    await expect(results.filter({ hasText: MY_FOSTER_ANIMALS_GUIDE })).toHaveCount(1);
 
     // A staff guide answers exactly like a guide that doesn't exist.
     await page.goto("/dashboard/help/record-a-vaccine-test-or-treatment");

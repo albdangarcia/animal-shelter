@@ -3,7 +3,7 @@ title: "Staff: verify a foster's outside vet report"
 summary: Review a vet visit a foster reported, record the care its paperwork supports, then mark it reviewed or dismiss it.
 permissions: [MEDICAL_MANAGE]
 aliases: [foster vet report, review foster report, foster took animal to vet, foster paperwork, waiting for review, dismiss report]
-related: [foster-give-care-and-report-a-vet-visit, schedule-care-and-read-the-due-page, record-a-vaccine-test-or-treatment, upload-and-manage-medical-documents, medical-status-glossary]
+related: [foster-give-care-and-report-a-vet-visit, schedule-care-and-read-the-due-page, record-a-vaccine-test-or-treatment, upload-and-manage-medical-documents, medical-status-glossary, place-an-animal-in-foster, return-an-animal-from-foster]
 verified: 2026-11-10
 ---
 

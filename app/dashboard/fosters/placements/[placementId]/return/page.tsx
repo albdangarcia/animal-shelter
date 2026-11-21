@@ -7,6 +7,9 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchFosterPlacementById } from "@/app/lib/data/fosters/fosters.data";
 import { fetchUnitPickerOptions } from "@/app/lib/data/locations/unit-picker.data";
 import { ReturnFromFosterForm } from "@/components/dashboard/fosters/placements/return-from-foster-form";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: Promise<{ placementId: string }>;
@@ -44,10 +47,16 @@ const PageContent = async ({ params }: Props) => {
     );
   }
 
-  const unitOptions = await fetchUnitPickerOptions();
+  const [unitOptions, help] = await Promise.all([
+    fetchUnitPickerOptions(),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.fosterReturn),
+  ]);
 
   return (
     <main className="container mx-auto">
+      <div className="mx-auto mb-2 flex w-full max-w-2xl justify-end">
+        <HelpLink guide={help} />
+      </div>
       <ReturnFromFosterForm
         placement={{
           id: placement.id,

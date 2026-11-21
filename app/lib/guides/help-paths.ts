@@ -60,4 +60,13 @@ export const PAGE_HELP_GUIDES = {
   applicationCreate: "enter-an-adoption-application-for-someone",
   applicationEdit: "edit-an-adoption-application-for-an-applicant",
   myApplications: "check-edit-withdraw-or-reactivate-your-application",
+  fosterApplications: "review-a-foster-application",
+  fosters: "find-a-foster-or-a-placement",
+  fosterNew: "add-a-foster-without-an-application",
+  fosterProfile: "pause-deactivate-or-change-a-foster",
+  fosterPlacementNew: "place-an-animal-in-foster",
+  fosterReturn: "return-an-animal-from-foster",
+  fosterConvert: "turn-a-foster-into-an-adoption",
+  myFosterApplication: "apply-to-foster-and-withdraw",
+  myFosterAnimals: "see-the-animals-in-your-care",
 } as const;

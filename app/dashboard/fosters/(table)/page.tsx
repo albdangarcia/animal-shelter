@@ -16,6 +16,9 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 import { fetchFosters } from "@/app/lib/data/fosters/fosters.data";
 import { fetchSpecies } from "@/app/lib/data/animals/animal.data";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
@@ -48,7 +51,7 @@ const PageContent = async ({ searchParams }: Props) => {
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
-  const [{ fosters, totalPages, totalRows }, speciesList, canManage] =
+  const [{ fosters, totalPages, totalRows }, speciesList, canManage, help] =
     await Promise.all([
       fetchFosters(
         query,
@@ -61,6 +64,7 @@ const PageContent = async ({ searchParams }: Props) => {
       ),
       fetchSpecies(),
       hasPermission(AppPermissions.FOSTERS_MANAGE),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.fosters),
     ]);
 
   const speciesOptions = speciesList.map((s) => ({ label: s.name, value: s.id }));
@@ -72,7 +76,7 @@ const PageContent = async ({ searchParams }: Props) => {
         <CardDescription>
           Approved fosters, their capabilities, and current capacity.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-2">
           <span
             className={cn("inline-block", !canManage && "cursor-not-allowed")}
           >
@@ -91,6 +95,7 @@ const PageContent = async ({ searchParams }: Props) => {
               </Link>
             </Button>
           </span>
+          <HelpLink guide={help} />
         </CardAction>
       </CardHeader>
       <CardContent>
