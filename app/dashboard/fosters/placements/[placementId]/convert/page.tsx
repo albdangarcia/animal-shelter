@@ -10,6 +10,9 @@ import {
   fetchFosterPlacementById,
 } from "@/app/lib/data/fosters/fosters.data";
 import { ConvertFosterToAdoptionForm } from "@/components/dashboard/fosters/placements/convert-foster-to-adoption-form";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: Promise<{ placementId: string }>;
@@ -61,13 +64,19 @@ const PageContent = async ({ params }: Props) => {
     );
   }
 
-  const approvedApplications = await fetchApprovedFosterApplications(
-    placement.fosterProfile.person.id,
-    placement.animal.id,
-  );
+  const [approvedApplications, help] = await Promise.all([
+    fetchApprovedFosterApplications(
+      placement.fosterProfile.person.id,
+      placement.animal.id,
+    ),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.fosterConvert),
+  ]);
 
   return (
     <main className="container mx-auto">
+      <div className="mx-auto mb-2 flex w-full max-w-2xl justify-end">
+        <HelpLink guide={help} />
+      </div>
       <ConvertFosterToAdoptionForm
         // Keyed so a client-side navigation between two placements' convert
         // pages remounts the form instead of reusing the instance — without

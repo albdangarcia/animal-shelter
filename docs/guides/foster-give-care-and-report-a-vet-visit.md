@@ -3,7 +3,7 @@ title: "Fosters: give care and report an outside vet visit"
 summary: For fosters. Record the doses and treatments you give your foster animal, and tell the shelter about a vet visit.
 permissions: [MY_FOSTER_ANIMALS_CARE]
 aliases: [foster medication, gave the pill, foster dewormer, missed a dose, took my foster to the vet, upload vet paperwork]
-related: [verify-a-fosters-vet-visit-report]
+related: [verify-a-fosters-vet-visit-report, see-the-animals-in-your-care]
 verified: 2026-11-09
 ---
 

@@ -11,6 +11,9 @@ import { FosterProfileEmptyState } from "@/components/dashboard/fosters/profile/
 import { FosterProfileStatusCard } from "@/components/dashboard/fosters/profile/foster-profile-status-card";
 import { FosterCurrentPlacementsCard } from "@/components/dashboard/fosters/profile/foster-current-placements-card";
 import { FosterPlacementHistoryCard } from "@/components/dashboard/fosters/profile/foster-placement-history-card";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: IDParamType;
@@ -30,9 +33,10 @@ const Page = async ({ params }: Props) => {
 const PageContent = async ({ params }: Props) => {
   const { id: personId } = await params;
 
-  const [profile, canManage] = await Promise.all([
+  const [profile, canManage, help] = await Promise.all([
     fetchFosterProfileByPersonId(personId),
     hasPermission(AppPermissions.FOSTERS_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.fosterProfile),
   ]);
 
   if (!profile) {
@@ -53,6 +57,9 @@ const PageContent = async ({ params }: Props) => {
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <HelpLink guide={help} />
+      </div>
       <FosterProfileStatusCard
         profile={profile}
         canManage={canManage}

@@ -129,6 +129,10 @@ export const HELP_PERMISSIONS: readonly AppPermission[] = [
   AppPermissions.PERSONS_MANAGE,
   AppPermissions.MY_APPLICATIONS_READ,
   AppPermissions.MY_APPLICATIONS_MANAGE,
+  AppPermissions.FOSTERS_READ,
+  AppPermissions.FOSTERS_MANAGE,
+  AppPermissions.MY_FOSTER_APPLICATION_MANAGE,
+  AppPermissions.MY_FOSTER_ANIMALS_READ,
 ] as const;
 
 export interface NavDocument {

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { PawPrint } from "lucide-react";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -15,6 +16,9 @@ import { fetchMyFosterAnimals } from "@/app/lib/data/fosters/my-foster-animals.d
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import { FosterAnimalCard } from "@/components/dashboard/my-foster-animals/foster-animal-card";
 import { PastFostersCard } from "@/components/dashboard/my-foster-animals/past-fosters-card";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 const Page = async () => {
   return (
@@ -28,8 +32,12 @@ const Page = async () => {
 };
 
 const PageContent = async () => {
-  const [{ hasFosterProfile, currentPlacements, pastPlacements }, today] =
-    await Promise.all([fetchMyFosterAnimals(), getShelterToday()]);
+  const [{ hasFosterProfile, currentPlacements, pastPlacements }, today, help] =
+    await Promise.all([
+      fetchMyFosterAnimals(),
+      getShelterToday(),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.myFosterAnimals),
+    ]);
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
@@ -41,6 +49,9 @@ const PageContent = async () => {
           <CardDescription>
             Animals currently placed with you as a foster.
           </CardDescription>
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
         </CardHeader>
         <CardContent>
           {!hasFosterProfile ? (

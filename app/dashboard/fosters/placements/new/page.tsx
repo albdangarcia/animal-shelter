@@ -14,6 +14,9 @@ import {
 } from "@/app/lib/data/fosters/fosters.data";
 import { PlacementCreateForm } from "@/components/dashboard/fosters/placements/placement-create-form";
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -32,6 +35,7 @@ const Page = async ({ searchParams }: Props) => {
 
 const PageContent = async ({ searchParams }: Props) => {
   const { animalId, fosterProfileId } = (await searchParams) || {};
+  const help = await getHelpLinkGuide(PAGE_HELP_GUIDES.fosterPlacementNew);
 
   if ((animalId && fosterProfileId) || (!animalId && !fosterProfileId)) {
     return notFound();
@@ -74,6 +78,9 @@ const PageContent = async ({ searchParams }: Props) => {
 
     return (
       <main className="container mx-auto">
+        <div className="mx-auto mb-2 flex w-full max-w-2xl justify-end">
+          <HelpLink guide={help} />
+        </div>
         <PlacementCreateForm
           fixedAnimal={{ id: animal.id, name: animal.name }}
           fosterOptions={fosterOptions}
@@ -123,6 +130,9 @@ const PageContent = async ({ searchParams }: Props) => {
 
   return (
     <main className="container mx-auto">
+      <div className="mx-auto mb-2 flex w-full max-w-2xl justify-end">
+        <HelpLink guide={help} />
+      </div>
       <PlacementCreateForm
         fixedFoster={{ id: fosterProfile.id, personName: fosterProfile.personName }}
         animalOptions={animalOptions}
