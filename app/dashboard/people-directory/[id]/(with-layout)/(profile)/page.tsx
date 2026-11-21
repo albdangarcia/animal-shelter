@@ -18,6 +18,9 @@ import Link from "next/link";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { HouseholdProfileCard } from "@/components/dashboard/household/household-profile-card";
 import { UnlinkAccountButton } from "@/components/dashboard/people-directory/unlink-account-button";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: IDParamType;
@@ -37,18 +40,24 @@ const Page = async ({ params }: Props) => {
 const PageContent = async ({ params }: Props) => {
   const { id } = await params;
 
-  const [person, canManage, canUnlinkAccount] = await Promise.all([
-    fetchPersonProfileTabData(id),
-    hasPermission(AppPermissions.PERSONS_MANAGE),
-    hasPermission(AppPermissions.PERSON_ACCOUNT_UNLINK),
-  ]);
+  const [person, canManage, canUnlinkAccount, help, unlinkHelp] =
+    await Promise.all([
+      fetchPersonProfileTabData(id),
+      hasPermission(AppPermissions.PERSONS_MANAGE),
+      hasPermission(AppPermissions.PERSON_ACCOUNT_UNLINK),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.personProfile),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.personUnlink),
+    ]);
 
   if (!person) {
     notFound();
   }
 
   return (
-    <div className="@container/profile-cards">
+    <div className="@container/profile-cards space-y-2">
+      <div className="flex justify-end">
+        <HelpLink guide={help} />
+      </div>
       <div className="grid grid-cols-1 gap-4 @[700px]/profile-cards:grid-cols-2">
         {/* Card 1 — Contact & Account Details */}
         <Card>
@@ -117,7 +126,8 @@ const PageContent = async ({ params }: Props) => {
                 )}
               </div>
               {person.user && canUnlinkAccount && (
-                <div className="mt-4 flex justify-end">
+                <div className="mt-4 flex items-center justify-end gap-2">
+                  <HelpLink guide={unlinkHelp} />
                   <UnlinkAccountButton
                     personId={person.id}
                     personName={person.name}

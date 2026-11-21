@@ -3,7 +3,7 @@ title: Add a foster without an application
 summary: Put a person on the foster roster straight away, for a walk-in or an emergency, and know what that skips.
 permissions: [FOSTERS_MANAGE]
 aliases: [add foster directly, direct add foster, emergency foster, walk-in foster, foster without application, add as foster, create foster profile, add someone to the foster roster]
-related: [review-a-foster-application, pause-deactivate-or-change-a-foster, place-an-animal-in-foster, find-a-foster-or-a-placement]
+related: [review-a-foster-application, pause-deactivate-or-change-a-foster, place-an-animal-in-foster, find-a-foster-or-a-placement, add-a-person]
 verified: 2026-11-20
 ---
 

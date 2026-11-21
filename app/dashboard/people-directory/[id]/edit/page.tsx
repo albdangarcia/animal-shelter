@@ -5,6 +5,9 @@ import StatusPage from "@/components/StatusPage";
 import { fetchPersonForEdit } from "@/app/lib/data/people-directory/people-directory.data";
 import { IDParamType, SearchParamsType } from "@/app/lib/types";
 import { notFound } from "next/navigation";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: IDParamType;
@@ -27,7 +30,10 @@ const PageContent = async ({ params, searchParams }: Props) => {
   const { returnTo } = await searchParams;
   const resolvedReturnTo = typeof returnTo === "string" ? returnTo : undefined;
 
-  const person = await fetchPersonForEdit(id);
+  const [person, help] = await Promise.all([
+    fetchPersonForEdit(id),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.personEdit),
+  ]);
 
   if (!person) {
     notFound();
@@ -35,6 +41,9 @@ const PageContent = async ({ params, searchParams }: Props) => {
 
   return (
     <main>
+      <div className="mx-auto mb-2 flex w-full max-w-3xl justify-end">
+        <HelpLink guide={help} />
+      </div>
       <PersonForm person={person} returnTo={resolvedReturnTo} />
     </main>
   );

@@ -3,7 +3,7 @@ title: Apply to foster, check your application and withdraw it
 summary: For people who want to foster. Send the shelter a foster application, follow it, and withdraw it if you change your mind.
 permissions: [MY_FOSTER_APPLICATION_MANAGE]
 aliases: [become a foster, foster an animal, foster application, volunteer to foster, how do I foster, sign up to foster, withdraw foster application, cancel foster application, foster parent]
-related: [see-the-animals-in-your-care, foster-give-care-and-report-a-vet-visit]
+related: [see-the-animals-in-your-care, foster-give-care-and-report-a-vet-visit, update-your-own-profile-and-household]
 verified: 2026-11-20
 ---
 

@@ -3,7 +3,7 @@ title: Apply to adopt an animal
 summary: For adopters. Send the shelter an application to adopt an animal, and know what happens next.
 permissions: [MY_APPLICATIONS_READ, MY_APPLICATIONS_MANAGE]
 aliases: [adopt a pet, adoption form, how do I adopt, submit an application, adopt a dog, adopt a cat, apply for a pet]
-related: [check-edit-withdraw-or-reactivate-your-application, apply-to-foster-and-withdraw]
+related: [check-edit-withdraw-or-reactivate-your-application, apply-to-foster-and-withdraw, update-your-own-profile-and-household]
 verified: 2026-11-20
 ---
 

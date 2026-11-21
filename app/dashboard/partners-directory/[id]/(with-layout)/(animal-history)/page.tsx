@@ -4,6 +4,9 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import PartnerAnimalHistory from "@/components/dashboard/partners-directory/animal-history/partner-animal-history";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: IDParamType;
@@ -23,9 +26,19 @@ const Page = async ({ params }: Props) => {
 const PageContent = async ({ params }: Props) => {
   const { id: partnerId } = await params;
 
-  const { history } = await fetchPartnerAnimalHistory(partnerId);
+  const [{ history }, help] = await Promise.all([
+    fetchPartnerAnimalHistory(partnerId),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.partnerHistory),
+  ]);
 
-  return <PartnerAnimalHistory history={history} />;
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <HelpLink guide={help} />
+      </div>
+      <PartnerAnimalHistory history={history} />
+    </div>
+  );
 };
 
 export default Page;

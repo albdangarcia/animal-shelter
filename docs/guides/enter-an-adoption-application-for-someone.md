@@ -3,7 +3,7 @@ title: Enter an adoption application for someone
 summary: File an adoption application on behalf of a person, for example a walk-in or someone on the phone, and know what is and isn't saved.
 permissions: [PERSONS_MANAGE]
 aliases: [walk-in application, add an application, apply for someone, phone application, paper application, submit on behalf of an applicant, new adoption application, applicant without an account]
-related: [edit-an-adoption-application-for-an-applicant, adoption-application-status-glossary, find-an-adoption-application, review-an-application-and-change-its-status]
+related: [edit-an-adoption-application-for-an-applicant, adoption-application-status-glossary, find-an-adoption-application, review-an-application-and-change-its-status, add-a-person, edit-a-persons-details-and-household]
 verified: 2026-11-20
 ---
 
