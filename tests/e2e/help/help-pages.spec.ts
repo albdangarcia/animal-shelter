@@ -12,8 +12,8 @@ import {
 // which guide, the search ranking, link rewriting and the anchor check are
 // covered by the unit tests in app/lib/guides/. This is what only a browser
 // can show: a search, a guide and its links working end to end, that a
-// foster's Help holds only the foster guide and a staff guide's URL is
-// not-found for them, and that the "?" on a page opens its guide.
+// foster's Help holds the foster and applicant guides but no staff guide, whose
+// URL is not-found for them, and that the "?" on a page opens its guide.
 
 const staffState = storageStatePathFor("help-pages-staff.state.json");
 const fosterState = storageStatePathFor("help-pages-foster.state.json");
@@ -23,6 +23,11 @@ const VACCINE_GUIDE = "Record a vaccine, test or treatment";
 const VITALS_GUIDE = "Record weight and vitals";
 const DUE_GUIDE = "Schedule care and read the Due page";
 const FOSTER_GUIDE = "Fosters: give care and report an outside vet visit";
+// Every signed-in account holds the applicant permissions, so a foster sees
+// the two applicant guides beside the foster one.
+const APPLY_GUIDE = "Apply to adopt an animal";
+const MY_APPLICATION_GUIDE =
+  "Check, change, withdraw or reactivate your adoption application";
 
 let animalId: string;
 
@@ -159,13 +164,15 @@ test.describe("a volunteer", () => {
 test.describe("a foster", () => {
   test.use({ storageState: fosterState });
 
-  test("sees only the foster guide, and a staff guide's URL is not found", async ({ page }) => {
+  test("sees the foster and applicant guides, and a staff guide's URL is not found", async ({ page }) => {
     await page.goto("/dashboard/help");
     await expect(searchBox(page)).toBeVisible();
 
     const results = guideList(page).getByRole("listitem");
-    await expect(results).toHaveCount(1);
-    await expect(results.first()).toContainText(FOSTER_GUIDE);
+    await expect(results).toHaveCount(3);
+    await expect(results.filter({ hasText: FOSTER_GUIDE })).toHaveCount(1);
+    await expect(results.filter({ hasText: APPLY_GUIDE })).toHaveCount(1);
+    await expect(results.filter({ hasText: MY_APPLICATION_GUIDE })).toHaveCount(1);
 
     // A staff guide answers exactly like a guide that doesn't exist.
     await page.goto("/dashboard/help/record-a-vaccine-test-or-treatment");

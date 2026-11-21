@@ -53,4 +53,11 @@ export const PAGE_HELP_GUIDES = {
   outcomes: "find-an-outcome",
   outcomeCreate: "record-an-outcome",
   outcomeCorrection: "correct-an-outcome",
+  applications: "find-an-adoption-application",
+  animalApplications: "find-an-adoption-application",
+  personApplications: "find-an-adoption-application",
+  applicationReview: "review-an-application-and-change-its-status",
+  applicationCreate: "enter-an-adoption-application-for-someone",
+  applicationEdit: "edit-an-adoption-application-for-an-applicant",
+  myApplications: "check-edit-withdraw-or-reactivate-your-application",
 } as const;

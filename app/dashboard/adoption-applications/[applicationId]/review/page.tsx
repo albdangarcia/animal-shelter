@@ -8,6 +8,9 @@ import { ArrowLeft } from "lucide-react";
 import { SearchParamsType } from "@/app/lib/types";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { AppPermissions } from "@/app/lib/auth/permissions";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: Promise<{ applicationId: string }>;
@@ -24,7 +27,10 @@ const Page = async ({ params, searchParams }: Props) => {
     notFound();
   }
 
-  const canCreateOutcome = await hasPermission(AppPermissions.OUTCOMES_MANAGE);
+  const [canCreateOutcome, help] = await Promise.all([
+    hasPermission(AppPermissions.OUTCOMES_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.applicationReview),
+  ]);
   const animal = userApplication.animal;
 
   if (!animal) {
@@ -33,12 +39,15 @@ const Page = async ({ params, searchParams }: Props) => {
 
   return (
     <main className="container mx-auto">
-      <Button asChild variant="ghost" className="mb-4">
-        <Link href={returnTo ?? "/dashboard/adoption-applications"}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Applications
-        </Link>
-      </Button>
+      <div className="mb-4 flex items-center justify-between">
+        <Button asChild variant="ghost">
+          <Link href={returnTo ?? "/dashboard/adoption-applications"}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Applications
+          </Link>
+        </Button>
+        <HelpLink guide={help} />
+      </div>
 
       <Suspense fallback={<div>Loading application...</div>}>
         <StaffApplicationUpdateForm

@@ -14,6 +14,9 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
@@ -38,10 +41,11 @@ const PageContent = async ({ searchParams, params }: Props) => {
   const { page = "1" } = await searchParams;
   const currentPage = Number(page);
 
-  const [canManage, { applications, totalPages, totalRows }] =
+  const [canManage, { applications, totalPages, totalRows }, help] =
     await Promise.all([
       hasPermission(AppPermissions.PERSONS_MANAGE),
       fetchPersonAdoptionApplications(currentPage, personId),
+      getHelpLinkGuide(PAGE_HELP_GUIDES.personApplications),
     ]);
 
   return (
@@ -53,15 +57,18 @@ const PageContent = async ({ searchParams, params }: Props) => {
         <CardDescription>
           Applications this person has submitted.
         </CardDescription>
-        {canManage && (
-          <CardAction>
-            <Button asChild size="sm">
-              <Link
-                href={`/dashboard/adoption-applications/new?personId=${personId}&returnTo=/dashboard/people-directory/${personId}/adoption-applications`}
-              >
-                Add Application
-              </Link>
-            </Button>
+        {(canManage || help) && (
+          <CardAction className="flex items-center gap-2">
+            {canManage && (
+              <Button asChild size="sm">
+                <Link
+                  href={`/dashboard/adoption-applications/new?personId=${personId}&returnTo=/dashboard/people-directory/${personId}/adoption-applications`}
+                >
+                  Add Application
+                </Link>
+              </Button>
+            )}
+            <HelpLink guide={help} />
           </CardAction>
         )}
       </CardHeader>

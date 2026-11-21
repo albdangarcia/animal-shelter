@@ -13,6 +13,9 @@ import MyAppTableToolbar from "@/components/dashboard/my-adoption-applications/t
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { fetchMyAdoptionApplications } from "@/app/lib/data/my-adoption-applications.data";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -29,13 +32,16 @@ const Page = async ({ searchParams }: Props) => {
   const currentPage = Number(page);
   const currentPageSize = Number(pageSize);
 
-  const { myApplications, totalPages, totalRows } = await fetchMyAdoptionApplications(
-    query,
-    currentPage,
-    sort,
-    status,
-    currentPageSize,
-  );
+  const [{ myApplications, totalPages, totalRows }, help] = await Promise.all([
+    fetchMyAdoptionApplications(
+      query,
+      currentPage,
+      sort,
+      status,
+      currentPageSize,
+    ),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.myApplications),
+  ]);
 
   return (
     <Card className="@container/card">
@@ -46,10 +52,11 @@ const Page = async ({ searchParams }: Props) => {
         <CardDescription>
           List of your submitted adoption applications.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-2">
           <Button asChild size="sm">
             <Link href="/pets">Adopt Pets</Link>
           </Button>
+          <HelpLink guide={help} />
         </CardAction>
       </CardHeader>
       <CardContent>

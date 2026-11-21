@@ -3,7 +3,7 @@ title: Find an animal
 summary: Look an animal up on the Animals list by name, listing status or sex, and open its record.
 permissions: [ANIMAL_INFO_READ]
 aliases: [search animals, look up an animal, animals list, archived animals, open an animal, animal profile, animal record]
-related: [edit-an-animals-details, read-an-animals-activity-and-journey, find-an-intake, take-in-a-new-animal, add-and-crop-an-animals-photos]
+related: [edit-an-animals-details, read-an-animals-activity-and-journey, find-an-intake, take-in-a-new-animal, add-and-crop-an-animals-photos, find-an-adoption-application]
 verified: 2026-11-16
 ---
 

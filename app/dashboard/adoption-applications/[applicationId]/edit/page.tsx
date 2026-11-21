@@ -5,6 +5,9 @@ import { fetchAdoptionApplicationForEdit } from "@/app/lib/data/people-directory
 import { notFound } from "next/navigation";
 import StaffAdoptionApplicationEditForm from "@/components/dashboard/people-directory/adoption-applications/staff-adoption-application-edit-form";
 import { SearchParamsType } from "@/app/lib/types";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: Promise<{ applicationId: string }>;
@@ -26,7 +29,10 @@ const PageContent = async ({ params, searchParams }: Props) => {
   const { applicationId } = await params;
   const { returnTo } = await searchParams;
 
-  const application = await fetchAdoptionApplicationForEdit(applicationId);
+  const [application, help] = await Promise.all([
+    fetchAdoptionApplicationForEdit(applicationId),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.applicationEdit),
+  ]);
 
   if (!application) {
     notFound();
@@ -34,6 +40,9 @@ const PageContent = async ({ params, searchParams }: Props) => {
 
   return (
     <main>
+      <div className="mx-auto mb-2 flex w-full max-w-3xl justify-end">
+        <HelpLink guide={help} />
+      </div>
       <StaffAdoptionApplicationEditForm
         application={application}
         personId={application.applicantId}
