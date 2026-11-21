@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ApplicationStatus } from "@/prisma/generated/enums";
-import { cuidSchema } from "./common.schemas";
+import { pickedCuidSchema } from "./common.schemas";
 import { householdSuperRefine } from "./household-profile.schemas";
 import { myAdoptionAppFieldsShape } from "./myAdoptionApplication.schema";
 
@@ -25,7 +25,10 @@ export type StaffUpdateAdoptionAppFormInput = z.input<
 // household refinement is applied once, to the finished object.
 // Any future changes to myAdoptionAppFieldsShape are inherited automatically.
 export const StaffAdoptionApplicationFormSchema = z
-  .object({ ...myAdoptionAppFieldsShape, animalId: cuidSchema })
+  .object({
+    ...myAdoptionAppFieldsShape,
+    animalId: pickedCuidSchema("Pick an animal."),
+  })
   .superRefine(householdSuperRefine);
 
 export type StaffAdoptionApplicationFormInput = z.input<
