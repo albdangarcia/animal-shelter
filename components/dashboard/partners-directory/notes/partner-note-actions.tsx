@@ -42,13 +42,15 @@ export function PartnerNoteActions({
   const onSoftDelete = () => {
     startTransition(() => {
       deletePartnerNote(note.id, partnerId).then((data) => {
-        if (data?.message) {
+        if (data.ok) {
           toast.success(data.message, {
             action: {
               label: "Undo",
               onClick: () => onRestore(),
             },
           });
+        } else {
+          toast.error(data.message);
         }
       });
     });
@@ -57,8 +59,10 @@ export function PartnerNoteActions({
   const onRestore = () => {
     startTransition(() => {
       restorePartnerNote(note.id, partnerId).then((data) => {
-        if (data?.message) {
+        if (data.ok) {
           toast.success(data.message);
+        } else {
+          toast.error(data.message);
         }
       });
     });

@@ -70,9 +70,13 @@ to the notes that are in use.
 - **"Database Error: Failed to create note."** or **"Database Error: Failed
   to update note."** Nothing was saved. Try again. If it keeps happening, tell
   an admin.
-- **"Failed to delete note."** or **"Failed to restore note."** Nothing
-  changed. Try again. The message looks like the green success message, with
-  an **Undo** button on a delete, so read the words. If the note is still in
-  the list, the delete failed.
+- **"Failed to delete note."** or **"Failed to restore note."** A red
+  message. Nothing changed. Try again. If it keeps happening, tell an admin.
+- **"This note is already deleted."** or **"This note is not deleted, so
+  there is nothing to restore."** A red message. Someone else changed the
+  note since you opened the page, so nothing changed. Reload the page to see
+  it as it is now.
+- **"Note not found."** A red message. The note is no longer there. Reload
+  the page.
 - **Add Note** is greyed out, and the notes have no **…** button. Your account
   can read notes but not write them. Ask a staff member.

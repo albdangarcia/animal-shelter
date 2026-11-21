@@ -84,18 +84,26 @@ export const noteCard = (page: Page, contentSubstring: string): Locator =>
 // group-hover:opacity-100` wrapper, so hover the card first; Radix also
 // occasionally drops the first click before hydration settles, and re-clicking
 // an open menu would toggle it shut — so re-click only when it is closed.
-export const openNoteEditDialog = async (page: Page, card: Locator) => {
+export const clickNoteMenuItem = async (
+  page: Page,
+  card: Locator,
+  itemName: string,
+) => {
   await expect(card).toHaveCount(1);
   await card.hover();
   const trigger = card.getByRole("button", { name: /note actions/i });
-  const editItem = page.getByRole("menuitem", { name: "Edit" });
+  const item = page.getByRole("menuitem", { name: itemName });
   await expect(trigger).toBeVisible();
   await expect(async () => {
-    if (!(await editItem.isVisible())) {
+    if (!(await item.isVisible())) {
       await trigger.click();
     }
-    await expect(editItem).toBeVisible({ timeout: 2_000 });
+    await expect(item).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 20_000 });
-  await editItem.click();
+  await item.click();
+};
+
+export const openNoteEditDialog = async (page: Page, card: Locator) => {
+  await clickNoteMenuItem(page, card, "Edit");
   await expect(page.getByRole("heading", { name: "Edit Note" })).toBeVisible();
 };

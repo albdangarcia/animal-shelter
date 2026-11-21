@@ -2,6 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import {
   adminStatePath,
   bootstrapAdminAuth,
+  clickNoteMenuItem,
   fillStable,
   firstRowIdByQuery,
   noteCard,
@@ -11,7 +12,8 @@ import {
 const storageState = adminStatePath("animals");
 
 // the animal note "edited by" footer, the
-// matching AnimalActivityLog row on the animal index, and the no-op guard.
+// matching AnimalActivityLog row on the animal index, the no-op guard, and
+// what a refused delete looks like on screen.
 //
 // Fixtures come from prisma/seed.ts (playwright/global-setup.ts reseeds before
 // every run):
@@ -113,4 +115,51 @@ test("editing an animal note stamps 'edited by Admin User' and feeds the activit
     }
     await expect(detail).toBeVisible({ timeout: 3_000 });
   }).toPass({ timeout: 30_000 });
+});
+
+// A delete that cannot happen must not look like one that did. The second tab
+// is a real second view of the page: it deletes the note, so the first tab,
+// which still lists it as live, asks for a delete the server refuses.
+test("a delete the server refuses shows a red message with no Undo, and Undo on a real delete brings the note back", async ({
+  page,
+  context,
+}) => {
+  const id = await buddyId(page);
+  const content = `Refused delete walk E2E ${Date.now()}`;
+  const toastWith = (on: Page, message: string) =>
+    on.locator("[data-sonner-toast]").filter({ hasText: message });
+
+  await page.goto(`/dashboard/animals/${id}/notes`);
+  await page.getByRole("button", { name: "Add Note" }).click();
+  await fillStable(page.getByLabel("Content *", { exact: true }), content);
+  await page.getByRole("button", { name: "Create Note" }).click();
+  await expect(page.getByText("Note created successfully.")).toBeVisible();
+  await expect(noteCard(page, content)).toHaveCount(1);
+
+  const otherTab = await context.newPage();
+  await otherTab.goto(`/dashboard/animals/${id}/notes`);
+
+  // A delete that works: green, with Undo, and Undo brings the note back.
+  // Undo is clicked at once, since a toast lasts only a few seconds.
+  await clickNoteMenuItem(otherTab, noteCard(otherTab, content), "Delete");
+  const deleted = toastWith(otherTab, "Note deleted successfully.");
+  await expect(deleted).toHaveAttribute("data-type", "success");
+  await deleted.getByRole("button", { name: "Undo" }).click();
+  await expect(toastWith(otherTab, "Note restored successfully.")).toHaveAttribute(
+    "data-type",
+    "success",
+  );
+  await expect(noteCard(otherTab, content)).toHaveCount(1);
+
+  // Delete it again from the second tab. The first tab still lists the note
+  // as live, so its delete is refused: red, and no Undo.
+  await clickNoteMenuItem(otherTab, noteCard(otherTab, content), "Delete");
+  await expect(noteCard(otherTab, content)).toHaveCount(0);
+
+  await clickNoteMenuItem(page, noteCard(page, content), "Delete");
+  const refused = toastWith(page, "This note is already deleted.");
+  await expect(refused).toHaveAttribute("data-type", "error");
+  await expect(refused.getByRole("button", { name: "Undo" })).toHaveCount(0);
+  await expect(page.getByText("Note deleted successfully.")).toHaveCount(0);
+  await otherTab.close();
 });
