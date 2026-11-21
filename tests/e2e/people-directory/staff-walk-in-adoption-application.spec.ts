@@ -250,6 +250,22 @@ test("Add Application opens the standalone form, and submitting it redirects to 
   await expect(row.getByText("Pending", { exact: true })).toBeVisible();
 });
 
+test("submitting without picking an animal says to pick one", async ({
+  page,
+}) => {
+  await page.goto(
+    `/dashboard/adoption-applications/new?personId=${walkInId}&returnTo=/dashboard/people-directory/${walkInId}/adoption-applications`,
+  );
+  await expect(
+    page.getByText("Submitting on behalf of WalkIn TestUser"),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Submit Application" }).click();
+
+  await expect(page.getByText("Pick an animal.")).toBeVisible();
+  await expect(page.getByText("Invalid ID format")).toHaveCount(0);
+});
+
 test("the application can be edited from the row menu", async ({ page }) => {
   await page.goto(
     `/dashboard/people-directory/${walkInId}/adoption-applications`,

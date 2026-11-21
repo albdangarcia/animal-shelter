@@ -69,8 +69,8 @@ If the person has an account, the application also appears on their own
 
 ## If something goes wrong
 
-- **"Invalid ID format. Expected a CUID."** under **Animal to Adopt**. You
-  didn't pick an animal. Search for one and click it.
+- **"Pick an animal."** under **Animal to Adopt**. You didn't pick an
+  animal. Search for one and click it.
 - **Required field messages**, for example "Reason for adoption is required",
   "Applicant phone is required", "Invalid ZIP code" (it takes five digits),
   "Please provide the ages of the children if 'Yes' is selected." or
