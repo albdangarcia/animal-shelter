@@ -47,8 +47,9 @@ the record before you click.
    is no way to put the link back from here."
 3. Click **Unlink Account** in the box, or **Cancel** to stop.
 
-You should see "Login account unlinked. It now has its own person record, and
-this one is staff-editable again." and the new record opens.
+You should see "Login account unlinked. It now lives on this new person
+record, and the original record is staff-editable again." and the new record
+opens.
 
 ## What moves and what stays
 
