@@ -57,13 +57,15 @@ export function NoteActions({ note, animalId }: NoteActionsProps) {
   const onSoftDelete = () => {
     startTransition(() => {
       deleteAnimalNote(note.id, animalId).then((data) => {
-        if (data?.message) {
+        if (data.ok) {
           toast.success(data.message, {
             action: {
               label: "Undo",
               onClick: () => onRestore(),
             },
           });
+        } else {
+          toast.error(data.message);
         }
       });
     });
@@ -72,8 +74,10 @@ export function NoteActions({ note, animalId }: NoteActionsProps) {
   const onRestore = () => {
     startTransition(() => {
       restoreAnimalNote(note.id, animalId).then((data) => {
-        if (data?.message) {
+        if (data.ok) {
           toast.success(data.message);
+        } else {
+          toast.error(data.message);
         }
       });
     });

@@ -17,8 +17,16 @@ import {
   NO_OP_EDIT_MESSAGE,
   recordNoteMutation,
 } from "../services/note-audit";
+import {
+  noteRefusalMessage,
+  softDeleteAnimalNote,
+  restoreAnimalNoteRow,
+} from "../services/note-delete-restore";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+
+// A delete or restore has no form, so no field errors to carry.
+type NoteChangeResult = FormResult<Record<string, never>>;
 
 type NoteFormInput = z.input<typeof NoteFormSchema>;
 type NoteResult = FormResult<NoteFormInput>;
@@ -164,119 +172,65 @@ const _updateAnimalNote = async (
 };
 
 const _deleteAnimalNote = async (
-  user: SessionUser, // Injected by withAuthenticatedUser
+  user: SessionUser,
   noteId: string,
   animalId: string,
-): Promise<{ success: boolean; message: string }> => {
+): Promise<NoteChangeResult> => {
   const parsedNoteId = cuidSchema.safeParse(noteId);
-  if (!parsedNoteId.success) {
-    return { success: false, message: "Invalid note ID format." };
-  }
   const parsedAnimalId = cuidSchema.safeParse(animalId);
-  if (!parsedAnimalId.success) {
-    return { success: false, message: "Invalid animal ID format." };
-  }
-
-  // `animalId` is not trusted for the activity-log write — read the owning animal
-  // and the category off the note itself, scoped by both ids like `_update` does.
-  const current = await prisma.animalNote.findFirst({
-    where: { id: parsedNoteId.data, animalId: parsedAnimalId.data },
-    select: { animalId: true, category: true },
-  });
-  if (!current) {
-    return { success: false, message: "Note not found." };
+  if (!parsedNoteId.success || !parsedAnimalId.success) {
+    return { ok: false, message: "Invalid ID format." };
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.animalNote.update({
-        where: { id: parsedNoteId.data, animalId: parsedAnimalId.data },
-        data: {
-          deletedAt: new Date(),
-          lastEditedById: user.personId,
-          lastEditedAt: new Date(),
-        },
-      });
-
-      await recordNoteMutation(tx, {
-        targetType: NoteTargetType.ANIMAL,
-        targetId: parsedNoteId.data,
-        action: NoteEventAction.DELETED,
-        actorId: user.personId,
-        animalId: current.animalId,
-        categoryLabel: formatSingleEnumOption(current.category),
-      });
-    });
+    await prisma.$transaction((tx) =>
+      softDeleteAnimalNote(
+        tx,
+        parsedNoteId.data,
+        parsedAnimalId.data,
+        user.personId,
+      ),
+    );
   } catch (error) {
-    console.error("Database Error deleting note:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to delete note.",
-    };
+    const refusal = noteRefusalMessage(error);
+    if (refusal) return { ok: false, message: refusal };
+    console.error("Database Error deleting animal note:", error);
+    return { ok: false, message: "Database Error: Failed to delete note." };
   }
 
   revalidateAnimalNotes(parsedAnimalId.data);
-  return {
-    success: true,
-    message: "Note deleted successfully.",
-  };
+  return { ok: true, message: "Note deleted successfully." };
 };
 
 const _restoreAnimalNote = async (
-  user: SessionUser, // Injected by withAuthenticatedUser
+  user: SessionUser,
   noteId: string,
   animalId: string,
-): Promise<{ success: boolean; message: string }> => {
+): Promise<NoteChangeResult> => {
   const parsedNoteId = cuidSchema.safeParse(noteId);
-  if (!parsedNoteId.success) {
-    return { success: false, message: "Invalid note ID format." };
-  }
   const parsedAnimalId = cuidSchema.safeParse(animalId);
-  if (!parsedAnimalId.success) {
-    return { success: false, message: "Invalid animal ID format." };
-  }
-
-  const current = await prisma.animalNote.findFirst({
-    where: { id: parsedNoteId.data, animalId: parsedAnimalId.data },
-    select: { animalId: true, category: true },
-  });
-  if (!current) {
-    return { success: false, message: "Note not found." };
+  if (!parsedNoteId.success || !parsedAnimalId.success) {
+    return { ok: false, message: "Invalid ID format." };
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.animalNote.update({
-        where: { id: parsedNoteId.data, animalId: parsedAnimalId.data },
-        data: {
-          deletedAt: null,
-          lastEditedById: user.personId,
-          lastEditedAt: new Date(),
-        },
-      });
-
-      await recordNoteMutation(tx, {
-        targetType: NoteTargetType.ANIMAL,
-        targetId: parsedNoteId.data,
-        action: NoteEventAction.RESTORED,
-        actorId: user.personId,
-        animalId: current.animalId,
-        categoryLabel: formatSingleEnumOption(current.category),
-      });
-    });
+    await prisma.$transaction((tx) =>
+      restoreAnimalNoteRow(
+        tx,
+        parsedNoteId.data,
+        parsedAnimalId.data,
+        user.personId,
+      ),
+    );
   } catch (error) {
-    console.error("Database Error restoring note:", error);
-    return {
-      success: false,
-      message: "Database Error: Failed to restore note.",
-    };
+    const refusal = noteRefusalMessage(error);
+    if (refusal) return { ok: false, message: refusal };
+    console.error("Database Error restoring animal note:", error);
+    return { ok: false, message: "Database Error: Failed to restore note." };
   }
 
   revalidateAnimalNotes(parsedAnimalId.data);
-  return {
-    success: true,
-    message: "Note restored successfully.",
-  };
+  return { ok: true, message: "Note restored successfully." };
 };
 
 export const deleteAnimalNote = withAuthenticatedUser(

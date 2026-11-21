@@ -16,8 +16,16 @@ import {
   NO_OP_EDIT_MESSAGE,
   recordNoteMutation,
 } from "../services/note-audit";
+import {
+  noteRefusalMessage,
+  softDeletePartnerNote,
+  restorePartnerNoteRow,
+} from "../services/note-delete-restore";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
+
+// A delete or restore has no form, so no field errors to carry.
+type NoteChangeResult = FormResult<Record<string, never>>;
 
 type PartnerNoteFormInput = z.input<typeof PartnerNoteFormSchema>;
 type PartnerNoteResult = FormResult<PartnerNoteFormInput>;
@@ -145,76 +153,62 @@ const _deletePartnerNote = async (
   user: SessionUser,
   noteId: string,
   partnerId: string,
-): Promise<{ message: string }> => {
+): Promise<NoteChangeResult> => {
   const parsedNoteId = cuidSchema.safeParse(noteId);
   const parsedPartnerId = cuidSchema.safeParse(partnerId);
   if (!parsedNoteId.success || !parsedPartnerId.success) {
-    return { message: "Invalid ID format." };
+    return { ok: false, message: "Invalid ID format." };
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.partnerNote.update({
-        where: { id: parsedNoteId.data },
-        data: {
-          deletedAt: new Date(),
-          lastEditedById: user.personId,
-          lastEditedAt: new Date(),
-        },
-      });
-
-      await recordNoteMutation(tx, {
-        targetType: NoteTargetType.PARTNER,
-        targetId: parsedNoteId.data,
-        action: NoteEventAction.DELETED,
-        actorId: user.personId,
-      });
-    });
+    await prisma.$transaction((tx) =>
+      softDeletePartnerNote(
+        tx,
+        parsedNoteId.data,
+        parsedPartnerId.data,
+        user.personId,
+      ),
+    );
   } catch (error) {
+    const refusal = noteRefusalMessage(error);
+    if (refusal) return { ok: false, message: refusal };
     console.error("Database Error deleting partner note:", error);
-    return { message: "Failed to delete note." };
+    return { ok: false, message: "Failed to delete note." };
   }
 
   revalidateNotes(parsedPartnerId.data);
-  return { message: "Note deleted." };
+  return { ok: true, message: "Note deleted." };
 };
 
 const _restorePartnerNote = async (
   user: SessionUser,
   noteId: string,
   partnerId: string,
-): Promise<{ message: string }> => {
+): Promise<NoteChangeResult> => {
   const parsedNoteId = cuidSchema.safeParse(noteId);
   const parsedPartnerId = cuidSchema.safeParse(partnerId);
   if (!parsedNoteId.success || !parsedPartnerId.success) {
-    return { message: "Invalid ID format." };
+    return { ok: false, message: "Invalid ID format." };
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.partnerNote.update({
-        where: { id: parsedNoteId.data },
-        data: {
-          deletedAt: null,
-          lastEditedById: user.personId,
-          lastEditedAt: new Date(),
-        },
-      });
-
-      await recordNoteMutation(tx, {
-        targetType: NoteTargetType.PARTNER,
-        targetId: parsedNoteId.data,
-        action: NoteEventAction.RESTORED,
-        actorId: user.personId,
-      });
-    });
+    await prisma.$transaction((tx) =>
+      restorePartnerNoteRow(
+        tx,
+        parsedNoteId.data,
+        parsedPartnerId.data,
+        user.personId,
+      ),
+    );
   } catch (error) {
+    const refusal = noteRefusalMessage(error);
+    if (refusal) return { ok: false, message: refusal };
     console.error("Database Error restoring partner note:", error);
-    return { message: "Failed to restore note." };
+    return { ok: false, message: "Failed to restore note." };
   }
 
   revalidateNotes(parsedPartnerId.data);
-  return { message: "Note restored." };
+  return { ok: true, message: "Note restored." };
 };
 
 export const createPartnerNote = withAuthenticatedUser(

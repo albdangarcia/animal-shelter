@@ -4,7 +4,7 @@ summary: Write a note on an animal's record, such as a behavior or feeding obser
 permissions: [ANIMAL_NOTE_MANAGE]
 aliases: [animal note, add a comment, behavior note, feeding note, edit a note, delete a note, restore a note]
 related: [create-assign-and-complete-tasks, read-an-animals-activity-and-journey]
-verified: 2026-11-16
+verified: 2026-11-21
 ---
 
 ## When to use this
@@ -65,3 +65,15 @@ You should see "Note restored successfully."
   anything. Nothing was saved.
 - **"Database Error: Failed to create notes."** Nothing was saved. Try
   again; if it keeps happening, tell an admin.
+- **"Database Error: Failed to delete note."** or **"Database Error: Failed
+  to restore note."** A red message. Nothing changed. Try again. If it keeps
+  happening, tell an admin.
+- **"This note is already deleted."** or **"This note is not deleted, so
+  there is nothing to restore."** A red message. Someone else changed the
+  note since you opened the page, so nothing changed. Reload the page to see
+  it as it is now.
+- **"Note not found."** A red message. The note is no longer there. Reload
+  the page.
+
+A delete or restore that works shows a green message. A red one means nothing
+changed.

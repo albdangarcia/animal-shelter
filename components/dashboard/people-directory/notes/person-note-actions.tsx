@@ -39,13 +39,15 @@ export function PersonNoteActions({ note, personId }: PersonNoteActionsProps) {
   const onSoftDelete = () => {
     startTransition(() => {
       deletePersonNote(note.id, personId).then((data) => {
-        if (data?.message) {
+        if (data.ok) {
           toast.success(data.message, {
             action: {
               label: "Undo",
               onClick: () => onRestore(),
             },
           });
+        } else {
+          toast.error(data.message);
         }
       });
     });
@@ -54,8 +56,10 @@ export function PersonNoteActions({ note, personId }: PersonNoteActionsProps) {
   const onRestore = () => {
     startTransition(() => {
       restorePersonNote(note.id, personId).then((data) => {
-        if (data?.message) {
+        if (data.ok) {
           toast.success(data.message);
+        } else {
+          toast.error(data.message);
         }
       });
     });
