@@ -26,24 +26,22 @@ person can be a contact at several partners.
 2. Click **Add Contact**. The box **Add Contact** opens.
 3. Click **Search for a person...** and type a name or an email. Click the
    person in the list. People who are already active contacts here aren't
-   listed. The list shows everyone else in the system, including
-   administrators, whose People Directory records you can't open. A person who
-   used to be a contact here is marked **Deactivated here**, and the form says
-   adding them will reactivate the link. It doesn't: the app refuses with
-   "This person is already a contact here." For those people, use
-   **Reactivate** (see below) instead of **Add Contact**.
+   listed, and neither are administrators, since their records aren't in the
+   People Directory. A person who used to be a contact here is marked
+   **Deactivated here**. Adding them again reactivates their link, with the
+   role, **Primary contact** and **Active** settings you enter in this box.
 4. Under **Role**, type what they do there, such as "Intake Coordinator". It is
    optional.
 5. Tick **Primary contact** if this is the person to call first. Setting it
-   unsets whoever was primary before. Leave **Active** ticked. Don't tick
-   **Primary contact** and untick **Active** together: the app saves both, the
-   list shows **Primary**, but the partner's page says "No primary contact
-   set." because only an active contact counts. A contact who isn't active
-   can't really be the primary.
+   unsets whoever was primary before. Leave **Active** ticked. **Primary
+   contact** needs **Active**: if you untick **Active**, **Primary contact** is
+   cleared and greyed out, because only an active contact can be the primary.
 6. Click **Add Contact**.
 
 You should see "Contact added successfully." The person is in the list with
-their role, email and phone. A **Primary** badge marks the primary contact,
+their role, email and phone. If they were a former contact, their old
+**Inactive** entry is the one that comes back, now active with the role you
+typed. A **Primary** badge marks the primary contact,
 who is listed first. The name is a link to their record in the People
 Directory.
 
@@ -59,15 +57,14 @@ message reads "NAME set as primary contact." and has no **Undo**.
 ## Change a contact's role
 
 1. Click **…** on the contact, then **Edit**. The box **Edit Contact** opens.
-2. Change **Role**, or tick or untick **Primary contact**.
+2. Change **Role**, or tick or untick **Primary contact**. **Primary contact**
+   is greyed out while **Active** is unticked.
 3. Click **Update Contact**.
 
 You should see "Contact updated successfully." You can't change which person
-the contact is. The box says "Remove this contact and add another", but there
-is no Remove: deactivate the old contact (see below), then add the right
-person as a new one. The same rule applies to **Active** here: untick it only
-if the contact is not primary, or use **Deactivate**, which also clears
-primary.
+the contact is. The box says so: deactivate this contact (see below), then
+add the right person as a new contact. Unticking **Active** here also clears
+**Primary contact**, as **Deactivate** does.
 
 ## Deactivate and reactivate a contact
 
@@ -87,11 +84,12 @@ again: use **Set as primary** if they should be.
 ## If something goes wrong
 
 - **"Please select a person."** Click **Search for a person...** and pick one.
-- **"This person is already a contact here."** The person is already linked to
-  this partner. If the picker showed **Deactivated here**, they are an
-  **Inactive** contact further down the list: the form's promise to reactivate
-  them doesn't hold, so find them there and use **Reactivate**. If they are
-  an active contact, there is nothing to do.
+- **"This person is already a contact here."** Someone else added the same
+  person a moment ago. Reload the page: they are in the list, and you can use
+  **Edit** to change their role.
+- **"Administrators can't be added as partner contacts."** Administrators
+  aren't listed in the picker, so this only shows if the person's account was
+  made an administrator while the box was open. Pick someone else.
 - **"Failed to set primary contact."** or **"Failed to update contact."**
   Nothing changed. Try again.
 - **"Couldn't undo."** Use **Set as primary** on the contact you want.
