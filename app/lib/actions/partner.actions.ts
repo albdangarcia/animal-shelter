@@ -10,6 +10,10 @@ import {
   PartnerFormSchema,
   type PartnerFormInput,
 } from "../zod-schemas/partners-directory.schemas";
+import {
+  PARTNER_NAME_TAKEN,
+  partnerNameRefusal,
+} from "@/app/lib/services/partner-name";
 import { safeInternalPath } from "../utils/safe-redirect";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
@@ -54,6 +58,16 @@ const _createPartner = async (
   let newPartnerId: string;
 
   try {
+    // The unique index only catches an exact match; this catches the capitals.
+    const refusal = await partnerNameRefusal(prisma, validatedFields.data.name);
+    if (refusal) {
+      return {
+        ok: false,
+        message: "Failed to create partner.",
+        fieldErrors: { name: [refusal] },
+      };
+    }
+
     const partner = await prisma.partner.create({
       data: toPartnerData(validatedFields.data),
     });
@@ -66,7 +80,7 @@ const _createPartner = async (
       return {
         ok: false,
         message: "Failed to create partner.",
-        fieldErrors: { name: ["A partner with this name already exists."] },
+        fieldErrors: { name: [PARTNER_NAME_TAKEN] },
       };
     }
     console.error("Database Error creating partner:", error);
@@ -110,6 +124,27 @@ const _updatePartner = async (
   }
 
   try {
+    const stored = await prisma.partner.findUnique({
+      where: { id: parsedId.data },
+      select: { id: true, name: true },
+    });
+    if (!stored) return { ok: false, message: "Partner not found." };
+
+    // Only a changed name is checked, so editing another field of a partner
+    // whose case-variant twin already exists is not refused.
+    const refusal = await partnerNameRefusal(
+      prisma,
+      validatedFields.data.name,
+      stored,
+    );
+    if (refusal) {
+      return {
+        ok: false,
+        message: "Failed to update partner.",
+        fieldErrors: { name: [refusal] },
+      };
+    }
+
     await prisma.partner.update({
       where: { id: parsedId.data },
       data: toPartnerData(validatedFields.data),
@@ -120,7 +155,7 @@ const _updatePartner = async (
         return {
           ok: false,
           message: "Failed to update partner.",
-          fieldErrors: { name: ["A partner with this name already exists."] },
+          fieldErrors: { name: [PARTNER_NAME_TAKEN] },
         };
       }
       if (error.code === "P2025") {

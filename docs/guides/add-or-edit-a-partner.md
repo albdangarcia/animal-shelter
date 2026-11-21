@@ -45,8 +45,9 @@ Where else a partner shows up:
    **New Partner** opens. (If **Add Partner** is greyed out, your account
    can't add partners.)
 2. Search the list first. A partner's name must be different from every other,
-   and the app compares it exactly, so "Second Chance Rescue" and "second
-   chance rescue" count as two partners. Don't add one twice.
+   and capital letters don't count, so "Second Chance Rescue" and "second
+   chance rescue" are the same name. A retired partner keeps its name, so
+   check for it too. Don't add one twice.
 3. Type the **Name** and pick the **Type**.
 4. Fill in what you know: **Email**, **Phone**, **Website** (it must start
    with `https://`), **Street Address**, **City**, **State** and
@@ -80,8 +81,11 @@ There is no way to delete a partner.
 - **"Please enter a valid email address."** Check the **Email**.
 - **"Please enter a valid URL (including https://)."** Type the **Website**
   with `https://` in front, for example `https://example.org`.
-- **"A partner with this name already exists."** Search for it in the list and
-  use that partner, or give this one a different name.
+- **"A partner with this name already exists."** Another partner, retired or
+  not, has this name. Capital letters don't make it different, so "walk vet
+  clinic" is the same as "Walk Vet Clinic". Search for it in the list and use
+  that partner, or give this one a different name. The same message appears
+  when you rename a partner to another one's name.
 - **"Partner not found."** The partner was removed. Go back to **Partner
   Directory**.
 - **"Database Error: Failed to create partner."** or **"Database Error: Failed
