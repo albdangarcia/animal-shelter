@@ -27,6 +27,23 @@ export const cuidSchema = z.cuid2({
 });
 
 /**
+ * A CUID a staff member picks in a picker (animal, foster, unit, person).
+ *
+ * The forms hold "" until something is picked, and `cuidSchema` would answer
+ * that with "Invalid ID format. Expected a CUID." — a message about the data,
+ * not about what to do. This says what to do for an unpicked value, and keeps
+ * `cuidSchema`'s message for anything else, so a malformed id that reaches an
+ * action by direct POST is still reported the way it always was.
+ */
+export const pickedCuidSchema = (pickMessage: string) =>
+  z.cuid2({
+    error: (issue) =>
+      issue.input === undefined || issue.input === ""
+        ? pickMessage
+        : "Invalid ID format. Expected a CUID.",
+  });
+
+/**
  * Ids owned by Better Auth: User, Session, Account, Verification.
  *
  * Better Auth generates these itself on insert (32-char random base62), so the

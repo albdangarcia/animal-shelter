@@ -56,8 +56,7 @@ placement. A return never sets either.
 ## If something goes wrong
 
 - **"A return reason is required."** Pick a **Return Reason**.
-- **"Invalid ID format. Expected a CUID."** under **Unit.** Pick a location and
-  a unit.
+- **"Pick a unit."** under **Unit.** Pick a location and a unit.
 - **Placement Already Ended** (page), or **"This foster placement has already
   ended."** Someone already returned the animal. Open its page to see where
   it is.

@@ -21,9 +21,39 @@ export const safeInternalPath = (
   candidate: string | null | undefined,
   fallback: string,
 ): string =>
-  candidate &&
+  // `returnTo` is typed as a string but comes from a URL or a direct POST, so
+  // a repeated query key (a string[]) or any other value can arrive: refuse
+  // it here rather than throw on `.startsWith` after an action has written.
+  typeof candidate === "string" &&
   candidate.startsWith("/") &&
   !candidate.startsWith("//") &&
   !candidate.startsWith("/\\")
     ? candidate
     : fallback;
+
+/**
+ * Like `safeInternalPath`, but the path must also resolve to a page inside the
+ * staff dashboard ("/dashboard/..."). For a `returnTo` that only ever names a
+ * dashboard page: a same-origin path outside it (a public page, an API route)
+ * is not somewhere a form should send staff.
+ *
+ * "Resolve" matters: "/dashboard/../api/x" and "/dashboard/%2e%2e/x" start
+ * with "/dashboard/" but the browser navigates to "/api/x", so the path is
+ * resolved the way the browser will and the result is what is checked.
+ */
+export const safeDashboardPath = (
+  candidate: string | null | undefined,
+  fallback: string,
+): string => {
+  const path = safeInternalPath(candidate, "");
+  if (!path) return fallback;
+  try {
+    const resolved = new URL(path, "http://localhost");
+    return resolved.origin === "http://localhost" &&
+      resolved.pathname.startsWith("/dashboard/")
+      ? path
+      : fallback;
+  } catch {
+    return fallback;
+  }
+};

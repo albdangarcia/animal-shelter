@@ -176,6 +176,18 @@ test("an animal already in foster cannot be placed again", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("placing with no animal picked says to pick one", async ({ page }) => {
+  // The form always opens with the foster or the animal fixed by the link, so
+  // the unpicked picker here is the animal; the foster message is covered by
+  // app/lib/zod-schemas/foster.schemas.test.ts.
+  await openCreateFormForAvailableFoster(page);
+  await chooseFromSelect(page, "Placement Type *", "General");
+  await page.getByRole("button", { name: "Place in Foster" }).click();
+
+  await expect(page.getByText("Pick an animal.")).toBeVisible();
+  await expect(page.getByText(/Invalid ID format/)).toHaveCount(0);
+});
+
 test("a general placement cannot be converted to an adoption", async ({
   page,
 }) => {

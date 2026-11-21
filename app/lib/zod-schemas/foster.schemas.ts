@@ -7,6 +7,7 @@ import {
 import {
   calendarDaySchema,
   cuidSchema,
+  pickedCuidSchema,
   requiredNumber,
   usStateSchema,
 } from "./common.schemas";
@@ -136,8 +137,8 @@ export type FosterApplicationStatusChangeInput = z.input<
  */
 export const createFosterPlacementSchema = (today: CalendarDay) =>
   z.object({
-    animalId: cuidSchema,
-    fosterProfileId: cuidSchema,
+    animalId: pickedCuidSchema("Pick an animal."),
+    fosterProfileId: pickedCuidSchema("Pick a foster."),
     type: z.enum(FosterPlacementType, {
       error: (issue) =>
         issue.input === undefined ? "A placement type is required." : undefined,
@@ -185,7 +186,7 @@ export const ReturnFromFosterSchema = z.object({
       error: "That reason is recorded by an outcome, not by a return.",
     }),
   returnNotes: z.string().optional(),
-  unitId: cuidSchema,
+  unitId: pickedCuidSchema("Pick a unit."),
 });
 
 export const ConvertFosterToAdoptionSchema = z.object({
@@ -196,7 +197,7 @@ export const ConvertFosterToAdoptionSchema = z.object({
 // Staff "direct add" pressure valve — person picker + capability form, born
 // ACTIVE.
 export const CreateFosterProfileSchema = z.object({
-  personId: cuidSchema,
+  personId: pickedCuidSchema("Pick a person."),
   ...fosterCapabilityFieldsShape,
 });
 

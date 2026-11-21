@@ -42,7 +42,9 @@ keeps their household answers and a **Status History** on record.
 
 You should see "Foster profile created." and the **Foster Roster** opens
 with the person in the list as **Active**, for example **0/1** under
-**Capacity**.
+**Capacity**. If you started from **Add as Foster** on a person's
+**Fostering** tab, you go back to that tab instead, and it now shows their
+foster profile.
 
 The answers are for you to read. Only **Max animals at once** limits
 placements. The species and the yes and no answers aren't checked when you
@@ -50,8 +52,8 @@ place an animal.
 
 ## If something goes wrong
 
-- **"Invalid ID format. Expected a CUID."** under **Person.** You haven't
-  picked a person yet. Search and pick one.
+- **"Pick a person."** under **Person.** You haven't picked a person yet.
+  Search and pick one.
 - **"Select at least one species you can foster."** Pick a species.
 - **"Max animals must be a positive whole number."** Type 1 or more.
 - **"This person already has a foster profile. Manage their status from the

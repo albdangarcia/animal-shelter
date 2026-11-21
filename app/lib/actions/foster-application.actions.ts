@@ -33,6 +33,7 @@ import {
   illegalTransitionMessage,
 } from "../utils/application-status";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
+import { safeDashboardPath } from "../utils/safe-redirect";
 import { lockPerson } from "../data/application-status.data";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
@@ -441,6 +442,7 @@ export const updateFosterApplicationStatus = withAuthenticatedUser(
 // Direct add (pressure valve for walk-ins/emergencies)
 
 const _createFosterProfileDirect = async (
+  returnTo: string | null,
   values: CreateFosterProfileInput,
 ): Promise<FormResult<CreateFosterProfileInput>> => {
   const validatedFields = CreateFosterProfileSchema.safeParse(values);
@@ -503,12 +505,17 @@ const _createFosterProfileDirect = async (
   }
 
   revalidatePath("/dashboard/fosters");
+  // The person's Fostering tab is where "Add as Foster" comes from and returns
+  // to; same pair as the status and capability actions below.
+  revalidatePath(`/dashboard/people-directory/${personId}/fostering`);
   // The destination is returned rather than navigated to here: redirect()
   // never returns, so the form could not show a success toast before leaving.
+  // returnTo comes from the URL and is re-checked here: the action is
+  // reachable by direct POST, so the page and the form are not the boundary.
   return {
     ok: true,
     message: "Foster profile created.",
-    redirectTo: "/dashboard/fosters",
+    redirectTo: safeDashboardPath(returnTo, "/dashboard/fosters"),
   };
 };
 
