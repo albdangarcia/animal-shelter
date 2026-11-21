@@ -199,15 +199,12 @@ legacy rows whose stored value predates the current option list.
 
 ### Expected noise, not bugs
 
-A logged-out request to `/dashboard` logs an `Access Denied. You do not have
-permission to perform this action.` error from `protected-actions.ts`, from
-`ChartWrapper`, immediately before `GET /dashboard 307`. `ChartWrapper` calls
-`protectedAction` without checking `hasPermission` first, and React renders it
-alongside the layout, so it throws before the layout's `redirect()` lands. (The
-headcount cards, the attention panel and the Under care card check
-`hasPermission` first and render nothing, so they add none.) Authorization held;
-the 307 is the proof. It's one message per such component, not per request. Don't try to silence it, and don't read it as a permissions
-bug.
+None known for `/dashboard`. `ChartWrapper` and every home card check
+`hasPermission` first and render nothing without it, so a logged-out request
+to `/dashboard` goes straight to the layout's `GET /dashboard 307`. An
+`Access Denied. You do not have permission to perform this action.` error
+from `protected-actions.ts` on that request is a real regression: a component
+fetching without checking first.
 
 ## Cleaning up after a UI-driven write
 
