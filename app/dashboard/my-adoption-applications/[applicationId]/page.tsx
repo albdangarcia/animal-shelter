@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { MyAdoptionApplicationView } from "@/components/dashboard/my-adoption-applications/my-adoption-application-view";
 import { fetchMyAdoptionAppById } from "@/app/lib/data/my-adoption-applications.data";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: Promise<{ applicationId: string }>;
@@ -14,13 +17,23 @@ interface Props {
 const Page = async ({ params }: Props) => {
   const { applicationId } = await params;
 
-  const myApplication = await fetchMyAdoptionAppById(applicationId);
+  const [myApplication, help] = await Promise.all([
+    fetchMyAdoptionAppById(applicationId),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.myApplications),
+  ]);
 
   if (!myApplication) {
     notFound();
   }
 
-  return <MyAdoptionApplicationView application={myApplication} />;
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <HelpLink guide={help} />
+      </div>
+      <MyAdoptionApplicationView application={myApplication} />
+    </div>
+  );
 };
 
 export default Page;

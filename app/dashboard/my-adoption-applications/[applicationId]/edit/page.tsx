@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -10,6 +11,9 @@ import {
 import { MyApplicationForm } from "@/components/dashboard/my-adoption-applications/my-adoption-application-form";
 import { fetchMyAdoptionAppById } from "@/app/lib/data/my-adoption-applications.data";
 import { APPLICANT_EDITABLE_STATUSES } from "@/app/lib/utils/application-status";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: Promise<{ applicationId: string }>;
@@ -18,7 +22,10 @@ interface Props {
 const Page = async ({ params }: Props) => {
   const { applicationId } = await params;
 
-  const myApplication = await fetchMyAdoptionAppById(applicationId);
+  const [myApplication, help] = await Promise.all([
+    fetchMyAdoptionAppById(applicationId),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.myApplications),
+  ]);
 
   if (!myApplication) {
     notFound();
@@ -45,6 +52,11 @@ const Page = async ({ params }: Props) => {
         <CardDescription>
           Make changes to your application for {animal.name}.
         </CardDescription>
+        {help && (
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent>
         <Suspense fallback={<div>Loading adoption application edit form...</div>}>

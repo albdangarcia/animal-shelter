@@ -16,6 +16,9 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -50,9 +53,10 @@ const PageContent = async ({ searchParams, params }: Props) => {
     return notFound();
   }
 
-  const canManage = await hasPermission(
-    AppPermissions.ANIMAL_ASSESSMENT_MANAGE,
-  );
+  const [canManage, help] = await Promise.all([
+    hasPermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.animalApplications),
+  ]);
 
   const { applications, totalPages, totalRows } = await fetchAnimalApplications(
     animalId,
@@ -72,7 +76,11 @@ const PageContent = async ({ searchParams, params }: Props) => {
         <CardDescription>
           Review and compare all adoption applications received for this animal.
         </CardDescription>
-        <CardAction></CardAction>
+        {help && (
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent>
         <div className="flex flex-1 flex-col">

@@ -15,6 +15,9 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -51,9 +54,10 @@ const PageContent = async ({ searchParams }: Props) => {
       currentPageSize,
     );
 
-  const canManage = await hasPermission(
-    AppPermissions.ANIMAL_ASSESSMENT_MANAGE,
-  );
+  const [canManage, help] = await Promise.all([
+    hasPermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.applications),
+  ]);
 
   return (
     <Card className="@container/card">
@@ -64,7 +68,11 @@ const PageContent = async ({ searchParams }: Props) => {
         <CardDescription>
           Manage all incoming animal adoption applications.
         </CardDescription>
-        <CardAction></CardAction>
+        {help && (
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent>
         <div className="flex flex-1 flex-col">

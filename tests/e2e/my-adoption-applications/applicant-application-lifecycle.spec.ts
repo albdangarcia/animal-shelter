@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import pg from "pg";
+import { E2E_DATABASE_URL } from "../../../playwright/env";
 import {
   APPLICANT_EMAIL,
   MY_APPLICATIONS_PATH,
@@ -517,4 +519,55 @@ test("withdrawing an approved application says the animal goes back on the listi
   await expect(statusMessage(page)).toContainText(
     MESSAGE_TITLE_BY_STATUS.WITHDRAWN,
   );
+});
+
+// The action's own refusal, not the catch-all "Database Error": the form is
+// opened while the animal is listed, and the animal is taken off the listings
+// (a draft here, as an approval elsewhere would do) before it is submitted.
+// Last in the file because it needs an animal Jane has no application for and
+// leaves none behind.
+test("submitting for an animal that stopped being listed says so", async ({
+  page,
+}) => {
+  const client = new pg.Client({ connectionString: E2E_DATABASE_URL });
+  await client.connect();
+  let animalId: string | undefined;
+  try {
+    const { rows } = await client.query<{ id: string }>(
+      `select a.id from animals a
+        where a."listingStatus" = 'PUBLISHED'
+          and not exists (select 1 from adoption_applications x where x.animal_id = a.id)
+          and not exists (select 1 from outcomes o where o."animalId" = a.id)
+        order by a.id limit 1`,
+    );
+    animalId = rows[0]?.id;
+    if (!animalId) {
+      throw new Error("Expected a published animal with no applications.");
+    }
+
+    await page.goto(`/pets/${animalId}/adopt`);
+    await fillStable(
+      page.getByLabel("Reason for Adoption *", { exact: true }),
+      `Opened while the animal was listed — E2E ${Date.now()}`,
+    );
+
+    await client.query(
+      `update animals set "listingStatus" = 'DRAFT' where id = $1`,
+      [animalId],
+    );
+
+    await page.getByRole("button", { name: "Submit Application" }).click();
+    await expect(
+      page.getByText("This animal is no longer available for adoption."),
+    ).toBeVisible();
+    await expect(page.getByText("Database Error")).toHaveCount(0);
+  } finally {
+    if (animalId) {
+      await client.query(
+        `update animals set "listingStatus" = 'PUBLISHED' where id = $1`,
+        [animalId],
+      );
+    }
+    await client.end();
+  }
 });

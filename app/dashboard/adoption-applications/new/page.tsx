@@ -5,6 +5,9 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { fetchPersonForApplicationForm } from "@/app/lib/data/people-directory/people-directory.data";
 import { searchPublishedAnimals } from "@/app/lib/data/animals/animal.data";
 import { notFound } from "next/navigation";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 import StaffAdoptionApplicationForm from "@/components/dashboard/people-directory/adoption-applications/staff-adoption-application-form";
 
 interface Props {
@@ -27,11 +30,12 @@ const PageContent = async ({ searchParams }: Props) => {
 
   const query = typeof animalSearch === "string" ? animalSearch.trim() : "";
 
-  const [person, animalResults] = await Promise.all([
+  const [person, animalResults, help] = await Promise.all([
     personId ? fetchPersonForApplicationForm(personId) : Promise.resolve(null),
     query.length >= 2 && personId
       ? searchPublishedAnimals(query, personId)
       : Promise.resolve([]),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.applicationCreate),
   ]);
 
   if (!person) {
@@ -40,6 +44,9 @@ const PageContent = async ({ searchParams }: Props) => {
 
   return (
     <main>
+      <div className="mx-auto mb-2 flex w-full max-w-3xl justify-end">
+        <HelpLink guide={help} />
+      </div>
       <StaffAdoptionApplicationForm
         person={person}
         animalResults={animalResults}

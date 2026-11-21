@@ -507,7 +507,9 @@ const _createMyAdoptionApp = async (
         });
 
         if (animal?.listingStatus !== "PUBLISHED") {
-          throw new Error("This animal is no longer available for adoption.");
+          throw new ConflictError(
+            "This animal is no longer available for adoption.",
+          );
         }
 
         // The apply page hides the form from someone who already has an
