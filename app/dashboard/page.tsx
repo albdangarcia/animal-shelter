@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import ChartWrapper from "@/components/dashboard/analytics/chart-wrapper";
+import WelcomeCard from "@/components/dashboard/home/welcome-card";
 import AttentionPanel from "@/components/dashboard/home/attention-panel";
 import UnderCareCard from "@/components/dashboard/home/under-care-card";
 import HeadcountCards from "@/components/dashboard/home/headcount-cards";
@@ -16,6 +17,10 @@ import LongestStaysCardSkeleton from "@/components/skeletons/longestStaysCardSke
 const Page = async () => {
   return (
     <>
+      {/* For a viewer without the analytics permission, in place of the cards
+          below, which each render nothing for them. */}
+      <WelcomeCard />
+
       {/* Where the animals are now, counted as the shelter board counts. */}
       <Suspense fallback={<HeadcountCardsSkeleton />}>
         <HeadcountCards />

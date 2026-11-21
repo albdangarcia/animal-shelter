@@ -189,11 +189,13 @@ test("an account without assessment access neither sees nor opens it", async ({
   const page = await context.newPage();
 
   await page.goto("/dashboard");
+  // The sidebar's links: the dashboard's welcome card lists the same pages.
+  const sidebar = page.locator('[data-slot="sidebar"]');
   await expect(
-    page.getByRole("link", { name: "My Adoption Applications" }),
+    sidebar.getByRole("link", { name: "My Adoption Applications" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Readiness Board", exact: true }),
+    sidebar.getByRole("link", { name: "Readiness Board", exact: true }),
   ).toHaveCount(0);
 
   await page.goto(BOARD_PATH);
