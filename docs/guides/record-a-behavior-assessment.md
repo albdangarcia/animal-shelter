@@ -2,8 +2,8 @@
 title: Record a behavior assessment
 summary: Record a structured check such as an intake behavioral, a cat test or a dog introduction, add the characteristics it suggests, and edit, delete or restore it.
 permissions: [ANIMAL_ASSESSMENT_MANAGE, ANIMAL_CHARACTERISTICS_MANAGE]
-aliases: [behaviour assessment, temperament test, cat test, dog introduction, intake behavioral, assessment signal, cite this assessment, suggested characteristics]
-related: [set-an-animals-characteristics, read-an-animals-activity-and-journey]
+aliases: [missing assessment, behaviour assessment, temperament test, cat test, dog introduction, intake behavioral, assessment signal, cite this assessment, suggested characteristics]
+related: [set-an-animals-characteristics, read-an-animals-activity-and-journey, read-the-readiness-board]
 verified: 2026-11-16
 ---
 

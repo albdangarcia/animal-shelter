@@ -2,8 +2,8 @@
 title: Add, edit or delete a location or unit
 summary: Add a kennel area and the units in it, change a unit's name or capacity, or delete one that is no longer used.
 permissions: [MANAGE_LOCATIONS]
-aliases: [add a kennel, new kennel, add a run, add a room, kennel capacity, change capacity, housing units, remove a kennel, restore a location, isolation room, quarantine area, offsite location]
-related: [take-in-a-new-animal, move-an-animal-to-another-unit]
+aliases: [locations, add a kennel, new kennel, add a run, add a room, kennel capacity, change capacity, housing units, remove a kennel, restore a location, isolation room, quarantine area, offsite location]
+related: [take-in-a-new-animal, move-an-animal-to-another-unit, read-the-housing-board-and-drag-animals]
 verified: 2026-11-10
 ---
 

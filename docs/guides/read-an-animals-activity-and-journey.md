@@ -3,7 +3,7 @@ title: Read an animal's activity and journey
 summary: See every change made to an animal's record and who made it, and the timeline of its intakes, outcomes, status changes and foster stays.
 permissions: [ANIMAL_ACTIVITY_READ, ANIMAL_JOURNEY_READ]
 aliases: [animal history, activity log, who changed this, timeline, when did it leave, foster history]
-related: [find-an-animal, correct-an-intake, review-and-undo-the-assistants-changes]
+related: [find-an-animal, correct-an-intake, review-and-undo-the-assistants-changes, read-the-readiness-board]
 verified: 2026-11-16
 ---
 

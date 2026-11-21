@@ -56,6 +56,8 @@ import type {
 import { moveAnimalToUnit } from "@/app/lib/actions/animal-placement.actions";
 import type { CareEpisodeOfferPrompt } from "@/app/lib/data/care-episode-offer.data";
 import { CareEpisodeOfferDialog } from "@/components/dashboard/animals/medical/care-episode-offer-dialog";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 import { AnimalChip } from "./animal-chip";
 import {
   DraggableAnimalChip,
@@ -448,9 +450,10 @@ interface Props {
   // the fostering fact shows to every board viewer, but
   // the foster's identity is gated behind FOSTERS_READ.
   canReadFosters: boolean;
+  help: HelpLinkGuide | null;
 }
 
-export const ShelterBoard = ({ data, canReadFosters }: Props) => {
+export const ShelterBoard = ({ data, canReadFosters, help }: Props) => {
   // Optimistic copy of the server-fetched board: a move renders immediately,
   // then reconciles to server truth when the action's revalidate lands (or
   // rolls back automatically if the action fails).
@@ -675,6 +678,11 @@ export const ShelterBoard = ({ data, canReadFosters }: Props) => {
             <span className="ml-auto flex items-center gap-1">
               <IconLoader2 className="size-3 animate-spin" />
               Saving…
+            </span>
+          )}
+          {help && (
+            <span className={cn(!isPending && "ml-auto")}>
+              <HelpLink guide={help} />
             </span>
           )}
         </div>
