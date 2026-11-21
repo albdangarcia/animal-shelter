@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import {
+  APPLICANT_EMAIL,
   SEEDED_USER_PASSWORD,
   bootstrapStorageState,
   storageStatePathFor,
@@ -18,9 +19,12 @@ import {
 // (prisma/attention-signals.test.ts, prisma/care-status.test.ts) and the unit
 // tests of the summary (attention-summary.test.ts).
 //
-// Every role that sees the dashboard (volunteer, staff, admin) holds
-// MEDICAL_READ, REPORTS_READ and the task and animal reads, so there is no
-// "left out" case to show.
+// Every role with ANIMAL_READ_ANALYTICS (volunteer, staff, admin) holds
+// MEDICAL_READ, REPORTS_READ and the task and animal reads, so the staff
+// tests have no "left out" card to show. The "left out" case is the whole page
+// for a viewer without ANIMAL_READ_ANALYTICS: an applicant lands on /dashboard
+// after sign-in and gets a welcome with links in place of every card, and no
+// error. That is the last test, signed in as the applicant.
 //
 // Fixtures: the seed's deterministic overdue tasks (seedTasks'
 // `overdueTaskSeedData`), and its open care episodes (Fido, Daisy, Rocket,
@@ -38,6 +42,13 @@ test.beforeAll(async ({ browser }) => {
 });
 
 test.use({ storageState: staffState });
+
+// The analytics chart's title. Its narrow-layout description repeats the text,
+// so this reads the card title only.
+const chartTitle = (page: Page) =>
+  page
+    .locator('[data-slot="card-title"]')
+    .getByText("Intakes vs. Outcomes", { exact: true });
 
 const cardIn = (page: Page, title: string) =>
   page
@@ -65,6 +76,11 @@ test("the headcount cards say where the animals are, and In care opens the shelt
   await expect(space.getByText(/^\d+ \/ \d+$/)).toBeVisible();
   await expect(
     space.getByText(/^(\d+ units? full( · \d+ over capacity)?|\d+ over capacity|Every unit has space)$/),
+  ).toBeVisible();
+
+  // The analytics chart below the cards is still there for staff.
+  await expect(
+    chartTitle(page),
   ).toBeVisible();
 
   // The old KPI cards are gone, and the new ones carry no trend.
@@ -276,4 +292,63 @@ test("Longest stays shows the length-of-stay report's first animals and counts, 
     .getByRole("link");
   await expect(reportFirst).toHaveText(firstName);
   await expect(reportFirst).toHaveAttribute("href", firstHref);
+});
+
+test.describe("an applicant, who cannot read the shelter's analytics", () => {
+  const applicantState = storageStatePathFor("dashboard-home-applicant.state.json");
+
+  test.beforeAll(async ({ browser }) => {
+    await bootstrapStorageState(browser, {
+      email: APPLICANT_EMAIL,
+      password: SEEDED_USER_PASSWORD,
+      storageStatePath: applicantState,
+    });
+  });
+
+  test.use({ storageState: applicantState });
+
+  test("lands on /dashboard with a welcome and links, no error and none of the staff cards", async ({
+    page,
+  }) => {
+    // Which links appear is the permission-filtered sidebar list
+    // (getFilteredNavLinks). Here: the page is wired to it and to the cards'
+    // own permission checks, so nothing throws.
+    await page.goto("/dashboard");
+
+    const welcome = cardIn(page, "Welcome");
+    await expect(welcome).toBeVisible();
+    await expect(
+      welcome.getByRole("link", { name: "My Adoption Applications" }),
+    ).toHaveAttribute("href", "/dashboard/my-adoption-applications");
+    // The USER role's other two pages are listed, and no staff page is.
+    await expect(
+      welcome.getByRole("link", { name: "My Foster Application" }),
+    ).toHaveAttribute("href", "/dashboard/my-foster-application");
+    await expect(
+      welcome.getByRole("link", { name: "My Foster Animals" }),
+    ).toHaveAttribute("href", "/dashboard/my-foster-animals");
+    await expect(
+      welcome.getByRole("link", { name: "Animals", exact: true }),
+    ).toHaveCount(0);
+
+    await expect(page.getByText("Something Went Wrong")).toHaveCount(0);
+    await expect(
+      chartTitle(page),
+    ).toHaveCount(0);
+    for (const title of [
+      "In care",
+      "Needs attention today",
+      "Under care",
+      "Applications waiting",
+      "Readiness",
+      "Longest stays",
+    ]) {
+      await expect(
+        page.getByRole("heading", { name: title, exact: true }),
+      ).toHaveCount(0);
+    }
+
+    await welcome.getByRole("link", { name: "My Adoption Applications" }).click();
+    await expect(page).toHaveURL(/\/dashboard\/my-adoption-applications$/);
+  });
 });
