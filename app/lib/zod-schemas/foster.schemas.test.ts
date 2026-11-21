@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
 import {
+  CreateFosterProfileSchema,
   createFosterPlacementSchema,
   ReturnFromFosterSchema,
 } from "./foster.schemas";
@@ -141,4 +142,81 @@ test("ReturnFromFosterSchema: the reasons only an outcome records are refused", 
       returnReason: ["That reason is recorded by an outcome, not by a return."],
     });
   }
+});
+
+// An unpicked picker holds "" (or undefined once a form is reset), and the
+// message under it has to say what to do. A malformed id that is not empty
+// still gets the schema's own message: that one is a data problem, reachable
+// only by a direct call.
+const MALFORMED = "Invalid ID format. Expected a CUID.";
+
+const fieldErrors = (
+  parsed: { success: boolean; error?: z.ZodError },
+  field: string,
+) =>
+  (z.flattenError(parsed.error!).fieldErrors as Record<string, string[]>)[
+    field
+  ];
+
+test("createFosterPlacementSchema: an unpicked animal or foster says to pick one", () => {
+  for (const unpicked of ["", undefined]) {
+    const result = schema.safeParse({
+      ...baseInput,
+      animalId: unpicked,
+      fosterProfileId: unpicked,
+    });
+    assert.equal(result.success, false);
+    assert.deepEqual(fieldErrors(result, "animalId"), ["Pick an animal."]);
+    assert.deepEqual(fieldErrors(result, "fosterProfileId"), [
+      "Pick a foster.",
+    ]);
+  }
+});
+
+test("createFosterPlacementSchema: a malformed id keeps the schema's message", () => {
+  const result = schema.safeParse({
+    ...baseInput,
+    animalId: "not an id",
+    fosterProfileId: "NOT-A-CUID",
+  });
+  assert.equal(result.success, false);
+  assert.deepEqual(fieldErrors(result, "animalId"), [MALFORMED]);
+  assert.deepEqual(fieldErrors(result, "fosterProfileId"), [MALFORMED]);
+});
+
+test("ReturnFromFosterSchema: an unpicked unit says to pick one", () => {
+  const unpicked = ReturnFromFosterSchema.safeParse({
+    ...returnInput,
+    unitId: "",
+  });
+  assert.equal(unpicked.success, false);
+  assert.deepEqual(fieldErrors(unpicked, "unitId"), ["Pick a unit."]);
+
+  const malformed = ReturnFromFosterSchema.safeParse({
+    ...returnInput,
+    unitId: "not an id",
+  });
+  assert.deepEqual(fieldErrors(malformed, "unitId"), [MALFORMED]);
+});
+
+test("CreateFosterProfileSchema: an unpicked person says to pick one", () => {
+  const input = { speciesIds: ["cmtn2bxpz00gancgsd6hyf79q"], maxAnimals: 1 };
+  const unpicked = CreateFosterProfileSchema.safeParse({
+    ...input,
+    personId: "",
+  });
+  assert.equal(unpicked.success, false);
+  assert.deepEqual(fieldErrors(unpicked, "personId"), ["Pick a person."]);
+
+  const malformed = CreateFosterProfileSchema.safeParse({
+    ...input,
+    personId: "not an id",
+  });
+  assert.deepEqual(fieldErrors(malformed, "personId"), [MALFORMED]);
+
+  const picked = CreateFosterProfileSchema.safeParse({
+    ...input,
+    personId: "cmtn2bxpz00gancgsd6hyf79r",
+  });
+  assert.equal(picked.success, true);
 });

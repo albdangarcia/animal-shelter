@@ -26,12 +26,17 @@ const Page = async ({ searchParams }: Props) => {
 };
 
 const PageContent = async ({ searchParams }: Props) => {
-  const { personId, returnTo } = await searchParams;
+  const { personId, returnTo: returnToParam } = await searchParams;
+  // A repeated ?returnTo= arrives as an array.
+  const returnTo =
+    typeof returnToParam === "string" ? returnToParam : undefined;
 
   const [species, suggestedPerson, canCreatePerson, help] = await Promise.all([
     fetchSpecies(),
     // Prefill from the Fostering tab's "Add as Foster" shortcut.
-    personId ? fetchPersonForApplicationForm(personId) : Promise.resolve(null),
+    typeof personId === "string"
+      ? fetchPersonForApplicationForm(personId)
+      : Promise.resolve(null),
     hasPermission(AppPermissions.PERSONS_MANAGE),
     getHelpLinkGuide(PAGE_HELP_GUIDES.fosterNew),
   ]);

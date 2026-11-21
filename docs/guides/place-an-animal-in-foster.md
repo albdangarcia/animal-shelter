@@ -79,8 +79,8 @@ shelter's care that are not already in foster are offered.
   Return one or raise **Max Animals**.
 - **Already In Foster** (page). Return the animal from its current foster first.
 - **Not In Care** (page). The animal has left the shelter, or isn't here yet.
-- **"Invalid ID format. Expected a CUID."** under **Animal** or **Foster.**
-  Pick one.
+- **"Pick an animal."** under **Animal**, or **"Pick a foster."** under
+  **Foster.** You haven't picked one yet. Pick one.
 - **"A placement type is required."** Pick a **Placement Type**.
 - **"An expected return date cannot be in the past."** Pick today or later.
 - **"This foster is already at capacity."**, **"Cannot place an animal with

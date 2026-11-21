@@ -28,6 +28,7 @@ import {
 import { PersonPicker } from "@/components/common/person-picker";
 import { FosterCapabilityFormFields } from "@/components/dashboard/my-foster-application/foster-capability-form-fields";
 import { createFosterProfileDirect } from "@/app/lib/actions/foster-application.actions";
+import { safeDashboardPath } from "@/app/lib/utils/safe-redirect";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import {
   CreateFosterProfileSchema,
@@ -81,7 +82,7 @@ export function DirectAddFosterForm({
   // entry at a time to work around FormData's repeated-key handling.
   const onSubmit = (values: DirectAddFosterFormValues) => {
     startSubmitTransition(async () => {
-      const result = await createFosterProfileDirect(values);
+      const result = await createFosterProfileDirect(returnTo ?? null, values);
 
       if (result.ok) {
         toast.success(result.message);
@@ -146,7 +147,7 @@ export function DirectAddFosterForm({
               type="button"
               disabled={isPending}
             >
-              <Link href={returnTo || "/dashboard/fosters"}>Cancel</Link>
+              <Link href={safeDashboardPath(returnTo, "/dashboard/fosters")}>Cancel</Link>
             </Button>
             <Button type="submit" size="lg" disabled={isPending}>
               {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
