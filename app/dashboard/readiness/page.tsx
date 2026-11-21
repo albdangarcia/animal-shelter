@@ -10,6 +10,8 @@ import {
   parseReadinessBoardFilters,
   readinessBoardFilterOptions,
 } from "@/app/lib/readiness/board";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 import { ReadinessBoard } from "@/components/dashboard/readiness/readiness-board";
 
 interface Props {
@@ -36,12 +38,14 @@ const PageContent = async ({ searchParams }: Props) => {
     manageAnimalInfo,
     managePhotos,
     manageMedical,
+    help,
   ] = await Promise.all([
     fetchReadinessForAnimals(),
     hasPermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE),
     hasPermission(AppPermissions.ANIMAL_INFO_MANAGE),
     hasPermission(AppPermissions.ANIMAL_PHOTO_MANAGE),
     hasPermission(AppPermissions.MEDICAL_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.readinessBoard),
   ]);
 
   const board = buildReadinessBoard(
@@ -60,6 +64,7 @@ const PageContent = async ({ searchParams }: Props) => {
       )}
       can={{ manageAssessments, manageAnimalInfo, managePhotos, manageMedical }}
       filterParams={{ species, location, stage }}
+      help={help}
     />
   );
 };

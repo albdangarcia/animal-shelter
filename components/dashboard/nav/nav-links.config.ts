@@ -117,6 +117,7 @@ export const HELP_PERMISSIONS: readonly AppPermission[] = [
   AppPermissions.INTAKE_MANAGE,
   AppPermissions.ANIMAL_INFO_READ,
   AppPermissions.ANIMAL_INFO_MANAGE,
+  AppPermissions.ANIMAL_ASSESSMENT_READ,
   AppPermissions.ANIMAL_PHOTO_MANAGE,
   AppPermissions.ANIMAL_VITALS_MANAGE,
   AppPermissions.ANIMAL_CHARACTERISTICS_MANAGE,

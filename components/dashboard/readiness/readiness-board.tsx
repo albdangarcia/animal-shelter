@@ -33,8 +33,11 @@ import {
 } from "@/app/lib/utils/shelter-day";
 import { SimplePagination } from "@/components/simple-pagination";
 import { Badge } from "@/components/ui/badge";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import type { HelpLinkGuide } from "@/app/lib/guides/help-paths";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -468,9 +471,10 @@ interface Props {
   filterOptions: ReadinessBoardFilterOptions;
   can: ReadinessViewerCan;
   filterParams: ReadinessFilterParams;
+  help: HelpLinkGuide | null;
 }
 
-export async function ReadinessBoard({ board, filterOptions, can, filterParams }: Props) {
+export async function ReadinessBoard({ board, filterOptions, can, filterParams, help }: Props) {
   const timezone = (await getShelterSettings()).timezone;
   const ready = board.animalCount - board.blockedCount;
 
@@ -480,6 +484,11 @@ export async function ReadinessBoard({ board, filterOptions, can, filterParams }
         <CardTitle className="@[650px]/main:text-xl">
           <h1>Readiness Board</h1>
         </CardTitle>
+        {help && (
+          <CardAction>
+            <HelpLink guide={help} />
+          </CardAction>
+        )}
         <CardDescription>
           What&apos;s still outstanding before each animal is fully ready for
           adoption, and what clears it.

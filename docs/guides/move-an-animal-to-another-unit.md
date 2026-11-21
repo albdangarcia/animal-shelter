@@ -3,7 +3,7 @@ title: Move an animal to another unit
 summary: Change the kennel, room or other unit an animal is housed in, and open or close a care episode when it moves in or out of a medical area.
 permissions: [ANIMAL_INFO_MANAGE, MEDICAL_MANAGE]
 aliases: [move kennel, change kennel, rehouse, relocate an animal, move to medical, unplaced, assign a kennel]
-related: [edit-an-animals-details, add-edit-or-delete-a-location-or-unit, open-a-care-episode-add-a-condition-or-allergy, take-in-a-new-animal]
+related: [edit-an-animals-details, add-edit-or-delete-a-location-or-unit, open-a-care-episode-add-a-condition-or-allergy, take-in-a-new-animal, read-the-housing-board-and-drag-animals]
 verified: 2026-11-16
 ---
 

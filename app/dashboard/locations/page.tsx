@@ -3,6 +3,8 @@ import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { fetchShelterBoard } from "@/app/lib/data/locations/shelter-board.data";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 import { ShelterBoard } from "@/components/dashboard/locations/shelter-board";
 
 const Page = async () => {
@@ -17,12 +19,13 @@ const Page = async () => {
 };
 
 const PageContent = async () => {
-  const [data, canReadFosters] = await Promise.all([
+  const [data, canReadFosters, help] = await Promise.all([
     fetchShelterBoard(),
     hasPermission(AppPermissions.FOSTERS_READ),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.housingBoard),
   ]);
 
-  return <ShelterBoard data={data} canReadFosters={canReadFosters} />;
+  return <ShelterBoard data={data} canReadFosters={canReadFosters} help={help} />;
 };
 
 export default Page;
