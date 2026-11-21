@@ -8,6 +8,11 @@ import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { PartnerContactFormSchema } from "../zod-schemas/partners-directory.schemas";
 import { z } from "zod";
+import { addContact, updateContact } from "../services/partner-contact";
+import {
+  NotFoundError,
+  PreconditionFailedError,
+} from "../utils/errors";
 
 export type PartnerContactFormState = {
   success?: boolean;
@@ -52,27 +57,25 @@ const _addPartnerContact = async (
   const { personId, role, isPrimary, isActive } = validatedFields.data;
 
   try {
-    await prisma.$transaction(async (tx) => {
-      // If this contact will be primary, demote any existing primary first
-      // so the partial unique index isn't violated.
-      if (isPrimary) {
-        await tx.partnerContact.updateMany({
-          where: { partnerId: parsedPartnerId.data, isPrimary: true },
-          data: { isPrimary: false },
-        });
-      }
-
-      await tx.partnerContact.create({
-        data: {
-          partnerId: parsedPartnerId.data,
-          personId,
-          role: role || null,
-          isPrimary: isPrimary ?? false,
-          isActive: isActive ?? true,
-        },
-      });
-    });
+    await prisma.$transaction((tx) =>
+      addContact(tx, parsedPartnerId.data, personId, {
+        role: role || null,
+        isPrimary: isPrimary ?? false,
+        isActive: isActive ?? true,
+      }),
+    );
   } catch (error) {
+    if (
+      error instanceof NotFoundError ||
+      error instanceof PreconditionFailedError
+    ) {
+      return {
+        errors: { personId: [error.message] },
+        message: "Failed to add contact.",
+      };
+    }
+    // A second tab adding the same person at the same moment: the service
+    // read no row, then lost the race to the unique index.
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
@@ -123,33 +126,22 @@ const _updatePartnerContact = async (
   const { role, isPrimary, isActive } = validatedFields.data;
 
   try {
-    await prisma.$transaction(async (tx) => {
-      if (isPrimary) {
-        // Demote any OTHER primary (not this row) before promoting this one.
-        await tx.partnerContact.updateMany({
-          where: {
-            partnerId: parsedPartnerId.data,
-            isPrimary: true,
-            id: { not: parsedContactId.data },
-          },
-          data: { isPrimary: false },
-        });
-      }
-
-      await tx.partnerContact.update({
-        where: { id: parsedContactId.data },
-        data: {
-          role: role || null,
-          isPrimary: isPrimary ?? false,
-          isActive: isActive ?? true,
-        },
-      });
-    });
+    await prisma.$transaction((tx) =>
+      updateContact(tx, parsedPartnerId.data, parsedContactId.data, {
+        role: role || null,
+        isPrimary: isPrimary ?? false,
+        isActive: isActive ?? true,
+      }),
+    );
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === "P2025") {
-        return { message: "Contact not found." };
-      }
+    if (error instanceof NotFoundError) {
+      return { message: error.message };
+    }
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2025"
+    ) {
+      return { message: "Contact not found." };
     }
     console.error("Database Error updating partner contact:", error);
     return {

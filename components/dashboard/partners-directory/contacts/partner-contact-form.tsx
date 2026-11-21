@@ -1,7 +1,7 @@
 "use client";
 
 import { startTransition, useActionState, useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Loader2 } from "lucide-react";
@@ -77,7 +77,10 @@ export const PartnerContactForm = ({
       ? {
           personId: contact.person.id,
           role: contact.role || "",
-          isPrimary: contact.isPrimary,
+          // A legacy row can be primary and inactive; the box shows it
+          // unticked, so the value has to agree or ticking Active would
+          // quietly make them primary.
+          isPrimary: contact.isPrimary && contact.isActive,
           isActive: contact.isActive,
         }
       : {
@@ -118,6 +121,9 @@ export const PartnerContactForm = ({
     });
   };
 
+  // A contact who isn't active can't be primary.
+  const isActive = useWatch({ control: form.control, name: "isActive" });
+
   const onSubmit = (data: PartnerContactFormValues) => {
     const formData = new FormData();
     formData.append("personId", data.personId);
@@ -157,13 +163,13 @@ export const PartnerContactForm = ({
               </FormControl>
               {isEditMode ? (
                 <FormDescription>
-                  The linked person can&apos;t be changed. Remove this contact
-                  and add another to link a different person.
+                  The linked person can&apos;t be changed. Deactivate this
+                  contact and add another to link a different person.
                 </FormDescription>
               ) : selectedPerson?.isDeactivatedContactHere ? (
                 <FormDescription>
                   This person was previously a contact here. Adding them will
-                  reactivate that link.
+                  reactivate that link with the role and settings below.
                 </FormDescription>
               ) : null}
               <FormMessage />
@@ -197,15 +203,17 @@ export const PartnerContactForm = ({
             <FormItem className="flex flex-row items-start space-x-3 space-y-0">
               <FormControl>
                 <Checkbox
-                  checked={field.value}
+                  checked={field.value && isActive}
                   onCheckedChange={field.onChange}
+                  disabled={!isActive}
                 />
               </FormControl>
               <div className="space-y-1 leading-none">
                 <FormLabel>Primary contact</FormLabel>
                 <FormDescription>
-                  The main point of contact. Setting this unsets any existing
-                  primary.
+                  {isActive
+                    ? "The main point of contact. Setting this unsets any existing primary."
+                    : "Only an active contact can be the primary. Tick Active to choose this."}
                 </FormDescription>
               </div>
             </FormItem>
@@ -221,7 +229,13 @@ export const PartnerContactForm = ({
               <FormControl>
                 <Checkbox
                   checked={field.value}
-                  onCheckedChange={field.onChange}
+                  onCheckedChange={(checked) => {
+                    field.onChange(checked);
+                    // Unticking Active also clears Primary, as the server does.
+                    if (checked !== true) {
+                      form.setValue("isPrimary", false, { shouldDirty: true });
+                    }
+                  }}
                 />
               </FormControl>
               <div className="space-y-1 leading-none">

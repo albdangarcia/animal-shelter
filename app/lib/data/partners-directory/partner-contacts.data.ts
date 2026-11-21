@@ -3,6 +3,7 @@ import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import { PartnerContactsPayload, LinkablePersonPayload } from "../../types";
+import { fetchLinkablePeopleFor } from "../../services/partner-contact";
 
 const _fetchPartnerContacts = async (
   inputPartnerId: string,
@@ -53,39 +54,9 @@ const _fetchLinkablePeople = async (
   if (!parsedId.success) {
     throw new Error("Invalid partner ID format.");
   }
-  const partnerId = parsedId.data;
 
   try {
-    const rows = await prisma.person.findMany({
-      where: {
-        // Exclude people who are already ACTIVE contacts at this partner.
-        NOT: {
-          partnerContacts: { some: { partnerId, isActive: true } },
-        },
-      },
-      orderBy: { name: "asc" },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        partnerContacts: {
-          where: { partnerId },
-          select: { isActive: true },
-          take: 1,
-        },
-      },
-    });
-
-    const people = rows.map((p) => ({
-      id: p.id,
-      name: p.name,
-      email: p.email,
-      phone: p.phone,
-      isDeactivatedContactHere: p.partnerContacts.length > 0,
-    }));
-
-    return { people };
+    return { people: await fetchLinkablePeopleFor(parsedId.data) };
   } catch (error) {
     console.error("Error fetching linkable people.", error);
     throw new Error("Could not fetch people.");

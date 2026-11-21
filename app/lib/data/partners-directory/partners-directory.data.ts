@@ -6,6 +6,7 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { PartnersDirectoryParamsSchema } from "../../zod-schemas/partners-directory.schemas";
 import { PartnerFormPayload, PartnersDirectoryPayload, PartnerSectionCardPayload } from "../../types";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
+import { primaryContactArgs } from "../../services/partner-contact";
 
 const _fetchPartners = async (
   queryInput: string,
@@ -199,18 +200,9 @@ const _fetchSectionCardsPartnerData = async (
         zipCode: true,
         isActive: true,
         notes: true,
-        // Deterministic primary contact, at most one exists (DB-enforced)
-        contacts: {
-          where: { isPrimary: true, isActive: true },
-          orderBy: { createdAt: "asc" },
-          take: 1,
-          select: {
-            role: true,
-            person: {
-              select: { id: true, name: true, email: true, phone: true },
-            },
-          },
-        },
+        // Deterministic primary contact, at most one exists (DB-enforced).
+        // Shared with the Contacts tab's rules in the partner-contact service.
+        contacts: primaryContactArgs,
         _count: {
           select: {
             contacts: true,
