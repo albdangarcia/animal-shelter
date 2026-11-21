@@ -3,7 +3,7 @@ title: Record an adoption, transfer out, return to owner or other outcome
 summary: Record an animal leaving the shelter, and see what changes when you do, from its unit and foster placement to its adoption applications.
 permissions: [OUTCOMES_MANAGE]
 aliases: [complete an adoption, finalize adoption, adopt out, adopted, transfer out, transfer to a rescue, send to a partner, return to owner, owner reclaim, reclaimed, owner picked up, animal left, discharge, create outcome, process outcome, close the stay]
-related: [correct-an-outcome, find-an-outcome, record-an-end-of-life-outcome, reverse-an-outcome-recorded-by-mistake, take-back-an-animal-that-left, move-an-animal-to-another-unit, review-an-application-and-change-its-status, adoption-application-status-glossary, place-an-animal-in-foster, return-an-animal-from-foster, turn-a-foster-into-an-adoption]
+related: [correct-an-outcome, find-an-outcome, record-an-end-of-life-outcome, reverse-an-outcome-recorded-by-mistake, take-back-an-animal-that-left, move-an-animal-to-another-unit, review-an-application-and-change-its-status, adoption-application-status-glossary, place-an-animal-in-foster, return-an-animal-from-foster, turn-a-foster-into-an-adoption, add-or-edit-a-partner]
 verified: 2026-11-16
 ---
 

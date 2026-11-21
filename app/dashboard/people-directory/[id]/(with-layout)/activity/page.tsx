@@ -4,6 +4,9 @@ import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import PersonActivityFeed from "@/components/dashboard/people-directory/activity/person-activity-feed";
 import { fetchPersonActivity } from "@/app/lib/data/people-directory/person-activity.data";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: IDParamType;
@@ -23,9 +26,19 @@ const Page = async ({ params }: Props) => {
 const PageContent = async ({ params }: Props) => {
   const { id: personId } = await params;
 
-  const { activity } = await fetchPersonActivity(personId);
+  const [{ activity }, help] = await Promise.all([
+    fetchPersonActivity(personId),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.personActivity),
+  ]);
 
-  return <PersonActivityFeed activity={activity} />;
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <HelpLink guide={help} />
+      </div>
+      <PersonActivityFeed activity={activity} />
+    </div>
+  );
 };
 
 export default Page;

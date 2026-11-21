@@ -5,6 +5,9 @@ import { fetchPersonProfileTabData } from "@/app/lib/data/people-directory/peopl
 import { IDParamType } from "@/app/lib/types";
 import { notFound } from "next/navigation";
 import { StaffHouseholdForm } from "@/components/dashboard/household/staff-household-form";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: IDParamType;
@@ -24,7 +27,10 @@ const Page = async ({ params }: Props) => {
 const PageContent = async ({ params }: Props) => {
   const { id } = await params;
 
-  const person = await fetchPersonProfileTabData(id);
+  const [person, help] = await Promise.all([
+    fetchPersonProfileTabData(id),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.personHousehold),
+  ]);
 
   if (!person) {
     notFound();
@@ -32,6 +38,9 @@ const PageContent = async ({ params }: Props) => {
 
   return (
     <main>
+      <div className="mx-auto mb-2 flex w-full max-w-3xl justify-end">
+        <HelpLink guide={help} />
+      </div>
       <StaffHouseholdForm
         householdProfile={person.householdProfile}
         personId={person.id}

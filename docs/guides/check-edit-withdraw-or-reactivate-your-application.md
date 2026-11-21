@@ -3,7 +3,7 @@ title: Check, change, withdraw or reactivate your adoption application
 summary: For adopters. See where your application stands and why, change it while it is waiting, withdraw it, or bring a withdrawn one back.
 permissions: [MY_APPLICATIONS_READ, MY_APPLICATIONS_MANAGE]
 aliases: [my application status, did I get approved, cancel my application, change my application, edit my application, undo withdraw, why was my application closed, adoption application history, my adoption applications]
-related: [apply-to-adopt-an-animal]
+related: [apply-to-adopt-an-animal, update-your-own-profile-and-household]
 verified: 2026-11-20
 ---
 

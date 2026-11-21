@@ -5,6 +5,9 @@ import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import PersonNotes from "@/components/dashboard/people-directory/notes/person-notes";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   params: IDParamType;
@@ -27,22 +30,24 @@ const PageContent = async ({ params, searchParams }: Props) => {
   const { page = "1", sort, status } = await searchParams;
   const currentPage = Number(page);
 
-  const { notes, totalPages } = await fetchPersonNotes(
-    personId,
-    currentPage,
-    sort,
-    status,
-  );
-
-  const canManage = await hasPermission(AppPermissions.PERSONS_MANAGE);
+  const [{ notes, totalPages }, canManage, help] = await Promise.all([
+    fetchPersonNotes(personId, currentPage, sort, status),
+    hasPermission(AppPermissions.PERSONS_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.personNotes),
+  ]);
 
   return (
-    <PersonNotes
-      notes={notes}
-      totalPages={totalPages}
-      personId={personId}
-      canManage={canManage}
-    />
+    <div className="space-y-2">
+      <div className="flex justify-end">
+        <HelpLink guide={help} />
+      </div>
+      <PersonNotes
+        notes={notes}
+        totalPages={totalPages}
+        personId={personId}
+        canManage={canManage}
+      />
+    </div>
   );
 };
 

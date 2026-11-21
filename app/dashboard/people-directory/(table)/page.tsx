@@ -18,6 +18,9 @@ import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { fetchPeople } from "@/app/lib/data/people-directory/people-directory.data";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { HelpLink } from "@/components/dashboard/help/help-link";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -53,7 +56,10 @@ const PageContent = async ({ searchParams }: Props) => {
     account,
   );
 
-  const canManage = await hasPermission(AppPermissions.PERSONS_MANAGE);
+  const [canManage, help] = await Promise.all([
+    hasPermission(AppPermissions.PERSONS_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.people),
+  ]);
 
   return (
     <Card className="@container/card">
@@ -65,7 +71,7 @@ const PageContent = async ({ searchParams }: Props) => {
           View and manage records for adopters, volunteers, and shelter
           contacts.
         </CardDescription>
-        <CardAction>
+        <CardAction className="flex items-center gap-2">
           <span
             className={cn("inline-block", !canManage && "cursor-not-allowed")}
           >
@@ -84,6 +90,7 @@ const PageContent = async ({ searchParams }: Props) => {
               </Link>
             </Button>
           </span>
+          <HelpLink guide={help} />
         </CardAction>
       </CardHeader>
       <CardContent>
