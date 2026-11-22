@@ -1,4 +1,5 @@
 import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
+import { READINESS_READ_PERMISSIONS } from "@/app/lib/readiness/permissions";
 import type { GlobalSearchPermission } from "@/app/lib/data/search/global-search";
 
 export type IconName =
@@ -37,17 +38,24 @@ export interface NavItem {
   url: string;
   icon: IconName;
   /**
-   * Single required permission. Mutually exclusive with `anyPermissions` —
-   * if both are set, `anyPermissions` wins (see `getFilteredNavLinks`).
+   * Single required permission. Use one of `permission`, `anyPermissions`
+   * and `allPermissions`; if several are set, `anyPermissions` wins, then
+   * `allPermissions` (see `navItemAllowed`).
    */
   permission?: AppPermission;
   /**
    * Show the entry when the user holds ANY of these. Added for Settings, which
    * is reachable by several disjoint permissions (each settings card gates
    * itself); a single `permission` can't express "role-manager OR ai-activity
-   * reader OR …". Every other entry uses the single `permission` form.
+   * reader OR …". Most other entries use the single `permission` form.
    */
   anyPermissions?: readonly AppPermission[];
+  /**
+   * Show the entry only when the user holds EVERY one of these. Added for the
+   * Readiness Board, whose page needs all four readiness reads. Ignored if
+   * `anyPermissions` is set.
+   */
+  allPermissions?: readonly AppPermission[];
   isActive?: boolean;
   items?: Array<{
     title: string;
@@ -166,7 +174,7 @@ export const navMainItems: readonly NavItem[] = [
     title: "Readiness Board",
     url: "/dashboard/readiness",
     icon: "IconClipboardCheck",
-    permission: AppPermissions.ANIMAL_ASSESSMENT_READ,
+    allPermissions: READINESS_READ_PERMISSIONS,
   },
   {
     title: "People Directory",

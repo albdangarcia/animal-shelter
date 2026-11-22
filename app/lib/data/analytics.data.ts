@@ -20,6 +20,7 @@ import {
   countAdoptionApplicationsWaiting,
   countFosterApplicationsWaiting,
 } from "./applications-waiting";
+import { READINESS_READ_PERMISSIONS } from "../readiness/permissions";
 import { findReadinessForAnimals } from "./animals/readiness";
 import { shelterDay } from "./animals/readiness.data";
 import {
@@ -231,10 +232,7 @@ const _fetchReadinessSummary = async (): Promise<ReadinessSummary> => {
  *  it. */
 export const READINESS_PERMISSIONS = [
   AppPermissions.ANIMAL_READ_ANALYTICS,
-  AppPermissions.ANIMAL_INFO_READ,
-  AppPermissions.ANIMAL_ASSESSMENT_READ,
-  AppPermissions.ANIMAL_CHARACTERISTICS_READ,
-  AppPermissions.MEDICAL_READ,
+  ...READINESS_READ_PERMISSIONS,
 ] as const satisfies readonly AppPermission[];
 
 export const fetchReadinessSummary = RequireAllPermissions(

@@ -5,8 +5,8 @@ import {
 import prisma from "@/app/lib/prisma";
 import type { AnimalReadiness } from "../../readiness/board";
 import type { ReadinessBlocker } from "../../readiness/compute-readiness";
-import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequireAllPermissions } from "../../auth/protected-actions";
+import { READINESS_READ_PERMISSIONS } from "../../readiness/permissions";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import {
   findAnimalReadiness,
@@ -42,12 +42,7 @@ const _fetchAnimalReadiness = async (
   return readiness.blockers;
 };
 
-export const fetchAnimalReadiness = RequireAllPermissions(
-  AppPermissions.ANIMAL_INFO_READ,
-  AppPermissions.ANIMAL_ASSESSMENT_READ,
-  AppPermissions.ANIMAL_CHARACTERISTICS_READ,
-  AppPermissions.MEDICAL_READ,
-)(_fetchAnimalReadiness);
+export const fetchAnimalReadiness = RequireAllPermissions(...READINESS_READ_PERMISSIONS)(_fetchAnimalReadiness);
 
 // Exported unwrapped for the AI tool layer: a tool's `execute` runs
 // mid-stream where `RequirePermission`'s ambient session read is unreliable.
@@ -73,9 +68,4 @@ export const _fetchAnimalReadinessForAssistant = async (
 const _fetchReadinessForAnimals = async (): Promise<AnimalReadiness[]> =>
   findReadinessForAnimals(prisma, await shelterDay());
 
-export const fetchReadinessForAnimals = RequireAllPermissions(
-  AppPermissions.ANIMAL_INFO_READ,
-  AppPermissions.ANIMAL_ASSESSMENT_READ,
-  AppPermissions.ANIMAL_CHARACTERISTICS_READ,
-  AppPermissions.MEDICAL_READ,
-)(_fetchReadinessForAnimals);
+export const fetchReadinessForAnimals = RequireAllPermissions(...READINESS_READ_PERMISSIONS)(_fetchReadinessForAnimals);

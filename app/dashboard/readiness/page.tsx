@@ -13,6 +13,7 @@ import {
 } from "@/app/lib/readiness/board";
 import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
 import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import { READINESS_READ_PERMISSIONS } from "@/app/lib/readiness/permissions";
 import { ReadinessBoard } from "@/components/dashboard/readiness/readiness-board";
 
 interface Props {
@@ -22,7 +23,7 @@ interface Props {
 const Page = async ({ searchParams }: Props) => {
   return (
     <Authorize
-      permission={AppPermissions.ANIMAL_ASSESSMENT_READ}
+      permissions={READINESS_READ_PERMISSIONS}
       fallback={<StatusPage type="accessDenied" />}
     >
       <PageContent searchParams={searchParams} />
