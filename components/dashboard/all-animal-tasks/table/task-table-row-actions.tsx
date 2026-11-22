@@ -4,7 +4,6 @@ import type { Row, StockFeatures } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +26,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TaskAssignee } from "@/app/lib/types";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
-import { updateAnimalTaskStatus } from "@/app/lib/actions/animal-task.actions";
+import { changeTaskStatus, moveTaskToTrash } from "../../animals/tasks/table/task-status-changes";
 import { TaskStatus } from "@/prisma/generated/enums";
 import { TaskStatusOptions } from "@/app/lib/utils/enum-formatter";
 import { TaskForm } from "../../animals/tasks/task-form";
@@ -58,20 +57,7 @@ export function DataTableRowActions({
     return null;
   }
 
-  const onSoftDelete = () => {
-    const originalStatus = task.status;
-    updateAnimalTaskStatus(task.id, TaskStatus.DELETED);
-
-    toast.success("Task moved to trash.", {
-      action: {
-        label: "Undo",
-        onClick: () => {
-          updateAnimalTaskStatus(task.id, originalStatus);
-          toast.info("Task restored.");
-        },
-      },
-    });
-  };
+  const onSoftDelete = () => moveTaskToTrash(task.id, task.status);
 
   return (
     <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -98,10 +84,9 @@ export function DataTableRowActions({
             <DropdownMenuSubContent>
               <DropdownMenuRadioGroup
                 value={task.status}
-                onValueChange={(newStatus) => {
-                  updateAnimalTaskStatus(task.id, newStatus as TaskStatus);
-                  toast.success(`Task status updated`);
-                }}
+                onValueChange={(newStatus) =>
+                  changeTaskStatus(task.id, newStatus as TaskStatus)
+                }
               >
                 {TaskStatusOptions.map((status) => (
                   <DropdownMenuRadioItem

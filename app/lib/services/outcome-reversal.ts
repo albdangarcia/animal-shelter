@@ -5,8 +5,13 @@ import { checkOutcomeReversal } from "@/app/lib/data/animal-timeline.data";
 import { findLiveUnitForPlacement } from "@/app/lib/services/unit-housing";
 import { findArchivingOutcome } from "@/app/lib/services/archiving-outcome";
 import {
+  describeReopenedTasks,
+  reopenTasksCanceledByOutcome,
+} from "@/app/lib/services/outcome-tasks";
+import {
   AnimalActivityType,
   AnimalListingStatus,
+  TaskStatus,
 } from "@/prisma/generated/enums";
 import {
   ConflictError,
@@ -31,7 +36,8 @@ import {
  *
  * A reversal puts the animal back as it was before the outcome: its listing,
  * its foster placement if the outcome closed one, and otherwise the unit it
- * was housed in, each only when nothing has moved the animal since.
+ * was housed in, and the tasks the outcome canceled, each only when nothing
+ * has moved the animal since.
  *
  * A reversal voids the row rather than deleting it or posting an opposite
  * entry. The outcome is kept, with who reversed it, when and why, and from
@@ -62,6 +68,8 @@ export interface OutcomeReversal {
   fosterPersonId: string | null;
   /** The unit the animal was put back in, or null when it was not placed. */
   restoredUnitId: string | null;
+  /** How many tasks the outcome canceled were put back to their status. */
+  reopenedTaskCount: number;
   /** What happened to the listing, placement and unit, as sentences for staff. */
   effects: string;
 }
@@ -188,6 +196,7 @@ export const recordOutcomeReversal = async (
   let reopenedPlacementId: string | null = null;
   let restoredUnit: Awaited<ReturnType<typeof findLiveUnitForPlacement>> =
     null;
+  let reopenedTaskCount = 0;
 
   if (archivedByThisOutcome) {
     // The listing and the animal's place, a foster or a unit, come back
@@ -278,10 +287,34 @@ export const recordOutcomeReversal = async (
         effects.push("It has no unit now; place it from its record.");
       }
     }
+
+    // The tasks the outcome canceled when it archived the animal, each back
+    // to the status it had. Their rows are stamped after the reversal's,
+    // which is stamped `reversedAt`.
+    reopenedTaskCount = await reopenTasksCanceledByOutcome(tx, {
+      animalId,
+      outcomeId,
+      actorId,
+      after: reversedAt,
+    });
+    const reopenedSentence = describeReopenedTasks(reopenedTaskCount);
+    if (reopenedSentence) effects.push(reopenedSentence);
   } else {
     effects.push(
       "The listing was left as it is, since this outcome is no longer what archived the animal.",
     );
+    // A re-intake has moved the animal on since, and what was planned for it
+    // before it left is stale. Staff reopen any task that still matters.
+    const stillCanceled = await tx.task.count({
+      where: { canceledByOutcomeId: outcomeId, status: TaskStatus.CANCELED },
+    });
+    if (stillCanceled > 0) {
+      effects.push(
+        stillCanceled === 1
+          ? "The task it canceled stays canceled."
+          : `The ${stillCanceled} tasks it canceled stay canceled.`,
+      );
+    }
   }
 
   const effectsText = effects.join(" ");
@@ -323,6 +356,7 @@ export const recordOutcomeReversal = async (
     reopenedPlacementId,
     fosterPersonId: outcome.fosterPlacement?.fosterProfile.person.id ?? null,
     restoredUnitId: restoredUnit?.id ?? null,
+    reopenedTaskCount,
     effects: effectsText,
   };
 };

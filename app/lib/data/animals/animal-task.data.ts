@@ -9,6 +9,7 @@ import { AnimalTasksSchema } from "../../zod-schemas/animal.schemas";
 import { RequirePermission } from "../../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { TaskAssignee } from "../../types";
+import { countTasksStillToDo } from "@/app/lib/services/outcome-tasks";
 
 export type FetchAnimalTasksPayload = Prisma.TaskGetPayload<{
   select: {
@@ -177,3 +178,12 @@ export const fetchTaskAssigneeList = RequirePermission(
 export const fetchAnimalTasks = RequirePermission(
   AppPermissions.ANIMAL_TASK_READ,
 )(_fetchAnimalTasks);
+
+/**
+ * How many of the animal's tasks are still to do: what recording an outcome,
+ * or converting a foster-to-adopt placement, would cancel now. Only a count,
+ * read by the outcome and conversion pages, which already admit only someone
+ * who can record that outcome, so it is not gated on reading tasks.
+ */
+export const fetchTasksStillToDoCount = (animalId: string) =>
+  countTasksStillToDo(prisma, animalId);

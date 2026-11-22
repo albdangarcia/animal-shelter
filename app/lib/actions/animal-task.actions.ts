@@ -21,9 +21,15 @@ import {
   type TaskPriority,
   type TaskStatus,
 } from "@/prisma/generated/enums";
-import { NotFoundError } from "../utils/errors";
+import { ConflictError, NotFoundError } from "../utils/errors";
 import { formatSingleEnumOption } from "../utils/enum-formatter";
 import { applyTaskStatusChange } from "../tasks/apply-task-status-change";
+import { recordTaskCreation } from "../tasks/record-task-creation";
+import { lockAnimal } from "@/app/lib/data/application-status.data";
+import {
+  assertAnimalCanHaveOpenTask,
+  outcomeLinkAfterStatusChange,
+} from "../services/outcome-tasks";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 
 type TaskFormInput = z.input<typeof TaskFormSchema>;
@@ -166,25 +172,17 @@ const _createAnimalTask = async (
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.task.create({
-        data: {
-          ...toTaskData(validatedFields.data),
-          animalId: parsedId.data,
-          createdById: taskCreatorId,
-        },
-      });
-
-      await tx.animalActivityLog.create({
-        data: {
-          animalId: parsedId.data,
-          activityType: AnimalActivityType.TASK_CREATED,
-          changedById: taskCreatorId,
-          changeSummary: `Task "${validatedFields.data.title}" was created.`,
-        },
-      });
-    });
+    await prisma.$transaction((tx) =>
+      recordTaskCreation(tx, {
+        animalId: parsedId.data,
+        createdById: taskCreatorId,
+        data: toTaskData(validatedFields.data),
+      }),
+    );
   } catch (error) {
+    if (error instanceof ConflictError) {
+      return { ok: false, message: error.message };
+    }
     console.error("Database Error creating task:", error);
     return { ok: false, message: "Database Error: Failed to create task." };
   }
@@ -232,6 +230,9 @@ const _updateAnimalTask = async (
 
   try {
     await prisma.$transaction(async (tx) => {
+      // The animal's lock, as every task status write takes it: an outcome
+      // recorded at the same moment cancels this task or sees it settled.
+      await lockAnimal(tx, parsedAnimalId.data);
       const existing = await tx.task.findFirst({
         where: {
           id: parsedTaskId.data,
@@ -252,16 +253,31 @@ const _updateAnimalTask = async (
         throw new NotFoundError("Task not found for this animal.");
       }
 
+      const statusChanges =
+        nextData.status !== undefined && nextData.status !== existing.status;
+      if (statusChanges && nextData.status) {
+        await assertAnimalCanHaveOpenTask(
+          tx,
+          parsedAnimalId.data,
+          nextData.status,
+        );
+      }
+
+      // A status staff set can unlink the task from the outcome that
+      // canceled it, as `applyTaskStatusChange` does.
       await tx.task.update({
         where: { id: parsedTaskId.data },
-        data: nextData,
+        data:
+          statusChanges && nextData.status
+            ? { ...nextData, ...outcomeLinkAfterStatusChange(nextData.status) }
+            : nextData,
       });
 
       // Fields with a dedicated activity type are logged as that type, no
       // matter which UI produced the change. One save can emit up to three
       // entries: TASK_STATUS_CHANGED, TASK_ASSIGNED, and a TASK_UPDATED
       // rollup for whatever else changed. None fire if nothing changed.
-      if (nextData.status !== undefined && nextData.status !== existing.status) {
+      if (statusChanges) {
         await tx.animalActivityLog.create({
           data: {
             animalId: parsedAnimalId.data,
@@ -300,7 +316,7 @@ const _updateAnimalTask = async (
       }
     });
   } catch (error) {
-    if (error instanceof NotFoundError) {
+    if (error instanceof NotFoundError || error instanceof ConflictError) {
       return { ok: false, message: error.message };
     }
     console.error("Database Error updating task:", error);
@@ -348,7 +364,7 @@ const _updateTaskStatus = async (
       }),
     ));
   } catch (error) {
-    if (error instanceof NotFoundError) {
+    if (error instanceof NotFoundError || error instanceof ConflictError) {
       return { success: false, message: error.message };
     }
     console.error("Database Error updating task status:", error);

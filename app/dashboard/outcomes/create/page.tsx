@@ -18,6 +18,8 @@ import {
 } from "@/prisma/generated/enums";
 import ActionBlockedMessage from "@/components/action-blocked-message";
 import { OutcomeFosterNotice } from "@/components/dashboard/outcomes/outcome-foster-notice";
+import { OutcomeTasksNotice } from "@/components/dashboard/outcomes/outcome-tasks-notice";
+import { fetchTasksStillToDoCount } from "@/app/lib/data/animals/animal-task.data";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { Authorize } from "@/components/auth/authorize";
@@ -62,14 +64,21 @@ const PageContent = async ({ searchParams }: Props) => {
     return notFound();
   }
 
-  const [partners, canCreatePerson, canReadFosters, canManageFosters, help] =
-    await Promise.all([
-      fetchPartners(),
-      hasPermission(AppPermissions.PERSONS_MANAGE),
-      hasPermission(AppPermissions.FOSTERS_READ),
-      hasPermission(AppPermissions.FOSTERS_MANAGE),
-      getHelpLinkGuide(PAGE_HELP_GUIDES.outcomeCreate),
-    ]);
+  const [
+    partners,
+    canCreatePerson,
+    canReadFosters,
+    canManageFosters,
+    help,
+    openTaskCount,
+  ] = await Promise.all([
+    fetchPartners(),
+    hasPermission(AppPermissions.PERSONS_MANAGE),
+    hasPermission(AppPermissions.FOSTERS_READ),
+    hasPermission(AppPermissions.FOSTERS_MANAGE),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.outcomeCreate),
+    fetchTasksStillToDoCount(animal.id),
+  ]);
   if (!partners) {
     return notFound();
   }
@@ -151,6 +160,11 @@ const PageContent = async ({ searchParams }: Props) => {
               canReadFosters={canReadFosters}
             />
           )}
+          <OutcomeTasksNotice
+            animalName={animal.name}
+            count={openTaskCount}
+            action="Recording this outcome"
+          />
           <OutcomeForm
             animal={{ id: animal.id, name: animal.name }}
             application={application || undefined}

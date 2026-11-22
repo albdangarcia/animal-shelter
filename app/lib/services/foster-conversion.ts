@@ -7,6 +7,7 @@ import {
   lockAnimal,
 } from "@/app/lib/data/application-status.data";
 import { assertNoLiveAdoptionOutcome } from "@/app/lib/services/outcome-reversal";
+import { cancelOpenTasksForOutcome } from "@/app/lib/services/outcome-tasks";
 import {
   AnimalActivityType,
   AnimalListingStatus,
@@ -31,7 +32,8 @@ import {
  *
  * The conversion records an adoption outcome dated today, archives the animal
  * for it, and closes the placement as adopted by the foster, linked to the
- * outcome and to the foster's application when one is given.
+ * outcome and to the foster's application when one is given. Like any
+ * outcome that archives the animal, it cancels the tasks still to do on it.
  */
 
 export type FosterConversionValues = {
@@ -43,7 +45,7 @@ export const recordFosterConversion = async (
   tx: TransactionClient,
   values: FosterConversionValues,
   staffMemberId: string,
-): Promise<{ animalId: string }> => {
+): Promise<{ animalId: string; canceledTaskCount: number }> => {
   const { placementId, adoptionApplicationId } = values;
 
   const placement = await tx.fosterPlacement.findUnique({
@@ -207,5 +209,13 @@ export const recordFosterConversion = async (
     },
   });
 
-  return { animalId: placement.animalId };
+  const canceledTaskCount = await cancelOpenTasksForOutcome(tx, {
+    animalId: placement.animalId,
+    outcomeId: outcome.id,
+    outcomeType: OutcomeType.ADOPTION,
+    actorId: staffMemberId,
+    after: outcomeRow.changedAt,
+  });
+
+  return { animalId: placement.animalId, canceledTaskCount };
 };

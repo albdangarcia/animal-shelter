@@ -311,7 +311,7 @@ test("a conversion adopts the animal to the foster and closes the placement on t
 
   const result = await convert(placementId, applicationId);
 
-  assert.deepEqual(result, { animalId });
+  assert.deepEqual(result, { animalId, canceledTaskCount: 0 });
   const after = await readState(animalId, placementId);
   assert.equal(after.listingStatus, AnimalListingStatus.ARCHIVED);
   assert.equal(after.archiveReason, OutcomeType.ADOPTION);

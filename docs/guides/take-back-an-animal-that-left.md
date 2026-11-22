@@ -4,7 +4,7 @@ summary: Record a re-intake when an adopted, transferred or returned animal come
 permissions: [INTAKE_MANAGE]
 aliases: [re-intake, reintake, returned adoption, adoption return, animal came back, bring an animal back, returned animal, re-admit, readmit, adopter brought it back, second intake]
 related: [take-in-a-new-animal, correct-an-intake, find-an-intake, set-up-or-change-a-medical-protocol, schedule-care-and-read-the-due-page, record-an-outcome, reverse-an-outcome-recorded-by-mistake, find-an-outcome]
-verified: 2026-11-16
+verified: 2026-11-22
 ---
 
 ## When to use this
@@ -62,6 +62,10 @@ unticked **Schedule this protocol's care**.
 
 The animal's page opens. It is listed as **Draft** again, it is
 **Unplaced**, and the button reads **Create Outcome** again.
+
+The tasks the outcome canceled stay **Canceled**: what was planned before the
+animal left may no longer apply. To reopen one, open the **Tasks** tab, click
+its **…** button, point at **Status** and pick the status it should have.
 
 The new intake is on the **Intakes** list, beside the animal's earlier ones.
 

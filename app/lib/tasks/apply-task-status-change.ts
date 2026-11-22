@@ -1,6 +1,11 @@
 import type { TransactionClient } from "@/app/lib/prisma";
 import { AnimalActivityType, type TaskStatus } from "@/prisma/generated/enums";
 import { NotFoundError } from "@/app/lib/utils/errors";
+import { lockAnimal } from "@/app/lib/data/application-status.data";
+import {
+  assertAnimalCanHaveOpenTask,
+  outcomeLinkAfterStatusChange,
+} from "@/app/lib/services/outcome-tasks";
 
 /**
  * Read prior status inside the transaction, update, and write a
@@ -15,6 +20,13 @@ import { NotFoundError } from "@/app/lib/utils/errors";
  *
  * `changed: false` is a real outcome, not an error: the caller skips whatever
  * side-effects (revalidation, `AiActionLog`) a no-op should not produce.
+ *
+ * Behind the animal's lock, a task of an animal that has left can't be moved
+ * back to a status still to do (`assertAnimalCanHaveOpenTask`): an outcome
+ * canceled it, and the dashboard would never show it again. A change other
+ * than trashing or restoring a canceled task also unlinks it from the outcome
+ * that canceled it (`outcomeLinkAfterStatusChange`), so reversing that outcome
+ * leaves what staff did alone.
  */
 export async function applyTaskStatusChange(
   tx: TransactionClient,
@@ -27,6 +39,16 @@ export async function applyTaskStatusChange(
 }> {
   const { taskId, status, changedById } = params;
 
+  // A task's animal never changes, so this read needs no lock.
+  const located = await tx.task.findUnique({
+    where: { id: taskId },
+    select: { animalId: true },
+  });
+  if (!located) {
+    throw new NotFoundError("Task not found.");
+  }
+  await lockAnimal(tx, located.animalId);
+
   const existing = await tx.task.findUnique({
     where: { id: taskId },
     select: { status: true, title: true },
@@ -36,13 +58,18 @@ export async function applyTaskStatusChange(
     throw new NotFoundError("Task not found.");
   }
 
+  const changed = existing.status !== status;
+  if (changed) {
+    await assertAnimalCanHaveOpenTask(tx, located.animalId, status);
+  }
+
   const task = await tx.task.update({
     where: { id: taskId },
-    data: { status },
+    data: changed
+      ? { status, ...outcomeLinkAfterStatusChange(status) }
+      : { status },
     select: { animalId: true },
   });
-
-  const changed = existing.status !== status;
 
   if (changed) {
     await tx.animalActivityLog.create({

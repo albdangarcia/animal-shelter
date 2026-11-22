@@ -4,7 +4,7 @@ summary: Void an outcome that should never have been recorded, so the animal com
 permissions: [OUTCOMES_REVERSE]
 aliases: [undo an outcome, undo an adoption, cancel an adoption, void an outcome, wrong animal outcome, outcome on the wrong animal, wrong outcome type, outcome entered by mistake, unarchive an animal, un-archive, restore an archived animal, delete an outcome]
 related: [review-an-application-and-change-its-status, correct-an-outcome, record-an-outcome, find-an-outcome, take-back-an-animal-that-left, record-an-end-of-life-outcome, correct-an-intake, move-an-animal-to-another-unit, read-the-reports]
-verified: 2026-11-16
+verified: 2026-11-22
 ---
 
 ## When to use this
@@ -75,12 +75,18 @@ the animal back where it was before the outcome:
   had none, the message ends "place it from its record": move it to a unit
   from its page.
 - **Its scheduled care** is back on the **Due** page.
+- **The tasks the outcome canceled**, each back to the status it had, for
+  example **Todo** or **In Progress**: "2 tasks the outcome canceled were
+  reopened." A task someone changed after the outcome, for example marked
+  **Done**, stays as they left it.
 
 If something has moved the animal since, usually a re-intake recorded to
 undo the mistake, the message is "Outcome reversed. The listing was left as
 it is, since this outcome is no longer what archived the animal." The
 listing, unit and foster placement are left as they are now, and the
-re-intake stays on the animal's record. The applications and the medical
+re-intake stays on the animal's record. So are the tasks the outcome
+canceled: the message adds "The 2 tasks it canceled stay canceled." Reopen
+any that still matter from the animal's **Tasks** tab. The applications and the medical
 entry still change as above.
 
 ## What stays on the record

@@ -26,6 +26,7 @@ import {
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import { recordFosterReturn } from "../services/foster-return";
 import { recordFosterConversion } from "../services/foster-conversion";
+import { withCanceledTasks } from "../services/outcome-tasks";
 import {
   makeFosterPlacement,
   isSerializationFailure,
@@ -189,6 +190,7 @@ const _convertFosterToAdoption = async (
   const { placementId, adoptionApplicationId } = validatedFields.data;
 
   let animalId: string;
+  let canceledTaskCount: number;
   try {
     const result = await prisma.$transaction((tx) =>
       recordFosterConversion(
@@ -197,7 +199,7 @@ const _convertFosterToAdoption = async (
         staffMemberId,
       ),
     );
-    animalId = result.animalId;
+    ({ animalId, canceledTaskCount } = result);
   } catch (error) {
     console.error("Database error converting foster placement:", error);
     // A refused day has no picker to show under: the conversion form has no
@@ -228,7 +230,10 @@ const _convertFosterToAdoption = async (
   }
   return {
     ok: true,
-    message: "Foster placement converted to adoption.",
+    message: withCanceledTasks(
+      "Foster placement converted to adoption.",
+      canceledTaskCount,
+    ),
     redirectTo: `/dashboard/animals/${animalId}`,
   };
 };

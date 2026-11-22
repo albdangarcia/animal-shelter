@@ -797,6 +797,10 @@ model Outcome {
   /// The clinical record owned by this outcome, retained after reversal.
   medicalEntry MedicalEntry?
 
+  // The open tasks this outcome canceled when it archived the animal, put
+  // back if the outcome is reversed.
+  canceledTasks Task[] @relation("TasksCanceledByOutcome")
+
   // For RETURN_TO_OWNER
   ownerId String?
   owner   Person? @relation("ReclaimedByOwner", fields: [ownerId], references: [id])
@@ -2757,12 +2761,23 @@ model Task {
   createdById String @map("created_by_id")
   createdBy   Person @relation("TasksCreatedBy", fields: [createdById], references: [id])
 
+  /// The outcome that canceled this task when it took the animal out of the
+  /// shelter, and the status the task had just before. Reversing that outcome
+  /// puts the status back. Both are set together and cleared together: a
+  /// later change of the task's status clears them, so a reversal never
+  /// overrides what staff did since. Trashing the canceled task and restoring
+  /// it keep them (`outcomeLinkAfterStatusChange`).
+  canceledByOutcomeId String?     @map("canceled_by_outcome_id")
+  canceledByOutcome   Outcome?    @relation("TasksCanceledByOutcome", fields: [canceledByOutcomeId], references: [id], onDelete: SetNull)
+  statusBeforeOutcome TaskStatus? @map("status_before_outcome")
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([animalId])
   @@index([assigneeId])
   @@index([status])
+  @@index([canceledByOutcomeId])
   @@map(name: "tasks")
 }
 

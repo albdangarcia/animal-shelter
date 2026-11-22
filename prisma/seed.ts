@@ -79,6 +79,7 @@ import {
   type CalendarDay,
 } from "@/app/lib/utils/shelter-day";
 import { recordNoteMutation } from "@/app/lib/services/note-audit";
+import { cancelOpenTasksForOutcome } from "@/app/lib/services/outcome-tasks";
 import {
   createMedicalItem,
   retireMedicalItem,
@@ -2238,7 +2239,7 @@ async function seedAdoption(opts: {
     });
   }
 
-  await prisma.outcome.create({
+  const outcome = await prisma.outcome.create({
     data: {
       animalId: opts.animalId,
       type: OutcomeType.ADOPTION,
@@ -2269,6 +2270,34 @@ async function seedAdoption(opts: {
     },
   });
 
+  // As `recordOutcome` does: a fixture can adopt an animal that already has
+  // an intake follow-up task, and left open it would be stranded.
+  await seedCancelOpenTasks({
+    animalId: opts.animalId,
+    outcomeId: outcome.id,
+    actorId: approvingStaff.id,
+    outcomeAt: opts.outcomeDate,
+  });
+}
+
+// The seed's call of `cancelOpenTasksForOutcome`, with its rows dated a
+// millisecond after the backdated outcome's own row.
+async function seedCancelOpenTasks(opts: {
+  animalId: string;
+  outcomeId: string;
+  actorId: string;
+  outcomeAt: Date;
+}) {
+  await prisma.$transaction((tx) =>
+    cancelOpenTasksForOutcome(tx, {
+      animalId: opts.animalId,
+      outcomeId: opts.outcomeId,
+      outcomeType: OutcomeType.ADOPTION,
+      actorId: opts.actorId,
+      after: opts.outcomeAt,
+      at: new Date(opts.outcomeAt.getTime() + 1),
+    }),
+  );
 }
 
 // Full lifecycle for a return-and-re-adopt animal: an initial adoption
@@ -3676,6 +3705,13 @@ async function seedFostering() {
         changeSummary: "Animal was processed for outcome: adoption.",
       },
     });
+    // As `recordFosterConversion` does.
+    await seedCancelOpenTasks({
+      animalId: animal.id,
+      outcomeId: outcome.id,
+      actorId: approver.id,
+      outcomeAt: adoptedAt,
+    });
     await prisma.fosterPlacement.update({
       where: { id: placement.id },
       data: {
@@ -4596,7 +4632,11 @@ async function seedTasks() {
     const staffMembers = await prisma.person.findMany({
       where: { user: { role: Role.STAFF } },
     });
-    const animals = await prisma.animal.findMany();
+    // Only animals still in care: an animal that has left can't have an open
+    // task (`assertAnimalCanHaveOpenTask`), and these are all still to do.
+    const animals = await prisma.animal.findMany({
+      where: { listingStatus: { not: AnimalListingStatus.ARCHIVED } },
+    });
 
     if (!staffMembers.length || !animals.length) {
       console.log("No staff or animals found, skipping task seeding.");

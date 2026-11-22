@@ -1,6 +1,8 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import pg from "pg";
+import { E2E_DATABASE_URL } from "../../../playwright/env";
 import {
   bootstrapStorageState,
   fillStable,
@@ -648,4 +650,97 @@ test("a reversed outcome puts the animal back in its unit, and the feed shows th
   await expect(move).toBeVisible();
   await move.getByRole("button", { name: "Show details" }).click();
   await expect(move.getByText(`Moved to ${unitLabel}.`)).toBeVisible();
+});
+
+/**
+ * Adds an open task to the animal, written straight to the database: how a
+ * task is added is not what this spec is about.
+ */
+const addOpenTask = async (animalId: string, title: string) => {
+  const client = new pg.Client({ connectionString: E2E_DATABASE_URL });
+  await client.connect();
+  try {
+    await client.query(
+      `INSERT INTO tasks (id, title, status, priority, category, animal_id, created_by_id, "updatedAt")
+       SELECT $1, $2, 'IN_PROGRESS', 'MEDIUM', 'MEDICAL', $3, u."personId", now()
+       FROM users u WHERE u.email = 'admin@example.com'`,
+      // A cuid2 shape (lowercase letters and digits, a letter first): the
+      // task actions refuse any other id.
+      [`etask${Date.now().toString(36)}`, title, animalId],
+    );
+  } finally {
+    await client.end();
+  }
+};
+
+const taskStatusCell = async (page: Page, animalId: string, title: string) => {
+  await page.goto(`/dashboard/animals/${animalId}/tasks`);
+  return page.getByRole("row").filter({ hasText: title });
+};
+
+test("an outcome cancels the animal's open tasks, and reversing it reopens them", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+
+  const { animalId } = await findHousedAnimal(page);
+  const title = `Recheck sutures ${Date.now().toString(36)}`;
+  await addOpenTask(animalId, title);
+
+  // The form says what recording the outcome will do to the tasks.
+  await page.goto(`${OUTCOMES_PATH}/create?animalId=${animalId}`);
+  await expect(
+    page.getByRole("note").filter({ hasText: /open tasks?\. Recording this outcome cancels/ }),
+  ).toBeVisible();
+  await page.getByLabel("Outcome Type *", { exact: true }).click();
+  await page.getByRole("option", { name: "Deceased" }).click();
+  await page.getByLabel("Circumstances").selectOption("FOUND_DEAD");
+  await page.getByLabel("Cause knowledge").selectOption("UNKNOWN");
+  await page.getByRole("button", { name: "Process Outcome" }).click();
+  await expect(
+    page.getByText(/^Outcome processed successfully\. \d+ open tasks? (was|were) canceled\.$/),
+  ).toBeVisible();
+  await waitForPathname(page, OUTCOMES_PATH);
+
+  const taskRow = await taskStatusCell(page, animalId, title);
+  await expect(taskRow).toContainText("Canceled");
+
+  // While the animal is away, the task can't be reopened, and the screen
+  // says why rather than that it was updated.
+  const todo = page.getByRole("menuitemradio", { name: "Todo" });
+  await expect(async () => {
+    if (!(await todo.isVisible())) {
+      if (!(await page.getByRole("menuitem", { name: "Status" }).isVisible())) {
+        await taskRow.getByRole("button", { name: "Open menu" }).click();
+      }
+      await page.getByRole("menuitem", { name: "Status" }).hover();
+    }
+    await expect(todo).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
+  await todo.click();
+  await expect(
+    page.getByText(
+      "This animal has left the shelter, so it can't have open tasks. To add or reopen one, re-intake the animal first.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByText("Task status updated")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("row").filter({ hasText: title })).toContainText(
+    "Canceled",
+  );
+
+  const row = (await gotoOutcomeRows(page, animalId)).first();
+  const dialog = await openReverseDialog(row);
+  await dialog
+    .getByLabel("Reason for reversal")
+    .fill(`Recorded against the wrong animal ${Date.now()}`);
+  await dialog.getByRole("button", { name: "Reverse Outcome" }).click();
+  await expect(
+    page.getByText(/tasks? the outcome canceled (was|were) reopened\./),
+  ).toBeVisible();
+
+  // Back to the status it had before the outcome.
+  await expect(await taskStatusCell(page, animalId, title)).toContainText(
+    "In Progress",
+  );
 });

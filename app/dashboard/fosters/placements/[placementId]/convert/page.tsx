@@ -13,6 +13,8 @@ import { ConvertFosterToAdoptionForm } from "@/components/dashboard/fosters/plac
 import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
 import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 import { HelpLink } from "@/components/dashboard/help/help-link";
+import { OutcomeTasksNotice } from "@/components/dashboard/outcomes/outcome-tasks-notice";
+import { fetchTasksStillToDoCount } from "@/app/lib/data/animals/animal-task.data";
 
 interface Props {
   params: Promise<{ placementId: string }>;
@@ -64,18 +66,26 @@ const PageContent = async ({ params }: Props) => {
     );
   }
 
-  const [approvedApplications, help] = await Promise.all([
+  const [approvedApplications, help, openTaskCount] = await Promise.all([
     fetchApprovedFosterApplications(
       placement.fosterProfile.person.id,
       placement.animal.id,
     ),
     getHelpLinkGuide(PAGE_HELP_GUIDES.fosterConvert),
+    fetchTasksStillToDoCount(placement.animal.id),
   ]);
 
   return (
     <main className="container mx-auto">
       <div className="mx-auto mb-2 flex w-full max-w-2xl justify-end">
         <HelpLink guide={help} />
+      </div>
+      <div className="mx-auto w-full max-w-2xl">
+        <OutcomeTasksNotice
+          animalName={placement.animal.name}
+          count={openTaskCount}
+          action="Converting this placement"
+        />
       </div>
       <ConvertFosterToAdoptionForm
         // Keyed so a client-side navigation between two placements' convert
