@@ -31,7 +31,10 @@ export function SimplePagination({
 }: Props) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const currentPage = Number(searchParams.get("page")) || 1;
+  // A zero, negative, fractional or non-numeric page is page 1, so no hand-
+  // edited URL leaves the pager with no current page or a Next to page 0.
+  const rawPage = Number(searchParams.get("page"));
+  const currentPage = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
 
   const createPageURL = (pageNumber: number | string) => {
     const params = new URLSearchParams(searchParams);

@@ -17,6 +17,7 @@ import {
   shelterDayKey,
   shelterDaysBetween,
 } from "../utils/shelter-day";
+import { currentPageSchema } from "../zod-schemas/common.schemas";
 import type { ReadinessBlocker } from "./compute-readiness";
 
 /** Where an animal is right now. Fostered and unplaced animals have no unit. */
@@ -129,6 +130,13 @@ export function parseReadinessBoardFilters(params: {
     stages: splitParam(params.stage),
     kind: params.kind && isBlockerKind(params.kind) ? params.kind : null,
   };
+}
+
+/** Reads the board's `?page=`. Anything but a positive whole number (a
+ *  missing, zero, negative, fractional or non-numeric page) is page 1. */
+export function parseReadinessPage(raw: string | undefined): number {
+  const parsed = currentPageSchema.safeParse(Number(raw));
+  return parsed.success ? parsed.data : 1;
 }
 
 const placementKey = (placement: ReadinessPlacement): string => {
@@ -332,6 +340,9 @@ export function buildReadinessBoard(
   const blockedCount = matching.filter(isBlocked).length;
 
   if (filters.kind) {
+    // A page below 1 or between two pages would slice from the end of the
+    // list, so it is read as page 1, as `parseReadinessPage` reads the URL.
+    if (!Number.isInteger(page) || page < 1) page = 1;
     const rows = rowsForKind(matching, filters.kind, now, timezone);
     const totalRows = rows.length;
     const totalPages = Math.ceil(totalRows / READINESS_KIND_PAGE_SIZE);

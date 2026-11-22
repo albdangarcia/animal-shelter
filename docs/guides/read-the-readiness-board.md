@@ -119,5 +119,7 @@ member to add it. The guides on each task are listed at the end of this page.
   it, that is empty: another person may have fixed the last animal. Click
   **All groups**.
 - **An unknown group in the address** shows all groups.
+- **A page number below 1, or not a whole number,** shows the first page. A
+  page past the last one shows **"Nothing here matches these filters."**
 - **A blocker you fixed is still listed.** Reload the page. The board shows
   the record as it is when the page loads.

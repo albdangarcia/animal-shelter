@@ -497,7 +497,10 @@ export async function ReadinessBoard({ board, filterOptions, can, filterParams, 
       </CardHeader>
       <CardContent className="flex flex-col gap-4 md:gap-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <ReadinessBoardToolbar options={filterOptions} />
+          <ReadinessBoardToolbar
+            options={filterOptions}
+            drilledDown={board.view === "detail"}
+          />
           <p className="text-sm text-muted-foreground" aria-live="polite">
             <span className="font-medium text-foreground tabular-nums">
               {board.blockedCount}
