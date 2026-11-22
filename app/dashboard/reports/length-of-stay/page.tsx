@@ -34,6 +34,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -77,9 +80,10 @@ const PageContent = async ({ searchParams }: Props) => {
 
   const timezone = (await getShelterSettings()).timezone;
   const range = resolveReportRange(from, to, await getShelterToday());
-  const [speciesList, report] = await Promise.all([
+  const [speciesList, report, help] = await Promise.all([
     fetchSpecies(),
     fetchLengthOfStayReport(from, to, species),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.reportLengthOfStay),
   ]);
   const speciesOptions = speciesList.map((s) => ({
     label: s.name,
@@ -103,14 +107,17 @@ const PageContent = async ({ searchParams }: Props) => {
       </Breadcrumb>
 
       <div className="flex flex-col gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Length of stay
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Completed-stay statistics use the selected period; the waiting list
-            reflects animals in care today.
-          </p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              Length of stay
+            </h1>
+            <p className="text-muted-foreground text-sm">
+              Completed-stay statistics use the selected period; the waiting list
+              reflects animals in care today.
+            </p>
+          </div>
+          <HelpLink guide={help} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{formatRangeLabel(range)}</span>

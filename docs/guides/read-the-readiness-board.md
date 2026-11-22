@@ -3,7 +3,7 @@ title: Read the Readiness Board
 summary: See what stands between each animal and adoption, what each blocker means, and the link that takes you to where it is fixed.
 permissions: [ANIMAL_ASSESSMENT_READ]
 aliases: [readiness, adoption ready, ready for adoption, blockers, what is outstanding, escalated finding, needs vet review, under care, missing assessment, no photo, not spayed or neutered, intake exam outstanding]
-related: [record-a-behavior-assessment, set-an-animals-characteristics, record-an-exam, record-a-surgery-spay-neuter-or-exemption, add-and-crop-an-animals-photos, open-a-care-episode-add-a-condition-or-allergy, read-an-animals-activity-and-journey, find-an-animal]
+related: [record-a-behavior-assessment, set-an-animals-characteristics, record-an-exam, record-a-surgery-spay-neuter-or-exemption, add-and-crop-an-animals-photos, open-a-care-episode-add-a-condition-or-allergy, read-an-animals-activity-and-journey, find-an-animal, read-the-dashboard-home-page]
 verified: 2026-11-21
 ---
 

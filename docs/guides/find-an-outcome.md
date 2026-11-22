@@ -3,7 +3,7 @@ title: Find an outcome
 summary: Look up when and how an animal left, who took it, and who recorded it, on the list of every outcome.
 permissions: [OUTCOMES_READ]
 aliases: [outcomes list, outcome history, when did it leave, who adopted, adoption records, list of adoptions, list of transfers, who took the animal, reversed outcomes, look up an outcome, departures]
-related: [record-an-outcome, correct-an-outcome, reverse-an-outcome-recorded-by-mistake, find-an-intake, find-an-animal]
+related: [record-an-outcome, correct-an-outcome, reverse-an-outcome-recorded-by-mistake, find-an-intake, find-an-animal, read-the-reports]
 verified: 2026-11-16
 ---
 

@@ -3,7 +3,7 @@ title: Reverse an outcome recorded by mistake
 summary: Void an outcome that should never have been recorded, so the animal comes back into care as it was, and see what it puts back.
 permissions: [OUTCOMES_REVERSE]
 aliases: [undo an outcome, undo an adoption, cancel an adoption, void an outcome, wrong animal outcome, outcome on the wrong animal, wrong outcome type, outcome entered by mistake, unarchive an animal, un-archive, restore an archived animal, delete an outcome]
-related: [review-an-application-and-change-its-status, correct-an-outcome, record-an-outcome, find-an-outcome, take-back-an-animal-that-left, record-an-end-of-life-outcome, correct-an-intake, move-an-animal-to-another-unit]
+related: [review-an-application-and-change-its-status, correct-an-outcome, record-an-outcome, find-an-outcome, take-back-an-animal-that-left, record-an-end-of-life-outcome, correct-an-intake, move-an-animal-to-another-unit, read-the-reports]
 verified: 2026-11-16
 ---
 

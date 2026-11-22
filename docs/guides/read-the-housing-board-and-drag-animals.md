@@ -3,7 +3,7 @@ title: Read the Housing Board and move animals by dragging
 summary: See who is in which kennel and how full each unit is, find unplaced and fostered animals, and drag an animal to another unit.
 permissions: [ANIMAL_INFO_READ, ANIMAL_INFO_MANAGE, MEDICAL_MANAGE]
 aliases: [housing board, shelter board, kennel board, who is in which kennel, capacity, over capacity, full kennel, drag animal, drag and drop, unplaced animals, fostered animals card, kennel map]
-related: [move-an-animal-to-another-unit, add-edit-or-delete-a-location-or-unit, open-a-care-episode-add-a-condition-or-allergy, find-a-foster-or-a-placement, read-an-animals-activity-and-journey, find-an-animal]
+related: [move-an-animal-to-another-unit, add-edit-or-delete-a-location-or-unit, open-a-care-episode-add-a-condition-or-allergy, find-a-foster-or-a-placement, read-an-animals-activity-and-journey, find-an-animal, read-the-dashboard-home-page]
 verified: 2026-11-21
 ---
 
