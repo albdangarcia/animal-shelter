@@ -29,6 +29,9 @@ interface Props {
   // Human-readable current location shown in the hover-card, e.g.
   // "A-1 · Dog block A" for a placed animal or "Unplaced" for the tray.
   locationLabel: string;
+  // False for a viewer who may not move animals: the chip can't be picked up
+  // and is shown for reading only.
+  canMove: boolean;
 }
 
 // On-demand identity peek: a larger thumbnail plus the key details staff need to
@@ -96,10 +99,16 @@ const AnimalHoverContent = ({
 
 // Drag handle around the presentational AnimalChip. The bare chip stays
 // separate so the DragOverlay can render it without draggable behavior.
-export const DraggableAnimalChip = ({ animal, fromUnitId, locationLabel }: Props) => {
+export const DraggableAnimalChip = ({
+  animal,
+  fromUnitId,
+  locationLabel,
+  canMove,
+}: Props) => {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: animal.id,
     data: { animal, fromUnitId } satisfies AnimalDragData,
+    disabled: !canMove,
   });
 
   // Hover opens the peek; dragging is press-and-move, so the two don't conflict.
@@ -119,19 +128,27 @@ export const DraggableAnimalChip = ({ animal, fromUnitId, locationLabel }: Props
       <HoverCardTrigger asChild>
         <div
           ref={setNodeRef}
-          {...listeners}
-          {...attributes}
+          // A chip that can't move gets none of dnd-kit's handle: no button
+          // role, no "draggable" description and no grab cursor. It keeps a
+          // tab stop of its own, since focus is what opens its peek from the
+          // keyboard.
+          {...(canMove ? { ...listeners, ...attributes } : { role: "group", tabIndex: 0 })}
           // The chip's text runs the name into the species line (and, with
           // no photo, the initials into the name), so it is named for the
           // animal and described by its species, after the drag instructions
-          // dnd-kit points to.
+          // dnd-kit points to when it can move.
           aria-label={animal.name}
+          aria-describedby={
+            canMove
+              ? `${attributes["aria-describedby"]} ${speciesId}`
+              : speciesId
+          }
           // Lets the board give focus back to an animal's chip after a dialog
           // about it, the chip being a new node once the animal has moved.
           data-animal-id={animal.id}
-          aria-describedby={`${attributes["aria-describedby"]} ${speciesId}`}
           className={cn(
-            "cursor-grab touch-none rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            "rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            canMove && "cursor-grab touch-none",
             isDragging && "opacity-40",
           )}
         >

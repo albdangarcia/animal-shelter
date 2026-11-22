@@ -69,6 +69,10 @@ import { boardKeyboardCoordinates } from "./board-keyboard-coordinates";
 // Droppable id for the Unplaced tray; every other droppable id is a unit id.
 const UNPLACED_ID = "unplaced";
 
+// Arrow keys move a picked-up chip from target to target; Right from the end
+// of a row reaches the Unplaced tray in the wide layout.
+const keyboardCoordinates = boardKeyboardCoordinates(UNPLACED_ID);
+
 // The board itself, where focus goes when nothing nearer to an animal can
 // take it.
 const BOARD_ID = "shelter-board";
@@ -243,9 +247,11 @@ function MetricCard({
 function UnitTile({
   unit,
   locationName,
+  canMoveAnimals,
 }: {
   unit: BoardUnit;
   locationName: string;
+  canMoveAnimals: boolean;
 }) {
   const count = unit.animals.length;
   const state = getCapacityState(count, unit.capacity);
@@ -292,13 +298,20 @@ function UnitTile({
         unitId={unit.id}
         animals={unit.animals}
         locationLabel={`${unit.name} · ${locationName}`}
+        canMoveAnimals={canMoveAnimals}
       />
     </div>
   );
 }
 
 // Location group
-function LocationGroup({ location }: { location: BoardLocation }) {
+function LocationGroup({
+  location,
+  canMoveAnimals,
+}: {
+  location: BoardLocation;
+  canMoveAnimals: boolean;
+}) {
   const headingId = useId();
   return (
     // Its unit tiles are groups too, so each sits inside its location's.
@@ -322,7 +335,12 @@ function LocationGroup({ location }: { location: BoardLocation }) {
       {location.units.length > 0 ? (
         <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
           {location.units.map((unit) => (
-            <UnitTile key={unit.id} unit={unit} locationName={location.name} />
+            <UnitTile
+              key={unit.id}
+              unit={unit}
+              locationName={location.name}
+              canMoveAnimals={canMoveAnimals}
+            />
           ))}
         </div>
       ) : (
@@ -335,7 +353,13 @@ function LocationGroup({ location }: { location: BoardLocation }) {
 }
 
 // Side column
-function UnplacedTray({ animals }: { animals: ShelterBoardData["unplaced"] }) {
+function UnplacedTray({
+  animals,
+  canMoveAnimals,
+}: {
+  animals: ShelterBoardData["unplaced"];
+  canMoveAnimals: boolean;
+}) {
   const { setNodeRef, isOver, active } = useDroppable({ id: UNPLACED_ID });
   const dragData = getDragData(active);
   const isIncoming = isOver && dragData != null && dragData.fromUnitId !== null;
@@ -369,6 +393,7 @@ function UnplacedTray({ animals }: { animals: ShelterBoardData["unplaced"] }) {
                 animal={animal}
                 fromUnitId={null}
                 locationLabel="Unplaced"
+                canMove={canMoveAnimals}
               />
             ))}
           </div>
@@ -445,15 +470,27 @@ const screenReaderInstructions: ScreenReaderInstructions = {
     "To pick up an animal, press space or enter. While dragging, use the arrow keys to move it to a unit or the Unplaced tray. Press space or enter again to drop it there, or press escape to cancel.",
 };
 
+// For a viewer who may not move animals, no chip can be picked up, so the
+// board leaves the drag instructions out.
+const noScreenReaderInstructions: ScreenReaderInstructions = { draggable: "" };
+
 interface Props {
   data: ShelterBoardData;
   // the fostering fact shows to every board viewer, but
   // the foster's identity is gated behind FOSTERS_READ.
   canReadFosters: boolean;
+  // ANIMAL_INFO_MANAGE, which moveAnimalToUnit needs. Without it the chips
+  // can't be picked up.
+  canMoveAnimals: boolean;
   help: HelpLinkGuide | null;
 }
 
-export const ShelterBoard = ({ data, canReadFosters, help }: Props) => {
+export const ShelterBoard = ({
+  data,
+  canReadFosters,
+  canMoveAnimals,
+  help,
+}: Props) => {
   // Optimistic copy of the server-fetched board: a move renders immediately,
   // then reconciles to server truth when the action's revalidate lands (or
   // rolls back automatically if the action fails).
@@ -544,7 +581,7 @@ export const ShelterBoard = ({ data, canReadFosters, help }: Props) => {
   const sensors = useSensors(
     // Small activation distance so a plain click on a chip isn't a drag.
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: boardKeyboardCoordinates }),
+    useSensor(KeyboardSensor, { coordinateGetter: keyboardCoordinates }),
   );
 
   const dropTargetLabels = new Map<UniqueIdentifier, string>([
@@ -572,7 +609,7 @@ export const ShelterBoard = ({ data, canReadFosters, help }: Props) => {
     },
     onDragEnd({ active, over }) {
       return over
-        ? `Moved ${activeName(active)} to ${dropTargetLabel(over.id)}.`
+        ? `Dropped ${activeName(active)} on ${dropTargetLabel(over.id)}.`
         : `Dropped ${activeName(active)}. No move was made.`;
     },
     onDragCancel({ active }) {
@@ -623,7 +660,12 @@ export const ShelterBoard = ({ data, canReadFosters, help }: Props) => {
       id="shelter-board"
       sensors={sensors}
       collisionDetection={boardCollisionDetection}
-      accessibility={{ announcements, screenReaderInstructions }}
+      accessibility={{
+        announcements,
+        screenReaderInstructions: canMoveAnimals
+          ? screenReaderInstructions
+          : noScreenReaderInstructions,
+      }}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
@@ -692,7 +734,11 @@ export const ShelterBoard = ({ data, canReadFosters, help }: Props) => {
           <div className="flex flex-col gap-6">
             {locations.length > 0 ? (
               locations.map((location) => (
-                <LocationGroup key={location.id} location={location} />
+                <LocationGroup
+                  key={location.id}
+                  location={location}
+                  canMoveAnimals={canMoveAnimals}
+                />
               ))
             ) : (
               <div className="rounded-lg border-2 border-dashed py-12 px-6 text-center">
@@ -704,7 +750,7 @@ export const ShelterBoard = ({ data, canReadFosters, help }: Props) => {
           </div>
 
           <div className="flex flex-col gap-4">
-            <UnplacedTray animals={unplaced} />
+            <UnplacedTray animals={unplaced} canMoveAnimals={canMoveAnimals} />
             <FosterCard animals={fostered} canReadFosters={canReadFosters} />
           </div>
         </div>

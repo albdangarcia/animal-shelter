@@ -57,13 +57,16 @@ animals on this card can't be dragged: to bring one back, return it from foster.
 
 ## Move an animal by dragging
 
-Only staff who manage animals can move them. If your account can't, a drop
-ends with "Failed to move" (see the end of this guide) and nothing changes.
+Only staff who manage animals can move them. If your account can't, the chips
+can't be picked up, and the board is for reading only.
 
 1. Press on the animal's chip, then drag it. Move a little before it lifts, then
    drop it on another unit's box. Both need to be on the screen at once, so a
    tall window or a small zoom helps. To take an animal out of its unit
-   without placing it elsewhere, drop it on the **Unplaced** card.
+   without placing it elsewhere, drop it on the **Unplaced** card. To move one
+   with the keyboard, press Tab until the chip is selected, press Space to pick
+   it up, use the arrow keys to move it from unit to unit, then press Space to
+   drop it, or Escape to cancel.
 2. While you drag, the unit under the chip gets a dark ring. The ring is red
    if the move would take that unit over capacity.
 3. Let go over the unit.
@@ -93,9 +96,15 @@ another unit.
 ## If something goes wrong
 
 - **"Failed to move Rocket."** (with the animal's name) The move wasn't
-  saved and the chip jumps back. Your account may not be allowed to move
-  animals, or your sign-in may have ended, or the connection failed. Reload
-  the page, and if it happens again, ask a staff member.
+  saved and the chip jumps back. The connection failed, or something
+  unexpected went wrong. Reload the page, and if it happens again, ask a staff
+  member.
+- **"Access Denied. You must be logged in to perform this action."** The move
+  wasn't saved because your sign-in has ended. Sign in again, then move the
+  animal again.
+- **"Access Denied. You do not have permission to perform this action."** The
+  move wasn't saved. Your account lost the right to move animals while you had
+  the board open. Reload the page: the board is then for reading only.
 - **"This animal has left the shelter, so it can't be placed in a unit."** The
   animal was archived while you had the board open. Reload the page.
 - **"That unit is no longer available."** An admin deleted the unit or its

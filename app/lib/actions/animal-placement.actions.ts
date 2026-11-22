@@ -17,7 +17,12 @@ import {
   careEpisodeOfferPrompt,
   type CareEpisodeOfferPrompt,
 } from "../data/care-episode-offer.data";
-import { NotFoundError, PreconditionFailedError } from "../utils/errors";
+import {
+  ForbiddenError,
+  NotFoundError,
+  PreconditionFailedError,
+  UnauthenticatedError,
+} from "../utils/errors";
 
 export interface MoveAnimalResult {
   success: boolean;
@@ -140,6 +145,26 @@ const _moveAnimalToUnit = async (
   return result;
 };
 
-export const moveAnimalToUnit = withAuthenticatedUser(
+const protectedMoveAnimalToUnit = withAuthenticatedUser(
   RequirePermission(AppPermissions.ANIMAL_INFO_MANAGE)(_moveAnimalToUnit),
 );
+
+// A refused sign-in or permission is returned, not thrown: Next hides the
+// message of an error a server action throws, and the board shows a returned
+// message as it is.
+export const moveAnimalToUnit = async (
+  animalId: string,
+  targetUnitId: string | null,
+): Promise<MoveAnimalResult> => {
+  try {
+    return await protectedMoveAnimalToUnit(animalId, targetUnitId);
+  } catch (error) {
+    if (
+      error instanceof ForbiddenError ||
+      error instanceof UnauthenticatedError
+    ) {
+      return { success: false, message: error.message };
+    }
+    throw error;
+  }
+};

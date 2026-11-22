@@ -11,12 +11,19 @@ interface Props {
   animals: BoardAnimal[];
   // Passed to each chip's hover-card as its current-location line.
   locationLabel: string;
+  canMoveAnimals: boolean;
 }
 
 // Occupant list for a unit tile. Shows at most VISIBLE_LIMIT occupants, then a
-// "+N more" toggle reveals the rest. Chips are draggable so staff can move an
-// animal to another unit or the Unplaced tray.
-export const UnitOccupants = ({ unitId, animals, locationLabel }: Props) => {
+// "+N more" toggle reveals the rest. Chips are draggable, for a viewer who may
+// move animals, so staff can move an animal to another unit or the Unplaced
+// tray.
+export const UnitOccupants = ({
+  unitId,
+  animals,
+  locationLabel,
+  canMoveAnimals,
+}: Props) => {
   const [expanded, setExpanded] = useState(false);
 
   if (animals.length === 0) {
@@ -37,6 +44,7 @@ export const UnitOccupants = ({ unitId, animals, locationLabel }: Props) => {
           animal={animal}
           fromUnitId={unitId}
           locationLabel={locationLabel}
+          canMove={canMoveAnimals}
         />
       ))}
       {hasOverflow && (
