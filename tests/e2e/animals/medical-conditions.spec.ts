@@ -236,26 +236,24 @@ const removeTrait = async (page: Page, animalPath: string, trait: string) => {
 test.describe("as staff", () => {
   test.use({ storageState: staffStatePath });
 
-  test("an allergy, a condition found on a positive test, and the trait it stands for", async ({
+  // The allergy and the condition are separate journeys: nothing in one reads
+  // what the other writes, and together they ran close to the 60s test
+  // timeout on a slow CI runner.
+  test("an allergy shows on the banner, the Overview's alerts and History's Condition filter", async ({
     page,
   }, testInfo) => {
-    const today = todayIn(SHELTER_ZONE);
     // A retry or a repeat runs against the database an earlier attempt wrote
     // to, so each attempt marks the notes of what it writes. Buddy is a
     // hand-authored dog whose medical record, traits and readiness no other
     // spec reads.
     const attempt = `${testInfo.retry}-${testInfo.repeatEachIndex}`;
-    const marker = "Conditions journey";
+    const marker = "Allergy journey";
     const id = await animalId(page, "Buddy");
     const activity = `/dashboard/animals/${id}`;
     const overview = `${activity}/medical`;
     const conditions = `${overview}/conditions`;
-    const trait = "Heartworm Positive";
-    const conditionName = "Heartworm antigen positive";
 
-    // Start by voiding what an earlier attempt left (its allergy, its
-    // condition and its test), and taking the trait off, so the animal reads
-    // as the seed left it.
+    // Start by voiding the allergy an earlier attempt left.
     await voidLeftovers(
       page,
       conditions,
@@ -263,14 +261,6 @@ test.describe("as staff", () => {
       () => expect(problemList(page)).toBeVisible(),
       "Void",
     );
-    await voidLeftovers(
-      page,
-      `${overview}/history?kind=TEST`,
-      () => liveRowsWith(page.locator("main"), marker),
-      () => expect(page.getByRole("button", { name: /^Kind/ })).toBeVisible(),
-      "Void Entry",
-    );
-    await removeTrait(page, activity, trait);
 
     // Add an allergy: the banner and Overview's alerts name it.
     await page.goto(conditions);
@@ -293,6 +283,56 @@ test.describe("as staff", () => {
       overviewAlerts(page).getByRole("link", { name: "Allergy: Chicken" }),
     ).toHaveAttribute("href", conditions);
 
+    // History's Condition filter lists allergies too.
+    await page.goto(`${overview}/history?kind=CONDITION`);
+    await expect(
+      page
+        .locator('li[aria-label="Chicken, allergy"]')
+        .filter({ hasText: `${marker}: allergy, attempt ${attempt}` }),
+    ).toHaveCount(1);
+  });
+
+  test("a condition found on a positive test, and the trait it stands for", async ({
+    page,
+  }, testInfo) => {
+    // One chain (the test finds the condition, the condition gives the
+    // trait, resolving and voiding it change what readiness says), so it
+    // can't be split further, and it crosses the activity, conditions,
+    // characteristics and history pages about a dozen times. That takes
+    // 23-25s locally, and on a slow CI runner it came close to the 60s
+    // timeout, so it gets three times as long.
+    test.slow();
+    const today = todayIn(SHELTER_ZONE);
+    // Marked per attempt, as in the allergy journey.
+    const attempt = `${testInfo.retry}-${testInfo.repeatEachIndex}`;
+    const marker = "Conditions journey";
+    const id = await animalId(page, "Buddy");
+    const activity = `/dashboard/animals/${id}`;
+    const overview = `${activity}/medical`;
+    const conditions = `${overview}/conditions`;
+    const trait = "Heartworm Positive";
+    const conditionName = "Heartworm antigen positive";
+
+    // Start by voiding what an earlier attempt left (its condition and its
+    // test), and taking the trait off, so the animal reads as the seed left
+    // it.
+    await voidLeftovers(
+      page,
+      conditions,
+      () => liveRowsWith(problemList(page), marker),
+      () => expect(problemList(page)).toBeVisible(),
+      "Void",
+    );
+    await voidLeftovers(
+      page,
+      `${overview}/history?kind=TEST`,
+      () => liveRowsWith(page.locator("main"), marker),
+      () => expect(page.getByRole("button", { name: /^Kind/ })).toBeVisible(),
+      "Void Entry",
+    );
+    await removeTrait(page, activity, trait);
+
+    await page.goto(overview);
     // Record a heartworm test in house today, positive. The condition found
     // on it starts on its day.
     await pickFromMenu(page, page.getByRole("button", { name: "Add entry" }), "Test");
@@ -422,10 +462,7 @@ test.describe("as staff", () => {
     );
     await expect(voided).toContainText("Voided by Olivia Chen");
     await expect(voided.getByRole("button", { name: /^Actions for / })).toHaveCount(0);
-    // Only conditions are listed: the allergy too, not the test.
-    await expect(
-      page.locator('li[aria-label="Chicken, allergy"]').filter({ hasText: `attempt ${attempt}` }),
-    ).toHaveCount(1);
+    // Only conditions are listed, not the test.
     await expect(
       page.locator("li[aria-label]").filter({ hasText: `test, attempt ${attempt}` }),
     ).toHaveCount(0);
