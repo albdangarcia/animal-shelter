@@ -4,6 +4,10 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { SearchParamsType } from "@/app/lib/types";
+import {
+  pickedSpeciesNames,
+  speciesLabel,
+} from "@/app/lib/utils/report-href";
 import { ReportParamsSchema } from "@/app/lib/zod-schemas/report.schemas";
 import {
   formatRangeLabel,
@@ -24,6 +28,7 @@ import {
   OverviewCardSkeleton,
 } from "@/components/dashboard/reports/overview-cards";
 import { HelpLink } from "@/components/dashboard/help/help-link";
+import { ReportDownloadLink } from "@/components/dashboard/reports/report-download-link";
 import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
 import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
@@ -71,21 +76,31 @@ const PageContent = async ({ searchParams }: Props) => {
               Historical and compliance statistics over a date range you choose.
             </p>
           </div>
-          <HelpLink guide={help} />
+          <div className="print:hidden">
+            <HelpLink guide={help} />
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{formatRangeLabel(range)}</span>
           <span className="text-muted-foreground text-xs">
             · Times counted in {timezone}
           </span>
-          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          {/* The species filter is left out of a printout; this says what it
+              picked instead. */}
+          <span className="text-muted-foreground hidden text-xs print:inline">
+            · {speciesLabel(pickedSpeciesNames(speciesList, species))}
+          </span>
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto print:hidden">
             <ReportRangePicker />
             <ServerSideFacetedFilter
               title="Species"
               paramKey="species"
               options={speciesOptions}
             />
-            {/* Room reserved here for a future CSV/PDF export button. */}
+            <ReportDownloadLink
+              report="overview"
+              params={{ from, to, species }}
+            />
           </div>
         </div>
       </div>
