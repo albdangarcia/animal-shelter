@@ -4,7 +4,7 @@ summary: Add a to-do for an animal, assign it and set its due date, mark its pro
 permissions: [ANIMAL_TASK_MANAGE]
 aliases: [to-do, add a task, assign a task, due date, overdue task, mark done, trash a task, restore a task]
 related: [review-and-undo-the-assistants-changes, add-edit-or-delete-a-note]
-verified: 2026-11-16
+verified: 2026-11-22
 ---
 
 ## When to use this
@@ -78,8 +78,10 @@ who can manage tasks can bring one back: click its **…** button, point at
 1. In the sidebar, open **Animal Tasks**.
 
 Each row names its **Animal**; click the name to open that animal's
-**Tasks** tab. Type in **Filter by task title...**, or use **Category** and
-**Status**, to narrow the list. The **…** button on each row works as on the
+**Tasks** tab. Type in **Filter by task title...**, or use **Category**,
+**Status** and **Due**, to narrow the list. **Due** picks tasks by their due
+date against today: **Overdue**, **Due today**, **Due later** or **No due
+date**. The **…** button on each row works as on the
 animal's **Tasks** tab. New tasks are added from the animal's own **Tasks**
 tab.
 

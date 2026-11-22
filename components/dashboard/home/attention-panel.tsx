@@ -26,9 +26,9 @@ import {
 const plural = (count: number, one: string, many: string) =>
   `${count} ${count === 1 ? one : many}`;
 
-// Open tasks, the earliest due first: the tasks page has no "due or overdue"
-// filter, so this puts those tasks at the top.
-const TASKS_DUE_HREF = `/dashboard/animal-tasks?status=${TaskStatus.TODO},${TaskStatus.IN_PROGRESS}&sort=dueDate.asc`;
+// Open tasks due today or earlier, the earliest due first: the same tasks the
+// group counts (signal 1 in `attention-signals.ts`).
+const TASKS_DUE_HREF = `/dashboard/animal-tasks?status=${TaskStatus.TODO},${TaskStatus.IN_PROGRESS}&due=overdue,today&sort=dueDate.asc`;
 
 /**
  * Per reason: the group's label (in the unit its count counts, see

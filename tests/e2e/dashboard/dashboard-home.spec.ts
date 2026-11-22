@@ -118,7 +118,8 @@ test("the dashboard shows what needs attention and who is under care, and a grou
   );
 
   // Needs attention today: the seed's overdue tasks are a group, whose link
-  // opens the tasks page with open tasks, the earliest due first.
+  // opens the tasks page with the open tasks due today or earlier, the
+  // earliest due first: as many as the group counts.
   const attention = card("Needs attention today");
   await expect(attention).toBeVisible();
   // The old Tasks/Health tabs are gone. Checked once the cards have loaded:
@@ -128,13 +129,18 @@ test("the dashboard shows what needs attention and who is under care, and a grou
     name: /^\d+ tasks? due or overdue$/,
   });
   await expect(tasksDue).toBeVisible();
+  const count = Number((await tasksDue.textContent())!.match(/^\d+/)![0]);
   await tasksDue.click();
 
   await expect(page).toHaveURL(
-    /\/dashboard\/animal-tasks\?status=TODO(,|%2C)IN_PROGRESS&sort=dueDate\.asc$/,
+    /\/dashboard\/animal-tasks\?status=TODO(,|%2C)IN_PROGRESS&due=overdue(,|%2C)today&sort=dueDate\.asc$/,
   );
-  // Overdue tasks lead the list.
+  await expect(page.getByText(`of ${count} row(s)`)).toBeVisible();
+  // Overdue tasks lead the list, and the Due filter shows what it picked.
   await expect(page.getByText(/^Overdue by /).first()).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^Due\s*Overdue\s*Due today$/ }),
+  ).toBeVisible();
 });
 
 test("Applications waiting counts what its list shows, and a line opens the list filtered to it", async ({

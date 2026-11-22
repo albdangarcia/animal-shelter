@@ -7,7 +7,8 @@ import {
 } from "@/app/lib/utils/enum-formatter";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { DataTableToolbar } from "@/components/table-common/data-table-toolbar";
-import { AllAnimalsTasksPayload } from "@/app/lib/data/all-animal-tasks.data";
+import { TASK_DUE_OPTIONS } from "@/app/lib/constants/task-due";
+import type { AllAnimalsTasksPayload } from "@/app/lib/data/all-animal-tasks";
 
 interface TasksDataTableToolbarProps {
   table: Table<StockFeatures, AllAnimalsTasksPayload>;
@@ -19,7 +20,7 @@ const TasksDataTableToolbar = ({ table }: TasksDataTableToolbarProps) => {
       table={table}
       searchId="task-search"
       searchPlaceholder="Filter by task title..."
-      filterParamKeys={["category", "status"]}
+      filterParamKeys={["category", "status", "due"]}
       filters={
         <>
           <ServerSideFacetedFilter
@@ -31,6 +32,11 @@ const TasksDataTableToolbar = ({ table }: TasksDataTableToolbarProps) => {
             title="Status"
             paramKey="status"
             options={TaskStatusOptions}
+          />
+          <ServerSideFacetedFilter
+            title="Due"
+            paramKey="due"
+            options={[...TASK_DUE_OPTIONS]}
           />
         </>
       }
