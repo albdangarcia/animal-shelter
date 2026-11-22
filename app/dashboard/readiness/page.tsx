@@ -8,6 +8,7 @@ import { fetchReadinessForAnimals } from "@/app/lib/data/animals/readiness.data"
 import {
   buildReadinessBoard,
   parseReadinessBoardFilters,
+  parseReadinessPage,
   readinessBoardFilterOptions,
 } from "@/app/lib/readiness/board";
 import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
@@ -52,7 +53,7 @@ const PageContent = async ({ searchParams }: Props) => {
     readiness,
     parseReadinessBoardFilters({ species, location, stage, kind }),
     new Date(),
-    Number(page) || 1,
+    parseReadinessPage(page),
     (await getShelterSettings()).timezone,
   );
 

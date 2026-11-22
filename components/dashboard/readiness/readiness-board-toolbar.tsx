@@ -13,15 +13,17 @@ const FILTER_PARAM_KEYS = ["species", "location", "stage"] as const;
 
 interface Props {
   options: ReadinessBoardFilterOptions;
+  /** Whether the board shows one group. The server's parse of `?kind=` is
+   *  the judge: an unknown or empty kind is the overview, not a group. */
+  drilledDown: boolean;
 }
 
-export function ReadinessBoardToolbar({ options }: Props) {
+export function ReadinessBoardToolbar({ options, drilledDown }: Props) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
 
   const isFiltered = FILTER_PARAM_KEYS.some((key) => searchParams.has(key));
-  const isDrilledDown = searchParams.has("kind");
 
   // Reset stays on the current group when one is open — it only clears
   // species/location/stage, not `kind`. Leaving a group entirely is "All
@@ -44,7 +46,7 @@ export function ReadinessBoardToolbar({ options }: Props) {
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {isDrilledDown && (
+      {drilledDown && (
         <Button variant="ghost" size="sm" asChild className="h-8">
           <Link href={overviewHref}>
             <ArrowLeft className="size-3.5" />

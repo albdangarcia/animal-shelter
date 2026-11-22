@@ -16,6 +16,7 @@ import {
   describeBlocker,
   orderBlockers,
   parseReadinessBoardFilters,
+  parseReadinessPage,
   readinessBoardFilterOptions,
   type AnimalReadiness,
   type ReadinessAnimal,
@@ -274,6 +275,33 @@ test("`kind` returns every row of that kind, paginated in longest-blocked order"
     page2.rows.map((r) => r.animal.id),
     ["a10", "a11"],
   );
+});
+
+test("a page below 1 or between two pages shows the first page, not rows counted from the end", () => {
+  const readiness = Array.from({ length: 25 }, (_, i) =>
+    entry(animal({ id: `a${i}`, name: `Animal ${i}` }), [
+      { kind: "NO_PHOTO", since: at(i + 1) },
+    ]),
+  );
+  const filters: ReadinessBoardFilters = { ...NO_FILTERS, kind: "NO_PHOTO" };
+  const firstPage = Array.from(
+    { length: READINESS_KIND_PAGE_SIZE },
+    (_, i) => `a${i}`,
+  );
+
+  for (const page of [-1, 0, 1.5]) {
+    const board = buildReadinessBoard(readiness, filters, NOW, page);
+    if (board.view !== "detail") throw new Error("expected a detail view");
+    assert.equal(board.page, 1, `page ${page}`);
+    assert.deepEqual(board.rows.map((r) => r.animal.id), firstPage, `page ${page}`);
+  }
+});
+
+test("parseReadinessPage reads anything but a positive whole number as page 1", () => {
+  for (const raw of ["-1", "0", "1.5", "abc", "", undefined]) {
+    assert.equal(parseReadinessPage(raw), 1, `page ${JSON.stringify(raw)}`);
+  }
+  assert.equal(parseReadinessPage("2"), 2);
 });
 
 test("kind combines with species/location/stage — only matching animals' rows appear", () => {

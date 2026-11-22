@@ -160,6 +160,18 @@ test("drills into a group's full list and paginates it", async ({ page }) => {
   await expect(group(page, "Missing assessments")).toBeVisible();
 });
 
+test("an unknown group in the address shows the overview with no All groups link", async ({
+  page,
+}) => {
+  // The stray page is ignored on the overview; a bad page inside a group is
+  // covered by the unit tests in app/lib/readiness/board.test.ts.
+  await page.goto(`${BOARD_PATH}?kind=BOGUS&page=-1`);
+  await expect(rowFor(page, "Escalated findings", "Fido")).toBeVisible();
+  await expect(group(page, "Missing assessments")).toBeVisible();
+  // The server read the kind as none, so the toolbar has no group to leave.
+  await expect(page.getByRole("link", { name: "All groups" })).toHaveCount(0);
+});
+
 test("filters by species", async ({ page }) => {
   await page.goto(BOARD_PATH);
   await expect(rowFor(page, "Escalated findings", "Fido")).toBeVisible();
