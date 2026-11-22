@@ -2,7 +2,7 @@
 title: Create, assign and complete tasks
 summary: Add a to-do for an animal, assign it and set its due date, mark its progress, and see every animal's tasks on one page.
 permissions: [ANIMAL_TASK_MANAGE]
-aliases: [to-do, add a task, assign a task, due date, overdue task, mark done, trash a task, restore a task]
+aliases: [animals that have left, to-do, add a task, assign a task, due date, overdue task, mark done, trash a task, restore a task]
 related: [review-and-undo-the-assistants-changes, add-edit-or-delete-a-note]
 verified: 2026-11-22
 ---
@@ -81,7 +81,9 @@ Each row names its **Animal**; click the name to open that animal's
 **Tasks** tab. Type in **Filter by task title...**, or use **Category**,
 **Status** and **Due**, to narrow the list. **Due** picks tasks by their due
 date against today: **Overdue**, **Due today**, **Due later** or **No due
-date**. The **…** button on each row works as on the
+date**. Turn on **Hide animals that have left** to leave out the tasks of
+animals that were adopted, transferred or died; without it they are listed
+too, and the dashboard home page never counts them. The **…** button on each row works as on the
 animal's **Tasks** tab. New tasks are added from the animal's own **Tasks**
 tab.
 

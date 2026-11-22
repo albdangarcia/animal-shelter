@@ -82,7 +82,9 @@ export function DataTableToolbar<TData extends RowData>({
             />
           </div>
         )}
-        <div className="space-x-2 @[736px]/toolbar:justify-self-start items-center flex">
+        {/* Wraps, so a row of filters with their picks showing (and Reset) is
+            never clipped by the card on a narrow screen. */}
+        <div className="@[736px]/toolbar:justify-self-start flex flex-wrap items-center gap-2">
           {filters}
           {isFiltered && (
             <Button

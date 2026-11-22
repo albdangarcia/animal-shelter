@@ -32,6 +32,7 @@ const Page = async ({ searchParams }: Props) => {
     category,
     status,
     due,
+    hideLeft,
   } = await searchParams;
 
   const currentPage = Number(page);
@@ -51,6 +52,8 @@ const Page = async ({ searchParams }: Props) => {
         category,
         status,
         due,
+        // Only the switch's own "true" turns it on.
+        hideLeft: hideLeft === "true",
         pageSize: currentPageSize,
         sort,
       }),

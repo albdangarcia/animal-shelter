@@ -26,9 +26,10 @@ import {
 const plural = (count: number, one: string, many: string) =>
   `${count} ${count === 1 ? one : many}`;
 
-// Open tasks due today or earlier, the earliest due first: the same tasks the
-// group counts (signal 1 in `attention-signals.ts`).
-const TASKS_DUE_HREF = `/dashboard/animal-tasks?status=${TaskStatus.TODO},${TaskStatus.IN_PROGRESS}&due=overdue,today&sort=dueDate.asc`;
+// Open tasks due today or earlier, the earliest due first, leaving out animals
+// that have left: the same tasks the group counts (signal 1 in
+// `attention-signals.ts`).
+const TASKS_DUE_HREF = `/dashboard/animal-tasks?status=${TaskStatus.TODO},${TaskStatus.IN_PROGRESS}&due=overdue,today&hideLeft=true&sort=dueDate.asc`;
 
 /**
  * Per reason: the group's label (in the unit its count counts, see

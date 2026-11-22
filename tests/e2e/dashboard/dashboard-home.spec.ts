@@ -143,7 +143,7 @@ test("the dashboard shows what needs attention and who is under care, and a grou
   await tasksDue.click();
 
   await expect(page).toHaveURL(
-    /\/dashboard\/animal-tasks\?status=TODO(,|%2C)IN_PROGRESS&due=overdue(,|%2C)today&sort=dueDate\.asc$/,
+    /\/dashboard\/animal-tasks\?status=TODO(,|%2C)IN_PROGRESS&due=overdue(,|%2C)today&hideLeft=true&sort=dueDate\.asc$/,
   );
   await expect(page.getByText(`of ${count} row(s)`)).toBeVisible();
   // Overdue tasks lead the list, and the Due filter shows what it picked.
@@ -151,6 +151,11 @@ test("the dashboard shows what needs attention and who is under care, and a grou
   await expect(
     page.getByRole("button", { name: /^Due\s*Overdue\s*Due today$/ }),
   ).toBeVisible();
+  // The link turns on the switch that leaves out animals that have left, as
+  // the count does, so the rows above are the rows counted.
+  await expect(
+    page.getByRole("switch", { name: "Hide animals that have left" }),
+  ).toBeChecked();
 });
 
 test("Applications waiting counts what its list shows, and a line opens the list filtered to it", async ({

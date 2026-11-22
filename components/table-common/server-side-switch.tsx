@@ -29,13 +29,17 @@ export function ServerSideSwitch({ paramKey, label }: ServerSideSwitchProps) {
   };
 
   return (
-    <div className="flex items-center space-x-2">
+    <div className="flex items-center gap-2">
       <Switch
         id={paramKey}
         checked={isChecked}
         onCheckedChange={handleCheckedChange}
       />
-      <Label htmlFor={paramKey}>{label}</Label>
+      {/* One line: in a toolbar row that wraps, a long label would otherwise
+          squeeze into a tall column beside the other filters. */}
+      <Label htmlFor={paramKey} className="whitespace-nowrap">
+        {label}
+      </Label>
     </div>
   );
 }

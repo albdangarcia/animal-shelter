@@ -3,6 +3,7 @@ import { page } from "vitest/browser";
 import { render } from "vitest-browser-react";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
 import { ServerSideSort } from "@/components/table-common/server-side-sort";
+import { ServerSideSwitch } from "@/components/table-common/server-side-switch";
 import {
   currentUrl,
   resetNavigation,
@@ -12,8 +13,8 @@ import {
 
 vi.mock("next/navigation", () => import("@/tests/components/next-navigation"));
 
-// The two URL-driven controls every list toolbar shares (the dashboard lists,
-// the reports and /pets): the faceted filter and the sort. Each reads its state
+// The URL-driven controls every list toolbar shares (the dashboard lists,
+// the reports and /pets): the faceted filter, the sort and the switch. Each reads its state
 // from the URL on every render and writes its own parameter back, so what a
 // click writes, and that the control follows a URL it did not change (a
 // Reset, a back button), is checked here, once for all of them. The browser
@@ -143,5 +144,53 @@ describe("ServerSideSort", () => {
       { method: "replace", href: "/list?query=bud&page=1&order=date.asc" },
       { method: "replace", href: "/list?query=bud&page=1&order=date.desc" },
     ]);
+  });
+});
+
+describe("ServerSideSwitch", () => {
+  const hideSwitch = () =>
+    page.getByRole("switch", { name: "Hide animals that have left" });
+  const renderSwitch = () =>
+    render(<ServerSideSwitch paramKey="hideLeft" label="Hide animals that have left" />);
+
+  test("each click writes or deletes its parameter, back on page 1, keeping the others", async () => {
+    resetNavigation("/list?query=bud&page=3");
+    await renderSwitch();
+    await expect.element(hideSwitch()).not.toBeChecked();
+
+    await hideSwitch().click();
+    await expectUrl("/list?query=bud&page=1&hideLeft=true");
+    await expect.element(hideSwitch()).toBeChecked();
+
+    await hideSwitch().click();
+    await expectUrl("/list?query=bud&page=1");
+    await expect.element(hideSwitch()).not.toBeChecked();
+
+    expect(routerCalls).toEqual([
+      { method: "replace", href: "/list?query=bud&page=1&hideLeft=true" },
+      { method: "replace", href: "/list?query=bud&page=1" },
+    ]);
+  });
+
+  test("it shows the URL's state, and follows the URL when something else changes it", async () => {
+    resetNavigation("/list?hideLeft=true");
+    await renderSwitch();
+    await expect.element(hideSwitch()).toBeChecked();
+
+    // As a Reset leaves it.
+    setUrl("/list");
+    await expect.element(hideSwitch()).not.toBeChecked();
+
+    setUrl("/list?hideLeft=true");
+    await expect.element(hideSwitch()).toBeChecked();
+  });
+
+  test("only the exact value true counts as on", async () => {
+    resetNavigation("/list?hideLeft=1");
+    await renderSwitch();
+    await expect.element(hideSwitch()).not.toBeChecked();
+
+    setUrl("/list?hideLeft=false");
+    await expect.element(hideSwitch()).not.toBeChecked();
   });
 });
