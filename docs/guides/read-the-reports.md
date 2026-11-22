@@ -75,8 +75,9 @@ period, to one decimal place:
 - Non-live outcomes are **Euthanized**, **Deceased** and **Other**.
 
 For example, 86 live outcomes out of 97 is 88.7%. The overview card works it
-out the same way, so the two always agree. With no outcomes in the period the
-report shows "—" and "No outcomes recorded in this period."
+out the same way, so the two always agree. With no outcomes in the period
+both show "—" for the rate: the report adds "No outcomes recorded in this
+period." and the card "No outcomes in this period".
 
 ## The intake report
 

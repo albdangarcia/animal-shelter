@@ -4,6 +4,7 @@ import { OutcomeType } from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import { resolveReportRange } from "@/app/lib/utils/report-date-utils";
+import { liveReleaseRate } from "@/app/lib/utils/report-rate-utils";
 import {
   isLiveOutcome,
   LIVE_OUTCOME_TYPES,
@@ -97,7 +98,7 @@ const _fetchOutcomeReport = async (
       total,
       liveCount,
       nonLiveCount,
-      liveReleaseRate: total === 0 ? null : liveCount / total,
+      liveReleaseRate: liveReleaseRate(liveCount, total),
       rows,
       fromLabel: range.fromLabel,
       toLabel: range.toLabel,

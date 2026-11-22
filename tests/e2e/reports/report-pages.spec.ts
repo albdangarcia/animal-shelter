@@ -73,6 +73,18 @@ test("the reports overview draws each report's card", async ({ page }) => {
   }
 });
 
+test("the overview shows no live release rate for a period with no outcomes", async ({
+  page,
+}) => {
+  // Long before any seeded record, so the period is empty on any day. A rate
+  // over no outcomes is undefined: "—", as on the outcomes report, not 0.0%.
+  await page.goto("/dashboard/reports?from=1990-01-01&to=1990-01-31");
+  const outcomes = card(page, "Outcome statistics");
+  await expect(outcomes.getByText("No outcomes in this period")).toBeVisible();
+  await expect(outcomes.getByText("—", { exact: true })).toBeVisible();
+  await expect(outcomes.getByText("0.0%")).toHaveCount(0);
+});
+
 test("the intake sources report draws its trend and breakdown", async ({
   page,
 }) => {

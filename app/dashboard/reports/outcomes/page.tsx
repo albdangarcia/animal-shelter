@@ -14,6 +14,7 @@ import {
   getShelterToday,
 } from "@/app/lib/data/shelter-settings.data";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
+import { formatPercent } from "@/app/lib/utils/report-rate-utils";
 import { fetchSpecies } from "@/app/lib/data/animals/animal.data";
 import { fetchOutcomeReport } from "@/app/lib/data/reports/outcome-report.data";
 import { ServerSideFacetedFilter } from "@/components/table-common/server-side-faceted-filter";
@@ -48,11 +49,6 @@ import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   searchParams: SearchParamsType;
-}
-
-/** Formats a 0..1 ratio as a 1-decimal percent, or "—" when null. */
-function formatPercent(value: number | null): string {
-  return value === null ? "—" : `${(value * 100).toFixed(1)}%`;
 }
 
 /** Builds the overview href, preserving the current range/species params. */
