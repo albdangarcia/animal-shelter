@@ -14,6 +14,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { formatPercent } from "@/app/lib/utils/report-rate-utils";
 import {
+  reportHref,
+  type ReportLinkParams,
+} from "@/app/lib/utils/report-href";
+import {
   fetchBalanceSummary,
   fetchIntakeSummary,
   fetchLengthOfStaySummary,
@@ -22,21 +26,7 @@ import {
 
 // Raw URL params flowed down to each card so it can run its own fetch (letting
 // the cards stream independently) and build a link that preserves the range.
-export type OverviewCardParams = {
-  from?: string;
-  to?: string;
-  species?: string;
-};
-
-/** Builds a detail-report href that carries the current range/species params. */
-function reportHref(base: string, { from, to, species }: OverviewCardParams) {
-  const params = new URLSearchParams();
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  if (species) params.set("species", species);
-  const qs = params.toString();
-  return qs ? `${base}?${qs}` : base;
-}
+export type OverviewCardParams = ReportLinkParams;
 
 /**
  * Shared card presentation. When `href` is set the whole card is a link with a

@@ -1,8 +1,8 @@
 ---
 title: Read the reports
-summary: Pick a period and species, then read the live release rate, intakes by source and length of stay for that period.
+summary: Pick a period and species, read the live release rate, intakes and length of stay for it, and download or print them.
 permissions: [REPORTS_READ]
-aliases: [reports, statistics, stats, live release rate, LRR, save rate, outcome statistics, intake sources, intake report, length of stay, LOS, median stay, how long in care, year to date, annual numbers, monthly intakes, transfer partners, shelter animals count]
+aliases: [reports, statistics, export report, download report, csv, excel, spreadsheet, print report, board report, grant report, stats, live release rate, LRR, save rate, outcome statistics, intake sources, intake report, length of stay, LOS, median stay, how long in care, year to date, annual numbers, monthly intakes, transfer partners, shelter animals count]
 related: [read-the-dashboard-home-page, find-an-outcome, find-an-intake, correct-an-outcome, correct-an-intake, reverse-an-outcome-recorded-by-mistake, take-back-an-animal-that-left]
 verified: 2026-11-22
 ---
@@ -16,7 +16,8 @@ stayed. Use them for monthly or yearly numbers.
 To see what is happening today, use the **Dashboard** instead. To look up one
 intake or outcome, use the **Intakes** or **Outcomes** list.
 
-The reports can't be exported or printed yet.
+To take the numbers somewhere else, download a report as a spreadsheet or
+print it: see [Download or print a report](#download-or-print-a-report).
 
 ## Pick a period and species
 
@@ -123,6 +124,33 @@ How a stay is counted:
   (days)** adds up all of its stays, and shows "same" when there was only
   one.
 
+## Download or print a report
+
+Each report page, the **Reports** page included, has a **Download CSV**
+button beside **Species**.
+
+1. Pick the period and species first. The file counts what the page shows.
+2. Click **Download CSV**. The browser saves a file named after the report
+   and the period, for example
+   `outcome-statistics-2026-01-01-to-2026-11-22.csv`.
+3. Open it in Excel, Google Sheets or Numbers.
+
+The file starts with the report's name, the first and last day, the species
+and the time zone. Then come the page's tables, one after another, with the
+same numbers and percentages as the screen: "88.7%", and "—" where the page
+shows "—". The monthly intake trend has a column for the year and one for
+the month. The length of stay file lists the 20 longest current stays with
+their intake dates.
+
+To print a report, or to save it as a PDF, use the browser's **Print**
+(Cmd+P on a Mac, Ctrl+P on Windows) and pick **Save as PDF** as the printer
+if you want a file. The printout leaves out the sidebar, the buttons and the
+filters, and says which species it counts under the title. It prints in
+light colours even when the app is in dark mode.
+
+The file is not a Shelter Animals Count submission: it isn't laid out by age
+group and subtype the way their monthly form is.
+
 ## When a record is corrected
 
 The reports read the records as they are now:
@@ -146,3 +174,9 @@ The reports read the records as they are now:
 - **A number doesn't match what you remember.** Look the records up on the
   **Intakes** or **Outcomes** list. A reversed outcome is on the list, marked
   **Reversed**, but the reports don't count it.
+- **The downloaded file shows odd characters instead of "—".** The
+  spreadsheet opened it with the wrong text encoding. In Excel, use
+  **Data**, then **From Text/CSV**, and pick **UTF-8**.
+- **A name in the file starts with an apostrophe.** A name that starts with
+  `=`, `+`, `-` or `@` gets one, so the spreadsheet shows it as text instead
+  of running it as a formula.

@@ -4,6 +4,11 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { SearchParamsType } from "@/app/lib/types";
+import {
+  pickedSpeciesNames,
+  reportHref,
+  speciesLabel,
+} from "@/app/lib/utils/report-href";
 import { ReportParamsSchema } from "@/app/lib/zod-schemas/report.schemas";
 import {
   formatRangeLabel,
@@ -44,29 +49,12 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { HelpLink } from "@/components/dashboard/help/help-link";
+import { ReportDownloadLink } from "@/components/dashboard/reports/report-download-link";
 import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
 import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   searchParams: SearchParamsType;
-}
-
-/** Builds the overview href, preserving the current range/species params. */
-function overviewHref({
-  from,
-  to,
-  species,
-}: {
-  from?: string;
-  to?: string;
-  species?: string;
-}) {
-  const params = new URLSearchParams();
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  if (species) params.set("species", species);
-  const qs = params.toString();
-  return qs ? `/dashboard/reports?${qs}` : "/dashboard/reports";
 }
 
 const Page = async ({ searchParams }: Props) => {
@@ -101,11 +89,11 @@ const PageContent = async ({ searchParams }: Props) => {
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
-      <Breadcrumb>
+      <Breadcrumb className="print:hidden">
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink asChild>
-              <Link href={overviewHref({ from, to, species })}>Reports</Link>
+              <Link href={reportHref("/dashboard/reports", { from, to, species })}>Reports</Link>
             </BreadcrumbLink>
           </BreadcrumbItem>
           <BreadcrumbSeparator />
@@ -126,21 +114,31 @@ const PageContent = async ({ searchParams }: Props) => {
               period.
             </p>
           </div>
-          <HelpLink guide={help} />
+          <div className="print:hidden">
+            <HelpLink guide={help} />
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{formatRangeLabel(range)}</span>
           <span className="text-muted-foreground text-xs">
             · Times counted in {timezone}
           </span>
-          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+          {/* The species filter is left out of a printout; this says what it
+              picked instead. */}
+          <span className="text-muted-foreground hidden text-xs print:inline">
+            · {speciesLabel(pickedSpeciesNames(speciesList, species))}
+          </span>
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto print:hidden">
             <ReportRangePicker />
             <ServerSideFacetedFilter
               title="Species"
               paramKey="species"
               options={speciesOptions}
             />
-            {/* Room reserved here for a future CSV/PDF export button. */}
+            <ReportDownloadLink
+              report="intakes"
+              params={{ from, to, species }}
+            />
           </div>
         </div>
       </div>
