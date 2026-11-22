@@ -1,6 +1,7 @@
 import { NavDocument, NavItem } from "@/components/dashboard/nav/nav-links.config";
 import { hasPermission } from "./auth/hasPermission";
 import { type AppPermission } from "./auth/permissions";
+import { navItemAllowed } from "./nav-item-allowed";
 
 /**
  * True if the current user holds at least one of the given permissions.
@@ -19,25 +20,6 @@ export const hasAnyPermission = async (
 };
 
 /**
- * Whether the current user may see a nav entry.
- *
- * `anyPermissions` (hold ANY of the listed) takes precedence over the single
- * `permission` (hold this one). An entry with neither is ungated.
- */
-const navItemAllowed = async (item: {
-  permission?: AppPermission;
-  anyPermissions?: readonly AppPermission[];
-}): Promise<boolean> => {
-  if (item.anyPermissions && item.anyPermissions.length > 0) {
-    return hasAnyPermission(item.anyPermissions);
-  }
-  if (item.permission) {
-    return hasPermission(item.permission);
-  }
-  return true;
-};
-
-/**
  * Recursively filters navigation items based on user permissions
  * @param items Array of NavItem objects to filter
  * @returns Promise that resolves to filtered array of NavItems
@@ -49,7 +31,7 @@ export const getFilteredNavLinks = async (
 
   for (const item of items) {
     // Check if user has permission for this item
-    if (!(await navItemAllowed(item))) {
+    if (!(await navItemAllowed(item, hasPermission))) {
       continue; // Skip this item if no permission
     }
 

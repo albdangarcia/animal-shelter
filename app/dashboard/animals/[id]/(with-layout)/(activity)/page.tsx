@@ -5,6 +5,7 @@ import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
+import { READINESS_READ_PERMISSIONS } from "@/app/lib/readiness/permissions";
 import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
 import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 import ActivityFeed from "@/components/dashboard/animals/activity-feed/activity-feed";
@@ -34,10 +35,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
 
   const [
     { activityLogs, totalPages },
-    canReadAnimalInfo,
-    canReadAssessments,
-    canReadCharacteristics,
-    canReadMedical,
+    readinessReads,
     manageAssessments,
     manageAnimalInfo,
     managePhotos,
@@ -45,10 +43,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
     help,
   ] = await Promise.all([
     fetchAnimalActivityLogs(currentPage, animalId),
-    hasPermission(AppPermissions.ANIMAL_INFO_READ),
-    hasPermission(AppPermissions.ANIMAL_ASSESSMENT_READ),
-    hasPermission(AppPermissions.ANIMAL_CHARACTERISTICS_READ),
-    hasPermission(AppPermissions.MEDICAL_READ),
+    Promise.all(READINESS_READ_PERMISSIONS.map((p) => hasPermission(p))),
     hasPermission(AppPermissions.ANIMAL_ASSESSMENT_MANAGE),
     hasPermission(AppPermissions.ANIMAL_INFO_MANAGE),
     hasPermission(AppPermissions.ANIMAL_PHOTO_MANAGE),
@@ -56,11 +51,7 @@ const PageContent = async ({ params, searchParams }: Props) => {
     getHelpLinkGuide(PAGE_HELP_GUIDES.animalActivity),
   ]);
 
-  const canReadReadiness =
-    canReadAnimalInfo &&
-    canReadAssessments &&
-    canReadCharacteristics &&
-    canReadMedical;
+  const canReadReadiness = readinessReads.every(Boolean);
 
   return (
     <div className="flex flex-col gap-4">

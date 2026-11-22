@@ -10,21 +10,15 @@
 import type { Actor } from "@/app/lib/auth/actor";
 import { can } from "@/app/lib/auth/can";
 import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
+import { READINESS_READ_PERMISSIONS } from "@/app/lib/readiness/permissions";
 import type { AiToolName } from "./tool-names";
 
 export const FIND_ANIMALS_PERMISSIONS = [AppPermissions.ANIMAL_INFO_READ];
 
 export const GET_ANIMAL_SUMMARY_PERMISSIONS = [AppPermissions.ANIMAL_INFO_READ];
 
-// All four reads, as the readiness board and panel require: outstanding
-// items come from assessments, characteristic claims and the medical record
-// as well as the animal record.
-export const GET_ANIMAL_READINESS_PERMISSIONS = [
-  AppPermissions.ANIMAL_INFO_READ,
-  AppPermissions.ANIMAL_ASSESSMENT_READ,
-  AppPermissions.ANIMAL_CHARACTERISTICS_READ,
-  AppPermissions.MEDICAL_READ,
-];
+// All four reads, as every other reader of readiness requires.
+export const GET_ANIMAL_READINESS_PERMISSIONS = READINESS_READ_PERMISSIONS;
 
 // All three reads: the queue puts task detail, missed medication doses and
 // scheduled medical care next to animal identity.
