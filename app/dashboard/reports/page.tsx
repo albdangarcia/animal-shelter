@@ -23,6 +23,9 @@ import {
   OutcomeStatisticsCard,
   OverviewCardSkeleton,
 } from "@/components/dashboard/reports/overview-cards";
+import { HelpLink } from "@/components/dashboard/help/help-link";
+import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
+import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -47,7 +50,10 @@ const PageContent = async ({ searchParams }: Props) => {
 
   const timezone = (await getShelterSettings()).timezone;
   const range = resolveReportRange(from, to, await getShelterToday());
-  const speciesList = await fetchSpecies();
+  const [speciesList, help] = await Promise.all([
+    fetchSpecies(),
+    getHelpLinkGuide(PAGE_HELP_GUIDES.reports),
+  ]);
   const speciesOptions = speciesList.map((s) => ({
     label: s.name,
     value: s.id,
@@ -58,11 +64,14 @@ const PageContent = async ({ searchParams }: Props) => {
   return (
     <div className="flex flex-col gap-4 md:gap-6">
       <div className="flex flex-col gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
-          <p className="text-muted-foreground text-sm">
-            Historical and compliance statistics over a date range you choose.
-          </p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
+            <p className="text-muted-foreground text-sm">
+              Historical and compliance statistics over a date range you choose.
+            </p>
+          </div>
+          <HelpLink guide={help} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium">{formatRangeLabel(range)}</span>
