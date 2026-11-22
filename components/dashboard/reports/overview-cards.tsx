@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
+import { formatPercent } from "@/app/lib/utils/report-rate-utils";
 import {
   fetchBalanceSummary,
   fetchIntakeSummary,
@@ -104,7 +105,7 @@ export async function OutcomeStatisticsCard(params: OverviewCardParams) {
     <ReportCard
       href={reportHref("/dashboard/reports/outcomes", params)}
       label="Outcome statistics"
-      headline={`${(liveReleaseRate * 100).toFixed(1)}%`}
+      headline={formatPercent(liveReleaseRate)}
       sub={
         total === 0
           ? "No outcomes in this period"

@@ -5,6 +5,7 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import { resolveReportRange } from "@/app/lib/utils/report-date-utils";
 import { computeStays } from "@/app/lib/utils/stay-utils";
+import { liveReleaseRate } from "@/app/lib/utils/report-rate-utils";
 import {
   _fetchAnimalStayEvents,
   isLiveOutcome,
@@ -32,7 +33,7 @@ function median(values: number[]): number | null {
 export type OutcomeSummary = {
   total: number;
   liveCount: number;
-  liveReleaseRate: number; // 0..1; 0 when there are no outcomes (never NaN)
+  liveReleaseRate: number | null; // 0..1; null when there are no outcomes ("—")
   topTypes: { type: OutcomeType; count: number }[]; // up to 3, desc by count
 };
 
@@ -61,12 +62,16 @@ const _fetchOutcomeSummary = async (
     const liveCount = counts
       .filter((c) => isLiveOutcome(c.type))
       .reduce((sum, c) => sum + c.count, 0);
-    const liveReleaseRate = total === 0 ? 0 : liveCount / total;
     const topTypes = [...counts]
       .sort((a, b) => b.count - a.count)
       .slice(0, 3);
 
-    return { total, liveCount, liveReleaseRate, topTypes };
+    return {
+      total,
+      liveCount,
+      liveReleaseRate: liveReleaseRate(liveCount, total),
+      topTypes,
+    };
   } catch (error) {
     console.error("Error fetching outcome summary.", error);
     throw new Error("Error fetching outcome summary.");
