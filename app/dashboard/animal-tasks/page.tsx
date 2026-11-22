@@ -31,6 +31,7 @@ const Page = async ({ searchParams }: Props) => {
     sort,
     category,
     status,
+    due,
   } = await searchParams;
 
   const currentPage = Number(page);
@@ -39,17 +40,20 @@ const Page = async ({ searchParams }: Props) => {
   // Whether the current user can manage tasks (edit assignee/status, delete, edit form).
   // Volunteers have ANIMAL_TASK_READ only; staff/admin have ANIMAL_TASK_MANAGE.
   // fetchAllAnimalsTasks doesn't depend on canManage, so run them in parallel.
+  // It reads the shelter's today itself; getShelterToday is cached per render,
+  // so the columns get the same day without a second lookup.
   const [canManage, { tasks, totalPages, totalRows }, today, help] =
     await Promise.all([
       hasPermission(AppPermissions.ANIMAL_TASK_MANAGE),
-      fetchAllAnimalsTasks(
+      fetchAllAnimalsTasks({
         query,
         currentPage,
         category,
         status,
-        currentPageSize,
-        sort
-      ),
+        due,
+        pageSize: currentPageSize,
+        sort,
+      }),
       getShelterToday(),
       getHelpLinkGuide(PAGE_HELP_GUIDES.allAnimalTasks),
     ]);

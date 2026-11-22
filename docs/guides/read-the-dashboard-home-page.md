@@ -55,7 +55,7 @@ Animals that have left the shelter are never listed.
 
 | Group | It counts | The heading opens |
 |---|---|---|
-| **tasks due or overdue** | Open tasks due today or earlier. | **Animal Tasks**, the soonest due first. |
+| **tasks due or overdue** | Open tasks due today or earlier. | **Animal Tasks**, showing the same open tasks with **Due** set to **Overdue** and **Due today**, the soonest due first. |
 | **animal missed a dose** | Animals with a medication dose, yesterday or today, whose time has passed with nothing recorded. A dose recorded as refused or not given doesn't count as missed. | The **Dose sheet**. |
 | **care items due or overdue** | Scheduled vaccines, tests, treatments, surgeries, microchips and exams due today or overdue. | The **Due** page, which also lists care due in the next 7 days and exemptions up for review. |
 | **animals under care with nothing planned** | Animals with an open care episode and no open task, no scheduled care and no medication running. | Nothing. Click an animal to open its medical record. |
