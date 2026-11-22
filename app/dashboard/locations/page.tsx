@@ -19,13 +19,21 @@ const Page = async () => {
 };
 
 const PageContent = async () => {
-  const [data, canReadFosters, help] = await Promise.all([
+  const [data, canReadFosters, canMoveAnimals, help] = await Promise.all([
     fetchShelterBoard(),
     hasPermission(AppPermissions.FOSTERS_READ),
+    hasPermission(AppPermissions.ANIMAL_INFO_MANAGE),
     getHelpLinkGuide(PAGE_HELP_GUIDES.housingBoard),
   ]);
 
-  return <ShelterBoard data={data} canReadFosters={canReadFosters} help={help} />;
+  return (
+    <ShelterBoard
+      data={data}
+      canReadFosters={canReadFosters}
+      canMoveAnimals={canMoveAnimals}
+      help={help}
+    />
+  );
 };
 
 export default Page;
