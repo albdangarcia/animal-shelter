@@ -99,6 +99,16 @@ test("the headcount cards say where the animals are, and In care opens the shelt
   ).toBeVisible();
 });
 
+test("the Dashboard heading has a \"?\" that links to its guide", async ({
+  page,
+}) => {
+  await page.goto("/dashboard");
+
+  await expect(
+    page.getByRole("link", { name: "Help: Read the Dashboard home page" }),
+  ).toHaveAttribute("href", "/dashboard/help/read-the-dashboard-home-page");
+});
+
 test("the dashboard shows what needs attention and who is under care, and a group link opens its page", async ({
   page,
 }) => {
@@ -338,6 +348,8 @@ test.describe("an applicant, who cannot read the shelter's analytics", () => {
     ).toHaveCount(0);
 
     await expect(page.getByText("Something Went Wrong")).toHaveCount(0);
+    // The guide is for staff, so there is no "?" beside the heading.
+    await expect(page.getByRole("link", { name: /^Help: / })).toHaveCount(0);
     await expect(
       chartTitle(page),
     ).toHaveCount(0);

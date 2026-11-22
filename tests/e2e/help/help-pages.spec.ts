@@ -22,6 +22,7 @@ const volunteerState = storageStatePathFor("help-pages-volunteer.state.json");
 const VACCINE_GUIDE = "Record a vaccine, test or treatment";
 const VITALS_GUIDE = "Record weight and vitals";
 const DUE_GUIDE = "Schedule care and read the Due page";
+const DASHBOARD_GUIDE = "Read the Dashboard home page";
 const FOSTER_GUIDE = "Fosters: give care and report an outside vet visit";
 // Every signed-in account holds the applicant permissions, so a foster sees
 // the applicant guides (adopting, fostering and updating their own profile)
@@ -133,6 +134,14 @@ test.describe("staff", () => {
 
     await waitForPathname(page, "/dashboard/help/schedule-care-and-read-the-due-page");
     await expect(guideTitle(page, DUE_GUIDE)).toBeVisible();
+  });
+
+  test("the \"?\" on the Dashboard opens the Dashboard guide", async ({ page }) => {
+    await page.goto("/dashboard");
+    await page.getByRole("link", { name: `Help: ${DASHBOARD_GUIDE}` }).click();
+
+    await waitForPathname(page, "/dashboard/help/read-the-dashboard-home-page");
+    await expect(guideTitle(page, DASHBOARD_GUIDE)).toBeVisible();
   });
 
   test("the Medical \"?\" opens the medical guide, and the vitals guide on Vitals", async ({
