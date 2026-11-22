@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import ChartWrapper from "@/components/dashboard/analytics/chart-wrapper";
+import DashboardHelpLink from "@/components/dashboard/home/dashboard-help-link";
 import WelcomeCard from "@/components/dashboard/home/welcome-card";
 import AttentionPanel from "@/components/dashboard/home/attention-panel";
 import UnderCareCard from "@/components/dashboard/home/under-care-card";
@@ -17,6 +18,16 @@ import LongestStaysCardSkeleton from "@/components/skeletons/longestStaysCardSke
 const Page = async () => {
   return (
     <>
+      {/* The heading row. The "?" waits in its own Suspense, in a box the size
+          of the button, so the row keeps its height while the guide loads. It
+          is empty for a viewer who can't see the guide. */}
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
+        <Suspense fallback={<div className="size-8" aria-hidden="true" />}>
+          <DashboardHelpLink />
+        </Suspense>
+      </div>
+
       {/* For a viewer without the analytics permission, in place of the cards
           below, which each render nothing for them. */}
       <WelcomeCard />

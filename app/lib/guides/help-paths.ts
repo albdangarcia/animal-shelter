@@ -39,6 +39,7 @@ export const PAGE_HELP_GUIDES = {
   animalCreate: "take-in-a-new-animal",
   animalReIntake: "take-back-an-animal-that-left",
   animals: "find-an-animal",
+  dashboardHome: "read-the-dashboard-home-page",
   readinessBoard: "read-the-readiness-board",
   housingBoard: "read-the-housing-board-and-drag-animals",
   reports: "read-the-reports",

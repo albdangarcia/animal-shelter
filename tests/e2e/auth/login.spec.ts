@@ -29,7 +29,11 @@ test("seeded admin can sign in and reach the dashboard", async ({ page }) => {
 
   await page.waitForURL(`**${adminDashboardPath}`, { timeout: 60_000 });
 
-  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  // The site header and the page's own heading are both "Dashboard"; the
+  // page's comes last in the document.
+  await expect(
+    page.getByRole("heading", { name: "Dashboard" }).last(),
+  ).toBeVisible();
 });
 
 test("invalid credentials stay on sign-in and show an error", async ({ page }) => {
