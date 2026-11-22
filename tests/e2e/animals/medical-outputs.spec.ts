@@ -132,7 +132,7 @@ test("medical readers print the full safe handout, with private direct access an
     await page.getByRole("link", { name: "Print adopter medical history", exact: true }).click();
     await expect(page.getByRole("heading", { name: `Medical history — ${f.name}`, exact: true })).toBeVisible();
     const response = await page.reload();
-    expect(response!.headers()["cache-control"]).toMatch(/no-cache.*must-revalidate/);
+    expect(response!.headers()["cache-control"]).toMatch(/no-store/);
     expect(response!.headers()["cache-control"]).not.toMatch(/public|s-maxage/);
     const html = await response!.text();
     expect(html).not.toContain(f.marker);
@@ -141,7 +141,7 @@ test("medical readers print the full safe handout, with private direct access an
     expect(html).not.toContain("/api/medical-documents");
     expect(html).not.toContain(`${f.marker}/file.pdf`);
     const rsc = await context.request.get(route, { headers: { RSC: "1" } });
-    expect(rsc.headers()["cache-control"]).toMatch(/no-cache/);
+    expect(rsc.headers()["cache-control"]).toMatch(/no-store/);
     expect(rsc.status()).toBe(200);
     const payload = await rsc.text();
     expect(payload).toContain(f.product);
@@ -264,7 +264,7 @@ test("medical readers print a selected rabies certificate only after its missing
     await expect(page.getByRole("heading", { name: `Rabies vaccination certificate — ${f.name}`, exact: true })).toBeVisible();
     const before = await counts(f.animalId);
     const response = await page.reload();
-    expect(response!.headers()["cache-control"]).toMatch(/no-cache.*must-revalidate/);
+    expect(response!.headers()["cache-control"]).toMatch(/no-store/);
     expect(response!.headers()["cache-control"]).not.toMatch(/public|s-maxage/);
     expect(await response!.text()).not.toContain(f.marker);
     const payload = await context.request.get(route, { headers: { RSC: "1" } });
