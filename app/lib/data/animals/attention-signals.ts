@@ -29,7 +29,7 @@
 
 import type prisma from "@/app/lib/prisma";
 import type { Prisma } from "@/prisma/generated/client";
-import { AnimalListingStatus, TaskStatus } from "@/prisma/generated/enums";
+import { TaskStatus } from "@/prisma/generated/enums";
 import {
   calendarDay,
   type CalendarDay,
@@ -39,6 +39,7 @@ import type { DoseSlotEnds } from "@/app/lib/utils/medication-slots";
 import { findMedicalDueForQueue } from "../medical-due";
 import { findUnplannedCareForQueue } from "../care-episodes";
 import { findMissedDosesForQueue } from "../medication-doses";
+import { animalNotArchived } from "./not-archived";
 import {
   attentionUnitLabel,
   type AttentionAnimal,
@@ -76,10 +77,6 @@ const toAttentionAnimal = (animal: AttentionAnimalRow): AttentionAnimal => ({
   currentUnit: attentionUnitLabel(animal.currentUnit),
 });
 
-const notArchived = {
-  listingStatus: { not: AnimalListingStatus.ARCHIVED },
-} satisfies Prisma.AnimalWhereInput;
-
 /**
  * Every row of the five signals on the shelter's `today` and `clock`.
  *
@@ -107,7 +104,7 @@ export const findAttentionSignals = async (
         where: {
           status: { in: OPEN_TASK_STATUSES },
           dueDate: { lte: today },
-          animal: notArchived,
+          animal: animalNotArchived,
         },
         select: {
           id: true,
@@ -133,7 +130,7 @@ export const findAttentionSignals = async (
         where: {
           endDate: null,
           expectedEndDate: { lt: today },
-          animal: notArchived,
+          animal: animalNotArchived,
         },
         select: {
           id: true,

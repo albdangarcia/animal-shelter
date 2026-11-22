@@ -8,6 +8,7 @@ import type { TaskCategory, TaskStatus } from "@/prisma/generated/enums";
 import type { CalendarDay } from "@/app/lib/utils/shelter-day";
 import { TASK_DUE_OPTIONS, type TaskDue } from "@/app/lib/constants/task-due";
 import { pageSizeSchema } from "../zod-schemas/common.schemas";
+import { animalNotArchived } from "./animals/not-archived";
 
 type Db = typeof prisma;
 
@@ -41,6 +42,9 @@ const AllAnimalsTasksSchema = z.object({
   category: z.string().optional(),
   status: z.string().optional(),
   due: z.string().optional(),
+  // Leave out the tasks of animals that have left the shelter (listing status
+  // ARCHIVED): what the dashboard's "tasks due or overdue" count leaves out.
+  hideLeft: z.boolean().optional(),
   pageSize: pageSizeSchema,
   sort: z.string().optional(),
 });
@@ -126,7 +130,8 @@ export const findAllAnimalsTasks = async (
   totalPages: number;
   totalRows: number;
 }> => {
-  const { query, currentPage, category, status, due, pageSize, sort } = args;
+  const { query, currentPage, category, status, due, hideLeft, pageSize, sort } =
+    args;
 
   const dueWhere = taskDueWhere(due, today);
   const whereClause: Prisma.TaskWhereInput = {
@@ -138,6 +143,7 @@ export const findAllAnimalsTasks = async (
       status: { in: status.split(",") as TaskStatus[] },
     }),
     ...dueWhere,
+    ...(hideLeft && { animal: animalNotArchived }),
   };
 
   const offset = (currentPage - 1) * pageSize;
