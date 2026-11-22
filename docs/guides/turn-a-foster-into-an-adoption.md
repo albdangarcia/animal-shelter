@@ -4,7 +4,7 @@ summary: Finish a foster-to-adopt placement as an adoption by the foster, link t
 permissions: [FOSTERS_MANAGE]
 aliases: [foster fail, convert foster to adoption, convert placement, adopt out to the foster]
 related: [place-an-animal-in-foster, return-an-animal-from-foster, find-a-foster-or-a-placement, record-an-outcome, review-an-application-and-change-its-status, adoption-application-status-glossary, reverse-an-outcome-recorded-by-mistake]
-verified: 2026-11-20
+verified: 2026-11-22
 ---
 
 ## When to use this
@@ -34,12 +34,15 @@ so do it before placing the animal: see
    nothing. With two or more, nothing is picked and **None** shows as chosen, so
    pick the right one. If the foster has no approved application, the choice
    isn't shown and nothing is linked.
+   If the animal has open tasks, a note above says how many, and
+   "Converting this placement cancels them".
 3. Click **Convert to Adoption**.
 4. A box says "Confirm adoption" and "*Animal* will be marked as adopted by
    *name*. This action is final." Click **Confirm & Convert**.
 
-You should see "Foster placement converted to adoption." and the animal's
-page opens. Its card reads **Archived**, and the button now reads **Create
+You should see "Foster placement converted to adoption." If the animal had
+open tasks, it adds how many were canceled, for example "1 open task was
+canceled." The animal's page opens. Its card reads **Archived**, and the button now reads **Create
 Re-Intake**.
 
 ## What it records
@@ -48,6 +51,8 @@ Re-Intake**.
   appears on **Outcomes** with your name. The adopter shown is the person on
   the linked application, which has to be the foster's own.
 - **The animal is archived**, like any adoption: it leaves the listings.
+- **Its open tasks are canceled**, like any adoption: every task still
+  **Todo**, **In Progress** or **On Hold** reads **Canceled**.
 - **The placement ends**, today, with the reason **Adopted By Foster**. It is
   linked to the outcome and to the application.
 - **The linked application reads Adopted.** Every other application still open
@@ -73,7 +78,7 @@ are otherwise the same outcome, and the same changes to applications.
 
 It can't be undone from this page. If it was a mistake, an admin can reverse the
 outcome: see "Reverse an outcome recorded by mistake" in **Help**. That
-reopens the placement.
+reopens the placement and the tasks it canceled.
 
 ## If something goes wrong
 

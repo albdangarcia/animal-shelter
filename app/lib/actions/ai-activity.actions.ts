@@ -10,13 +10,13 @@ import {
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { AiActionTargetType } from "@/prisma/generated/enums";
 import { cuidSchema } from "../zod-schemas/common.schemas";
-import { applyTaskStatusChange } from "../tasks/apply-task-status-change";
+import { applyAiTaskUndo } from "../tasks/undo-ai-task-change";
 import {
   ConflictError,
   NotFoundError,
   PreconditionFailedError,
 } from "../utils/errors";
-import { isTaskStatusStale, parseSnapshot, STALE_UNDO_MESSAGE } from "../data/ai-activity";
+import { parseSnapshot } from "../data/ai-activity";
 
 const MISSING_PERSON_MESSAGE =
   "Authentication Error: Your user account is not associated with a person record.";
@@ -91,24 +91,13 @@ const _undoAiAction = async (
       // target type is an added case, not a refactor.
       switch (log.targetType) {
         case AiActionTargetType.TASK: {
-          const task = await tx.task.findUnique({
-            where: { id: log.targetId },
-            select: { status: true },
-          });
-          if (!task) {
-            throw new NotFoundError(
-              "The task this change applied to no longer exists.",
-            );
-          }
-          // Evaluated inside the transaction
-          // so nothing can slip between the check and the write.
-          if (isTaskStatusStale(task.status, leftAt)) {
-            throw new PreconditionFailedError(STALE_UNDO_MESSAGE);
-          }
-          await applyTaskStatusChange(tx, {
+          // Checked behind the animal's lock, so nothing can slip between
+          // the check and the write.
+          await applyAiTaskUndo(tx, {
             taskId: log.targetId,
-            status: restoreTo.status,
-            changedById: actorId,
+            restoreTo: restoreTo.status,
+            leftAt,
+            actorId,
           });
           break;
         }

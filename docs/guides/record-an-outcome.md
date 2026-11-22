@@ -2,9 +2,9 @@
 title: Record an adoption, transfer out, return to owner or other outcome
 summary: Record an animal leaving the shelter, and see what changes when you do, from its unit and foster placement to its adoption applications.
 permissions: [OUTCOMES_MANAGE]
-aliases: [complete an adoption, finalize adoption, adopt out, adopted, transfer out, transfer to a rescue, send to a partner, return to owner, owner reclaim, reclaimed, owner picked up, animal left, discharge, create outcome, process outcome, close the stay]
+aliases: [cancel tasks, open tasks after adoption, complete an adoption, finalize adoption, adopt out, adopted, transfer out, transfer to a rescue, send to a partner, return to owner, owner reclaim, reclaimed, owner picked up, animal left, discharge, create outcome, process outcome, close the stay]
 related: [correct-an-outcome, find-an-outcome, record-an-end-of-life-outcome, reverse-an-outcome-recorded-by-mistake, take-back-an-animal-that-left, move-an-animal-to-another-unit, review-an-application-and-change-its-status, adoption-application-status-glossary, place-an-animal-in-foster, return-an-animal-from-foster, turn-a-foster-into-an-adoption, add-or-edit-a-partner, read-the-reports]
-verified: 2026-11-16
+verified: 2026-11-22
 ---
 
 ## When to use this
@@ -25,7 +25,8 @@ have been recorded at all, ask an admin to reverse it.
    applications is approved, **Create Outcome** is the button below
    **Complete Adoption** (or **Choose Application**). The page **Process
    Animal Outcome** opens. If the animal is in foster, a note above the form
-   says "Recording this outcome ends that placement."
+   says "Recording this outcome ends that placement." If it has open tasks,
+   a note says how many, and "Recording this outcome cancels them".
 2. Under **Outcome Type**, pick **Transfer Out**, **Return To Owner** or
    **Other**.
 3. Check the **Date of Outcome**. It starts on today. Days after today can't
@@ -40,8 +41,9 @@ have been recorded at all, ask an admin to reverse it.
    you picked **Other**.
 7. Click **Process Outcome**.
 
-You should see "Outcome processed successfully." The **Outcomes** list opens
-with the new outcome at the top.
+You should see "Outcome processed successfully." If the animal had open
+tasks, it adds how many were canceled, for example "2 open tasks were
+canceled." The **Outcomes** list opens with the new outcome at the top.
 
 ## Record an adoption
 
@@ -79,6 +81,14 @@ approved. Record the adoption from the adopter's application, as in step 1.
   **Adopted**. Every other application still open on the animal (pending,
   reviewing, waitlisted or approved) reads **Closed**. Rejected and withdrawn
   ones stay as they were.
+- **Its open tasks are canceled.** Every task still **Todo**, **In
+  Progress** or **On Hold** reads **Canceled**, since nobody will do it now.
+  **Activity** shows "updated a task's status" for each, with, for example,
+  "Task "Weigh-in" status changed from TODO to CANCELED: the animal left
+  (transfer out)." Tasks already **Done**, **Skipped** or trashed stay as
+  they were. While the animal is archived, no task can be added to it or
+  reopened. If an admin reverses the outcome, the tasks go back to the
+  status they had.
 - **Scheduled care leaves the Due page** for the whole shelter, but isn't
   closed. It stays under **Due** on the animal's **Medical** tab. If the
   animal comes back, it is on the **Due** page again, overdue if its day has

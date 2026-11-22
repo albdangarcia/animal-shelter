@@ -10,6 +10,7 @@ import {
   type TimelineChange,
 } from "@/app/lib/data/animal-timeline.data";
 import { assertNoLiveAdoptionOutcome } from "@/app/lib/services/outcome-reversal";
+import { cancelOpenTasksForOutcome } from "@/app/lib/services/outcome-tasks";
 import {
   AnimalActivityType,
   AnimalListingStatus,
@@ -69,6 +70,11 @@ export interface RecordedOutcome {
   fosterPersonId: string | null;
 }
 
+export interface NewOutcome extends RecordedOutcome {
+  /** How many of the animal's open tasks the outcome canceled. */
+  canceledTaskCount: number;
+}
+
 const describe = (value: string) => value.replace(/_/g, " ").toLowerCase();
 
 // Both gates a new outcome day passes, in order, behind the animal's lock.
@@ -88,13 +94,15 @@ const assertOutcomeDayFits = async (
 
 /**
  * Archives the animal and records the outcome that archived it, with its
- * activity row. An open foster placement is ended by it, with a row of its own.
+ * activity row. An open foster placement is ended by it, with a row of its own,
+ * and every task still to do is canceled, with a row each
+ * (`cancelOpenTasksForOutcome`).
  */
 export const recordOutcome = async (
   tx: TransactionClient,
   { animalId, adoptionApplicationId, values }: OutcomeToRecord,
   actorId: string,
-): Promise<RecordedOutcome> => {
+): Promise<NewOutcome> => {
   const { outcomeDate, outcomeType, destinationPartnerId, ownerId, notes } =
     values;
 
@@ -299,6 +307,16 @@ export const recordOutcome = async (
     select: { changedAt: true },
   });
 
+  // The animal has left, so nothing planned for it is still to do. Left open,
+  // these would be stranded: the dashboard leaves out animals that have left.
+  const canceledTaskCount = await cancelOpenTasksForOutcome(tx, {
+    animalId,
+    outcomeId: outcome.id,
+    outcomeType,
+    actorId,
+    after: outcomeRow.changedAt,
+  });
+
   if (openPlacement && foster) {
     // Guarded like a return and a conversion, which take the same lock
     // before closing a placement, so a lost swap here means something
@@ -348,7 +366,7 @@ export const recordOutcome = async (
   // animal reads as closed, because both are derived from this outcome
   // (`deriveApplicationStatus`).
 
-  return { fosterPersonId: foster?.id ?? null };
+  return { fosterPersonId: foster?.id ?? null, canceledTaskCount };
 };
 
 interface OutcomeCorrectionFields {

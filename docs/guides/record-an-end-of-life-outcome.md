@@ -4,13 +4,16 @@ summary: Record a euthanasia or a death with its medical details, add the detail
 permissions: [OUTCOMES_MANAGE]
 aliases: [euthanasia, put to sleep, animal died, found dead, death record, cause of death, necropsy, body disposition, late euthanasia paperwork]
 related: [correct-or-void-an-entry, upload-and-manage-medical-documents, medical-status-glossary, correct-an-intake, record-an-outcome, correct-an-outcome, reverse-an-outcome-recorded-by-mistake, find-an-outcome]
-verified: 2026-11-16
+verified: 2026-11-22
 ---
 
 ## When to use this
 
 Use this when an animal has been euthanized or has died. The outcome closes
-the animal's stay and archives its record, and its medical details (drug,
+the animal's stay, archives its record and cancels its open tasks, as any
+outcome does (see "What changes when you save" in
+[Record an outcome](./record-an-outcome.md#what-changes-when-you-save)). Its
+medical details (drug,
 dose, who authorized it, cause of death) go on its medical **History**. Both
 are recorded together, from the outcome.
 

@@ -3,7 +3,7 @@ title: Create, assign and complete tasks
 summary: Add a to-do for an animal, assign it and set its due date, mark its progress, and see every animal's tasks on one page.
 permissions: [ANIMAL_TASK_MANAGE]
 aliases: [animals that have left, to-do, add a task, assign a task, due date, overdue task, mark done, trash a task, restore a task]
-related: [review-and-undo-the-assistants-changes, add-edit-or-delete-a-note]
+related: [review-and-undo-the-assistants-changes, add-edit-or-delete-a-note, record-an-outcome, take-back-an-animal-that-left]
 verified: 2026-11-22
 ---
 
@@ -87,9 +87,25 @@ too, and the dashboard home page never counts them. The **…** button on each r
 animal's **Tasks** tab. New tasks are added from the animal's own **Tasks**
 tab.
 
+## Tasks of an animal that leaves
+
+When an animal leaves through an outcome, such as an adoption, a transfer or a
+death, its tasks still **Todo**, **In Progress** or **On Hold** are set to
+**Canceled**, and its **Activity** says why, for example "Task "Weigh-in"
+status changed from TODO to CANCELED: the animal left (adoption)." While it is
+archived, no task can be added to it or set back to **Todo**, **In Progress**
+or **On Hold**. If an admin reverses the outcome, the tasks go back to the
+status they had.
+
 ## If something goes wrong
 
 - **"Title is required."** or **"Category is required."** Fill in the
   fields marked with *.
+- **"This animal has left the shelter, so it can't have open tasks. To add
+  or reopen one, re-intake the animal first."** The animal was adopted,
+  transferred or otherwise left, and its open tasks were canceled then. You
+  can still mark its tasks **Done**, **Skipped** or **Canceled**, or trash
+  them. If the animal is back, ask someone who takes animals in to record
+  its re-intake first.
 - **"Database Error: Failed to create task."** Nothing was saved. Try again;
   if it keeps happening, tell an admin.

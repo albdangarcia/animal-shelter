@@ -309,7 +309,7 @@ test("an outcome while in foster ends the placement on its day, linked to it", a
 
   const result = await record(animalId, "2026-01-10");
 
-  assert.deepEqual(result, { fosterPersonId });
+  assert.deepEqual(result, { fosterPersonId, canceledTaskCount: 0 });
   const outcome = await onlyOutcome(animalId);
   assert.deepEqual(await readPlacement(placementId!), {
     endDate: "2026-01-10",
@@ -452,7 +452,7 @@ test("an outcome with no open placement touches no placement", async () => {
 
   const result = await record(animalId, "2026-01-10");
 
-  assert.deepEqual(result, { fosterPersonId: null });
+  assert.deepEqual(result, { fosterPersonId: null, canceledTaskCount: 0 });
   assert.deepEqual(await readPlacement(returned.id), before);
   assert.deepEqual(await fosterRows(animalId), []);
   assert.equal(
@@ -816,7 +816,7 @@ test("an outcome waiting on a placement being made closes it once it commits", a
   if ("error" in waited) throw waited.error;
   if ("error" in result) throw result.error;
 
-  assert.deepEqual(result.value, { fosterPersonId });
+  assert.deepEqual(result.value, { fosterPersonId, canceledTaskCount: 0 });
   const { id: outcomeId } = await onlyOutcome(animalId);
   assert.deepEqual(await readPlacement(placementId), {
     endDate: "2026-01-10",

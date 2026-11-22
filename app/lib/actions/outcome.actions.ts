@@ -26,6 +26,7 @@ import { z } from "zod";
 import { fieldErrorsByPath } from "../utils/form-result-utils";
 import { canWriteOutcomeMedical } from "../auth/outcome-medical-policy";
 import { ForbiddenError } from "../utils/errors";
+import { withCanceledTasks } from "../services/outcome-tasks";
 import { MedicalEntryRefusal } from "../services/medical-entry-values";
 
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
@@ -37,7 +38,7 @@ import {
   recordOutcome,
   recordOutcomeCorrection,
   type OutcomeCorrection,
-  type RecordedOutcome,
+  type NewOutcome,
 } from "../services/outcome-recording";
 
 const clinicalPermissionMessage = "Managing medical details is required for this outcome change.";
@@ -113,7 +114,7 @@ const _createOutcome = async (
   if (!canWriteOutcomeMedical(user.role, { type: validatedFields.data.outcomeType, creating: true, medicalSupplied: validatedFields.data.medical !== undefined })) {
     return { ok: false, message: clinicalPermissionMessage };
   }
-  let recorded: RecordedOutcome;
+  let recorded: NewOutcome;
   try {
     recorded = await prisma.$transaction((tx) =>
       recordOutcome(
@@ -158,7 +159,10 @@ const _createOutcome = async (
 
   return {
     ok: true,
-    message: "Outcome processed successfully.",
+    message: withCanceledTasks(
+      "Outcome processed successfully.",
+      recorded.canceledTaskCount,
+    ),
     redirectTo: OUTCOMES_PATH,
   };
 };

@@ -4,7 +4,15 @@ import { z } from "zod";
 import { Prisma } from "@/prisma/generated/client";
 import prisma from "@/app/lib/prisma";
 import { requireFor, type Actor } from "@/app/lib/auth/actor";
-import { AiActionTargetType, TaskStatus } from "@/prisma/generated/enums";
+import {
+  AiActionTargetType,
+  AnimalListingStatus,
+  TaskStatus,
+} from "@/prisma/generated/enums";
+import {
+  ANIMAL_LEFT_TASK_MESSAGE,
+  isStillToDo,
+} from "@/app/lib/services/outcome-tasks";
 import { applyTaskStatusChange } from "@/app/lib/tasks/apply-task-status-change";
 import { ConflictError, PreconditionFailedError } from "@/app/lib/utils/errors";
 import { actorContextSchema } from "../context";
@@ -92,7 +100,9 @@ function findApprovalId(
  *
  * - the id does not resolve to a task (the model can hallucinate a cuid);
  * - the task is already in the requested status (the no-op guard,
- *   moved up front so `execute` only runs on a real change).
+ *   moved up front so `execute` only runs on a real change);
+ * - the animal has left the shelter and the requested status is still to do,
+ *   which the write refuses (`assertAnimalCanHaveOpenTask`).
  *
  * Runs at request time and again on replay (the SDK re-evaluates the policy
  * when the approval comes back) — a DB read plus a string build, idempotent.
@@ -115,6 +125,7 @@ export async function setTaskStatusApproval(
       animal: {
         select: {
           name: true,
+          listingStatus: true,
           currentUnit: {
             select: { name: true, location: { select: { name: true } } },
           },
@@ -136,6 +147,16 @@ export async function setTaskStatusApproval(
     return {
       type: "denied",
       reason: `Task "${task.title}" on ${task.animal.name} is already ${input.status}. No change needed.`,
+    };
+  }
+
+  if (
+    task.animal.listingStatus === AnimalListingStatus.ARCHIVED &&
+    isStillToDo(input.status)
+  ) {
+    return {
+      type: "denied",
+      reason: `${task.animal.name}: ${ANIMAL_LEFT_TASK_MESSAGE} Nothing was changed.`,
     };
   }
 
