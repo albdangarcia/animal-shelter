@@ -174,7 +174,11 @@ export function localPhotoStore(dir: string): AnimalPhotoStore {
     async remove(url) {
       const name = localPhotoName(url);
       if (!name) return;
-      await rm(path.join(root, name), { force: true });
+      // The local store never runs in production (see `animalPhotoStoreConfig`),
+      // and its folder is set at runtime, so there is nothing for the build to
+      // trace. Without the comment Turbopack warns that the whole project is
+      // traced into the server bundle.
+      await rm(path.join(/* turbopackIgnore: true */ root, name), { force: true });
     },
   };
 }
