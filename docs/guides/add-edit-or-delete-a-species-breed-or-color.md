@@ -2,8 +2,8 @@
 title: Add, edit or delete a species, breed or color
 summary: Add a species, breed or coat color staff can pick when they add an animal, change one, or delete one so it is no longer offered.
 permissions: [MANAGE_ANIMAL_TAXONOMY]
-aliases: [add a breed, new breed, add a species, new species, add a coat color, add a colour, typical adult size, remove a breed, delete a color, restore a breed, animal taxonomy, breed list, color list]
-verified: 2026-11-10
+aliases: [add a breed, new breed, add a species, new species, add a coat color, add a colour, typical adult size, remove a breed, delete a color, restore a breed, animal taxonomy, breed list, color list, Shelter Animals Count, SAC category, SAC species]
+verified: 2026-11-24
 ---
 
 ## When to use this
@@ -21,15 +21,22 @@ To change one animal's breed or color, edit the animal instead.
    a **Colors**, a **Species** and a **Breeds** section.
 2. Click **Add Color**, **Add Species** or **Add Breed**.
 3. Type the **Name**, for example "Merle" or "Ferret".
-4. For a breed, also pick its **Species**. Only species that aren't deleted
+4. For a species, pick its **Shelter Animals Count category**: the species
+   Shelter Animals Count (SAC) counts it under in its monthly report. Pick
+   **Canines**, **Felines**, **Rabbits**, **Equines**, **Small mammals**
+   (guinea pigs, hamsters, rats), **Farm animals** (pigs, llamas, cows and
+   other hooved animals that aren't horses), **Birds** or **Reptiles and
+   amphibians**. Leave **Not reported** for a species SAC doesn't count.
+5. For a breed, also pick its **Species**. Only species that aren't deleted
    are listed. **Typical Adult Size** is optional: pick **Small**, **Medium**,
    **Large** or **Extra Large**, or leave **Not specified**.
-5. Click **Create Color**, **Create Species** or **Create Breed**.
+6. Click **Create Color**, **Create Species** or **Create Breed**.
 
 You should see "Color created successfully.", "Species created successfully."
-or "Breed created successfully." The entry appears in its section. A breed is
-listed under its species with its size, for example "Small", or "No typical
-size".
+or "Breed created successfully." The entry appears in its section. A species
+shows its Shelter Animals Count category beside its name, for example
+"Small mammals", or "Not reported to SAC". A breed is listed under its species
+with its size, for example "Small", or "No typical size".
 
 Staff can pick it on the Add Animal form straight away. A breed is offered
 once its species is picked, and picking it fills in **Expected Adult Size**
@@ -38,8 +45,9 @@ with the breed's typical size.
 ## Edit a species, breed or color
 
 1. Click the **…** button beside the entry, then **Edit**.
-2. Change the **Name**. For a breed, you can also change its **Species** or
-   **Typical Adult Size**.
+2. Change the **Name**. For a species, you can also change its **Shelter
+   Animals Count category**, or pick **Not reported** to clear it. For a
+   breed, you can also change its **Species** or **Typical Adult Size**.
 3. Click **Update Color**, **Update Species** or **Update Breed**.
 
 You should see "Color updated successfully.", "Species updated

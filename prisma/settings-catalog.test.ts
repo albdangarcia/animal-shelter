@@ -1,10 +1,11 @@
-// What the Settings catalogs refuse: a name a live row already has in other
-// capitals (when adding, renaming or restoring; `_`, `%` and `\` in a name are
-// plain characters), and a breed added, moved or restored under a deleted
-// species (as a unit in a deleted location is refused, which
-// unit-housing.test.ts covers with its lock). The species and breed lock is
-// driven here: a species delete and a breed add, move or restore at the same
-// moment end with no live breed under a deleted species.
+// What the Settings catalogs save and refuse. A species keeps the Shelter
+// Animals Count category it is given, changed or cleared. Refused: a name a
+// live row already has in other capitals (when adding, renaming or restoring;
+// `_`, `%` and `\` in a name are plain characters), and a breed added, moved
+// or restored under a deleted species (as a unit in a deleted location is
+// refused, which unit-housing.test.ts covers with its lock). The species and
+// breed lock is driven here: a species delete and a breed add, move or restore
+// at the same moment end with no live breed under a deleted species.
 import { after, afterEach, before, test } from "node:test";
 import assert from "node:assert/strict";
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
@@ -14,14 +15,17 @@ import {
   LocationType,
   Sex,
   AnimalListingStatus,
+  SacSpeciesCategory,
 } from "@/prisma/generated/enums";
 import {
   addBreed,
+  addSpecies,
   BREED_NAME_TAKEN,
   BREED_SPECIES_DELETED,
   BREED_SPECIES_GONE,
   deleteSpeciesIfUnused,
   editBreed,
+  editSpecies,
   findLiveBreedNamed,
   findLiveCharacteristicNamed,
   findLiveColorNamed,
@@ -35,6 +39,7 @@ import {
   restoreSpecies,
   restoreUnit,
   SPECIES_IN_USE,
+  SPECIES_NAME_TAKEN,
 } from "@/app/lib/services/settings-catalog";
 
 const runId = Date.now().toString(36);
@@ -450,6 +455,102 @@ test("deleting a species, or editing a breed, that doesn't exist throws", async 
     isNotFound,
   );
   assert.equal(await prisma.breed.count({ where: { speciesId: species } }), 0);
+});
+
+// ── A species' Shelter Animals Count category ────────────────────────────
+
+const sacCategoryOf = async (speciesId: string) =>
+  (
+    await prisma.species.findUniqueOrThrow({
+      where: { id: speciesId },
+      select: { sacCategory: true },
+    })
+  ).sacCategory;
+
+test("a species keeps the Shelter Animals Count category it is added with, changed to or cleared of", async () => {
+  const name = `SAC species ${runId}`;
+  assert.equal(
+    await prisma.$transaction((tx) =>
+      addSpecies(tx, { name, sacCategory: SacSpeciesCategory.SMALL_MAMMAL }),
+    ),
+    null,
+  );
+  const species = id(await prisma.species.findUniqueOrThrow({ where: { name } }));
+  speciesIds.push(species);
+  assert.equal(await sacCategoryOf(species), SacSpeciesCategory.SMALL_MAMMAL);
+
+  const edit = (sacCategory: SacSpeciesCategory | null) =>
+    prisma.$transaction((tx) => editSpecies(tx, species, { name, sacCategory }));
+
+  assert.equal(await edit(SacSpeciesCategory.FARM_ANIMAL), null);
+  assert.equal(await sacCategoryOf(species), SacSpeciesCategory.FARM_ANIMAL);
+
+  // A rename that leaves the category out keeps it.
+  const renamed = `Renamed SAC species ${runId}`;
+  assert.equal(
+    await prisma.$transaction((tx) => editSpecies(tx, species, { name: renamed })),
+    null,
+  );
+  assert.deepEqual(
+    await prisma.species.findUniqueOrThrow({
+      where: { id: species },
+      select: { name: true, sacCategory: true },
+    }),
+    { name: renamed, sacCategory: SacSpeciesCategory.FARM_ANIMAL },
+  );
+
+  assert.equal(await edit(null), null);
+  assert.equal(await sacCategoryOf(species), null);
+
+  const unreported = `Unreported species ${runId}`;
+  await prisma.$transaction((tx) =>
+    addSpecies(tx, { name: unreported, sacCategory: null }),
+  );
+  const added = id(await prisma.species.findUniqueOrThrow({ where: { name: unreported } }));
+  speciesIds.push(added);
+  assert.equal(await sacCategoryOf(added), null);
+});
+
+test("a species name a live species has in other capitals is refused, and nothing is written", async () => {
+  const live = `Taken species ${runId}`;
+  await makeSpecies(live);
+  const other = await makeSpecies(`Other taken species ${runId}`);
+  await prisma.species.update({
+    where: { id: other },
+    data: { sacCategory: SacSpeciesCategory.BIRD },
+  });
+
+  assert.equal(
+    await prisma.$transaction((tx) =>
+      addSpecies(tx, {
+        name: live.toUpperCase(),
+        sacCategory: SacSpeciesCategory.CANINE,
+      }),
+    ),
+    SPECIES_NAME_TAKEN,
+  );
+  assert.equal(
+    await prisma.species.count({ where: { name: live.toUpperCase() } }),
+    0,
+  );
+
+  // Renaming another species to it leaves that one as it was, category too.
+  assert.equal(
+    await prisma.$transaction((tx) =>
+      editSpecies(tx, other, {
+        name: live.toLowerCase(),
+        sacCategory: SacSpeciesCategory.FELINE,
+      }),
+    ),
+    SPECIES_NAME_TAKEN,
+  );
+  assert.deepEqual(
+    await prisma.species.findUniqueOrThrow({
+      where: { id: other },
+      select: { name: true, sacCategory: true },
+    }),
+    { name: `Other taken species ${runId}`, sacCategory: SacSpeciesCategory.BIRD },
+  );
 });
 
 // ── Names with LIKE's special characters ─────────────────────────────────
