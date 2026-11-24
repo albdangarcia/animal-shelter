@@ -189,6 +189,37 @@ export function findListingMismatch<E extends StayEvent & { ref?: unknown }>(
   };
 }
 
+/** One stay as the events that open and close it; `outcome` null = open. */
+export type PairedStay<E extends StayEvent> = { intake: E; outcome: E | null };
+
+/**
+ * Pairs one animal's events into stays, handing back the events themselves
+ * (with any `ref` they carry), so a caller can tell which intake opened the
+ * stay an outcome closed. `computeStays` is this plus the day counts, and
+ * its comment below describes the walk.
+ */
+export function pairStayEvents<E extends StayEvent>(
+  events: readonly E[],
+): PairedStay<E>[] {
+  const stays: PairedStay<E>[] = [];
+  let openIntake: E | null = null;
+
+  for (const event of orderStayEvents(events)) {
+    if (event.kind === "intake") {
+      // A duplicate intake while already in care is ignored.
+      if (openIntake === null) openIntake = event;
+    } else if (openIntake !== null) {
+      stays.push({ intake: openIntake, outcome: event });
+      openIntake = null;
+    }
+    // else: an orphan outcome is ignored.
+  }
+
+  // A trailing open intake is the current (still-in-care) stay.
+  if (openIntake !== null) stays.push({ intake: openIntake, outcome: null });
+  return stays;
+}
+
 /**
  * Pairs one animal's intake/outcome events into discrete stays.
  *
@@ -215,38 +246,11 @@ export function computeStays(
   events: StayEvent[],
   asOf: CalendarDay,
 ): StayComputation {
-  const sorted = orderStayEvents(events);
-
-  const stays: Stay[] = [];
-  let openIntake: StayEvent | null = null;
-
-  for (const event of sorted) {
-    if (event.kind === "intake") {
-      if (openIntake === null) {
-        openIntake = event;
-      }
-      // else: duplicate intake while already in care — ignore.
-    } else {
-      if (openIntake !== null) {
-        stays.push({
-          intakeDate: openIntake.date,
-          outcomeDate: event.date,
-          days: shelterDaysBetweenKeys(openIntake.date, event.date),
-        });
-        openIntake = null;
-      }
-      // else: orphan outcome — ignore.
-    }
-  }
-
-  // A trailing open intake is the current (still-in-care) stay.
-  if (openIntake !== null) {
-    stays.push({
-      intakeDate: openIntake.date,
-      outcomeDate: null,
-      days: shelterDaysBetweenKeys(openIntake.date, asOf),
-    });
-  }
+  const stays: Stay[] = pairStayEvents(events).map(({ intake, outcome }) => ({
+    intakeDate: intake.date,
+    outcomeDate: outcome?.date ?? null,
+    days: shelterDaysBetweenKeys(intake.date, outcome?.date ?? asOf),
+  }));
 
   const isInCare = stays.length > 0 && stays[stays.length - 1].outcomeDate === null;
   const currentStayDays = isInCare ? stays[stays.length - 1].days : null;

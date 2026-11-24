@@ -21,3 +21,15 @@ export const ReportParamsSchema = z.object({
 });
 
 export type ReportParams = z.infer<typeof ReportParamsSchema>;
+
+/**
+ * The Shelter Animals Count report's URL params: one calendar month as
+ * `yyyy-MM`. Read as forgivingly as the others: anything else falls back to
+ * last month (`resolveSacMonth`).
+ */
+export const SacReportParamsSchema = z.object({
+  month: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/)
+    .optional(),
+});

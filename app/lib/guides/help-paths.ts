@@ -47,6 +47,7 @@ export const PAGE_HELP_GUIDES = {
   reportOutcomes: "read-the-reports",
   reportIntakes: "read-the-reports",
   reportLengthOfStay: "read-the-reports",
+  reportSac: "read-the-reports",
   animalEdit: "edit-an-animals-details",
   animalPhotos: "reorder-or-delete-an-animals-photos",
   animalPhotoUpload: "add-and-crop-an-animals-photos",

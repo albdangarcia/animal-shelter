@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import Link from "next/link";
+import { IconArrowUpRight } from "@tabler/icons-react";
 
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
@@ -31,6 +33,13 @@ import { HelpLink } from "@/components/dashboard/help/help-link";
 import { ReportDownloadLink } from "@/components/dashboard/reports/report-download-link";
 import { getHelpLinkGuide } from "@/app/lib/data/guides.data";
 import { PAGE_HELP_GUIDES } from "@/app/lib/guides/help-paths";
+import {
+  Card,
+  CardAction,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 interface Props {
   searchParams: SearchParamsType;
@@ -119,6 +128,25 @@ const PageContent = async ({ searchParams }: Props) => {
           <IntakeSourcesCard {...cardParams} />
         </Suspense>
       </div>
+
+      {/* A month, not the period and species above, so it keeps neither. */}
+      <Link
+        href="/dashboard/reports/shelter-animals-count"
+        className="block print:hidden"
+      >
+        <Card className="transition-colors hover:border-primary/40">
+          <CardHeader>
+            <CardTitle>Shelter Animals Count</CardTitle>
+            <CardDescription>
+              One month&apos;s intakes, outcomes and counts by species and
+              age, laid out like Shelter Animals Count&apos;s monthly form.
+            </CardDescription>
+            <CardAction>
+              <IconArrowUpRight className="size-4 text-muted-foreground" />
+            </CardAction>
+          </CardHeader>
+        </Card>
+      </Link>
     </div>
   );
 };

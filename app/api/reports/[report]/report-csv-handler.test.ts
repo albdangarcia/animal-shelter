@@ -120,3 +120,19 @@ test("a failing fetch answers 500 without the report", async () => {
     console.error = original;
   }
 });
+
+test("the Shelter Animals Count report takes a month, and no period or species", async () => {
+  const { get, built } = handlerFor(Role.VOLUNTEER);
+  const response = await get(
+    "/api/reports/sac?month=2026-10&from=2026-01-01&species=abc",
+  );
+  assert.equal(response.status, 200);
+  await get("/api/reports/sac?month=October");
+  // A month means nothing to the other reports.
+  await get("/api/reports/outcomes?month=2026-10&from=2026-01-01");
+  assert.deepEqual(built, [
+    { report: "sac", filters: { month: "2026-10" } },
+    { report: "sac", filters: {} },
+    { report: "outcomes", filters: { from: "2026-01-01" } },
+  ]);
+});

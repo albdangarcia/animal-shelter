@@ -7,17 +7,20 @@ export type ReportLinkParams = {
   from?: string;
   to?: string;
   species?: string;
+  /** `yyyy-MM`: the Shelter Animals Count report's one filter. */
+  month?: string;
 };
 
-/** `base` with the `from`, `to` and `species` params that are set. */
+/** `base` with the `from`, `to`, `species` and `month` params that are set. */
 export function reportHref(
   base: string,
-  { from, to, species }: ReportLinkParams,
+  { from, to, species, month }: ReportLinkParams,
 ): string {
   const params = new URLSearchParams();
   if (from) params.set("from", from);
   if (to) params.set("to", to);
   if (species) params.set("species", species);
+  if (month) params.set("month", month);
   const qs = params.toString();
   return qs ? `${base}?${qs}` : base;
 }
@@ -46,6 +49,8 @@ export const REPORT_EXPORTS = [
   "outcomes",
   "intakes",
   "length-of-stay",
+  // Shelter Animals Count: one month, not a period and species.
+  "sac",
 ] as const;
 
 export type ReportExport = (typeof REPORT_EXPORTS)[number];

@@ -11,6 +11,7 @@ import {
   lengthOfStayReportCsv,
   outcomeReportCsv,
   reportsOverviewCsv,
+  sacReportCsv,
   type ReportCsvContext,
 } from "@/app/lib/utils/report-csv";
 import {
@@ -21,6 +22,8 @@ import { fetchSpecies } from "@/app/lib/data/animals/animal.data";
 import { fetchOutcomeReport } from "@/app/lib/data/reports/outcome-report.data";
 import { fetchIntakeReport } from "@/app/lib/data/reports/intake-report.data";
 import { fetchLengthOfStayReport } from "@/app/lib/data/reports/length-of-stay-report.data";
+import { fetchSacReport } from "@/app/lib/data/reports/sac-report.data";
+import { resolveSacMonth, sacMonthDays } from "@/app/lib/utils/sac-report";
 import {
   fetchBalanceSummary,
   fetchIntakeSummary,
@@ -33,19 +36,26 @@ import {
 } from "./report-csv-handler";
 
 /** What the file covers: the period the fetchers count, by the same rule. */
-async function loadContext({
-  from,
-  to,
-  species,
-}: ReportFilters): Promise<ReportCsvContext> {
-  const [settings, today, speciesList] = await Promise.all([
+async function loadContext(
+  report: ReportExport,
+  { from, to, species, month }: ReportFilters,
+): Promise<ReportCsvContext> {
+  const [settings, today] = await Promise.all([
     getShelterSettings(),
     getShelterToday(),
-    fetchSpecies(),
   ]);
+  if (report === "sac") {
+    // The month's days; SAC counts every reported species.
+    const { first, last } = sacMonthDays(resolveSacMonth(month, today));
+    return {
+      range: { fromLabel: first, toLabel: last },
+      speciesNames: [],
+      timezone: settings.timezone,
+    };
+  }
   return {
     range: resolveReportRange(from, to, today),
-    speciesNames: pickedSpeciesNames(speciesList, species),
+    speciesNames: pickedSpeciesNames(await fetchSpecies(), species),
     timezone: settings.timezone,
   };
 }
@@ -53,10 +63,12 @@ async function loadContext({
 /** The CSV text of one report, read by the same fetcher as its page. */
 async function buildCsv(
   report: ReportExport,
-  { from, to, species }: ReportFilters,
+  { from, to, species, month }: ReportFilters,
   context: ReportCsvContext,
 ): Promise<string> {
   switch (report) {
+    case "sac":
+      return sacReportCsv(await fetchSacReport(month), context);
     case "outcomes":
       return outcomeReportCsv(
         await fetchOutcomeReport(from, to, species),

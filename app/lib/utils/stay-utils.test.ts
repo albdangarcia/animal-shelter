@@ -6,6 +6,7 @@ import {
   findListingMismatch,
   findTimelineBreaks,
   orderStayEvents,
+  pairStayEvents,
   type StayEvent,
 } from "./stay-utils";
 
@@ -318,4 +319,22 @@ test("the mismatch check and computeStays agree on whether the animal is here", 
       JSON.stringify(events),
     );
   }
+});
+
+test("pairing hands back the events that open and close each stay, refs included", () => {
+  const withRef = (event: StayEvent, ref: string) => ({ ...event, ref });
+  const stays = pairStayEvents([
+    withRef(outcome("2026-09-01"), "orphan"),
+    withRef(intake(SEP_10), "first"),
+    withRef(intake(SEP_15), "duplicate"),
+    withRef(outcome(SEP_20), "left"),
+    withRef(intake("2026-09-25"), "back"),
+  ]);
+  assert.deepEqual(
+    stays.map((stay) => [stay.intake.ref, stay.outcome?.ref ?? null]),
+    [
+      ["first", "left"],
+      ["back", null],
+    ],
+  );
 });
