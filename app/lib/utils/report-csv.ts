@@ -22,6 +22,18 @@ import type { ReportRange } from "./report-date-utils";
 import { speciesLabel, type ReportExport } from "./report-href";
 import { formatPercent } from "./report-rate-utils";
 import { formatSingleEnumOption } from "./enum-formatter";
+import {
+  describeFosterWarning,
+  describeReconciliation,
+  describeTimelineBreak,
+  describeTransferWarning,
+  formatSacMonth,
+  SAC_SECTIONS,
+  SHELTER_STATE_MISSING_WARNING,
+  type SacAgeCounts,
+  type SacReport,
+} from "./sac-report";
+import { SAC_SPECIES_CATEGORY_LABELS } from "@/app/lib/constants/sac-species";
 
 export type CsvCell = string | number | null;
 
@@ -93,13 +105,20 @@ const REPORT_FILE_NAMES: Record<ReportExport, string> = {
   outcomes: "outcome-statistics",
   intakes: "intake-sources",
   "length-of-stay": "length-of-stay",
+  sac: "shelter-animals-count",
 };
 
-/** e.g. `outcome-statistics-2026-01-01-to-2026-11-22.csv`. */
+/**
+ * e.g. `outcome-statistics-2026-01-01-to-2026-11-22.csv`, or
+ * `shelter-animals-count-2026-10.csv` for the SAC report's one month.
+ */
 export function reportCsvFileName(
   report: ReportExport,
   range: ReportRange,
 ): string {
+  if (report === "sac") {
+    return `${REPORT_FILE_NAMES.sac}-${range.fromLabel.slice(0, 7)}.csv`;
+  }
   return `${REPORT_FILE_NAMES[report]}-${range.fromLabel}-to-${range.toLabel}.csv`;
 }
 
@@ -300,4 +319,92 @@ export function reportsOverviewCsv(
       ],
     },
   ]);
+}
+
+const SAC_AGE_HEADER = ["Adult", "Up to 5 months", "Age unknown", "Total"];
+
+const sacAgeCells = (counts: SacAgeCounts): CsvCell[] => [
+  counts.adult,
+  counts.young,
+  counts.unknown,
+  counts.total,
+];
+
+/**
+ * The Shelter Animals Count monthly report, laid out like SAC's form (Intake
+ * & Outcome Database, VRS 1.2021) row for row, one block per species
+ * category, then the warnings. SAC's own upload template is only offered
+ * inside a SAC account, so its column names are not known; the file is for
+ * copying the numbers into SAC, not for uploading as it is.
+ */
+export function sacReportCsv(
+  report: SacReport,
+  context: ReportCsvContext,
+): string {
+  const rows: CsvCell[][] = [
+    ["Report", "Shelter Animals Count monthly report"],
+    ["Month", formatSacMonth(report.month)],
+    ["From", report.first],
+    ["To", report.last],
+    ["Shelter state", report.shelterState],
+    ["Times counted in", context.timezone],
+    [
+      "Layout",
+      "Rows follow SAC's Intake & Outcome Database form (VRS 1.2021). Not SAC's upload template.",
+    ],
+  ];
+
+  for (const table of report.tables) {
+    rows.push([], [table.label]);
+    for (const section of SAC_SECTIONS) {
+      rows.push([section.title, ...SAC_AGE_HEADER]);
+      for (const row of section.rows) {
+        rows.push([row.label, ...sacAgeCells(table.rows[row.key])]);
+      }
+      rows.push([section.totalLabel, ...sacAgeCells(table.totals[section.key])]);
+    }
+    rows.push(
+      ["Total outcomes", ...sacAgeCells(table.totals.outcomes)],
+      ["Animal counts", "Total in care", "In foster care"],
+      ["Beginning count", table.beginning.inCare, table.beginning.inFoster],
+      ["Ending count", table.ending.inCare, table.ending.inFoster],
+      ["Check", describeReconciliation(table)],
+    );
+  }
+
+  const { warnings } = report;
+  rows.push([], ["Warnings"], ["Animal", "Species category", "Warning"]);
+  if (warnings.shelterStateMissing) {
+    rows.push(["", "", SHELTER_STATE_MISSING_WARNING]);
+  }
+  for (const warning of warnings.timelineBreaks) {
+    rows.push([
+      warning.animalName,
+      SAC_SPECIES_CATEGORY_LABELS[warning.category],
+      describeTimelineBreak(warning),
+    ]);
+  }
+  for (const warning of warnings.transfers) {
+    rows.push([
+      warning.animalName,
+      SAC_SPECIES_CATEGORY_LABELS[warning.category],
+      describeTransferWarning(warning),
+    ]);
+  }
+  for (const warning of warnings.fosters) {
+    rows.push([
+      warning.animalName,
+      SAC_SPECIES_CATEGORY_LABELS[warning.category],
+      describeFosterWarning(warning),
+    ]);
+  }
+  if (
+    !warnings.shelterStateMissing &&
+    warnings.timelineBreaks.length === 0 &&
+    warnings.transfers.length === 0 &&
+    warnings.fosters.length === 0
+  ) {
+    rows.push(["None"]);
+  }
+  return toCsv(rows);
 }

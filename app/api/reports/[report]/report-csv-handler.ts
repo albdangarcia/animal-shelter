@@ -4,21 +4,35 @@
 // context and a database.
 import { z } from "zod";
 import { AppPermissions, type AppPermission } from "@/app/lib/auth/permissions";
-import { ReportParamsSchema } from "@/app/lib/zod-schemas/report.schemas";
+import {
+  ReportParamsSchema,
+  SacReportParamsSchema,
+} from "@/app/lib/zod-schemas/report.schemas";
 import { REPORT_EXPORTS, type ReportExport } from "@/app/lib/utils/report-href";
 import {
   reportCsvFileName,
   type ReportCsvContext,
 } from "@/app/lib/utils/report-csv";
 
-/** The period and species as the report's page reads them from its URL. */
-export type ReportFilters = { from?: string; to?: string; species?: string };
+/**
+ * What the report's page reads from its URL: the period and species, or, for
+ * the Shelter Animals Count report, the month alone.
+ */
+export type ReportFilters = {
+  from?: string;
+  to?: string;
+  species?: string;
+  month?: string;
+};
 
 export type ReportCsvHandlerDeps = {
   getSession: () => Promise<{ user?: unknown } | null>;
   hasPermission: (permission: AppPermission) => Promise<boolean>;
   /** The period, species names and time zone the file says it covers. */
-  loadContext: (filters: ReportFilters) => Promise<ReportCsvContext>;
+  loadContext: (
+    report: ReportExport,
+    filters: ReportFilters,
+  ) => Promise<ReportCsvContext>;
   /** The report's CSV text, counted by the same fetcher as its page. */
   buildCsv: (
     report: ReportExport,
@@ -61,7 +75,8 @@ export function searchParamsRecord(
 
 /**
  * Serves a report as a CSV file, for the period and species in the query
- * string, read the same forgiving way as the report's page.
+ * string (the month, for the SAC report), read the same forgiving way as the
+ * report's page.
  *
  * Whoever may read the reports (`REPORTS_READ`) may download them: the file
  * holds nothing the page doesn't. Signed out answers 401; signed in without
@@ -80,13 +95,15 @@ export const createReportCsvHandler =
     if (!parsedReport.success) return text("Not found.", 404);
     const report = parsedReport.data;
 
-    const parsed = ReportParamsSchema.safeParse(
-      searchParamsRecord(new URL(request.url).searchParams),
-    );
+    // The SAC report takes a month and nothing else; the others a period
+    // and species, and never a month.
+    const parsed = (
+      report === "sac" ? SacReportParamsSchema : ReportParamsSchema
+    ).safeParse(searchParamsRecord(new URL(request.url).searchParams));
     const filters: ReportFilters = parsed.success ? parsed.data : {};
 
     try {
-      const context = await loadContext(filters);
+      const context = await loadContext(report, filters);
       const csv = await buildCsv(report, filters, context);
       return new Response(csv, {
         headers: {

@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { IntakeType, OutcomeType } from "@/prisma/generated/enums";
+import {
+  IntakeType,
+  OutcomeType,
+  SacSpeciesCategory,
+} from "@/prisma/generated/enums";
 import {
   csvCell,
   intakeReportCsv,
@@ -8,11 +12,13 @@ import {
   outcomeReportCsv,
   reportCsvFileName,
   reportsOverviewCsv,
+  sacReportCsv,
   toCsv,
   type ReportCsvContext,
 } from "./report-csv";
 import type { CalendarDay } from "./shelter-day";
 import { pickedSpeciesNames, speciesLabel } from "./report-href";
+import { buildSacReport, type SacMonth } from "./sac-report";
 
 const context: ReportCsvContext = {
   range: {
@@ -376,4 +382,78 @@ test("the picked species are named in the list's order; unknown ids drop out", (
   assert.deepEqual(pickedSpeciesNames(all, undefined), []);
   assert.equal(speciesLabel([]), "All species");
   assert.equal(speciesLabel(["Cat", "Dog"]), "Cat, Dog");
+});
+
+test("the SAC file names its month", () => {
+  assert.equal(
+    reportCsvFileName("sac", {
+      fromLabel: "2026-10-01" as CalendarDay,
+      toLabel: "2026-10-31" as CalendarDay,
+    }),
+    "shelter-animals-count-2026-10.csv",
+  );
+});
+
+test("the SAC report is laid out like SAC's form, then its warnings", () => {
+  const report = buildSacReport({
+    month: "2026-10" as SacMonth,
+    shelterState: null,
+    categories: [SacSpeciesCategory.FELINE],
+    animals: [
+      {
+        id: "a1",
+        name: "=Kit",
+        birthDate: "2026-08-01",
+        category: SacSpeciesCategory.FELINE,
+        intakes: [
+          {
+            id: "i1",
+            date: "2026-10-02",
+            type: IntakeType.TRANSFER_IN,
+            partner: null,
+          },
+        ],
+        outcomes: [],
+        fosterPlacements: [{ startDate: "2026-10-05", endDate: null }],
+      },
+    ],
+  });
+  const csv = lines(sacReportCsv(report, context));
+  assert.deepEqual(csv.slice(0, 6), [
+    "Report,Shelter Animals Count monthly report",
+    "Month,October 2026",
+    "From,2026-10-01",
+    "To,2026-10-31",
+    "Shelter state,—",
+    "Times counted in,America/New_York",
+  ]);
+  assert.deepEqual(csv.slice(7, 20), [
+    "",
+    "Felines",
+    "Live intakes,Adult,Up to 5 months,Age unknown,Total",
+    "Stray/At large,0,0,0,0",
+    "Relinquished by owner,0,0,0,0",
+    "Owner intended euthanasia,0,0,0,0",
+    "Transferred in from agency (in state),0,1,0,1",
+    "Transferred in from agency (out of state),0,0,0,0",
+    "Transferred in from agency (international),0,0,0,0",
+    "Impound/Seizure,0,0,0,0",
+    "Other intakes,0,0,0,0",
+    "Total live intakes,0,1,0,1",
+    "Live outcomes,Adult,Up to 5 months,Age unknown,Total",
+  ]);
+  const end = csv.indexOf("Total outcomes,0,0,0,0");
+  assert.deepEqual(csv.slice(end, end + 5), [
+    "Total outcomes,0,0,0,0",
+    "Animal counts,Total in care,In foster care",
+    "Beginning count,0,0",
+    "Ending count,1,1",
+    "Check,Balanced: beginning + intakes − outcomes = ending (0 + 1 − 0 = 1).",
+  ]);
+  assert.deepEqual(csv.slice(end + 5), [
+    "",
+    "Warnings",
+    "Animal,Species category,Warning",
+    '\'=Kit,Felines,"Transfer in on Oct 2, 2026 has no partner. Counted as in state."',
+  ]);
 });
