@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
+import { formatOutcomeType } from "@/app/lib/utils/outcome-types";
 import { formatPercent } from "@/app/lib/utils/report-rate-utils";
 import {
   reportHref,
@@ -102,7 +103,7 @@ export async function OutcomeStatisticsCard(params: OverviewCardParams) {
           : `Live release rate · ${total} total outcomes`
       }
       badges={topTypes.map(
-        (t) => `${formatSingleEnumOption(t.type)} · ${t.count}`,
+        (t) => `${formatOutcomeType(t.type)} · ${t.count}`,
       )}
     />
   );

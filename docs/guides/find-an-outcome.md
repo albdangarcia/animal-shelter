@@ -2,15 +2,16 @@
 title: Find an outcome
 summary: Look up when and how an animal left, who took it, and who recorded it, on the list of every outcome.
 permissions: [OUTCOMES_READ]
-aliases: [outcomes list, outcome history, when did it leave, who adopted, adoption records, list of adoptions, list of transfers, who took the animal, reversed outcomes, look up an outcome, departures]
+aliases: [outcomes list, outcome history, when did it leave, who adopted, adoption records, list of adoptions, list of transfers, who took the animal, reversed outcomes, look up an outcome, departures, return to field, lost in care, escaped]
 related: [record-an-outcome, correct-an-outcome, reverse-an-outcome-recorded-by-mistake, find-an-intake, find-an-animal, read-the-reports]
-verified: 2026-11-16
+verified: 2026-11-24
 ---
 
 ## When to use this
 
 Use the **Outcomes** list to see every time an animal left the shelter:
-adoptions, transfers out, returns to owner, deaths and the rest. Each
+adoptions, transfers out, returns to owner, returns to field, animals lost
+in care, deaths and the rest. Each
 departure is one row, so an animal that left more than once has a row for
 each. Outcomes that were reversed stay on the list, marked **Reversed**.
 
@@ -31,7 +32,8 @@ Each row shows:
 
 - **Animal**: its name. Click it to open the animal.
 - **Recipient**: who took the animal, with a label: **Adopter**, **Partner**
-  or **Owner**. "N/A" for a death, a euthanasia or **Other**.
+  or **Owner**. "N/A" for a death, a euthanasia, **Return To Field**, **Lost
+  In Care** or **Other Live Outcome**.
 - **Type**: how it left. **Reversed** beside it means the outcome was voided
   by an admin; point at it to see who reversed it, when, and why.
 - **Outcome Date**: the day the animal left.

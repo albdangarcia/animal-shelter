@@ -1,4 +1,5 @@
 import { fetchOutcomeMedical, fetchOutcomeMedicalClinics } from "@/app/lib/data/animals/outcome-medical.data";
+import { formatOutcomeType } from "@/app/lib/utils/outcome-types";
 import { outcomeMedicalFormValues } from "@/app/lib/data/animals/outcome-medical";
 import { MedicalEntryRow } from "@/components/dashboard/animals/medical/medical-entry-list";
 import { findEventNames } from "@/app/lib/data/animals/medical-entry";
@@ -14,7 +15,6 @@ import Link from "next/link";
 import { ArrowLeft, Undo2 } from "lucide-react";
 import ActionBlockedMessage from "@/components/action-blocked-message";
 import { formatDateOrNA } from "@/app/lib/utils/date-utils";
-import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { hasPermission } from "@/app/lib/auth/hasPermission";
 import { Authorize } from "@/components/auth/authorize";
@@ -83,7 +83,7 @@ const PageContent = async ({ outcomeId }: { outcomeId: string }) => {
       {outcome.reversedAt ? (
         <ActionBlockedMessage icon={Undo2} title="Outcome Reversed">
           <p>
-            This {formatSingleEnumOption(outcome.type).toLowerCase()} outcome
+            This {formatOutcomeType(outcome.type).toLowerCase()} outcome
             for <strong>{animal.name}</strong> was reversed by{" "}
             {outcome.reversedBy?.name ?? "Unknown User"} on{" "}
             {formatDateOrNA(outcome.reversedAt)}, and can no longer be

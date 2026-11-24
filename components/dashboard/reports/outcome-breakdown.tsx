@@ -1,4 +1,4 @@
-import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
+import { formatOutcomeType } from "@/app/lib/utils/outcome-types";
 import { cn } from "@/lib/utils";
 import type { OutcomeReportRow } from "@/app/lib/data/reports/outcome-report.data";
 
@@ -31,7 +31,7 @@ export function OutcomeBreakdown({ rows }: { rows: OutcomeReportRow[] }) {
             <div key={row.type} className="flex flex-col gap-1">
               <div className="flex items-baseline justify-between gap-2 text-sm">
                 <span className="font-medium">
-                  {formatSingleEnumOption(row.type)}
+                  {formatOutcomeType(row.type)}
                 </span>
                 <span className="text-muted-foreground tabular-nums">
                   {row.count} · {percent.toFixed(1)}%

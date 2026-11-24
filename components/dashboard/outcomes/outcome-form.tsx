@@ -44,6 +44,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { PersonPicker } from "@/components/common/person-picker";
 import { outcomeTypeOptions } from "@/app/lib/utils/enum-formatter";
+import { OUTCOME_TYPE_HELP } from "@/app/lib/utils/outcome-types";
 import {
   createOutcome,
   updateOutcome,
@@ -146,6 +147,7 @@ export function OutcomeForm({
     control: form.control,
     name: "outcomeType",
   });
+  const typeHelp = outcomeTypeValue ? OUTCOME_TYPE_HELP[outcomeTypeValue] : undefined;
 
   const medicalValue = useWatch({ control: form.control, name: "medical" });
 
@@ -231,10 +233,15 @@ export function OutcomeForm({
                         ))}
                       </SelectContent>
                     </Select>
-                    {isEditMode && (
+                    {/* One description: FormDescription carries the id the
+                        trigger's aria-describedby names, so a second one
+                        would share it and a screen reader would skip it. */}
+                    {(typeHelp || isEditMode) && (
                       <FormDescription>
-                        A wrong type is fixed by reversing this outcome and
-                        recording the right one.
+                        {typeHelp}
+                        {typeHelp && isEditMode && " "}
+                        {isEditMode &&
+                          "A wrong type is fixed by reversing this outcome and recording the right one."}
                       </FormDescription>
                     )}
                     <FormMessage />

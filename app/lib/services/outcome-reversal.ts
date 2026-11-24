@@ -1,4 +1,5 @@
 import { voidOutcomeMedical } from "./outcome-medical";
+import { describeOutcomeType } from "@/app/lib/utils/outcome-types";
 import type { TransactionClient } from "@/app/lib/prisma";
 import { lockAnimal } from "@/app/lib/data/application-status.data";
 import { checkOutcomeReversal } from "@/app/lib/data/animal-timeline.data";
@@ -325,7 +326,7 @@ export const recordOutcomeReversal = async (
       activityType: AnimalActivityType.OUTCOME_REVERSED,
       changedAt: reversedAt,
       changedById: actorId,
-      changeSummary: `Outcome was reversed: ${describe(outcome.type)}. ${effectsText} Reason: ${trimmedReason}`,
+      changeSummary: `Outcome was reversed: ${describeOutcomeType(outcome.type)}. ${effectsText} Reason: ${trimmedReason}`,
     },
     select: { changedAt: true },
   });

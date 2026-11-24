@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatOutcomeType } from "@/app/lib/utils/outcome-types";
 
 import { Authorize } from "@/components/auth/authorize";
 import StatusPage from "@/components/StatusPage";
@@ -18,7 +19,6 @@ import {
   getShelterSettings,
   getShelterToday,
 } from "@/app/lib/data/shelter-settings.data";
-import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { formatPercent } from "@/app/lib/utils/report-rate-utils";
 import { fetchSpecies } from "@/app/lib/data/animals/animal.data";
 import { fetchOutcomeReport } from "@/app/lib/data/reports/outcome-report.data";
@@ -201,7 +201,7 @@ const PageContent = async ({ searchParams }: Props) => {
                 report.rows.map((row) => (
                   <TableRow key={row.type}>
                     <TableCell className="font-medium">
-                      {formatSingleEnumOption(row.type)}
+                      {formatOutcomeType(row.type)}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
                       {row.count}
@@ -226,9 +226,10 @@ const PageContent = async ({ searchParams }: Props) => {
       </Card>
 
       <p className="text-muted-foreground text-xs">
-        Live release rate = (adoption + return to owner + transfer out) ÷ total
-        outcomes, following Shelter Animals Count conventions. Euthanized,
-        deceased, and other count as non-live. Date boundaries computed in{" "}
+        Live release rate = (adoption + return to owner + transfer out + return
+        to field + other live outcome) ÷ total outcomes, following Shelter
+        Animals Count conventions. Euthanized, deceased, and lost in care count
+        as non-live. Date boundaries computed in{" "}
         {timezone}.
       </p>
     </div>

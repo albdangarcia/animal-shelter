@@ -1,27 +1,18 @@
 import { getShelterToday } from "@/app/lib/data/shelter-settings.data";
 import prisma from "@/app/lib/prisma";
-import { OutcomeType } from "@/prisma/generated/enums";
+import type { OutcomeType } from "@/prisma/generated/enums";
 import { AppPermissions } from "@/app/lib/auth/permissions";
 import { RequirePermission } from "../../auth/protected-actions";
 import { resolveReportRange } from "@/app/lib/utils/report-date-utils";
 import { liveReleaseRate } from "@/app/lib/utils/report-rate-utils";
-import {
-  isLiveOutcome,
-  LIVE_OUTCOME_TYPES,
-  parseSpeciesIds,
-  speciesWhere,
-} from "./report-shared.data";
+import { isLiveOutcome, parseSpeciesIds, speciesWhere } from "./report-shared.data";
+import { OUTCOME_TYPE_REPORT_ORDER } from "@/app/lib/utils/outcome-types";
 
 // Display/render order for the breakdown and table: live types first (in the
 // canonical Shelter Animals Count order), then the non-live types. Types with
 // zero outcomes in the period are omitted by the fetcher, so the UI renders a
 // subset of this list, always in this order.
-const OUTCOME_TYPE_ORDER: readonly OutcomeType[] = [
-  ...LIVE_OUTCOME_TYPES, // ADOPTION, RETURN_TO_OWNER, TRANSFER_OUT
-  OutcomeType.EUTHANIZED,
-  OutcomeType.DECEASED,
-  OutcomeType.OTHER,
-];
+const OUTCOME_TYPE_ORDER = OUTCOME_TYPE_REPORT_ORDER;
 
 export type OutcomeReportRow = {
   type: OutcomeType;

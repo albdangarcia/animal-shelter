@@ -719,7 +719,15 @@ enum OutcomeType {
   RETURN_TO_OWNER
   DECEASED
   EUTHANIZED
+  /// Other live outcome. Not a catch-all: an escape or an unknown fate is
+  /// LOST_IN_CARE.
   OTHER
+  /// Shelter Animals Count's "Return to Field" (often called SNR): a stray,
+  /// already altered or altered after intake, released where it was found.
+  /// A live outcome. Not TNR.
+  RETURN_TO_FIELD
+  /// The animal escaped, or its outcome is unknown. A non-live outcome.
+  LOST_IN_CARE
 }
 
 model Intake {

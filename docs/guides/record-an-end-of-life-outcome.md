@@ -2,9 +2,9 @@
 title: Record an end-of-life outcome and add missing details later
 summary: Record a euthanasia or a death with its medical details, add the details to an outcome recorded without them, and correct them.
 permissions: [OUTCOMES_MANAGE]
-aliases: [euthanasia, put to sleep, animal died, found dead, death record, cause of death, necropsy, body disposition, late euthanasia paperwork]
+aliases: [euthanasia, put to sleep, animal died, found dead, death record, cause of death, necropsy, body disposition, late euthanasia paperwork, escaped, outcome unknown]
 related: [correct-or-void-an-entry, upload-and-manage-medical-documents, medical-status-glossary, correct-an-intake, record-an-outcome, correct-an-outcome, reverse-an-outcome-recorded-by-mistake, find-an-outcome]
-verified: 2026-11-22
+verified: 2026-11-24
 ---
 
 ## When to use this
@@ -19,6 +19,10 @@ are recorded together, from the outcome.
 
 Use the second part when an older outcome was recorded without its medical
 details, or when the paperwork arrives later.
+
+An animal that escaped, or whose fate nobody knows, didn't die in the
+shelter's records: record **Lost In Care** instead, as in
+[Record an outcome](./record-an-outcome.md). It needs no medical details.
 
 You need to be able to record outcomes, and to read and manage medical
 records. Without the medical part, **Euthanized** and **Deceased** aren't

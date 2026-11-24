@@ -8912,8 +8912,75 @@ async function seedAll() {
   await seedFosterMedical();
   await seedEndOfLife();
   await seedMedicalOutputExamples();
+  await seedReturnToFieldAndLostInCare();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
+}
+
+// Shelter Animals Count's Return to Field and Lost in Care, so the outcome
+// table, filters and reports show them. Four generated return-to-owner
+// outcomes are relabeled rather than new animals added: two strays are
+// released where they were found, two others are lost in care. Updates only,
+// so no cuid() draws from the shared mulberry32 stream. Neither type has an
+// owner, so it is cleared.
+async function seedReturnToFieldAndLostInCare() {
+  const candidates = await prisma.outcome.findMany({
+    where: {
+      type: OutcomeType.RETURN_TO_OWNER,
+      reversedAt: null,
+      animal: {
+        name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+        listingStatus: AnimalListingStatus.ARCHIVED,
+      },
+    },
+    select: {
+      id: true,
+      animalId: true,
+      animal: { select: { intake: { select: { type: true } } } },
+    },
+    orderBy: { id: "asc" },
+  });
+  const strays = candidates.filter((outcome) =>
+    outcome.animal.intake.some((intake) => intake.type === IntakeType.STRAY),
+  );
+  const returnedToField = strays.slice(0, 2);
+  const lostInCare = candidates
+    .filter((outcome) => !returnedToField.includes(outcome))
+    .slice(0, 2);
+  // Too few strays among them would leave a screen without its example, and
+  // nothing else would say so.
+  if (returnedToField.length < 2 || lostInCare.length < 2) {
+    throw new Error(
+      `Expected two return-to-owner outcomes each to relabel as return to field (strays) and lost in care; found ${returnedToField.length} and ${lostInCare.length}.`,
+    );
+  }
+
+  for (const [type, outcomes] of [
+    [OutcomeType.RETURN_TO_FIELD, returnedToField],
+    [OutcomeType.LOST_IN_CARE, lostInCare],
+  ] as const) {
+    for (const outcome of outcomes) {
+      await prisma.outcome.update({
+        where: { id: outcome.id },
+        data: { type, ownerId: null },
+      });
+      await prisma.animal.update({
+        where: { id: outcome.animalId },
+        data: { archiveReason: type },
+      });
+      await prisma.animalActivityLog.updateMany({
+        where: {
+          animalId: outcome.animalId,
+          activityType: "OUTCOME_PROCESSED",
+        },
+        data: {
+          changeSummary: `Animal was processed for outcome: ${type
+            .replace(/_/g, " ")
+            .toLowerCase()}.`,
+        },
+      });
+    }
+  }
 }
 
 const isExplicitSeedRun =
