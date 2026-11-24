@@ -134,6 +134,9 @@ export const AppPermissions = {
   MANAGE_ASSESSMENT_TEMPLATES: "assessment_templates:manage",
   MANAGE_ANIMAL_TAXONOMY: "animal_taxonomy:manage",
   MANAGE_LOCATIONS: "locations:manage",
+  // The shelter's own details, such as the US state it is in, which decides
+  // whether a transfer is in or out of state (admins only).
+  SHELTER_DETAILS_MANAGE: "shelter_details:manage",
 } as const;
 
 export type AppPermission =

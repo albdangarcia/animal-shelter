@@ -8,6 +8,7 @@ import { DataTableColumnHeader } from "../../../table-common/data-table-column-h
 import { DataTableRowActions } from "./partners-directory-table-row-actions";
 import { PartnersDirectoryPayload } from "@/app/lib/types";
 import { PartnerTypesOptions, ActiveStatusesOptions } from "./partners-directory-options";
+import { countryName } from "@/app/lib/constants/countries";
 
 export interface GetColumnsProps {
   canManage: boolean;
@@ -153,13 +154,16 @@ export const getColumns = ({
   {
     accessorKey: "state",
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="State" />
+      <DataTableColumnHeader column={column} title="State / Country" />
     ),
+    // A US partner (no country) shows its state; any other, its country.
     cell: ({ row }) => {
-      const state = row.getValue("state") as string | null;
+      const place = row.original.country
+        ? countryName(row.original.country)
+        : (row.getValue("state") as string | null);
       return (
         <span className="truncate">
-          {state || <span className="text-muted-foreground italic">—</span>}
+          {place || <span className="text-muted-foreground italic">—</span>}
         </span>
       );
     },

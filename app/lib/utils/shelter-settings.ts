@@ -1,6 +1,7 @@
 import { isSupportedCountry, type CountryCode } from "libphonenumber-js";
 import { DOSE_SLOT_LABELS, DOSE_SLOT_ORDER } from "@/app/lib/constants/medical";
 import type { DoseSlotEnds } from "@/app/lib/utils/medication-slots";
+import { US_STATES } from "@/app/lib/constants/us-states";
 
 export type WeightUnitSystem = "metric" | "imperial";
 
@@ -10,6 +11,11 @@ export type ShelterSettings = {
   defaultPhoneCountry: CountryCode;
   /** When each medication dose slot's window ends, as "HH:mm". */
   doseSlotEnds: DoseSlotEnds;
+  /**
+   * The US state the shelter is in, as a code, or null until an admin sets
+   * it. Transfers are in or out of state against it.
+   */
+  state: string | null;
 };
 
 /** The dose times a shelter starts with, and falls back to. */
@@ -69,6 +75,13 @@ const validTimezone = (
   return fallback;
 };
 
+/** The message for a shelter state that isn't one of the 50 US state codes. */
+export const SHELTER_STATE_MESSAGE = "Select the state the shelter is in.";
+
+/** Whether `value` is one of the 50 US state codes. */
+export const isUsStateCode = (value: string): boolean =>
+  US_STATES.some((state) => state.code === value);
+
 const validCountry = (
   value: string | undefined,
   fallback: CountryCode = "US",
@@ -83,6 +96,7 @@ export const fallbackShelterSettings = (): ShelterSettings => ({
     process.env.WEIGHT_UNIT_SYSTEM === "imperial" ? "imperial" : "metric",
   defaultPhoneCountry: validCountry(process.env.DEFAULT_PHONE_COUNTRY),
   doseSlotEnds: { ...DEFAULT_DOSE_SLOT_ENDS },
+  state: null,
 });
 
 /**
@@ -114,6 +128,7 @@ export const shelterSettingsColumns = (settings: ShelterSettings) => ({
   amDoseEndTime: settings.doseSlotEnds.AM,
   middayDoseEndTime: settings.doseSlotEnds.MIDDAY,
   pmDoseEndTime: settings.doseSlotEnds.PM,
+  state: settings.state,
 });
 
 export const resolveShelterSettings = (
@@ -125,6 +140,7 @@ export const resolveShelterSettings = (
     amDoseEndTime?: string | null;
     middayDoseEndTime?: string | null;
     pmDoseEndTime?: string | null;
+    state?: string | null;
   } | null,
 ): ShelterSettings => {
   const fallback = fallbackShelterSettings();
@@ -140,5 +156,7 @@ export const resolveShelterSettings = (
       fallback.defaultPhoneCountry,
     ),
     doseSlotEnds: validDoseSlotEnds(row),
+    // Anything but a state code reads as not set, as no state does.
+    state: row.state && isUsStateCode(row.state) ? row.state : null,
   };
 };

@@ -23,6 +23,13 @@ interface SettingsCard {
 // — that list gates both this page and its sidebar entry.
 const settingsCards: readonly SettingsCard[] = [
     {
+        title: "Shelter Details",
+        description:
+            "Set the US state the shelter is in, which decides whether a transfer is in or out of state.",
+        url: "/dashboard/settings/shelter-details",
+        permission: AppPermissions.SHELTER_DETAILS_MANAGE,
+    },
+    {
         title: "Role Management",
         description: "Manage user roles and permissions across the shelter.",
         url: "/dashboard/settings/role-management",
