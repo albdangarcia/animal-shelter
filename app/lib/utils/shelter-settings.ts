@@ -75,10 +75,10 @@ const validTimezone = (
   return fallback;
 };
 
-/** The message for a shelter state that isn't one of the 50 US state codes. */
+/** The message for a shelter state that isn't a `US_STATES` code. */
 export const SHELTER_STATE_MESSAGE = "Select the state the shelter is in.";
 
-/** Whether `value` is one of the 50 US state codes. */
+/** Whether `value` is a `US_STATES` code: a state, DC or an inhabited territory. */
 export const isUsStateCode = (value: string): boolean =>
   US_STATES.some((state) => state.code === value);
 

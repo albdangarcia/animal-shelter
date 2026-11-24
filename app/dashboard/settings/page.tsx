@@ -25,7 +25,7 @@ const settingsCards: readonly SettingsCard[] = [
     {
         title: "Shelter Details",
         description:
-            "Set the US state the shelter is in, which decides whether a transfer is in or out of state.",
+            "Set the US state or territory the shelter is in, which decides whether a transfer is in or out of state.",
         url: "/dashboard/settings/shelter-details",
         permission: AppPermissions.SHELTER_DETAILS_MANAGE,
     },

@@ -64,6 +64,9 @@ opens, showing **Active**.
 
 ## A partner outside the US
 
+A partner in Puerto Rico, Guam or another US territory is in the US. Leave
+**Country** on **United States** and pick the territory under **State**.
+
 Pick the partner's country under **Country**. You can type the first letters
 of its name to jump to it. **State** then disappears, and a state already
 picked is cleared: only a partner in the United States has a state. Put a

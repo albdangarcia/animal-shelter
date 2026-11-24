@@ -79,9 +79,11 @@ test("a save writes the state and leaves the other settings alone", async () => 
     );
     assert.equal(resolveShelterSettings(row).state, "VT");
 
-    // A second save changes it.
+    // A second save changes it. A territory is a state here, as SAC counts it.
     await updateShelterState(tx, "ME");
     assert.equal((await readRow(tx)).state, "ME");
+    await updateShelterState(tx, "PR");
+    assert.equal((await readRow(tx)).state, "PR");
   });
 });
 
@@ -110,7 +112,7 @@ test("with no settings row, a save creates it from the fallbacks", async () => {
 });
 
 test("anything but a US state code is refused under State, and nothing is written", async () => {
-  for (const state of ["", "ny", "DC", "PR", "ON", "New York"]) {
+  for (const state of ["", "ny", "UM", "ON", "New York"]) {
     await rolledBack(async (tx) => {
       await storeRow(tx);
       await tx.shelterSettings.update({ where: { id: "shelter" }, data: { state: "NY" } });

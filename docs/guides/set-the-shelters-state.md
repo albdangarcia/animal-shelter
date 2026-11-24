@@ -1,6 +1,6 @@
 ---
 title: Set the shelter's state
-summary: Set the US state the shelter is in, which decides whether a transfer from or to a partner is in state, out of state or outside the US.
+summary: Set the US state or territory the shelter is in, which decides whether a transfer from or to a partner is in state, out of state or outside the US.
 permissions: [SHELTER_DETAILS_MANAGE]
 aliases: [shelter details, shelter state, our state, shelter location, home state, in state transfer, out of state transfer, shelter address state]
 related: [add-or-edit-a-partner]
@@ -22,7 +22,9 @@ partner" in **Help**.
 1. In the sidebar, open **Settings**, then the **Shelter Details** card. The
    page shows the shelter's **State**, or **Not set**.
 2. Click **Edit shelter details**.
-3. Pick the **State**. Only the 50 US states are offered.
+3. Pick the **State**. The list has the 50 states and the District of
+   Columbia, then the US territories, such as Puerto Rico and Guam. A
+   territory counts as a state here, as Shelter Animals Count counts it.
 4. Click **Save Shelter Details**.
 
 You should see "Shelter details saved." The box closes and the page shows

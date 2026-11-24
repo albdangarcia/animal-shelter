@@ -13,13 +13,14 @@ const fieldErrorsOf = (values: ShelterDetailsFormInput) => {
   return z.flattenError(result.error).fieldErrors;
 };
 
-test("ShelterDetailsFormSchema: the state is one of the 50 US state codes", () => {
-  assert.deepEqual(ShelterDetailsFormSchema.parse({ state: "NY" }), { state: "NY" });
-  assert.deepEqual(ShelterDetailsFormSchema.parse({ state: "WY" }), { state: "WY" });
+test("ShelterDetailsFormSchema: the state is a state, DC or an inhabited territory", () => {
+  for (const state of ["NY", "WY", "DC", "PR", "GU", "VI", "AS", "MP"]) {
+    assert.deepEqual(ShelterDetailsFormSchema.parse({ state }), { state }, state);
+  }
 });
 
 test("ShelterDetailsFormSchema: no state, or anything else, is refused under State", () => {
-  for (const state of ["", "ny", "DC", "PR", "CA-ON", "New York"]) {
+  for (const state of ["", "ny", "UM", "CA-ON", "New York"]) {
     assert.deepEqual(
       fieldErrorsOf({ state }),
       { state: ["Select the state the shelter is in."] },

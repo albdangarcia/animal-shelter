@@ -176,8 +176,11 @@ test("the shelter's state is a stored US state code, or not set", () => {
   assert.equal(resolveShelterSettings(row).state, null);
   assert.equal(resolveShelterSettings({ ...row, state: null }).state, null);
   assert.equal(resolveShelterSettings({ ...row, state: "NY" }).state, "NY");
-  // Anything but one of the 50 codes reads as not set.
-  for (const bad of ["", "ny", "DC", "PR", "New York", "XX"]) {
+  // DC and the inhabited territories are states here, as SAC counts them.
+  assert.equal(resolveShelterSettings({ ...row, state: "DC" }).state, "DC");
+  assert.equal(resolveShelterSettings({ ...row, state: "PR" }).state, "PR");
+  // Anything but a US_STATES code reads as not set.
+  for (const bad of ["", "ny", "UM", "ON", "New York", "XX"]) {
     assert.equal(resolveShelterSettings({ ...row, state: bad }).state, null, bad);
   }
 });

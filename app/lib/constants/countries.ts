@@ -1,7 +1,13 @@
 /**
- * Every ISO 3166-1 alpha-2 country, with its English short name, sorted by
- * name. Generated once from `Intl.DisplayNames` and kept static, so the
- * server and the browser print the same name whatever their ICU data.
+ * Every ISO 3166-1 alpha-2 country outside the US, and the US itself, with
+ * its English short name, sorted by name. Generated once from
+ * `Intl.DisplayNames` and kept static, so the server and the browser print
+ * the same name whatever their ICU data.
+ *
+ * The US territories with their own ISO codes (AS, GU, MP, PR, VI, UM) are
+ * left out: they are part of the US, entered as a state (`US_STATES`), as
+ * Shelter Animals Count counts them. Listing them here too would let one
+ * place be entered two ways.
  *
  * Used for `Partner.country`. The phone settings check a country against
  * libphonenumber-js instead: its list is the countries it can parse numbers
@@ -12,7 +18,6 @@ export const COUNTRIES: readonly { code: string; name: string }[] = [
   { code: "AX", name: "Åland Islands" },
   { code: "AL", name: "Albania" },
   { code: "DZ", name: "Algeria" },
-  { code: "AS", name: "American Samoa" },
   { code: "AD", name: "Andorra" },
   { code: "AO", name: "Angola" },
   { code: "AI", name: "Anguilla" },
@@ -99,7 +104,6 @@ export const COUNTRIES: readonly { code: string; name: string }[] = [
   { code: "GL", name: "Greenland" },
   { code: "GD", name: "Grenada" },
   { code: "GP", name: "Guadeloupe" },
-  { code: "GU", name: "Guam" },
   { code: "GT", name: "Guatemala" },
   { code: "GG", name: "Guernsey" },
   { code: "GN", name: "Guinea" },
@@ -172,7 +176,6 @@ export const COUNTRIES: readonly { code: string; name: string }[] = [
   { code: "NF", name: "Norfolk Island" },
   { code: "KP", name: "North Korea" },
   { code: "MK", name: "North Macedonia" },
-  { code: "MP", name: "Northern Mariana Islands" },
   { code: "NO", name: "Norway" },
   { code: "OM", name: "Oman" },
   { code: "PK", name: "Pakistan" },
@@ -186,7 +189,6 @@ export const COUNTRIES: readonly { code: string; name: string }[] = [
   { code: "PN", name: "Pitcairn Islands" },
   { code: "PL", name: "Poland" },
   { code: "PT", name: "Portugal" },
-  { code: "PR", name: "Puerto Rico" },
   { code: "QA", name: "Qatar" },
   { code: "RE", name: "Réunion" },
   { code: "RO", name: "Romania" },
@@ -239,8 +241,6 @@ export const COUNTRIES: readonly { code: string; name: string }[] = [
   { code: "TM", name: "Turkmenistan" },
   { code: "TC", name: "Turks & Caicos Islands" },
   { code: "TV", name: "Tuvalu" },
-  { code: "UM", name: "U.S. Outlying Islands" },
-  { code: "VI", name: "U.S. Virgin Islands" },
   { code: "UG", name: "Uganda" },
   { code: "UA", name: "Ukraine" },
   { code: "AE", name: "United Arab Emirates" },

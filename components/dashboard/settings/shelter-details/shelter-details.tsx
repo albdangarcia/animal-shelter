@@ -67,7 +67,7 @@ export default function ShelterDetails({ state, help }: Props) {
               <DialogHeader>
                 <DialogTitle>Edit Shelter Details</DialogTitle>
                 <DialogDescription>
-                  Pick the US state the shelter is in.
+                  Pick the US state or territory the shelter is in.
                 </DialogDescription>
               </DialogHeader>
               <ShelterDetailsForm

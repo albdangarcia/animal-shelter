@@ -56,6 +56,11 @@ test("a US partner is saved with its state and no country", async () => {
   assert.deepEqual(await stored(noState), { state: null, country: null });
 });
 
+test("a partner in a US territory is a US partner, saved with the territory as its state", async () => {
+  const id = await create(form({ country: "US", state: "PR" }));
+  assert.deepEqual(await stored(id), { state: "PR", country: null });
+});
+
 test("a partner outside the US is saved with its country and no state", async () => {
   const id = await create(form({ country: "CA", state: "" }));
   assert.deepEqual(await stored(id), { state: null, country: "CA" });

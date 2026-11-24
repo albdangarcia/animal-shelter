@@ -8,7 +8,7 @@ export const searchQuerySchema = z.string().trim().max(100, {
 
 const stateCodes = US_STATES.map((s) => s.code) as [string, ...string[]];
 
-// Required: must be one of the 50 valid US state codes.
+// Required: must be a `US_STATES` code (a state, DC or an inhabited territory).
 export const usStateSchema = z.enum(stateCodes, {
   error: "Please select a valid US state.",
 });
