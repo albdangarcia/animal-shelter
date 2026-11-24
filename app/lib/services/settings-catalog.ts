@@ -1,5 +1,9 @@
 import { Prisma } from "@/prisma/generated/client";
-import type { AnimalSize } from "@/prisma/generated/enums";
+import type {
+  AnimalSize,
+  CharacteristicCategory,
+  LocationType,
+} from "@/prisma/generated/enums";
 import type { TransactionClient } from "@/app/lib/prisma";
 import { lockLiveLocation } from "@/app/lib/services/unit-housing";
 
@@ -12,6 +16,19 @@ import { lockLiveLocation } from "@/app/lib/services/unit-housing";
  * Adding, renaming and restoring all ask the same finder below, so they refuse
  * the same names. A restore's refusal names the live row, whose capitals may
  * differ, and asks for it to be renamed or deleted first.
+ *
+ * The database can't refuse these itself: its unique keys compare names in
+ * the same capitals, and count deleted rows. So the finder first takes a lock
+ * on the names of its table (of one species for breeds, of one location for
+ * units), held until the transaction ends, and the write follows in the same
+ * transaction. Two staff adding "Ferret" and "ferret" at once are taken one
+ * after the other, and the second sees the first's row and is refused.
+ *
+ * An edit changes only a live row. A restore reads the deleted row's name
+ * before it takes the lock, so a rename of a deleted row (from a dialog opened
+ * before the delete) could otherwise slip in between and be brought back
+ * unchecked. The edit's own write is the check: it updates only where
+ * `deleted_at` is null, which Postgres reads again once the row is its.
  *
  * A breed is added, moved or restored only under a live species, as a unit is
  * only in a live location. Both sides lock the species, the way `unit-housing`
@@ -42,11 +59,25 @@ export const SPECIES_IN_USE =
 export const BREED_SPECIES_GONE = "The selected species no longer exists.";
 export const BREED_NAME_TAKEN =
   "A breed with that name already exists for this species.";
+export const CHARACTERISTIC_NAME_TAKEN =
+  "A characteristic with that name already exists.";
+export const COLOR_NAME_TAKEN = "A color with that name already exists.";
+export const SPECIES_NAME_TAKEN = "A species with that name already exists.";
+export const UNIT_LOCATION_GONE =
+  "Can't add a unit to a deleted location. Restore the location first.";
+export const editDeletedRefusal = (what: string) =>
+  `Can't edit a deleted ${what}. Restore it first.`;
+export const locationNameTaken = (name: string) =>
+  `A location named "${name}" already exists.`;
+export const unitNameTaken = (name: string) =>
+  `A unit named "${name}" already exists in this location.`;
 
 // ── Finding a live row by name ───────────────────────────────────────────
 
-type Db = Pick<TransactionClient, "$queryRaw">;
+type Db = Pick<TransactionClient, "$queryRaw" | "$executeRaw">;
 type Named = { id: string; name: string };
+/** A breed's species or a unit's location: names are unique within it. */
+type Scope = { column: "species_id" | "location_id"; id: string };
 
 /**
  * The live row of `table` named `name` in any capitals, within `scope`, other
@@ -54,19 +85,27 @@ type Named = { id: string; name: string };
  * `equals`: that is an `ILIKE`, which reads `_` and `%` in the name as
  * wildcards ("Tan_x" would match "Tanzx") and fails outright on a name ending
  * in a backslash.
+ *
+ * Takes the lock on the table's names (within `scope`) first, in a statement
+ * of its own: under READ COMMITTED a statement sees what was committed when it
+ * started, so the lookup must start once the lock is held. Given a
+ * transaction's client, the lock is held until that transaction ends, so the
+ * caller writes in it. Given the plain client, it is let go at once.
  */
 const findLiveNamed = async (
   db: Db,
   table: string,
   name: string,
-  scope: Prisma.Sql,
+  scope?: Scope,
   excludeId?: string,
 ): Promise<Named | null> => {
+  const lockKey = `settings-catalog:${table}:${scope?.id ?? ""}`;
+  await db.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))`;
   const rows = await db.$queryRaw<Named[]>`
     SELECT id, name FROM ${Prisma.raw(table)}
     WHERE lower(name) = lower(${name})
       AND deleted_at IS NULL
-      ${scope}
+      ${scope ? Prisma.sql`AND ${Prisma.raw(scope.column)} = ${scope.id}` : Prisma.empty}
       ${excludeId ? Prisma.sql`AND id <> ${excludeId}` : Prisma.empty}
     LIMIT 1`;
   return rows[0] ?? null;
@@ -76,16 +115,16 @@ export const findLiveCharacteristicNamed = (
   db: Db,
   name: string,
   excludeId?: string,
-) => findLiveNamed(db, "characteristics", name, Prisma.empty, excludeId);
+) => findLiveNamed(db, "characteristics", name, undefined, excludeId);
 
 export const findLiveColorNamed = (db: Db, name: string, excludeId?: string) =>
-  findLiveNamed(db, "colors", name, Prisma.empty, excludeId);
+  findLiveNamed(db, "colors", name, undefined, excludeId);
 
 export const findLiveSpeciesNamed = (
   db: Db,
   name: string,
   excludeId?: string,
-) => findLiveNamed(db, "species", name, Prisma.empty, excludeId);
+) => findLiveNamed(db, "species", name, undefined, excludeId);
 
 export const findLiveBreedNamed = (
   db: Db,
@@ -97,7 +136,7 @@ export const findLiveBreedNamed = (
     db,
     "breeds",
     name,
-    Prisma.sql`AND species_id = ${speciesId}`,
+    { column: "species_id", id: speciesId },
     excludeId,
   );
 
@@ -105,7 +144,7 @@ export const findLiveLocationNamed = (
   db: Db,
   name: string,
   excludeId?: string,
-) => findLiveNamed(db, "locations", name, Prisma.empty, excludeId);
+) => findLiveNamed(db, "locations", name, undefined, excludeId);
 
 export const findLiveUnitNamed = (
   db: Db,
@@ -117,9 +156,111 @@ export const findLiveUnitNamed = (
     db,
     "units",
     name,
-    Prisma.sql`AND location_id = ${locationId}`,
+    { column: "location_id", id: locationId },
     excludeId,
   );
+
+/**
+ * What an edit returns once its `updateMany` of the live row has run: null if
+ * it changed the row, the refusal if the row is deleted, and the not-found
+ * error `update` would throw if the row is gone.
+ */
+const editedLive = async (
+  { count }: { count: number },
+  findOrThrow: () => Promise<unknown>,
+  what: string,
+): Promise<string | null> => {
+  if (count > 0) return null;
+  await findOrThrow();
+  return editDeletedRefusal(what);
+};
+
+// ── Characteristics, colors and species ──────────────────────────────────
+
+export type CharacteristicValues = {
+  name: string;
+  category: CharacteristicCategory;
+};
+
+/** Adds a characteristic, unless a live one has the name in any capitals. */
+export const addCharacteristic = async (
+  tx: TransactionClient,
+  values: CharacteristicValues,
+): Promise<string | null> => {
+  if (await findLiveCharacteristicNamed(tx, values.name)) {
+    return CHARACTERISTIC_NAME_TAKEN;
+  }
+  await tx.characteristic.create({ data: values });
+  return null;
+};
+
+/** Renames a characteristic, unless another live one has the name. */
+export const editCharacteristic = async (
+  tx: TransactionClient,
+  id: string,
+  values: CharacteristicValues,
+): Promise<string | null> => {
+  if (await findLiveCharacteristicNamed(tx, values.name, id)) {
+    return CHARACTERISTIC_NAME_TAKEN;
+  }
+  return editedLive(
+    await tx.characteristic.updateMany({ where: { id, deletedAt: null }, data: values }),
+    () => tx.characteristic.findUniqueOrThrow({ where: { id }, select: { id: true } }),
+    "characteristic",
+  );
+};
+
+export type ColorValues = { name: string };
+
+/** Adds a color, unless a live one has the name in any capitals. */
+export const addColor = async (
+  tx: TransactionClient,
+  values: ColorValues,
+): Promise<string | null> => {
+  if (await findLiveColorNamed(tx, values.name)) return COLOR_NAME_TAKEN;
+  await tx.color.create({ data: values });
+  return null;
+};
+
+/** Renames a color, unless another live one has the name. */
+export const editColor = async (
+  tx: TransactionClient,
+  id: string,
+  values: ColorValues,
+): Promise<string | null> => {
+  if (await findLiveColorNamed(tx, values.name, id)) return COLOR_NAME_TAKEN;
+  return editedLive(
+    await tx.color.updateMany({ where: { id, deletedAt: null }, data: values }),
+    () => tx.color.findUniqueOrThrow({ where: { id }, select: { id: true } }),
+    "color",
+  );
+};
+
+export type SpeciesValues = { name: string };
+
+/** Adds a species, unless a live one has the name in any capitals. */
+export const addSpecies = async (
+  tx: TransactionClient,
+  values: SpeciesValues,
+): Promise<string | null> => {
+  if (await findLiveSpeciesNamed(tx, values.name)) return SPECIES_NAME_TAKEN;
+  await tx.species.create({ data: values });
+  return null;
+};
+
+/** Renames a species, unless another live one has the name. */
+export const editSpecies = async (
+  tx: TransactionClient,
+  id: string,
+  values: SpeciesValues,
+): Promise<string | null> => {
+  if (await findLiveSpeciesNamed(tx, values.name, id)) return SPECIES_NAME_TAKEN;
+  return editedLive(
+    await tx.species.updateMany({ where: { id, deletedAt: null }, data: values }),
+    () => tx.species.findUniqueOrThrow({ where: { id }, select: { id: true } }),
+    "species",
+  );
+};
 
 // ── Restores ─────────────────────────────────────────────────────────────
 
@@ -214,8 +355,11 @@ export const editBreed = async (
   if (await findLiveBreedNamed(tx, values.name, values.speciesId, id)) {
     return BREED_NAME_TAKEN;
   }
-  await tx.breed.update({ where: { id }, data: values });
-  return null;
+  return editedLive(
+    await tx.breed.updateMany({ where: { id, deletedAt: null }, data: values }),
+    () => tx.breed.findUniqueOrThrow({ where: { id }, select: { id: true } }),
+    "breed",
+  );
 };
 
 export const restoreBreed = async (
@@ -257,6 +401,81 @@ export const deleteSpeciesIfUnused = async (
 };
 
 // ── Locations and units ──────────────────────────────────────────────────
+
+export type LocationValues = { name: string; type: LocationType };
+
+/** Adds a location, unless a live one has the name in any capitals. */
+export const addLocation = async (
+  tx: TransactionClient,
+  values: LocationValues,
+): Promise<string | null> => {
+  if (await findLiveLocationNamed(tx, values.name)) {
+    return locationNameTaken(values.name);
+  }
+  await tx.location.create({ data: values });
+  return null;
+};
+
+/** Renames a location, unless another live one has the name. */
+export const editLocation = async (
+  tx: TransactionClient,
+  id: string,
+  values: LocationValues,
+): Promise<string | null> => {
+  if (await findLiveLocationNamed(tx, values.name, id)) {
+    return locationNameTaken(values.name);
+  }
+  return editedLive(
+    await tx.location.updateMany({ where: { id, deletedAt: null }, data: values }),
+    () => tx.location.findUniqueOrThrow({ where: { id }, select: { id: true } }),
+    "location",
+  );
+};
+
+export type UnitValues = { name: string; capacity: number; locationId: string };
+
+/**
+ * Adds a unit to a live location, unless a live unit there has the name. The
+ * location is checked behind its lock (see `unit-housing`), so one deleted at
+ * the same moment either sees this unit or refuses it.
+ */
+export const addUnit = async (
+  tx: TransactionClient,
+  values: UnitValues,
+): Promise<string | null> => {
+  if (!(await lockLiveLocation(tx, values.locationId))) {
+    return UNIT_LOCATION_GONE;
+  }
+  if (await findLiveUnitNamed(tx, values.name, values.locationId)) {
+    return unitNameTaken(values.name);
+  }
+  await tx.unit.create({ data: values });
+  return null;
+};
+
+/**
+ * Renames a unit or changes its capacity, unless another live unit in its
+ * location has the name. A unit never moves to another location, so its own
+ * is read from the row.
+ */
+export const editUnit = async (
+  tx: TransactionClient,
+  id: string,
+  values: Omit<UnitValues, "locationId">,
+): Promise<string | null> => {
+  const { locationId } = await tx.unit.findUniqueOrThrow({
+    where: { id },
+    select: { locationId: true },
+  });
+  if (await findLiveUnitNamed(tx, values.name, locationId, id)) {
+    return unitNameTaken(values.name);
+  }
+  return editedLive(
+    await tx.unit.updateMany({ where: { id, deletedAt: null }, data: values }),
+    () => tx.unit.findUniqueOrThrow({ where: { id }, select: { id: true } }),
+    "unit",
+  );
+};
 
 export const restoreLocation = async (
   tx: TransactionClient,

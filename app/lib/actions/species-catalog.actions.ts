@@ -10,19 +10,16 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { SpeciesFormSchema } from "../zod-schemas/taxonomy.schemas";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import {
+  addSpecies,
   deleteSpeciesIfUnused,
-  findLiveSpeciesNamed,
+  editSpecies,
   restoreSpecies as restoreSpeciesRow,
+  SPECIES_NAME_TAKEN,
 } from "@/app/lib/services/settings-catalog";
 
 type SpeciesFormInput = z.input<typeof SpeciesFormSchema>;
 type SpeciesResult = FormResult<SpeciesFormInput>;
 
-// Shared duplicate check, the one restore uses: case-insensitive, global,
-// ignores the row being edited.
-const findDuplicate = async (name: string, excludeId?: string) => {
-  return findLiveSpeciesNamed(prisma, name, excludeId);
-};
 
 const _createSpecies = async (
   values: SpeciesFormInput,
@@ -41,18 +38,18 @@ const _createSpecies = async (
   const { name } = validatedFields.data;
 
   try {
-    const existing = await findDuplicate(name);
-    if (existing) {
-      return { ok: false, message: "A species with that name already exists." };
+    // The name is checked behind a lock on the species' names, so the same
+    // name added at the same moment in other capitals is refused.
+    const refusal = await prisma.$transaction((tx) => addSpecies(tx, { name }));
+    if (refusal) {
+      return { ok: false, message: refusal };
     }
-
-    await prisma.species.create({ data: { name } });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return { ok: false, message: "A species with that name already exists." };
+      return { ok: false, message: SPECIES_NAME_TAKEN };
     }
     console.error("Database Error creating species:", error);
     return { ok: false, message: "Database Error: Failed to create species." };
@@ -85,21 +82,18 @@ const _updateSpecies = async (
   const { name } = validatedFields.data;
 
   try {
-    const existing = await findDuplicate(name, parsedId.data);
-    if (existing) {
-      return { ok: false, message: "A species with that name already exists." };
+    const refusal = await prisma.$transaction((tx) =>
+      editSpecies(tx, parsedId.data, { name }),
+    );
+    if (refusal) {
+      return { ok: false, message: refusal };
     }
-
-    await prisma.species.update({
-      where: { id: parsedId.data },
-      data: { name },
-    });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return { ok: false, message: "A species with that name already exists." };
+      return { ok: false, message: SPECIES_NAME_TAKEN };
     }
     console.error("Database Error updating species:", error);
     return { ok: false, message: "Database Error: Failed to update species." };

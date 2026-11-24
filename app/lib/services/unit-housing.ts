@@ -22,8 +22,8 @@ import type { TransactionClient } from "@/app/lib/prisma";
  * not enough: the delete's check can run first and see an empty unit, and the
  * placement then read the unit as still live.
  *
- * Restoring a unit takes the location's lock through `lockLiveLocation` (see
- * `restoreUnit` in `settings-catalog`).
+ * Adding and restoring a unit take the location's lock through
+ * `lockLiveLocation` (see `addUnit` and `restoreUnit` in `settings-catalog`).
  *
  * A path that also holds the animal (`lockAnimal`) takes it before the unit.
  * Nothing takes them the other way round: the delete locks no animal.
