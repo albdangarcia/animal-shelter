@@ -5,7 +5,10 @@
 // or restored under a deleted species (as a unit in a deleted location is
 // refused, which unit-housing.test.ts covers with its lock). The species and
 // breed lock is driven here: a species delete and a breed add, move or restore
-// at the same moment end with no live breed under a deleted species.
+// at the same moment end with no live breed under a deleted species. So is the
+// lock on each catalog's names: two adds, renames or restores of one name in
+// other capitals at the same moment end with one live row, and the other
+// refused.
 import { after, afterEach, before, test } from "node:test";
 import assert from "node:assert/strict";
 import prisma, { type TransactionClient } from "@/app/lib/prisma";
@@ -19,19 +22,31 @@ import {
 } from "@/prisma/generated/enums";
 import {
   addBreed,
+  addCharacteristic,
+  addColor,
+  addLocation,
   addSpecies,
+  addUnit,
   BREED_NAME_TAKEN,
   BREED_SPECIES_DELETED,
   BREED_SPECIES_GONE,
+  CHARACTERISTIC_NAME_TAKEN,
+  COLOR_NAME_TAKEN,
   deleteSpeciesIfUnused,
   editBreed,
+  editCharacteristic,
+  editDeletedRefusal,
+  editColor,
+  editLocation,
   editSpecies,
+  editUnit,
   findLiveBreedNamed,
   findLiveCharacteristicNamed,
   findLiveColorNamed,
   findLiveLocationNamed,
   findLiveSpeciesNamed,
   findLiveUnitNamed,
+  locationNameTaken,
   restoreBreed,
   restoreCharacteristic,
   restoreColor,
@@ -40,6 +55,7 @@ import {
   restoreUnit,
   SPECIES_IN_USE,
   SPECIES_NAME_TAKEN,
+  unitNameTaken,
 } from "@/app/lib/services/settings-catalog";
 
 const runId = Date.now().toString(36);
@@ -790,4 +806,216 @@ test("a breed being moved waits for a species delete, then is refused", async ()
   assert.equal(await moving, BREED_SPECIES_GONE);
   const row = await prisma.breed.findUniqueOrThrow({ where: { id: breed } });
   assert.equal(row.speciesId, from);
+});
+
+// ── One name in other capitals at the same moment ────────────────────────
+
+type Write = (tx: TransactionClient) => Promise<string | null>;
+
+/**
+ * For each catalog, how to add a row and rename one, the refusal of a name
+ * taken in either, and the ids of its live rows of a name in any capitals.
+ * Breeds and units go under a live parent made here; the other rows an add
+ * makes are counted for cleanup when they are looked up.
+ */
+const namers = async (label: string) => {
+  const species = await makeSpecies(`${label} breed species ${runId}`);
+  const location = await makeLocation(`${label} unit location ${runId}`);
+  const live = async (
+    rows: Promise<{ id: string }[]>,
+    track?: string[],
+  ) => {
+    const ids = (await rows).map(id);
+    track?.push(...ids);
+    return ids;
+  };
+  const named = (name: string) => ({
+    name: { equals: name, mode: "insensitive" as const },
+    deletedAt: null,
+  });
+  const behavior = CharacteristicCategory.BEHAVIOR;
+  const kennel = LocationType.KENNEL;
+  return [
+    {
+      kind: "characteristic",
+      make: makeCharacteristic,
+      add: (name: string): Write => (tx) =>
+        addCharacteristic(tx, { name, category: behavior }),
+      rename: (rowId: string, name: string): Write => (tx) =>
+        editCharacteristic(tx, rowId, { name, category: behavior }),
+      restore: restoreCharacteristic,
+      taken: () => CHARACTERISTIC_NAME_TAKEN,
+      liveIds: (name: string) =>
+        live(prisma.characteristic.findMany({ where: named(name) }), characteristicIds),
+    },
+    {
+      kind: "color",
+      make: makeColor,
+      add: (name: string): Write => (tx) => addColor(tx, { name }),
+      rename: (rowId: string, name: string): Write => (tx) =>
+        editColor(tx, rowId, { name }),
+      restore: restoreColor,
+      taken: () => COLOR_NAME_TAKEN,
+      liveIds: (name: string) =>
+        live(prisma.color.findMany({ where: named(name) }), colorIds),
+    },
+    {
+      kind: "species",
+      make: makeSpecies,
+      add: (name: string): Write => (tx) =>
+        addSpecies(tx, { name, sacCategory: null }),
+      rename: (rowId: string, name: string): Write => (tx) =>
+        editSpecies(tx, rowId, { name }),
+      restore: restoreSpecies,
+      taken: () => SPECIES_NAME_TAKEN,
+      liveIds: (name: string) =>
+        live(prisma.species.findMany({ where: named(name) }), speciesIds),
+    },
+    {
+      kind: "breed",
+      make: (name: string, deleted?: boolean) => makeBreed(name, species, deleted),
+      add: (name: string): Write => (tx) =>
+        addBreed(tx, { name, speciesId: species, typicalSize: null }),
+      rename: (rowId: string, name: string): Write => (tx) =>
+        editBreed(tx, rowId, { name, speciesId: species, typicalSize: null }),
+      restore: restoreBreed,
+      taken: () => BREED_NAME_TAKEN,
+      liveIds: (name: string) =>
+        live(prisma.breed.findMany({ where: { ...named(name), speciesId: species } })),
+    },
+    {
+      kind: "location",
+      make: makeLocation,
+      add: (name: string): Write => (tx) => addLocation(tx, { name, type: kennel }),
+      rename: (rowId: string, name: string): Write => (tx) =>
+        editLocation(tx, rowId, { name, type: kennel }),
+      restore: restoreLocation,
+      taken: locationNameTaken,
+      liveIds: (name: string) =>
+        live(prisma.location.findMany({ where: named(name) }), locationIds),
+    },
+    {
+      kind: "unit",
+      make: (name: string, deleted?: boolean) => makeUnit(name, location, deleted),
+      add: (name: string): Write => (tx) =>
+        addUnit(tx, { name, capacity: 1, locationId: location }),
+      rename: (rowId: string, name: string): Write => (tx) =>
+        editUnit(tx, rowId, { name, capacity: 1 }),
+      restore: restoreUnit,
+      taken: unitNameTaken,
+      liveIds: (name: string) =>
+        live(prisma.unit.findMany({ where: { ...named(name), locationId: location } })),
+    },
+  ];
+};
+
+/**
+ * Runs `first` and holds its transaction open, starts `second`, and checks
+ * that `second` waits on `first` before either commits. Then lets `first`
+ * commit and returns what `second` returned.
+ */
+const race = async (first: Write, second: Write) => {
+  const held = await holdOpen(async (tx) => ({
+    refusal: await first(tx),
+    pid: await backendPid(tx),
+  }));
+  assert.equal(held.result.refusal, null);
+
+  const waiting = prisma.$transaction(second, { timeout: lockWaitTimeout });
+  void waiting.catch(() => {});
+  await waitForSessionBlockedBy(held.result.pid);
+
+  held.release();
+  await held.done;
+  return waiting;
+};
+
+test("two adds of one name in other capitals at the same moment save one row", async () => {
+  for (const c of await namers("Race add")) {
+    const name = `Ferret ${c.kind} ${runId}`;
+
+    const refusal = await race(c.add(name), c.add(name.toUpperCase()));
+
+    assert.equal(refusal, c.taken(name.toUpperCase()), c.kind);
+    assert.equal((await c.liveIds(name)).length, 1, c.kind);
+  }
+});
+
+test("a rename and an add of one name at the same moment save one row of it", async () => {
+  for (const c of await namers("Race rename")) {
+    const name = `Stoat ${c.kind} ${runId}`;
+    const renamed = await c.make(`Weasel ${c.kind} ${runId}`);
+
+    const refusal = await race(c.rename(renamed, name), c.add(name.toLowerCase()));
+
+    assert.equal(refusal, c.taken(name.toLowerCase()), c.kind);
+    assert.deepEqual(await c.liveIds(name), [renamed], c.kind);
+  }
+});
+
+test("an add and a rename to one name at the same moment save one row of it", async () => {
+  for (const c of await namers("Race add first")) {
+    const name = `Otter ${c.kind} ${runId}`;
+    const renamed = await c.make(`Badger ${c.kind} ${runId}`);
+
+    const refusal = await race(c.add(name), c.rename(renamed, name.toUpperCase()));
+
+    assert.equal(refusal, c.taken(name.toUpperCase()), c.kind);
+    const [added] = await c.liveIds(name);
+    assert.notEqual(added, renamed, c.kind);
+    assert.equal((await c.liveIds(name)).length, 1, c.kind);
+  }
+});
+
+test("a restore and an add of one name at the same moment save one row of it", async () => {
+  for (const c of await namers("Race restore")) {
+    const name = `Mink ${c.kind} ${runId}`;
+    const deleted = await c.make(name, true);
+
+    const refusal = await race((tx) => c.restore(tx, deleted), c.add(name.toUpperCase()));
+
+    assert.equal(refusal, c.taken(name.toUpperCase()), c.kind);
+    assert.deepEqual(await c.liveIds(name), [deleted], c.kind);
+  }
+});
+
+test("an add and a restore of one name at the same moment save one row of it", async () => {
+  for (const c of await namers("Race add then restore")) {
+    const name = `Vole ${c.kind} ${runId}`;
+    const deleted = await c.make(name.toLowerCase(), true);
+
+    const refusal = await race(c.add(name), (tx) => c.restore(tx, deleted));
+
+    assert.match(refusal ?? "", /already exists/, c.kind);
+    const live = await c.liveIds(name);
+    assert.equal(live.length, 1, c.kind);
+    assert.notEqual(live[0], deleted, c.kind);
+  }
+});
+
+test("a deleted row isn't edited, so a restore brings back the name it checked", async () => {
+  for (const c of await namers("Edit deleted")) {
+    const name = `Red ${c.kind} ${runId}`;
+    const deleted = await c.make(name, true);
+
+    assert.equal(
+      await prisma.$transaction(c.rename(deleted, `Blue ${c.kind} ${runId}`)),
+      editDeletedRefusal(c.kind),
+      c.kind,
+    );
+    assert.equal(await run(c.restore, deleted), null, c.kind);
+    assert.deepEqual(await c.liveIds(name), [deleted], c.kind);
+    assert.deepEqual(await c.liveIds(`Blue ${c.kind} ${runId}`), [], c.kind);
+  }
+});
+
+test("editing a row that doesn't exist throws", async () => {
+  const missing = `missing${runId}`;
+  for (const c of await namers("Edit missing")) {
+    await assert.rejects(
+      prisma.$transaction(c.rename(missing, `Gone ${c.kind} ${runId}`)),
+      isNotFound,
+      c.kind,
+    );
+  }
 });

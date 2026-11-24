@@ -10,19 +10,15 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { ColorFormSchema } from "../zod-schemas/color.schemas";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import {
-  findLiveColorNamed,
+  addColor,
+  COLOR_NAME_TAKEN,
+  editColor,
   restoreColor as restoreColorRow,
 } from "@/app/lib/services/settings-catalog";
 
 type ColorFormInput = z.input<typeof ColorFormSchema>;
 type ColorResult = FormResult<ColorFormInput>;
 
-// Shared duplicate check, the one restore uses: case-insensitive, global,
-// ignores the row being edited (so renaming a color to itself doesn't
-// collide).
-const findDuplicate = async (name: string, excludeId?: string) => {
-  return findLiveColorNamed(prisma, name, excludeId);
-};
 
 const _createColor = async (values: ColorFormInput): Promise<ColorResult> => {
   const validatedFields = ColorFormSchema.safeParse(values);
@@ -39,18 +35,18 @@ const _createColor = async (values: ColorFormInput): Promise<ColorResult> => {
   const { name } = validatedFields.data;
 
   try {
-    const existing = await findDuplicate(name);
-    if (existing) {
-      return { ok: false, message: "A color with that name already exists." };
+    // The name is checked behind a lock on the colors' names, so the same
+    // name added at the same moment in other capitals is refused.
+    const refusal = await prisma.$transaction((tx) => addColor(tx, { name }));
+    if (refusal) {
+      return { ok: false, message: refusal };
     }
-
-    await prisma.color.create({ data: { name } });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return { ok: false, message: "A color with that name already exists." };
+      return { ok: false, message: COLOR_NAME_TAKEN };
     }
     console.error("Database Error creating color:", error);
     return { ok: false, message: "Database Error: Failed to create color." };
@@ -83,21 +79,18 @@ const _updateColor = async (
   const { name } = validatedFields.data;
 
   try {
-    const existing = await findDuplicate(name, parsedId.data);
-    if (existing) {
-      return { ok: false, message: "A color with that name already exists." };
+    const refusal = await prisma.$transaction((tx) =>
+      editColor(tx, parsedId.data, { name }),
+    );
+    if (refusal) {
+      return { ok: false, message: refusal };
     }
-
-    await prisma.color.update({
-      where: { id: parsedId.data },
-      data: { name },
-    });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return { ok: false, message: "A color with that name already exists." };
+      return { ok: false, message: COLOR_NAME_TAKEN };
     }
     console.error("Database Error updating color:", error);
     return { ok: false, message: "Database Error: Failed to update color." };

@@ -19,11 +19,12 @@ import {
   deleteLocationIfEmpty,
   deleteUnitIfEmpty,
   findLiveUnitForPlacement,
-  lockLiveLocation,
 } from "@/app/lib/services/unit-housing";
 import {
+  addUnit,
   restoreUnit,
   UNIT_LOCATION_DELETED,
+  UNIT_LOCATION_GONE,
 } from "@/app/lib/services/settings-catalog";
 import { recordOutcomeReversal } from "@/app/lib/services/outcome-reversal";
 
@@ -462,26 +463,18 @@ test("a unit restore waits for a location delete, then is refused", async () => 
   assert.ok(await unitDeletedAt(unit.id));
 });
 
-/** What creating a unit does: check the location behind its lock, then insert. */
-const createUnitIn = async (
-  tx: TransactionClient,
-  locationId: string,
-  name: string,
-) => {
-  if (!(await lockLiveLocation(tx, locationId))) return false;
-  await tx.unit.create({ data: { name, capacity: 1, locationId } });
-  return true;
-};
+const createUnitIn = (tx: TransactionClient, locationId: string, name: string) =>
+  addUnit(tx, { name, capacity: 1, locationId });
 
 test("a location delete waits for a unit being added, then sees it and refuses", async () => {
   const unit = await makeUnit();
   await prisma.$transaction((tx) => deleteUnitIfEmpty(tx, unit.id));
 
   const creation = await holdOpen(async (tx) => ({
-    created: await createUnitIn(tx, unit.locationId, "B2"),
+    refusal: await createUnitIn(tx, unit.locationId, "B2"),
     pid: await backendPid(tx),
   }));
-  assert.equal(creation.result.created, true);
+  assert.equal(creation.result.refusal, null);
 
   const deletion = prisma.$transaction(
     (tx) => deleteLocationIfEmpty(tx, unit.locationId),
@@ -515,7 +508,7 @@ test("a unit being added waits for a location delete, then is refused", async ()
 
   deletion.release();
   await deletion.done;
-  assert.equal(await creation, false);
+  assert.equal(await creation, UNIT_LOCATION_GONE);
   assert.ok(await locationDeletedAt(unit.locationId));
   assert.equal(
     await prisma.unit.count({ where: { locationId: unit.locationId, name: "B2" } }),

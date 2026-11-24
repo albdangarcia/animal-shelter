@@ -37,7 +37,8 @@ const _createSpecies = async (
   const { name, sacCategory } = validatedFields.data;
 
   try {
-    // The same duplicate check restore uses: any capitals, ignoring deleted rows.
+    // The name is checked behind a lock on the species' names, so the same
+    // name added at the same moment in other capitals is refused.
     const refusal = await prisma.$transaction((tx) =>
       addSpecies(tx, { name, sacCategory: sacCategory || null }),
     );

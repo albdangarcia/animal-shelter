@@ -10,19 +10,15 @@ import { AppPermissions } from "@/app/lib/auth/permissions";
 import { CharacteristicFormSchema } from "../zod-schemas/characteristic.schemas";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import {
-  findLiveCharacteristicNamed,
+  addCharacteristic,
+  CHARACTERISTIC_NAME_TAKEN,
+  editCharacteristic,
   restoreCharacteristic as restoreCharacteristicRow,
 } from "@/app/lib/services/settings-catalog";
 
 type CharacteristicFormInput = z.input<typeof CharacteristicFormSchema>;
 type CharacteristicResult = FormResult<CharacteristicFormInput>;
 
-// Shared duplicate check, the one restore uses: case-insensitive, global
-// (name is unique across the whole table regardless of category), ignores the
-// row being edited (so renaming a characteristic to itself doesn't collide).
-const findDuplicate = async (name: string, excludeId?: string) => {
-  return findLiveCharacteristicNamed(prisma, name, excludeId);
-};
 
 const _createCharacteristic = async (
   values: CharacteristicFormInput,
@@ -41,24 +37,20 @@ const _createCharacteristic = async (
   const { name, category } = validatedFields.data;
 
   try {
-    const existing = await findDuplicate(name);
-    if (existing) {
-      return {
-        ok: false,
-        message: "A characteristic with that name already exists.",
-      };
+    // The name is checked behind a lock on the characteristics' names, so the
+    // same name added at the same moment in other capitals is refused.
+    const refusal = await prisma.$transaction((tx) =>
+      addCharacteristic(tx, { name, category }),
+    );
+    if (refusal) {
+      return { ok: false, message: refusal };
     }
-
-    await prisma.characteristic.create({ data: { name, category } });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return {
-        ok: false,
-        message: "A characteristic with that name already exists.",
-      };
+      return { ok: false, message: CHARACTERISTIC_NAME_TAKEN };
     }
     console.error("Database Error creating characteristic:", error);
     return {
@@ -94,27 +86,18 @@ const _updateCharacteristic = async (
   const { name, category } = validatedFields.data;
 
   try {
-    const existing = await findDuplicate(name, parsedId.data);
-    if (existing) {
-      return {
-        ok: false,
-        message: "A characteristic with that name already exists.",
-      };
+    const refusal = await prisma.$transaction((tx) =>
+      editCharacteristic(tx, parsedId.data, { name, category }),
+    );
+    if (refusal) {
+      return { ok: false, message: refusal };
     }
-
-    await prisma.characteristic.update({
-      where: { id: parsedId.data },
-      data: { name, category },
-    });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return {
-        ok: false,
-        message: "A characteristic with that name already exists.",
-      };
+      return { ok: false, message: CHARACTERISTIC_NAME_TAKEN };
     }
     console.error("Database Error updating characteristic:", error);
     return {

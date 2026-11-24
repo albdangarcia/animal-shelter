@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { Prisma } from "@/prisma/generated/client";
-import prisma, { type TransactionClient } from "@/app/lib/prisma";
+import prisma from "@/app/lib/prisma";
 import { cuidSchema } from "../zod-schemas/common.schemas";
 import { RequirePermission } from "../auth/protected-actions";
 import { AppPermissions } from "@/app/lib/auth/permissions";
@@ -15,11 +15,12 @@ import type { FieldErrors, FormResult } from "@/app/lib/action-result";
 import {
   deleteLocationIfEmpty,
   deleteUnitIfEmpty,
-  lockLiveLocation,
 } from "@/app/lib/services/unit-housing";
 import {
-  findLiveLocationNamed,
-  findLiveUnitNamed,
+  addLocation,
+  addUnit,
+  editLocation,
+  editUnit,
   restoreLocation as restoreLocationRow,
   restoreUnit as restoreUnitRow,
 } from "@/app/lib/services/settings-catalog";
@@ -29,13 +30,6 @@ type LocationResult = FormResult<LocationFormInput>;
 
 type UnitFormInput = z.input<typeof UnitFormSchema>;
 type UnitResult = FormResult<UnitFormInput>;
-
-// Shared duplicate check, the one restore uses: case-insensitive, global,
-// among non-deleted rows only, ignoring the row being edited (so renaming a
-// location to itself doesn't collide).
-const findDuplicateLocation = async (name: string, excludeId?: string) => {
-  return findLiveLocationNamed(prisma, name, excludeId);
-};
 
 const _createLocation = async (
   values: LocationFormInput,
@@ -54,15 +48,14 @@ const _createLocation = async (
   const { name, type } = validatedFields.data;
 
   try {
-    const existing = await findDuplicateLocation(name);
-    if (existing) {
-      return {
-        ok: false,
-        message: `A location named "${name}" already exists.`,
-      };
+    // The name is checked behind a lock on the locations' names, so the same
+    // name added at the same moment in other capitals is refused.
+    const refusal = await prisma.$transaction((tx) =>
+      addLocation(tx, { name, type }),
+    );
+    if (refusal) {
+      return { ok: false, message: refusal };
     }
-
-    await prisma.location.create({ data: { name, type } });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -104,18 +97,12 @@ const _updateLocation = async (
   const { name, type } = validatedFields.data;
 
   try {
-    const existing = await findDuplicateLocation(name, parsedId.data);
-    if (existing) {
-      return {
-        ok: false,
-        message: `A location named "${name}" already exists.`,
-      };
+    const refusal = await prisma.$transaction((tx) =>
+      editLocation(tx, parsedId.data, { name, type }),
+    );
+    if (refusal) {
+      return { ok: false, message: refusal };
     }
-
-    await prisma.location.update({
-      where: { id: parsedId.data },
-      data: { name, type },
-    });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -199,18 +186,6 @@ const _restoreLocation = async (
 // UNITS
 // ═══════════════════════════════════════════════════
 
-// Duplicate check scoped per location (matches @@unique([name, locationId])).
-// Inside a transaction, pass its client: the global one would wait for a
-// second connection while the transaction holds the first.
-const findDuplicateUnit = async (
-  name: string,
-  locationId: string,
-  excludeId?: string,
-  db: Pick<TransactionClient, "$queryRaw"> = prisma,
-) => {
-  return findLiveUnitNamed(db, name, locationId, excludeId);
-};
-
 const _createUnit = async (values: UnitFormInput): Promise<UnitResult> => {
   const validatedFields = UnitFormSchema.safeParse(values);
 
@@ -227,25 +202,11 @@ const _createUnit = async (values: UnitFormInput): Promise<UnitResult> => {
 
   try {
     // The location is checked behind its lock, so one deleted at the same
-    // moment either sees this unit or refuses it.
-    const refusal = await prisma.$transaction(async (tx) => {
-      if (!(await lockLiveLocation(tx, locationId))) {
-        return "Can't add a unit to a deleted location. Restore the location first.";
-      }
-
-      const existing = await findDuplicateUnit(
-        name,
-        locationId,
-        undefined,
-        tx,
-      );
-      if (existing) {
-        return `A unit named "${name}" already exists in this location.`;
-      }
-
-      await tx.unit.create({ data: { name, capacity, locationId } });
-      return null;
-    });
+    // moment either sees this unit or refuses it, and the name behind a lock
+    // on the location's unit names.
+    const refusal = await prisma.$transaction((tx) =>
+      addUnit(tx, { name, capacity, locationId }),
+    );
     if (refusal) {
       return { ok: false, message: refusal };
     }
@@ -287,23 +248,18 @@ const _updateUnit = async (
     };
   }
 
-  const { name, capacity, locationId } = validatedFields.data;
+  const { name, capacity } = validatedFields.data;
 
   try {
-    const existing = await findDuplicateUnit(name, locationId, parsedId.data);
-    if (existing) {
-      return {
-        ok: false,
-        message: `A unit named "${name}" already exists in this location.`,
-      };
-    }
-
     // A unit doesn't move between locations via this form. Only name and
-    // capacity are editable.
-    await prisma.unit.update({
-      where: { id: parsedId.data },
-      data: { name, capacity },
-    });
+    // capacity are editable, and the name is checked in the unit's own
+    // location.
+    const refusal = await prisma.$transaction((tx) =>
+      editUnit(tx, parsedId.data, { name, capacity }),
+    );
+    if (refusal) {
+      return { ok: false, message: refusal };
+    }
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
