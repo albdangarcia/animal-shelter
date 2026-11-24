@@ -27,6 +27,7 @@ test("settings from the database control all three organization values", () => {
     weightUnitSystem: "imperial",
     defaultPhoneCountry: "GB",
     doseSlotEnds: DEFAULT_DOSE_SLOT_ENDS,
+    state: null,
   });
 
   const instant = new Date("2026-09-18T23:30:00Z");
@@ -150,6 +151,7 @@ test("the settings row's columns hold the dose times one to a column", () => {
     amDoseEndTime: "09:00",
     middayDoseEndTime: "13:00",
     pmDoseEndTime: "19:00",
+    state: "VT",
   });
   assert.deepEqual(shelterSettingsColumns(settings), {
     timezone: "Pacific/Auckland",
@@ -158,5 +160,27 @@ test("the settings row's columns hold the dose times one to a column", () => {
     amDoseEndTime: "09:00",
     middayDoseEndTime: "13:00",
     pmDoseEndTime: "19:00",
+    state: "VT",
   });
+});
+
+test("the shelter's state is a stored US state code, or not set", () => {
+  const row = {
+    timezone: "America/New_York",
+    weightUnitSystem: "metric",
+    defaultPhoneCountry: "US",
+  };
+  assert.equal(resolveShelterSettings(null).state, null);
+  assert.equal(fallbackShelterSettings().state, null);
+  // A reader that selects only the phone columns gets no state.
+  assert.equal(resolveShelterSettings(row).state, null);
+  assert.equal(resolveShelterSettings({ ...row, state: null }).state, null);
+  assert.equal(resolveShelterSettings({ ...row, state: "NY" }).state, "NY");
+  // DC and the inhabited territories are states here, as SAC counts them.
+  assert.equal(resolveShelterSettings({ ...row, state: "DC" }).state, "DC");
+  assert.equal(resolveShelterSettings({ ...row, state: "PR" }).state, "PR");
+  // Anything but a US_STATES code reads as not set.
+  for (const bad of ["", "ny", "UM", "ON", "New York", "XX"]) {
+    assert.equal(resolveShelterSettings({ ...row, state: bad }).state, null, bad);
+  }
 });

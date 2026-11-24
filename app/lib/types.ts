@@ -570,6 +570,7 @@ export type PartnersDirectoryPayload = Prisma.PartnerGetPayload<{
     website: true;
     city: true;
     state: true;
+    country: true;
     isActive: true;
     _count: {
       select: {
@@ -590,6 +591,7 @@ export type PartnerFormPayload = Prisma.PartnerGetPayload<{
     address: true;
     city: true;
     state: true;
+    country: true;
     zipCode: true;
     isActive: true;
     notes: true;
@@ -607,6 +609,7 @@ export type PartnerSectionCardPayload = Prisma.PartnerGetPayload<{
     address: true;
     city: true;
     state: true;
+    country: true;
     zipCode: true;
     isActive: true;
     notes: true;

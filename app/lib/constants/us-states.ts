@@ -1,3 +1,12 @@
+/**
+ * The places a US address or a US partner can be in: the 50 states and DC,
+ * by name, then the five inhabited territories. Shelter Animals Count counts a
+ * territory as its own "state or territory", so a transfer between Puerto
+ * Rico and New York is out of state, not international.
+ *
+ * The U.S. Minor Outlying Islands (UM) are left out: no one lives there. They
+ * are not a country either (see `COUNTRIES`).
+ */
 export const US_STATES = [
   { code: "AL", name: "Alabama" },
   { code: "AK", name: "Alaska" },
@@ -7,6 +16,7 @@ export const US_STATES = [
   { code: "CO", name: "Colorado" },
   { code: "CT", name: "Connecticut" },
   { code: "DE", name: "Delaware" },
+  { code: "DC", name: "District of Columbia" },
   { code: "FL", name: "Florida" },
   { code: "GA", name: "Georgia" },
   { code: "HI", name: "Hawaii" },
@@ -49,4 +59,10 @@ export const US_STATES = [
   { code: "WV", name: "West Virginia" },
   { code: "WI", name: "Wisconsin" },
   { code: "WY", name: "Wyoming" },
+  // The inhabited territories, after the states.
+  { code: "AS", name: "American Samoa" },
+  { code: "GU", name: "Guam" },
+  { code: "MP", name: "Northern Mariana Islands" },
+  { code: "PR", name: "Puerto Rico" },
+  { code: "VI", name: "U.S. Virgin Islands" },
 ];

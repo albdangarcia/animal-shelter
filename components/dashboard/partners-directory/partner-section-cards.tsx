@@ -14,6 +14,7 @@ import { fetchSectionCardsPartnerData } from "@/app/lib/data/partners-directory/
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PartnerTypesOptions } from "@/components/dashboard/partners-directory/table/partners-directory-options";
+import { countryName } from "@/app/lib/constants/countries";
 import {
   Mail,
   Phone,
@@ -50,6 +51,8 @@ const PartnerSectionCards = async ({ params }: Props) => {
     partner.city,
     partner.state,
     partner.zipCode,
+    // No country is the US, which the address leaves unsaid.
+    partner.country && countryName(partner.country),
   ]
     .filter(Boolean)
     .join(", ");

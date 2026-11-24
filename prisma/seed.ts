@@ -554,10 +554,11 @@ const partnerData: Prisma.PartnerCreateManyInput[] = [
     email: "sarah@secondchancerescue.org",
     phone: "555-0102",
     website: "https://secondchancerescue.org",
+    // Outside the US: a country, and no state.
     address: "456 Rescue Ave",
-    city: "New York",
-    state: "NY",
-    zipCode: "10002",
+    city: "Toronto",
+    zipCode: "M5V 2T6",
+    country: "CA",
   },
   {
     name: "Downtown Veterinary Clinic",
@@ -8881,7 +8882,8 @@ async function seedAll() {
   const resolvedSettings = resolveShelterSettings(row);
   await prisma.shelterSettings.update({
     where: { id: "shelter" },
-    data: { phoneIndexCountry: resolvedSettings.defaultPhoneCountry },
+    // The shelter is in New York, as the seeded US partners are.
+    data: { phoneIndexCountry: resolvedSettings.defaultPhoneCountry, state: "NY" },
   });
   seedTimezone = resolvedSettings.timezone;
   await seedPersonsAndUsers();

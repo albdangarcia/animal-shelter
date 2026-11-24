@@ -2,9 +2,9 @@
 title: Add or edit a partner
 summary: Add a rescue, shelter, vet clinic or government agency to the Partner Directory, change its details, retire it, and know where it is used.
 permissions: [PARTNERS_MANAGE]
-aliases: [new partner, add a rescue, add a vet clinic, add a shelter, add an agency, register a partner, edit partner info, retire a partner, deactivate a partner, inactive partner, partner type, source partner, destination partner, transfer partner]
-related: [find-a-partner-and-read-its-animal-history, manage-a-partners-contacts, add-edit-or-delete-a-note-on-a-partner, take-in-a-new-animal, record-an-outcome]
-verified: 2026-11-21
+aliases: [new partner, add a rescue, add a vet clinic, add a shelter, add an agency, register a partner, edit partner info, retire a partner, deactivate a partner, inactive partner, partner type, source partner, destination partner, transfer partner, partner country, foreign partner, international partner, partner outside the US, out of state partner]
+related: [find-a-partner-and-read-its-animal-history, manage-a-partners-contacts, add-edit-or-delete-a-note-on-a-partner, take-in-a-new-animal, record-an-outcome, set-the-shelters-state]
+verified: 2026-11-24
 ---
 
 ## When to use this
@@ -52,13 +52,33 @@ Where else a partner shows up:
 4. Fill in what you know: **Email**, **Phone**, **Website** (it must start
    with `https://`), **Street Address**, **City**, **State** and
    **Zip Code**. They are optional. The phone is saved as typed.
-5. Leave **Active partner** ticked.
-6. Under **Quick note**, write a short line to keep pinned on the partner,
+5. Leave **Country** on **United States** for a partner in the US. For a
+   partner elsewhere, see [A partner outside the US](#a-partner-outside-the-us).
+6. Leave **Active partner** ticked.
+7. Under **Quick note**, write a short line to keep pinned on the partner,
    such as "Transfers weekdays only." This is optional.
-7. Click **Create Partner**.
+8. Click **Create Partner**.
 
 You should see "Partner created successfully." and the new partner's page
 opens, showing **Active**.
+
+## A partner outside the US
+
+A partner in Puerto Rico, Guam or another US territory is in the US. Leave
+**Country** on **United States** and pick the territory under **State**.
+
+Pick the partner's country under **Country**. You can type the first letters
+of its name to jump to it. **State** then disappears, and a state already
+picked is cleared: only a partner in the United States has a state. Put a
+postal code in **Zip Code**.
+
+The partner's page shows the country at the end of its address, and the
+**State / Country** column of the list shows the country, for example
+"Canada". A US partner shows its state there.
+
+The country and state tell whether a transfer is in state, out of state or
+outside the US, against the shelter's own state. An admin sets that: see
+"Set the shelter's state" in **Help**.
 
 ## Edit a partner
 
