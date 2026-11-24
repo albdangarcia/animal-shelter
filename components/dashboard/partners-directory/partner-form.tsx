@@ -6,7 +6,7 @@ import {
 } from "@/app/lib/actions/partner.actions";
 import { useTransition } from "react";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
-import { useForm, type DefaultValues } from "react-hook-form";
+import { useForm, useWatch, type DefaultValues } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -39,11 +39,13 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import {
+  isHomeCountry,
   PartnerFormSchema,
   type PartnerFormInput,
 } from "@/app/lib/zod-schemas/partners-directory.schemas";
 import { PartnerTypesOptions } from "@/components/dashboard/partners-directory/table/partners-directory-options";
 import { US_STATES } from "@/app/lib/constants/us-states";
+import { COUNTRIES, HOME_COUNTRY } from "@/app/lib/constants/countries";
 import Link from "next/link";
 import { PartnerFormPayload } from "@/app/lib/types";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
@@ -71,6 +73,8 @@ const buildDefaultValues = (
   city: partner?.city || "",
   state: partner?.state || "",
   zipCode: partner?.zipCode || "",
+  // No country is the US. The select shows it by name rather than empty.
+  country: partner?.country || HOME_COUNTRY,
   isActive: partner?.isActive ?? true,
   notes: partner?.notes || "",
 });
@@ -91,6 +95,10 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
     resolver: standardSchemaResolver(PartnerFormSchema),
     defaultValues: buildDefaultValues(partner),
   });
+
+  // Only a partner in the US has a state: State is hidden for any other
+  // country, and cleared when one is picked (see the Country select).
+  const inUs = isHomeCountry(useWatch({ control: form.control, name: "country" }));
 
   const onSubmit = (values: PartnerFormValues) => {
     startSubmitTransition(async () => {
@@ -253,35 +261,37 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="state"
-                  render={({ field }) => (
-                    <FormItem className="col-span-2">
-                      <FormLabel>State</FormLabel>
-                      <Select
-                        name={field.name}
-                        autoComplete="address-level1"
-                        onValueChange={field.onChange}
-                        value={field.value ?? ""}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Select a state" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {US_STATES.map((state) => (
-                            <SelectItem key={state.code} value={state.code}>
-                              {state.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {inUs && (
+                  <FormField
+                    control={form.control}
+                    name="state"
+                    render={({ field }) => (
+                      <FormItem className="col-span-2">
+                        <FormLabel>State</FormLabel>
+                        <Select
+                          name={field.name}
+                          autoComplete="address-level1"
+                          onValueChange={field.onChange}
+                          value={field.value ?? ""}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select a state" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {US_STATES.map((state) => (
+                              <SelectItem key={state.code} value={state.code}>
+                                {state.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
                 <FormField
                   control={form.control}
                   name="zipCode"
@@ -291,6 +301,44 @@ const PartnerForm = ({ partner, cancelHref, returnTo }: PartnerFormProps) => {
                       <FormControl>
                         <Input placeholder="e.g., 12345" {...field} />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="country"
+                  render={({ field }) => (
+                    <FormItem className="col-span-2">
+                      <FormLabel>Country</FormLabel>
+                      <Select
+                        name={field.name}
+                        autoComplete="country"
+                        onValueChange={(value) => {
+                          field.onChange(value);
+                          if (!isHomeCountry(value)) {
+                            form.setValue("state", "", { shouldDirty: true });
+                            form.clearErrors("state");
+                          }
+                        }}
+                        value={field.value || HOME_COUNTRY}
+                      >
+                        <FormControl>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select a country" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {COUNTRIES.map((country) => (
+                            <SelectItem key={country.code} value={country.code}>
+                              {country.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        State is only for a partner in the United States.
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}

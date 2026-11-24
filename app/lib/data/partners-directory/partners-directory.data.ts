@@ -7,6 +7,7 @@ import { PartnersDirectoryParamsSchema } from "../../zod-schemas/partners-direct
 import { PartnerFormPayload, PartnersDirectoryPayload, PartnerSectionCardPayload } from "../../types";
 import { cuidSchema } from "../../zod-schemas/common.schemas";
 import { primaryContactArgs } from "../../services/partner-contact";
+import { partnersOrderBy } from "./partners-directory";
 
 const _fetchPartners = async (
   queryInput: string,
@@ -37,29 +38,7 @@ const _fetchPartners = async (
 
   const offset = (currentPage - 1) * pageSize;
 
-  // Dynamically set the sorting order
-  const orderBy: Prisma.PartnerOrderByWithRelationInput = (() => {
-    if (!sort) return { name: "asc" };
-    const [field, direction] = sort.split(".");
-    const dir = direction === "asc" ? "asc" : "desc";
-
-    switch (field) {
-      case "name":
-        return { name: dir };
-      case "type":
-        return { type: dir };
-      case "email":
-        return { email: dir };
-      case "city":
-        return { city: dir };
-      case "state":
-        return { state: dir };
-      case "createdAt":
-        return { createdAt: dir };
-      default:
-        return { name: "asc" };
-    }
-  })();
+  const orderBy = partnersOrderBy(sort);
 
   const whereClause: Prisma.PartnerWhereInput = {
     AND: [
@@ -119,6 +98,7 @@ const _fetchPartners = async (
           website: true,
           city: true,
           state: true,
+          country: true,
           isActive: true,
           _count: {
             select: {
@@ -160,6 +140,7 @@ const _fetchPartnerForEdit = async (
         address: true,
         city: true,
         state: true,
+        country: true,
         zipCode: true,
         isActive: true,
         notes: true,
@@ -197,6 +178,7 @@ const _fetchSectionCardsPartnerData = async (
         address: true,
         city: true,
         state: true,
+        country: true,
         zipCode: true,
         isActive: true,
         notes: true,

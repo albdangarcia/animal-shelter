@@ -29,7 +29,7 @@ test("describePlacementEnd: an outcome reversed after the placement ended is mar
       returnReason: FosterReturnReason.ENDED_BY_OUTCOME,
       outcome: { type: OutcomeType.OTHER, reversedAt: REVERSED_AT },
     }),
-    "Ended: other (reversed)",
+    "Ended: other live outcome (reversed)",
   );
   assert.equal(
     describePlacementEnd({

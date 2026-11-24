@@ -4,7 +4,7 @@ summary: Pick a period and species, read the live release rate, intakes and leng
 permissions: [REPORTS_READ]
 aliases: [reports, statistics, export report, download report, csv, excel, spreadsheet, print report, board report, grant report, stats, live release rate, LRR, save rate, outcome statistics, intake sources, intake report, length of stay, LOS, median stay, how long in care, year to date, annual numbers, monthly intakes, transfer partners, shelter animals count]
 related: [read-the-dashboard-home-page, find-an-outcome, find-an-intake, correct-an-outcome, correct-an-intake, reverse-an-outcome-recorded-by-mistake, take-back-an-animal-that-left]
-verified: 2026-11-22
+verified: 2026-11-24
 ---
 
 ## When to use this
@@ -72,8 +72,9 @@ is each live kind's share of the live outcomes.
 The live release rate is the live outcomes divided by all outcomes in the
 period, to one decimal place:
 
-- Live outcomes are **Adoption**, **Return To Owner** and **Transfer Out**.
-- Non-live outcomes are **Euthanized**, **Deceased** and **Other**.
+- Live outcomes are **Adoption**, **Return To Owner**, **Transfer Out**,
+  **Return To Field** and **Other Live Outcome**.
+- Non-live outcomes are **Euthanized**, **Deceased** and **Lost In Care**.
 
 For example, 86 live outcomes out of 97 is 88.7%. The overview card works it
 out the same way, so the two always agree. With no outcomes in the period

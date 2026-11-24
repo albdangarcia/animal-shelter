@@ -1,5 +1,6 @@
 "use client";
 
+import { formatOutcomeType } from "@/app/lib/utils/outcome-types";
 import React, { useState } from "react";
 import Link from "next/link";
 import {
@@ -121,7 +122,7 @@ export default function PersonActivityFeedItem({ entry }: Props) {
 
                 {entry.kind === "OUTCOME_PROCESSED" && (
                   <p>
-                    Outcome type: {formatSingleEnumOption(entry.outcomeType)}
+                    Outcome type: {formatOutcomeType(entry.outcomeType)}
                   </p>
                 )}
 

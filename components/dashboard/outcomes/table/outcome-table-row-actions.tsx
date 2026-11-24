@@ -1,6 +1,7 @@
 "use client";
 
 import type { Row, StockFeatures } from "@tanstack/react-table";
+import { formatOutcomeType } from "@/app/lib/utils/outcome-types";
 import { Loader2, MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -29,7 +30,6 @@ import Link from "next/link";
 import { OutcomeWithDetails } from "@/app/lib/data/animals/outcome.data";
 import { reverseOutcome } from "@/app/lib/actions/outcome.actions";
 import { REVERSAL_REASON_MAX_LENGTH } from "@/app/lib/zod-schemas/outcome.schema";
-import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
 import { OutcomeType } from "@/prisma/generated/enums";
 import { isDeathOutcome } from "@/app/lib/utils/death-outcome";
 import { useMenuDialogFocus } from "@/hooks/use-menu-dialog-focus";
@@ -75,7 +75,7 @@ export function DataTableRowActions({
     : reasonError;
 
   const animalName = outcome.animal.name;
-  const typeLabel = formatSingleEnumOption(outcome.type).toLowerCase();
+  const typeLabel = formatOutcomeType(outcome.type).toLowerCase();
 
   const handleReverse = () => {
     setReasonError(undefined);

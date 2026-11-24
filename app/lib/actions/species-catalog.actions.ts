@@ -20,7 +20,6 @@ import {
 type SpeciesFormInput = z.input<typeof SpeciesFormSchema>;
 type SpeciesResult = FormResult<SpeciesFormInput>;
 
-
 const _createSpecies = async (
   values: SpeciesFormInput,
 ): Promise<SpeciesResult> => {
@@ -35,12 +34,14 @@ const _createSpecies = async (
     };
   }
 
-  const { name } = validatedFields.data;
+  const { name, sacCategory } = validatedFields.data;
 
   try {
     // The name is checked behind a lock on the species' names, so the same
     // name added at the same moment in other capitals is refused.
-    const refusal = await prisma.$transaction((tx) => addSpecies(tx, { name }));
+    const refusal = await prisma.$transaction((tx) =>
+      addSpecies(tx, { name, sacCategory: sacCategory || null }),
+    );
     if (refusal) {
       return { ok: false, message: refusal };
     }
@@ -79,11 +80,15 @@ const _updateSpecies = async (
     };
   }
 
-  const { name } = validatedFields.data;
+  const { name, sacCategory } = validatedFields.data;
 
   try {
     const refusal = await prisma.$transaction((tx) =>
-      editSpecies(tx, parsedId.data, { name }),
+      editSpecies(tx, parsedId.data, {
+        name,
+        // Left out keeps the saved category; "" ("Not reported") clears it.
+        sacCategory: sacCategory === undefined ? undefined : sacCategory || null,
+      }),
     );
     if (refusal) {
       return { ok: false, message: refusal };

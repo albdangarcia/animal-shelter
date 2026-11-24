@@ -14,6 +14,10 @@ import {
   PARTNER_NAME_TAKEN,
   partnerNameRefusal,
 } from "@/app/lib/services/partner-name";
+import {
+  createPartnerRecord,
+  updatePartnerRecord,
+} from "@/app/lib/services/partner-record";
 import { safeInternalPath } from "../utils/safe-redirect";
 import { z } from "zod";
 import type { FieldErrors, FormResult } from "@/app/lib/action-result";
@@ -22,23 +26,6 @@ const PARTNERS_DIRECTORY_PATH = "/dashboard/partners-directory";
 
 const partnerPath = (partnerId: string) =>
   `${PARTNERS_DIRECTORY_PATH}/${partnerId}`;
-
-// Single mapper for both actions. `isActive` arrives as a real boolean now
-// rather than the checkbox's "on"/absent, but it is still optional in the
-// schema, so a payload that omits it defaults to active.
-const toPartnerData = (values: PartnerFormInput) => ({
-  name: values.name,
-  type: values.type,
-  email: values.email || null,
-  phone: values.phone || null,
-  website: values.website || null,
-  address: values.address || null,
-  city: values.city || null,
-  state: values.state || null,
-  zipCode: values.zipCode || null,
-  isActive: values.isActive ?? true,
-  notes: values.notes || null,
-});
 
 const _createPartner = async (
   returnTo: string | null,
@@ -68,9 +55,7 @@ const _createPartner = async (
       };
     }
 
-    const partner = await prisma.partner.create({
-      data: toPartnerData(validatedFields.data),
-    });
+    const partner = await createPartnerRecord(prisma, validatedFields.data);
     newPartnerId = partner.id;
   } catch (error) {
     if (
@@ -145,10 +130,7 @@ const _updatePartner = async (
       };
     }
 
-    await prisma.partner.update({
-      where: { id: parsedId.data },
-      data: toPartnerData(validatedFields.data),
-    });
+    await updatePartnerRecord(prisma, parsedId.data, validatedFields.data);
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {

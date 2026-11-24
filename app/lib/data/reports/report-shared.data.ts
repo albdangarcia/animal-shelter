@@ -1,25 +1,14 @@
 import prisma from "@/app/lib/prisma";
-import { OutcomeType } from "@/prisma/generated/enums";
 import { type StayEvent } from "@/app/lib/utils/stay-utils";
 import { calendarDay } from "@/app/lib/utils/shelter-day";
 import { cuidSchema } from "@/app/lib/zod-schemas/common.schemas";
 
-/**
- * Live outcomes per Shelter Animals Count conventions: an animal that left the
- * shelter alive. EUTHANIZED, DECEASED, and OTHER are non-live. This single
- * definition is the source of truth for both the overview card and the outcomes
- * detail report, so their numbers can never drift apart.
- */
-export const LIVE_OUTCOME_TYPES: readonly OutcomeType[] = [
-  OutcomeType.ADOPTION,
-  OutcomeType.RETURN_TO_OWNER,
-  OutcomeType.TRANSFER_OUT,
-];
-
-/** True when a given outcome type counts toward the live release rate. */
-export function isLiveOutcome(type: OutcomeType): boolean {
-  return LIVE_OUTCOME_TYPES.includes(type);
-}
+// The live/non-live split lives in an auth- and database-free module so a
+// unit test can pin it; re-exported here for the report fetchers.
+export {
+  LIVE_OUTCOME_TYPES,
+  isLiveOutcome,
+} from "@/app/lib/utils/outcome-types";
 
 /**
  * Splits the raw `species` URL param into validated cuid2 ids, silently

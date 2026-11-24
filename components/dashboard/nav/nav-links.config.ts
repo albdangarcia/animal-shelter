@@ -80,6 +80,7 @@ export const SETTINGS_PERMISSIONS: readonly AppPermission[] = [
   AppPermissions.MEDICAL_SETTINGS_MANAGE,
   AppPermissions.MANAGE_ANIMAL_TAXONOMY,
   AppPermissions.MANAGE_LOCATIONS,
+  AppPermissions.SHELTER_DETAILS_MANAGE,
   AppPermissions.AI_ACTIVITY_READ,
 ] as const;
 
@@ -119,6 +120,7 @@ export const HELP_PERMISSIONS: readonly AppPermission[] = [
   AppPermissions.MANAGE_CHARACTERISTICS_CATALOG,
   AppPermissions.MANAGE_ANIMAL_TAXONOMY,
   AppPermissions.MANAGE_LOCATIONS,
+  AppPermissions.SHELTER_DETAILS_MANAGE,
   AppPermissions.AI_ACTIVITY_READ,
   AppPermissions.ANIMAL_TASK_MANAGE,
   AppPermissions.INTAKE_READ,

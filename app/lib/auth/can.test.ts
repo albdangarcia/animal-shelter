@@ -112,6 +112,13 @@ test("MEDICAL_SETTINGS_MANAGE stops at ADMIN", () => {
   assert.equal(can(Role.ADMIN, AppPermissions.MEDICAL_SETTINGS_MANAGE), true);
 });
 
+// The shelter's state decides how every transfer is counted, so it is
+// configuration, as the dose times are.
+test("SHELTER_DETAILS_MANAGE stops at ADMIN", () => {
+  assert.equal(can(Role.STAFF, AppPermissions.SHELTER_DETAILS_MANAGE), false);
+  assert.equal(can(Role.ADMIN, AppPermissions.SHELTER_DETAILS_MANAGE), true);
+});
+
 // A foster of any role cares for the animal in their own placement, so every
 // role holds it; the placement, checked on every use, is what limits it. It
 // gives no staff-wide medical permission.

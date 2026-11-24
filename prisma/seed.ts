@@ -11,6 +11,7 @@ import { betterAuth } from "better-auth";
 import { authOptions } from "@/auth.options";
 import { PrismaClient } from "@/prisma/generated/client";
 import { Prisma } from "@/prisma/generated/client";
+import { SacSpeciesCategory } from "@/prisma/generated/enums";
 import {
   Role,
   Sex,
@@ -442,6 +443,7 @@ const allColors = {
 const allSpecies = {
   DOG: {
     name: "Dog",
+    sacCategory: SacSpeciesCategory.CANINE,
     breeds: {
       GOLDEN_RETRIEVER: { name: "Golden Retriever", typicalSize: AnimalSize.LARGE },
       AMERICAN_ESKIMO: { name: "American Eskimo Dog", typicalSize: AnimalSize.SMALL },
@@ -453,6 +455,7 @@ const allSpecies = {
   },
   CAT: {
     name: "Cat",
+    sacCategory: SacSpeciesCategory.FELINE,
     breeds: {
       SIAMESE: { name: "Siamese", typicalSize: AnimalSize.SMALL },
       BRITISH_SHORTHAIR: { name: "British Shorthair", typicalSize: AnimalSize.MEDIUM },
@@ -462,6 +465,7 @@ const allSpecies = {
   },
   BIRD: {
     name: "Bird",
+    sacCategory: SacSpeciesCategory.BIRD,
     breeds: {
       HOUSE_FINCH: { name: "House Finch", typicalSize: AnimalSize.SMALL },
       NORTHERN_CARDINAL: { name: "Northern Cardinal", typicalSize: AnimalSize.SMALL },
@@ -470,6 +474,7 @@ const allSpecies = {
   },
   RABBIT: {
     name: "Rabbit",
+    sacCategory: SacSpeciesCategory.RABBIT,
     breeds: {
       NETHERLAND_DWARF: { name: "Netherland Dwarf", typicalSize: AnimalSize.SMALL },
       LIONHEAD: { name: "Lionhead", typicalSize: AnimalSize.SMALL },
@@ -477,6 +482,7 @@ const allSpecies = {
   },
   REPTILE: {
     name: "Reptile",
+    sacCategory: SacSpeciesCategory.REPTILE_AMPHIBIAN,
     breeds: {
       IGUANA: { name: "Iguana", typicalSize: AnimalSize.LARGE },
       GREEN_SEA_TURTLE: { name: "Green Sea Turtle", typicalSize: AnimalSize.LARGE },
@@ -485,6 +491,8 @@ const allSpecies = {
   },
   OTHER: {
     name: "Other",
+    // Its breeds are guinea pigs and hamsters.
+    sacCategory: SacSpeciesCategory.SMALL_MAMMAL,
     breeds: {
       GUINEA_PIG: { name: "Guinea Pig", typicalSize: AnimalSize.SMALL },
       HAMSTER: { name: "Hamster", typicalSize: AnimalSize.SMALL },
@@ -546,10 +554,11 @@ const partnerData: Prisma.PartnerCreateManyInput[] = [
     email: "sarah@secondchancerescue.org",
     phone: "555-0102",
     website: "https://secondchancerescue.org",
+    // Outside the US: a country, and no state.
     address: "456 Rescue Ave",
-    city: "New York",
-    state: "NY",
-    zipCode: "10002",
+    city: "Toronto",
+    zipCode: "M5V 2T6",
+    country: "CA",
   },
   {
     name: "Downtown Veterinary Clinic",
@@ -2633,7 +2642,7 @@ async function seedLookupTables() {
     // Seed Species and Breeds
     for (const s of Object.values(allSpecies)) {
       const species = await prisma.species.create({
-        data: { name: s.name },
+        data: { name: s.name, sacCategory: s.sacCategory },
       });
       for (const breed of Object.values(s.breeds)) {
         await prisma.breed.create({
@@ -8873,7 +8882,8 @@ async function seedAll() {
   const resolvedSettings = resolveShelterSettings(row);
   await prisma.shelterSettings.update({
     where: { id: "shelter" },
-    data: { phoneIndexCountry: resolvedSettings.defaultPhoneCountry },
+    // The shelter is in New York, as the seeded US partners are.
+    data: { phoneIndexCountry: resolvedSettings.defaultPhoneCountry, state: "NY" },
   });
   seedTimezone = resolvedSettings.timezone;
   await seedPersonsAndUsers();
@@ -8912,8 +8922,75 @@ async function seedAll() {
   await seedFosterMedical();
   await seedEndOfLife();
   await seedMedicalOutputExamples();
+  await seedReturnToFieldAndLostInCare();
   await assertAnimalLifecycleConsistency();
   console.log("Seeding finished successfully.");
+}
+
+// Shelter Animals Count's Return to Field and Lost in Care, so the outcome
+// table, filters and reports show them. Four generated return-to-owner
+// outcomes are relabeled rather than new animals added: two strays are
+// released where they were found, two others are lost in care. Updates only,
+// so no cuid() draws from the shared mulberry32 stream. Neither type has an
+// owner, so it is cleared.
+async function seedReturnToFieldAndLostInCare() {
+  const candidates = await prisma.outcome.findMany({
+    where: {
+      type: OutcomeType.RETURN_TO_OWNER,
+      reversedAt: null,
+      animal: {
+        name: { notIn: HAND_AUTHORED_ANIMAL_NAMES },
+        listingStatus: AnimalListingStatus.ARCHIVED,
+      },
+    },
+    select: {
+      id: true,
+      animalId: true,
+      animal: { select: { intake: { select: { type: true } } } },
+    },
+    orderBy: { id: "asc" },
+  });
+  const strays = candidates.filter((outcome) =>
+    outcome.animal.intake.some((intake) => intake.type === IntakeType.STRAY),
+  );
+  const returnedToField = strays.slice(0, 2);
+  const lostInCare = candidates
+    .filter((outcome) => !returnedToField.includes(outcome))
+    .slice(0, 2);
+  // Too few strays among them would leave a screen without its example, and
+  // nothing else would say so.
+  if (returnedToField.length < 2 || lostInCare.length < 2) {
+    throw new Error(
+      `Expected two return-to-owner outcomes each to relabel as return to field (strays) and lost in care; found ${returnedToField.length} and ${lostInCare.length}.`,
+    );
+  }
+
+  for (const [type, outcomes] of [
+    [OutcomeType.RETURN_TO_FIELD, returnedToField],
+    [OutcomeType.LOST_IN_CARE, lostInCare],
+  ] as const) {
+    for (const outcome of outcomes) {
+      await prisma.outcome.update({
+        where: { id: outcome.id },
+        data: { type, ownerId: null },
+      });
+      await prisma.animal.update({
+        where: { id: outcome.animalId },
+        data: { archiveReason: type },
+      });
+      await prisma.animalActivityLog.updateMany({
+        where: {
+          animalId: outcome.animalId,
+          activityType: "OUTCOME_PROCESSED",
+        },
+        data: {
+          changeSummary: `Animal was processed for outcome: ${type
+            .replace(/_/g, " ")
+            .toLowerCase()}.`,
+        },
+      });
+    }
+  }
 }
 
 const isExplicitSeedRun =

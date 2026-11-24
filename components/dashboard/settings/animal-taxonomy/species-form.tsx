@@ -8,8 +8,16 @@ import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -22,10 +30,15 @@ import {
   updateSpecies,
 } from "@/app/lib/actions/species-catalog.actions";
 import { SpeciesFormSchema } from "@/app/lib/zod-schemas/taxonomy.schemas";
+import { SAC_SPECIES_CATEGORY_OPTIONS } from "@/app/lib/constants/sac-species";
 import { applyFieldErrors } from "@/app/lib/utils/form-result-utils";
 import { toast } from "sonner";
 
 type SpeciesFormValues = z.infer<typeof SpeciesFormSchema>;
+
+// Sentinel for "Not reported": Radix Select forbids an empty-string item
+// value, so it maps back to "" (sacCategory = null) on change.
+const NOT_REPORTED_VALUE = "__not_reported__";
 
 interface Props {
   onFormSubmit: () => void;
@@ -37,7 +50,9 @@ export const SpeciesForm = ({ onFormSubmit, species }: Props) => {
 
   const form = useForm<SpeciesFormValues>({
     resolver: standardSchemaResolver(SpeciesFormSchema),
-    defaultValues: species ? { name: species.name } : { name: "" },
+    defaultValues: species
+      ? { name: species.name, sacCategory: species.sacCategory ?? "" }
+      : { name: "", sacCategory: "" },
   });
 
   const onSubmit = (values: SpeciesFormValues) => {
@@ -69,6 +84,44 @@ export const SpeciesForm = ({ onFormSubmit, species }: Props) => {
               <FormControl>
                 <Input id="name" placeholder="e.g. Dog" {...field} />
               </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="sacCategory"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel htmlFor="sacCategory">
+                Shelter Animals Count category
+              </FormLabel>
+              <Select
+                onValueChange={(value) =>
+                  field.onChange(value === NOT_REPORTED_VALUE ? "" : value)
+                }
+                value={field.value || NOT_REPORTED_VALUE}
+                name={field.name}
+              >
+                <FormControl>
+                  <SelectTrigger className="w-full" id="sacCategory">
+                    <SelectValue placeholder="Not reported" />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value={NOT_REPORTED_VALUE}>Not reported</SelectItem>
+                  {SAC_SPECIES_CATEGORY_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                The species this one is counted under in the Shelter Animals
+                Count report.
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}

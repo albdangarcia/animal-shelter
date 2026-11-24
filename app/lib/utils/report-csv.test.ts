@@ -156,6 +156,48 @@ test("the outcomes file has the page's figures and percentages", () => {
   ]);
 });
 
+test("return to field and other live outcome read as live, lost in care as non-live", () => {
+  const csv = outcomeReportCsv(
+    {
+      total: 10,
+      liveCount: 7,
+      nonLiveCount: 3,
+      liveReleaseRate: 7 / 10,
+      rows: [
+        {
+          type: OutcomeType.RETURN_TO_FIELD,
+          count: 5,
+          isLive: true,
+          percentOfTotal: 5 / 10,
+          percentOfLive: 5 / 7,
+        },
+        {
+          type: OutcomeType.OTHER,
+          count: 2,
+          isLive: true,
+          percentOfTotal: 2 / 10,
+          percentOfLive: 2 / 7,
+        },
+        {
+          type: OutcomeType.LOST_IN_CARE,
+          count: 3,
+          isLive: false,
+          percentOfTotal: 3 / 10,
+          percentOfLive: null,
+        },
+      ],
+      fromLabel: "2026-01-01",
+      toLabel: "2026-11-22",
+    },
+    context,
+  );
+  assert.deepEqual(lines(csv).slice(-3), [
+    "Return To Field,5,50.0%,71.4%",
+    "Other Live Outcome,2,20.0%,28.6%",
+    "Lost In Care,3,30.0%,—",
+  ]);
+});
+
 test("a period with no outcomes has a dash for the rate and no detail rows", () => {
   const csv = outcomeReportCsv(
     {

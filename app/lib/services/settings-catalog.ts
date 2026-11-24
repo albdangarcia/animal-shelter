@@ -3,6 +3,7 @@ import type {
   AnimalSize,
   CharacteristicCategory,
   LocationType,
+  SacSpeciesCategory,
 } from "@/prisma/generated/enums";
 import type { TransactionClient } from "@/app/lib/prisma";
 import { lockLiveLocation } from "@/app/lib/services/unit-housing";
@@ -56,13 +57,13 @@ export const UNIT_LOCATION_DELETED =
   "Can't restore a unit in a deleted location. Restore the location first.";
 export const SPECIES_IN_USE =
   "This species can't be deleted because it still has breeds or animals associated with it.";
+export const SPECIES_NAME_TAKEN = "A species with that name already exists.";
 export const BREED_SPECIES_GONE = "The selected species no longer exists.";
 export const BREED_NAME_TAKEN =
   "A breed with that name already exists for this species.";
 export const CHARACTERISTIC_NAME_TAKEN =
   "A characteristic with that name already exists.";
 export const COLOR_NAME_TAKEN = "A color with that name already exists.";
-export const SPECIES_NAME_TAKEN = "A species with that name already exists.";
 export const UNIT_LOCATION_GONE =
   "Can't add a unit to a deleted location. Restore the location first.";
 export const editDeletedRefusal = (what: string) =>
@@ -175,7 +176,7 @@ const editedLive = async (
   return editDeletedRefusal(what);
 };
 
-// ── Characteristics, colors and species ──────────────────────────────────
+// ── Characteristics and colors ───────────────────────────────────────────
 
 export type CharacteristicValues = {
   name: string;
@@ -236,32 +237,6 @@ export const editColor = async (
   );
 };
 
-export type SpeciesValues = { name: string };
-
-/** Adds a species, unless a live one has the name in any capitals. */
-export const addSpecies = async (
-  tx: TransactionClient,
-  values: SpeciesValues,
-): Promise<string | null> => {
-  if (await findLiveSpeciesNamed(tx, values.name)) return SPECIES_NAME_TAKEN;
-  await tx.species.create({ data: values });
-  return null;
-};
-
-/** Renames a species, unless another live one has the name. */
-export const editSpecies = async (
-  tx: TransactionClient,
-  id: string,
-  values: SpeciesValues,
-): Promise<string | null> => {
-  if (await findLiveSpeciesNamed(tx, values.name, id)) return SPECIES_NAME_TAKEN;
-  return editedLive(
-    await tx.species.updateMany({ where: { id, deletedAt: null }, data: values }),
-    () => tx.species.findUniqueOrThrow({ where: { id }, select: { id: true } }),
-    "species",
-  );
-};
-
 // ── Restores ─────────────────────────────────────────────────────────────
 
 export const restoreCharacteristic = async (
@@ -304,6 +279,43 @@ export const restoreSpecies = async (
   if (live) return restoreRefusal(row.name, live.name, "a species");
   await tx.species.update({ where: { id }, data: { deletedAt: null } });
   return null;
+};
+
+// ── Species ──────────────────────────────────────────────────────────────
+
+export type SpeciesValues = {
+  name: string;
+  /** Null: the species is not reported to Shelter Animals Count. */
+  sacCategory: SacSpeciesCategory | null;
+};
+
+/** Adds a species, unless a live one has the name in any capitals. */
+export const addSpecies = async (
+  tx: TransactionClient,
+  values: SpeciesValues,
+): Promise<string | null> => {
+  if (await findLiveSpeciesNamed(tx, values.name)) return SPECIES_NAME_TAKEN;
+  await tx.species.create({ data: values });
+  return null;
+};
+
+/**
+ * Renames a species or changes its Shelter Animals Count category, unless
+ * another live species has the name. A category left out (undefined) is kept;
+ * null clears it.
+ */
+export const editSpecies = async (
+  tx: TransactionClient,
+  id: string,
+  values: Omit<SpeciesValues, "sacCategory"> &
+    Partial<Pick<SpeciesValues, "sacCategory">>,
+): Promise<string | null> => {
+  if (await findLiveSpeciesNamed(tx, values.name, id)) return SPECIES_NAME_TAKEN;
+  return editedLive(
+    await tx.species.updateMany({ where: { id, deletedAt: null }, data: values }),
+    () => tx.species.findUniqueOrThrow({ where: { id }, select: { id: true } }),
+    "species",
+  );
 };
 
 // ── Breeds and their species ─────────────────────────────────────────────

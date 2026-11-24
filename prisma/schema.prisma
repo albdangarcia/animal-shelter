@@ -326,8 +326,12 @@ model Partner {
   website String?
   address String?
   city    String?
+  // A US state code; only for a partner in the US.
   state   String?
   zipCode String?
+  /// ISO 3166-1 alpha-2 code of a partner outside the US. Null is the US,
+  /// never "US", and a partner with a country has no state.
+  country String?
 
   // Retire a partner without deleting it
   isActive Boolean @default(true)
@@ -389,6 +393,9 @@ model ShelterSettings {
   amDoseEndTime       String   @default("10:00")
   middayDoseEndTime   String   @default("14:00")
   pmDoseEndTime       String   @default("20:00")
+  /// The US state the shelter is in, as a code. Transfers are counted as in
+  /// or out of state against it.
+  state               String?
   updatedAt           DateTime @updatedAt
 
   @@map("shelter_settings")
@@ -548,10 +555,13 @@ model Animal {
 }
 
 model Species {
-  id      String   @id @default(cuid())
-  name    String   @unique
-  animals Animal[]
-  breeds  Breed[] // A species can have many breeds
+  id          String              @id @default(cuid())
+  name        String              @unique
+  // Which Shelter Animals Count species this one is counted under in the SAC
+  // monthly report. Null: the species is not reported to SAC.
+  sacCategory SacSpeciesCategory? @map(name: "sac_category")
+  animals     Animal[]
+  breeds      Breed[] // A species can have many breeds
 
   fosterProfiles     FosterProfile[]     @relation("FosterProfileSpeciesCapability")
   fosterApplications FosterApplication[] @relation("FosterApplicationSpeciesCapability")
@@ -563,6 +573,20 @@ model Species {
   deletedAt DateTime? @map(name: "deleted_at")
 
   @@map(name: "species")
+}
+
+// The species Shelter Animals Count reports by (Intake & Outcome Database
+// VRS 1.2021). SMALL_MAMMAL is guinea pigs, hamsters, rats and the like;
+// FARM_ANIMAL is non-equine hooved animals such as pigs, llamas and cows.
+enum SacSpeciesCategory {
+  CANINE
+  FELINE
+  RABBIT
+  EQUINE
+  SMALL_MAMMAL
+  FARM_ANIMAL
+  BIRD
+  REPTILE_AMPHIBIAN
 }
 
 model Breed {
@@ -719,7 +743,15 @@ enum OutcomeType {
   RETURN_TO_OWNER
   DECEASED
   EUTHANIZED
+  /// Other live outcome. Not a catch-all: an escape or an unknown fate is
+  /// LOST_IN_CARE.
   OTHER
+  /// Shelter Animals Count's "Return to Field" (often called SNR): a stray,
+  /// already altered or altered after intake, released where it was found.
+  /// A live outcome. Not TNR.
+  RETURN_TO_FIELD
+  /// The animal escaped, or its outcome is unknown. A non-live outcome.
+  LOST_IN_CARE
 }
 
 model Intake {

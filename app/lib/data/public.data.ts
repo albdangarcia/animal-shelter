@@ -281,6 +281,7 @@ export const fetchSpecies = async () => {
   try {
     const species = await prisma.species.findMany({
       where: { deletedAt: null },
+      select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
     return species;

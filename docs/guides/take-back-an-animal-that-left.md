@@ -2,16 +2,17 @@
 title: Take back an animal that left
 summary: Record a re-intake when an adopted, transferred or returned animal comes back, so it is in care again on its old record.
 permissions: [INTAKE_MANAGE]
-aliases: [re-intake, reintake, returned adoption, adoption return, animal came back, bring an animal back, returned animal, re-admit, readmit, adopter brought it back, second intake]
+aliases: [re-intake, reintake, returned adoption, adoption return, animal came back, bring an animal back, returned animal, re-admit, readmit, adopter brought it back, second intake, escaped animal found, lost in care found, came back after escaping]
 related: [take-in-a-new-animal, correct-an-intake, find-an-intake, set-up-or-change-a-medical-protocol, schedule-care-and-read-the-due-page, record-an-outcome, reverse-an-outcome-recorded-by-mistake, find-an-outcome]
-verified: 2026-11-22
+verified: 2026-11-24
 ---
 
 ## When to use this
 
 Use this when an animal that left the shelter comes back: an adopted animal
-returned by its adopter, a transferred animal sent back, or one that ran off
-from its owner again. The animal keeps its record, history and medical
+returned by its adopter, a transferred animal sent back, one that ran off
+from its owner again, or one recorded as **Lost In Care** that has been
+found. The animal keeps its record, history and medical
 record. A re-intake adds a new intake to it and brings it back into care.
 
 Don't add the animal again with **Add Animal**: it would get a second record.
@@ -22,7 +23,8 @@ leave and come back. An admin reverses the outcome instead.
 ## Where to find it
 
 When an animal leaves through an outcome, such as an adoption, a transfer
-out, a return to its owner or **Other**, its record is archived. From then
+out, a return to its owner, **Return To Field**, **Lost In Care** or **Other
+Live Outcome**, its record is archived. From then
 on, the animal's page shows **Create Re-Intake** where **Create Outcome**
 used to be. The animal still shows on the **Animals** list, marked
 **Archived**; search for it by name.

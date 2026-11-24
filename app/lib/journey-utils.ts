@@ -114,6 +114,21 @@ const formatOutcomeProcessed = (
         title: "Outcome: Euthanized",
         description: `${animalName}'s journey at the shelter has ended.`,
       };
+    case "RETURN_TO_FIELD":
+      return {
+        title: "Outcome: Returned to Field",
+        description: `${animalName} was released where they were found.`,
+      };
+    case "LOST_IN_CARE":
+      return {
+        title: "Outcome: Lost in Care",
+        description: `${animalName} escaped, or their outcome is unknown.`,
+      };
+    case "OTHER":
+      return {
+        title: "Outcome: Other Live Outcome",
+        description: `${animalName} has left the shelter.`,
+      };
     default:
       return {
         title: "Outcome Event",

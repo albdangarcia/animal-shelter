@@ -34,6 +34,7 @@ import { recordOutcomeMedical, correctOutcomeMedical } from "./outcome-medical";
 import { OutcomeMedicalCreateSchema, OutcomeMedicalCorrectionSchema } from "../zod-schemas/outcome-medical.schemas";
 import { MedicalEntryRefusal } from "./medical-entry-values";
 import type { OutcomeFormOutput } from "@/app/lib/zod-schemas/outcome.schema";
+import { describeOutcomeType } from "@/app/lib/utils/outcome-types";
 
 /**
  * Recording an outcome from the outcome form, and correcting one already
@@ -74,8 +75,6 @@ export interface NewOutcome extends RecordedOutcome {
   /** How many of the animal's open tasks the outcome canceled. */
   canceledTaskCount: number;
 }
-
-const describe = (value: string) => value.replace(/_/g, " ").toLowerCase();
 
 // Both gates a new outcome day passes, in order, behind the animal's lock.
 // Throws the first refusal, shown under the date picker.
@@ -300,9 +299,7 @@ export const recordOutcome = async (
       animalId,
       activityType: AnimalActivityType.OUTCOME_PROCESSED,
       changedById: actorId,
-      changeSummary: `Animal was processed for outcome: ${outcomeType
-        .replace(/_/g, " ")
-        .toLowerCase()}.`,
+      changeSummary: `Animal was processed for outcome: ${describeOutcomeType(outcomeType)}.`,
     },
     select: { changedAt: true },
   });
@@ -352,7 +349,7 @@ export const recordOutcome = async (
         activityType: AnimalActivityType.FOSTER_RETURNED,
         changedById: actorId,
         changeSummary: `Foster placement with ${foster.name} ended: ${
-          adoptedByFoster ? "adopted by the foster" : describe(outcomeType)
+          adoptedByFoster ? "adopted by the foster" : describeOutcomeType(outcomeType)
         }.`,
         changedAt: new Date(
           Math.max(Date.now(), outcomeRow.changedAt.getTime() + 1),

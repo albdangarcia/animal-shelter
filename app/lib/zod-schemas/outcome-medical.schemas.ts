@@ -96,6 +96,8 @@ const ordinaryOutcome = z.enum([
   OutcomeType.ADOPTION,
   OutcomeType.TRANSFER_OUT,
   OutcomeType.RETURN_TO_OWNER,
+  OutcomeType.RETURN_TO_FIELD,
+  OutcomeType.LOST_IN_CARE,
   OutcomeType.OTHER,
 ]);
 

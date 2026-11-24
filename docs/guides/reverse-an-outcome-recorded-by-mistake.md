@@ -4,7 +4,7 @@ summary: Void an outcome that should never have been recorded, so the animal com
 permissions: [OUTCOMES_REVERSE]
 aliases: [undo an outcome, undo an adoption, cancel an adoption, void an outcome, wrong animal outcome, outcome on the wrong animal, wrong outcome type, outcome entered by mistake, unarchive an animal, un-archive, restore an archived animal, delete an outcome]
 related: [review-an-application-and-change-its-status, correct-an-outcome, record-an-outcome, find-an-outcome, take-back-an-animal-that-left, record-an-end-of-life-outcome, correct-an-intake, move-an-animal-to-another-unit, read-the-reports]
-verified: 2026-11-22
+verified: 2026-11-24
 ---
 
 ## When to use this
@@ -14,6 +14,10 @@ animal, it has the wrong type or the wrong adopter, or the animal never left.
 The outcome stays on the record, marked as reversed, and stops counting in
 the reports. The animal comes back into care as it was before. Only admins
 can reverse an outcome.
+
+An animal recorded as **Lost In Care** that turns up again did leave, so
+don't reverse that outcome: record its return as a new intake, as in "Take
+back an animal that left" in **Help**.
 
 Don't reverse an outcome for anything else:
 

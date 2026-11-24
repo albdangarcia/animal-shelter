@@ -29,6 +29,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { SpeciesForm } from "./species-form";
+import { SAC_SPECIES_CATEGORY_LABELS } from "@/app/lib/constants/sac-species";
 import {
   deleteSpecies,
   restoreSpecies,
@@ -107,8 +108,8 @@ function SpeciesActions({ species }: { species: SpeciesModel }) {
         <DialogHeader>
           <DialogTitle>Edit Species</DialogTitle>
           <DialogDescription>
-            Update the name for this species. Click update when you&apos;re
-            done.
+            Update the name or Shelter Animals Count category for this
+            species. Click update when you&apos;re done.
           </DialogDescription>
         </DialogHeader>
         <SpeciesForm
@@ -166,6 +167,11 @@ export const SpeciesSection = ({ species }: Props) => {
                 )}
               >
                 <span className="text-sm font-medium">{s.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {s.sacCategory
+                    ? SAC_SPECIES_CATEGORY_LABELS[s.sacCategory]
+                    : "Not reported to SAC"}
+                </span>
                 {s.deletedAt && (
                   <Badge
                     variant="destructive"
