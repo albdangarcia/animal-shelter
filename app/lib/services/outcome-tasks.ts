@@ -6,6 +6,7 @@ import {
   type OutcomeType,
 } from "@/prisma/generated/enums";
 import { ConflictError } from "@/app/lib/utils/errors";
+import { describeOutcomeType } from "@/app/lib/utils/outcome-types";
 
 /**
  * What happens to an animal's tasks when it leaves the shelter, and when it
@@ -76,8 +77,6 @@ export const assertAnimalCanHaveOpenTask = async (
     throw new ConflictError(ANIMAL_LEFT_TASK_MESSAGE);
   }
 };
-
-const describe = (value: string) => value.replace(/_/g, " ").toLowerCase();
 
 const tasksSentence = (count: number, verb: string) =>
   count === 1
@@ -168,7 +167,7 @@ export const cancelOpenTasksForOutcome = async (
       activityType: AnimalActivityType.TASK_STATUS_CHANGED,
       changedById: actorId,
       changedAt,
-      changeSummary: `Task "${task.title}" status changed from ${task.status} to ${TaskStatus.CANCELED}: the animal left (${describe(outcomeType)}).`,
+      changeSummary: `Task "${task.title}" status changed from ${task.status} to ${TaskStatus.CANCELED}: the animal left (${describeOutcomeType(outcomeType)}).`,
     })),
   });
 

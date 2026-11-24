@@ -14,6 +14,7 @@ import {
   FosterReturnReason
 } from "@/prisma/generated/enums";
 import { EffectiveApplicationStatus } from "./derive-application-status";
+import { formatOutcomeType } from "./outcome-types";
 
 /**
  * Formats a Prisma enum's string values for display.
@@ -110,7 +111,12 @@ export const userApplicationStatusOptions = formatEnumAsOptions(
   EffectiveApplicationStatus,
 );
 
-export const outcomeTypeOptions = formatEnumAsOptions(OutcomeType)
+// Named from OUTCOME_TYPE_LABELS rather than the enum, so OTHER reads as
+// "Other Live Outcome".
+export const outcomeTypeOptions = Object.values(OutcomeType).map((value) => ({
+  value,
+  label: formatOutcomeType(value),
+}));
 
 export const locationTypeOptions = formatEnumAsOptions(LocationType);
 

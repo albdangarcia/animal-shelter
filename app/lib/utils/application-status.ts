@@ -191,7 +191,7 @@ export const STATUS_SORT_RANK: Record<EffectiveApplicationStatus, number> = {
 };
 
 // The applicant-visible reason the status history gives for an application an
-// outcome closed. Keyed by all six OutcomeTypes because every one of them
+// outcome closed. Keyed by every OutcomeType because every one of them
 // closes open applications — an animal that was transferred, reunited with its
 // owner or that died closes them exactly the same way an adoption does, so
 // this text can never be narrowed to adoption wording.
@@ -207,6 +207,10 @@ export const CLOSURE_REASON_BY_OUTCOME: Record<OutcomeType, string> = {
   [OutcomeType.DECEASED]: "This animal is no longer at the shelter.",
   [OutcomeType.EUTHANIZED]: "This animal is no longer at the shelter.",
   [OutcomeType.OTHER]: "This animal is no longer available for adoption.",
+  [OutcomeType.RETURN_TO_FIELD]:
+    "This animal was released back where they were found.",
+  // As for a death: an escape is news for a phone call, not a status line.
+  [OutcomeType.LOST_IN_CARE]: "This animal is no longer at the shelter.",
 };
 
 // One message per status, addressed to the applicant on their view of the

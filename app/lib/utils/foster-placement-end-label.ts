@@ -1,4 +1,5 @@
 import { formatSingleEnumOption } from "@/app/lib/utils/enum-formatter";
+import { formatOutcomeType } from "@/app/lib/utils/outcome-types";
 import {
   FosterReturnReason,
   type OutcomeType,
@@ -33,6 +34,6 @@ export const describePlacementEnd = (placement: PlacementEnd) => {
   if (returnReason !== FosterReturnReason.ENDED_BY_OUTCOME || !outcome) {
     return formatSingleEnumOption(returnReason);
   }
-  const type = formatSingleEnumOption(outcome.type).toLowerCase();
+  const type = formatOutcomeType(outcome.type).toLowerCase();
   return outcome.reversedAt ? `Ended: ${type} (reversed)` : `Ended: ${type}`;
 };

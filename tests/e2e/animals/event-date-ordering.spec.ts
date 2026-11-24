@@ -281,8 +281,8 @@ const expectRefusal = async (
 const gotoOutcomeForm = async (page: Page, animalId: string) => {
   await page.goto(`${OUTCOMES_PATH}/create?animalId=${animalId}`);
   await waitForFormHydration(page, "Process Outcome");
-  // "Other" needs no partner, owner or application.
-  await chooseFromSelect(page, "Outcome Type *", "Other");
+  // "Other Live Outcome" needs no partner, owner or application.
+  await chooseFromSelect(page, "Outcome Type *", "Other Live Outcome");
 };
 
 const recordOutcome = async (page: Page, animalId: string, day: DayKey) => {

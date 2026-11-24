@@ -1,17 +1,27 @@
 ---
 title: Record an adoption, transfer out, return to owner or other outcome
-summary: Record an animal leaving the shelter, and see what changes when you do, from its unit and foster placement to its adoption applications.
+summary: Record an animal leaving the shelter, released where it was found or lost in care, and see what changes, from its unit to its applications.
 permissions: [OUTCOMES_MANAGE]
-aliases: [cancel tasks, open tasks after adoption, complete an adoption, finalize adoption, adopt out, adopted, transfer out, transfer to a rescue, send to a partner, return to owner, owner reclaim, reclaimed, owner picked up, animal left, discharge, create outcome, process outcome, close the stay]
+aliases: [cancel tasks, open tasks after adoption, complete an adoption, finalize adoption, adopt out, adopted, transfer out, transfer to a rescue, send to a partner, return to owner, owner reclaim, reclaimed, owner picked up, animal left, discharge, create outcome, process outcome, close the stay, return to field, RTF, SNR, released where found, escaped, ran away, lost in care, missing animal, outcome unknown, other live outcome]
 related: [correct-an-outcome, find-an-outcome, record-an-end-of-life-outcome, reverse-an-outcome-recorded-by-mistake, take-back-an-animal-that-left, move-an-animal-to-another-unit, review-an-application-and-change-its-status, adoption-application-status-glossary, place-an-animal-in-foster, return-an-animal-from-foster, turn-a-foster-into-an-adoption, add-or-edit-a-partner, read-the-reports]
-verified: 2026-11-22
+verified: 2026-11-24
 ---
 
 ## When to use this
 
 Use this when an animal leaves the shelter: it is adopted, transferred out to
-a partner, returned to its owner, or leaves for another reason (**Other**).
-The outcome closes the animal's stay and archives its record.
+a partner, returned to its owner, released where it was found, lost in care,
+or leaves alive for another reason. The outcome closes the animal's stay and
+archives its record.
+
+Pick the type that says how the animal left:
+
+- **Return To Field**: a stray, already spayed or neutered or altered here,
+  released where it was found (often called SNR). Not trap-neuter-return.
+- **Lost In Care**: the animal escaped, or nobody knows what became of it.
+  The reports count it as a non-live outcome.
+- **Other Live Outcome**: the animal left alive, and no other type fits. Not
+  for an escape or an unknown fate: that is **Lost In Care**.
 
 For a death or a euthanasia, see
 [Record an end-of-life outcome](./record-an-end-of-life-outcome.md). To fix a
@@ -27,8 +37,9 @@ have been recorded at all, ask an admin to reverse it.
    Animal Outcome** opens. If the animal is in foster, a note above the form
    says "Recording this outcome ends that placement." If it has open tasks,
    a note says how many, and "Recording this outcome cancels them".
-2. Under **Outcome Type**, pick **Transfer Out**, **Return To Owner** or
-   **Other**.
+2. Under **Outcome Type**, pick **Transfer Out**, **Return To Owner**,
+   **Return To Field**, **Lost In Care** or **Other Live Outcome**. For the
+   last three, a line under the type says what it covers.
 3. Check the **Date of Outcome**. It starts on today. Days after today can't
    be picked.
 4. For **Transfer Out**, pick the **Destination Partner**.
@@ -37,8 +48,9 @@ have been recorded at all, ask an admin to reverse it.
    else, click **Clear**, click **Search for a person...**, type part of a
    name, email or phone number, and pick the person. If they aren't in the
    directory, click **Add a new person**.
-6. Add anything else under **Notes**, for example why the animal left when
-   you picked **Other**.
+6. Add anything else under **Notes**, for example where a returned-to-field
+   cat was released, or how the animal left when you picked **Other Live
+   Outcome**.
 7. Click **Process Outcome**.
 
 You should see "Outcome processed successfully." If the animal had open

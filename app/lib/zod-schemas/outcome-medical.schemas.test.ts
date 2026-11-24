@@ -39,7 +39,7 @@ test("new end-of-life outcomes require complete medical facts, including when a 
 
 test("ordinary outcomes accept no medical payload, and mismatched kinds are refused", () => {
   for (const schema of [OutcomeMedicalCreateSchema, OutcomeMedicalCorrectionSchema]) {
-    for (const outcomeType of ["ADOPTION", "TRANSFER_OUT", "RETURN_TO_OWNER", "OTHER"]) {
+    for (const outcomeType of ["ADOPTION", "TRANSFER_OUT", "RETURN_TO_OWNER", "RETURN_TO_FIELD", "LOST_IN_CARE", "OTHER"]) {
       assert.deepEqual(schema.parse({ outcomeType, ownerId: "hidden", destinationPartnerId: "hidden" }), { outcomeType });
       assert.equal(schema.safeParse({ outcomeType, medical: euthanasia }).success, false);
       assert.equal(schema.safeParse({ outcomeType, medical: death }).success, false);

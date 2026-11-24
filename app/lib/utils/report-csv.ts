@@ -1,6 +1,6 @@
 // The reports as CSV files. Each builder takes the object its page draws and
 // lays the same tables out as text, formatted with the page's own helpers
-// (`formatPercent`, `formatSingleEnumOption`), so a cell reads as the screen
+// (`formatPercent`, `formatSingleEnumOption`, `formatOutcomeType`), so a cell reads as the screen
 // does: "88.7%", "Owner Surrender", "—". Nothing is counted here; the counting
 // stays in app/lib/data/reports, and the route that serves these files
 // (app/api/reports/[report]/route.ts) calls the same fetchers as the pages.
@@ -9,6 +9,7 @@
 // (report-csv.test.ts). The `import type`s below are erased at runtime.
 
 import type { OutcomeReport } from "@/app/lib/data/reports/outcome-report.data";
+import { formatOutcomeType } from "@/app/lib/utils/outcome-types";
 import type { IntakeReport } from "@/app/lib/data/reports/intake-report.data";
 import type { LengthOfStayReport } from "@/app/lib/data/reports/length-of-stay-report.data";
 import type {
@@ -139,7 +140,7 @@ export function outcomeReportCsv(
       title: "Outcome detail",
       header: ["Outcome type", "Count", "% of total", "% of live"],
       rows: report.rows.map((row) => [
-        formatSingleEnumOption(row.type),
+        formatOutcomeType(row.type),
         row.count,
         formatPercent(row.percentOfTotal),
         row.isLive ? formatPercent(row.percentOfLive) : null,
@@ -264,7 +265,7 @@ export function reportsOverviewCsv(
         ["Total outcomes", outcomes.total],
         ["Live outcomes", outcomes.liveCount],
         ...outcomes.topTypes.map((t): CsvCell[] => [
-          formatSingleEnumOption(t.type),
+          formatOutcomeType(t.type),
           t.count,
         ]),
       ],

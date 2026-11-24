@@ -617,11 +617,11 @@ test("a returning animal gets its protocol's care when it is re-intaked", async 
   const animal = await takeFirstStayDogOrCat(today);
   const animalPath = `/dashboard/animals/${animal.id}`;
 
-  // It leaves today, through the outcome form. "Other" needs no partner,
-  // owner or application.
+  // It leaves today, through the outcome form. "Other Live Outcome" needs no
+  // partner, owner or application.
   await page.goto(`/dashboard/outcomes/create?animalId=${animal.id}`);
   await waitForFormHydration(page, "Process Outcome");
-  await chooseOption(page, page.getByLabel("Outcome Type *", { exact: true }), "Other");
+  await chooseOption(page, page.getByLabel("Outcome Type *", { exact: true }), "Other Live Outcome");
   await pickDay(page, page.getByRole("button", { name: /^Date of Outcome \*:/ }), today);
   await page.getByRole("button", { name: "Process Outcome" }).click();
   await expect(toast(page, "Outcome processed successfully.")).toBeVisible();

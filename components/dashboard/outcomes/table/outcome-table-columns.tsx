@@ -19,7 +19,8 @@ import {
 import { ReversedOutcomeBadge } from "../reversed-outcome-badge";
 
 // Maps outcome types to their recipient's relationship label. Types not
-// listed here (deceased, euthanized, other) genuinely have no recipient.
+// listed here (deceased, euthanized, return to field, lost in care, other)
+// genuinely have no recipient.
 const recipientRelationshipLabel: Partial<Record<OutcomeType, string>> = {
   ADOPTION: "Adopter",
   TRANSFER_OUT: "Partner",
@@ -129,8 +130,10 @@ export const getColumns = ({
         ADOPTION: "default",
         TRANSFER_OUT: "secondary",
         RETURN_TO_OWNER: "outline",
+        RETURN_TO_FIELD: "outline",
         DECEASED: "destructive",
         EUTHANIZED: "destructive",
+        LOST_IN_CARE: "destructive",
       };
 
       const variant = variantMap[outcomeType.value] || "secondary";
