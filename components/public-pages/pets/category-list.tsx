@@ -5,7 +5,7 @@ import type { SpeciesModel } from "@/prisma/generated/models/Species";
 import { cn } from "@/lib/utils";
 
 interface Props {
-  species: SpeciesModel[];
+  species: Pick<SpeciesModel, "id" | "name">[];
 }
 
 /**

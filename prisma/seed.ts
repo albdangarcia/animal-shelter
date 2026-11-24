@@ -11,6 +11,7 @@ import { betterAuth } from "better-auth";
 import { authOptions } from "@/auth.options";
 import { PrismaClient } from "@/prisma/generated/client";
 import { Prisma } from "@/prisma/generated/client";
+import { SacSpeciesCategory } from "@/prisma/generated/enums";
 import {
   Role,
   Sex,
@@ -442,6 +443,7 @@ const allColors = {
 const allSpecies = {
   DOG: {
     name: "Dog",
+    sacCategory: SacSpeciesCategory.CANINE,
     breeds: {
       GOLDEN_RETRIEVER: { name: "Golden Retriever", typicalSize: AnimalSize.LARGE },
       AMERICAN_ESKIMO: { name: "American Eskimo Dog", typicalSize: AnimalSize.SMALL },
@@ -453,6 +455,7 @@ const allSpecies = {
   },
   CAT: {
     name: "Cat",
+    sacCategory: SacSpeciesCategory.FELINE,
     breeds: {
       SIAMESE: { name: "Siamese", typicalSize: AnimalSize.SMALL },
       BRITISH_SHORTHAIR: { name: "British Shorthair", typicalSize: AnimalSize.MEDIUM },
@@ -462,6 +465,7 @@ const allSpecies = {
   },
   BIRD: {
     name: "Bird",
+    sacCategory: SacSpeciesCategory.BIRD,
     breeds: {
       HOUSE_FINCH: { name: "House Finch", typicalSize: AnimalSize.SMALL },
       NORTHERN_CARDINAL: { name: "Northern Cardinal", typicalSize: AnimalSize.SMALL },
@@ -470,6 +474,7 @@ const allSpecies = {
   },
   RABBIT: {
     name: "Rabbit",
+    sacCategory: SacSpeciesCategory.RABBIT,
     breeds: {
       NETHERLAND_DWARF: { name: "Netherland Dwarf", typicalSize: AnimalSize.SMALL },
       LIONHEAD: { name: "Lionhead", typicalSize: AnimalSize.SMALL },
@@ -477,6 +482,7 @@ const allSpecies = {
   },
   REPTILE: {
     name: "Reptile",
+    sacCategory: SacSpeciesCategory.REPTILE_AMPHIBIAN,
     breeds: {
       IGUANA: { name: "Iguana", typicalSize: AnimalSize.LARGE },
       GREEN_SEA_TURTLE: { name: "Green Sea Turtle", typicalSize: AnimalSize.LARGE },
@@ -485,6 +491,8 @@ const allSpecies = {
   },
   OTHER: {
     name: "Other",
+    // Its breeds are guinea pigs and hamsters.
+    sacCategory: SacSpeciesCategory.SMALL_MAMMAL,
     breeds: {
       GUINEA_PIG: { name: "Guinea Pig", typicalSize: AnimalSize.SMALL },
       HAMSTER: { name: "Hamster", typicalSize: AnimalSize.SMALL },
@@ -2633,7 +2641,7 @@ async function seedLookupTables() {
     // Seed Species and Breeds
     for (const s of Object.values(allSpecies)) {
       const species = await prisma.species.create({
-        data: { name: s.name },
+        data: { name: s.name, sacCategory: s.sacCategory },
       });
       for (const breed of Object.values(s.breeds)) {
         await prisma.breed.create({
